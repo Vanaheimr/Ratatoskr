@@ -153,10 +153,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(meldung, Does.Contain("Aushandlung"),
+                Assert.That(meldung, Does.Contain("negotiation"),
                             "Die Meldung muss sagen, in welcher Phase es hing.");
 
-                Assert.That(meldung, Does.Contain("Stream-Kopf"),
+                Assert.That(meldung, Does.Contain("stream header"),
                             "Und auf welchen Schritt gewartet wurde.");
 
             });
@@ -208,7 +208,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 // gemeldete. Stünde sie nur im Ereignis, müsste der Aufrufer
                 // doch wieder abonnieren, um zu erfahren, was los war - und
                 // genau das sollte der Wurf ihm ersparen.
-                Assert.That(fehler!.Message, Does.Contain("Stream-Kopf"),
+                Assert.That(fehler!.Message, Does.Contain("stream header"),
                             "Der geworfene Fehler muss den Schritt nennen, nicht nur " +
                             "die Tatsache des Scheiterns.");
 

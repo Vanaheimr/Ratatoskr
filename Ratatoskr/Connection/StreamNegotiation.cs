@@ -24,47 +24,48 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// RFC 6120: die Aushandlung vor der ersten Stanza - Stream-Features, SASL
-/// und Resource Binding.
+/// RFC 6120: the negotiation before the first stanza - stream features, SASL
+/// and resource binding.
 ///
-/// Bewusst reine Funktionen auf dem geparsten <see cref="XElement"/>: die
-/// Aushandlung ist der Teil des Clients, der sich am schlechtesten
-/// integrativ prüfen lässt, weil er nur beim Verbindungsaufbau läuft und
-/// jeder Fehler dort die Verbindung gleich mitreisst. So sind die
-/// Entscheidungen einzeln prüfbar.
+/// Deliberately pure functions on the parsed <see cref="XElement"/>: the
+/// negotiation is the part of the client that is hardest to check
+/// integratively, because it only runs while the connection is being
+/// established and every error there tears the connection down with it. This
+/// way the decisions can be checked one by one.
 /// </summary>
 internal static class StreamNegotiation
 {
 
     #region Namespaces
 
-    /// <summary>Namespace der Stream-Ebene (RFC 6120, Abschnitt 4.8.2).</summary>
+    /// <summary>Namespace of the stream layer (RFC 6120, section 4.8.2).</summary>
     public const string StreamNamespace   = "http://etherx.jabber.org/streams";
 
-    /// <summary>Namespace des WebSocket-Framings (RFC 7395).</summary>
+    /// <summary>Namespace of the WebSocket framing (RFC 7395).</summary>
     public const string FramingNamespace  = "urn:ietf:params:xml:ns:xmpp-framing";
 
-    /// <summary>Namespace von SASL (RFC 6120, Abschnitt 6).</summary>
+    /// <summary>Namespace of SASL (RFC 6120, section 6).</summary>
     public const string SaslNamespace     = "urn:ietf:params:xml:ns:xmpp-sasl";
 
-    /// <summary>Namespace des Resource Bindings (RFC 6120, Abschnitt 7).</summary>
+    /// <summary>Namespace of the resource binding (RFC 6120, section 7).</summary>
     public const string BindNamespace     = "urn:ietf:params:xml:ns:xmpp-bind";
 
-    /// <summary>Namespace der Legacy-Session (RFC 3921, in RFC 6121 entfallen).</summary>
+    /// <summary>Namespace of the legacy session (RFC 3921, dropped in RFC 6121).</summary>
     public const string SessionNamespace  = "urn:ietf:params:xml:ns:xmpp-session";
 
     #endregion
 
-    #region Rahmen der Aushandlung
+    #region The frame of the negotiation
 
     /// <summary>
-    /// Ist das der Stream-Kopf? Über WebSocket ist das <c>&lt;open/&gt;</c>
-    /// nach RFC 7395, über TCP das <c>&lt;stream:stream&gt;</c>.
+    /// Is that the stream header? Over WebSocket it is the
+    /// <c>&lt;open/&gt;</c> per RFC 7395, over TCP the
+    /// <c>&lt;stream:stream&gt;</c>.
     /// </summary>
     public static bool IsStreamOpen(XElement element)
         => element.Name.LocalName is "open" or "stream";
 
-    /// <summary>Sind das die Stream-Features?</summary>
+    /// <summary>Are those the stream features?</summary>
     public static bool IsFeatures(XElement element)
         => element.Name.LocalName     == "features" &&
            element.Name.NamespaceName == StreamNamespace;
@@ -74,28 +75,28 @@ internal static class StreamNegotiation
     #region SASL
 
     /// <summary>
-    /// Ist das ein SASL-Element mit diesem Namen? Der Namespace gehört zur
-    /// Prüfung: die frühere Suche nach der Zeichenfolge
-    /// <c>&quot;&lt;success&quot;</c> im Rohtext traf auch ein
-    /// <c>&lt;success/&gt;</c> einer beliebigen anderen Erweiterung.
+    /// Is that a SASL element with this name? The namespace belongs to the
+    /// check: the earlier search for the character sequence
+    /// <c>&quot;&lt;success&quot;</c> in the raw text also hit a
+    /// <c>&lt;success/&gt;</c> of any other extension.
     /// </summary>
     public static bool IsSasl(XElement element, string localName)
         => element.Name.LocalName     == localName &&
            element.Name.NamespaceName == SaslNamespace;
 
     /// <summary>
-    /// Der Base64-Inhalt eines <c>&lt;challenge/&gt;</c> oder
-    /// <c>&lt;success/&gt;</c>. Leer, wenn das Element keinen trägt - bei
-    /// SCRAM ist das ein Fehler und keine Nebensächlichkeit, denn ohne die
-    /// server-final-message lässt sich die Serversignatur nicht prüfen.
+    /// The base64 content of a <c>&lt;challenge/&gt;</c> or
+    /// <c>&lt;success/&gt;</c>. Empty when the element carries none - with
+    /// SCRAM that is an error and not a triviality, because without the
+    /// server-final-message the server signature cannot be checked.
     /// </summary>
     public static string SaslPayload(XElement element)
         => element.Value.Trim();
 
     /// <summary>
-    /// Die Bedingung eines <c>&lt;failure/&gt;</c>, also der lokale Name des
-    /// ersten Kindelements - <c>not-authorized</c>,
-    /// <c>invalid-mechanism</c> und so weiter (RFC 6120, Abschnitt 6.5).
+    /// The condition of a <c>&lt;failure/&gt;</c>, that is the local name of
+    /// the first child element - <c>not-authorized</c>,
+    /// <c>invalid-mechanism</c> and so on (RFC 6120, section 6.5).
     /// </summary>
     public static string? SaslFailureCondition(XElement failure)
         => failure.Elements()
@@ -103,13 +104,13 @@ internal static class StreamNegotiation
                   ?.Name.LocalName;
 
     /// <summary>
-    /// Die angebotenen SASL-Mechanismen.
+    /// The SASL mechanisms offered.
     ///
-    /// Das frühere Muster <c>&lt;mechanism&gt;([^&lt;]+)&lt;/mechanism&gt;</c>
-    /// verlangte ein Element ganz ohne Attribute und gab den Inhalt
-    /// unbeschnitten zurück. Ein Server, der seine Features einrückt oder den
-    /// Namespace am Kindelement wiederholt - beides gültig -, sah für den
-    /// Client aus wie einer ganz ohne SASL.
+    /// The earlier pattern <c>&lt;mechanism&gt;([^&lt;]+)&lt;/mechanism&gt;</c>
+    /// demanded an element entirely without attributes and returned the content
+    /// untrimmed. A server that indents its features or repeats the namespace
+    /// on the child element - both valid - looked to the client like one
+    /// entirely without SASL.
     /// </summary>
     public static List<string> SaslMechanisms(XElement features)
     {
@@ -136,16 +137,16 @@ internal static class StreamNegotiation
 
     #endregion
 
-    #region Angekündigte Features
+    #region Announced features
 
     /// <summary>
-    /// Die Namespaces der angekündigten Features.
+    /// The namespaces of the announced features.
     ///
-    /// Gelesen werden die direkten Kinder von <c>&lt;features/&gt;</c>. Das
-    /// frühere Muster suchte <c>xmlns</c> als erstes Attribut irgendwo im
-    /// Text - ein <c>&lt;c hash='sha-1' ver='…' xmlns='…/caps'/&gt;</c> fiel
-    /// damit heraus, und genau so serialisiert die BCL: der
-    /// Namespace steht am Ende.
+    /// Read are the direct children of <c>&lt;features/&gt;</c>. The earlier
+    /// pattern searched for <c>xmlns</c> as the first attribute somewhere in
+    /// the text - a <c>&lt;c hash='sha-1' ver='…' xmlns='…/caps'/&gt;</c> fell
+    /// out that way, and that is exactly how the BCL serialises: the namespace
+    /// stands at the end.
     /// </summary>
     public static List<string> FeatureNamespaces(XElement features)
         => features.Elements()
@@ -154,50 +155,49 @@ internal static class StreamNegotiation
                    .Distinct()
                    .ToList();
 
-    /// <summary>Bietet der Server Resource Binding an?</summary>
+    /// <summary>Does the server offer resource binding?</summary>
     public static bool OffersBind(XElement features)
         => features.Child(BindNamespace, "bind") is not null;
 
-    /// <summary>Bietet der Server XEP-0198 Stream Management an?</summary>
+    /// <summary>Does the server offer XEP-0198 stream management?</summary>
     public static bool OffersStreamManagement(XElement features)
         => features.Child(StreamManagementManager.Namespace, "sm") is not null;
 
     /// <summary>
-    /// Bietet der Server XEP-0352 Client State Indication an?
+    /// Does the server offer XEP-0352 client state indication?
     /// </summary>
     /// <remarks>
-    /// Ohne diese Ankündigung darf der Client kein <c>&lt;inactive/&gt;</c>
-    /// schicken. Der Grund ist nicht Höflichkeit: Ein Server, der die
-    /// Erweiterung nicht kennt, sieht ein unbekanntes Element auf Stream-Ebene
-    /// - und RFC 6120, Abschnitt 4.9.3.24 lässt ihm dafür einen
-    /// Stream-Fehler. Aus einer Sparmassnahme würde ein Verbindungsabbruch.
+    /// Without this announcement the client must not send an
+    /// <c>&lt;inactive/&gt;</c>. The reason is not politeness: a server that
+    /// does not know the extension sees an unknown element on the stream layer
+    /// - and RFC 6120, section 4.9.3.24 allows it a stream error for that. A
+    /// saving measure would turn into a dropped connection.
     /// </remarks>
     public static bool OffersClientStateIndication(XElement features)
         => features.Child(ClientStateIndication.Namespace, "csi") is not null;
 
     /// <summary>
-    /// Bietet der Server Roster-Versionierung an (RFC 6121, Abschnitt 2.6.1)?
+    /// Does the server offer roster versioning (RFC 6121, section 2.6.1)?
     /// </summary>
     /// <remarks>
-    /// Ohne diese Ankündigung darf ein Client kein <c>ver</c> an seine
-    /// Roster-Anfrage hängen. Der Grund ist nicht Höflichkeit: Ein Server ohne
-    /// Versionierung übergeht das Attribut und antwortet mit dem vollen
-    /// Roster - das ginge noch. Gefährlich wäre der umgekehrte Fall, dass ein
-    /// leeres Ergebnis als „unverändert" gelesen wird, wo es „leerer Roster"
-    /// heisst.
+    /// Without this announcement a client must not append a <c>ver</c> to its
+    /// roster request. The reason is not politeness: a server without
+    /// versioning ignores the attribute and answers with the full roster -
+    /// that would still be fine. Dangerous would be the reverse case, that an
+    /// empty result is read as "unchanged" where it means "empty roster".
     /// </remarks>
     public static bool OffersRosterVersioning(XElement features)
         => features.Child("urn:xmpp:features:rosterver", "ver") is not null;
 
     /// <summary>
-    /// Muss die Legacy-Session (RFC 3921) angefordert werden?
+    /// Does the legacy session (RFC 3921) have to be requested?
     ///
-    /// Die frühere Prüfung war <c>Contains("&lt;session")</c> und
-    /// <c>!Contains("optional")</c> auf dem ganzen Rahmen. Das
-    /// <c>&lt;optional/&gt;</c> gehört aber jeweils zu genau einem Feature,
-    /// und XEP-0198 setzt es in sein eigenes: bei einem Server, der
-    /// <c>&lt;sm&gt;&lt;optional/&gt;&lt;/sm&gt;</c> ankündigt, unterblieb
-    /// die zwingende Session.
+    /// The earlier check was <c>Contains("&lt;session")</c> and
+    /// <c>!Contains("optional")</c> over the whole frame. The
+    /// <c>&lt;optional/&gt;</c> belongs to exactly one feature each, though,
+    /// and XEP-0198 puts it into its own: with a server announcing
+    /// <c>&lt;sm&gt;&lt;optional/&gt;&lt;/sm&gt;</c> the mandatory session was
+    /// omitted.
     /// </summary>
     public static bool RequiresSession(XElement features)
     {
@@ -216,15 +216,14 @@ internal static class StreamNegotiation
     #region Resource Binding
 
     /// <summary>
-    /// Der zugeteilte Full-JID aus der Bind-Antwort, oder null, wenn die
-    /// Antwort kein Ergebnis ist oder keinen JID trägt.
+    /// The full JID assigned in the bind answer, or null when the answer is
+    /// not a result or carries no JID.
     ///
-    /// Dass null hier wirklich "abgelehnt" heisst und nicht "such halt
-    /// weiter", ist der Punkt: früher suchte ein
-    /// <c>&lt;jid&gt;([^&lt;]+)&lt;/jid&gt;</c> im Rohtext, und blieb es
-    /// erfolglos, nahm der Client den selbst gewünschten JID an. Ein
-    /// abgelehntes Binding war von einem erfolgreichen nicht zu
-    /// unterscheiden.
+    /// That null really means "refused" here and not "just keep looking" is
+    /// the point: previously a <c>&lt;jid&gt;([^&lt;]+)&lt;/jid&gt;</c>
+    /// searched the raw text, and if it stayed unsuccessful, the client
+    /// assumed the JID it had wished for itself. A refused binding was
+    /// indistinguishable from a successful one.
     /// </summary>
     public static string? ReadBoundJid(XElement iq)
     {

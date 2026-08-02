@@ -32,21 +32,21 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XMPP over WebSocket (RFC 7395) mit Auto-Reconnect.
+/// XMPP over WebSocket (RFC 7395) with auto-reconnect.
 ///
-/// Diese Klasse ist die Transport- und Protokollebene: WebSocket-I/O, SASL,
-/// Resource Binding und Stanza-Routing. Die anwendungsnahe Sitzungslogik
-/// (aktueller Chatpartner, offene Kontaktanfragen, zusammengesetzte
-/// Operationen) liegt in <see cref="XMPPClient"/>.
+/// This class is the transport and protocol layer: WebSocket I/O, SASL,
+/// resource binding and stanza routing. The application-facing session logic
+/// (current chat partner, open contact requests, composite operations) lives in
+/// <see cref="XMPPClient"/>.
 ///
 /// Features:
-/// - SCRAM-SHA-1/256 und SASL PLAIN Authentifizierung
+/// - SCRAM-SHA-1/256 and SASL PLAIN authentication
 /// - XEP-0030 Service Discovery
 /// - XEP-0060 Publish-Subscribe
 /// - XEP-0085 Chat State Notifications
 /// - XEP-0115 Entity Capabilities
 /// - XEP-0184 Message Delivery Receipts
-/// - XEP-0198 Stream Management (standardmäßig deaktiviert)
+/// - XEP-0198 Stream Management (disabled by default)
 /// - XEP-0199 Ping
 /// - XEP-0280 Message Carbons
 /// - XEP-0333 Chat Markers
@@ -68,70 +68,70 @@ public sealed class XMPPConnection : IAsyncDisposable
     private readonly ILogger _logger;
 
     /// <summary>
-    /// Serialisiert ausgehende Stanzas. Gesendet wird aus mehreren Richtungen
-    /// gleichzeitig: Keepalive-Schleife, Auto-Receipts und Chat-Marker aus der
-    /// Empfangsschleife sowie Benutzeraktionen.
+    /// Serialises outgoing stanzas. Sending happens from several directions at
+    /// once: the keepalive loop, auto-receipts and chat markers from the
+    /// receive loop, as well as user actions.
     /// </summary>
     /// <remarks>
-    /// Der WebSocket-Vertrag erlaubt nur einen ausstehenden Sendevorgang; ob
-    /// ein Verstoß auffällt, hängt von der Implementierung ab. Auf .NET 10
-    /// serialisiert ClientWebSocket intern, dort blieben 200 parallele Sends
-    /// à 40 kB fehlerfrei und unbeschädigt. Andere Implementierungen (ältere
-    /// Runtimes, Browser-WebSockets unter WASM) werfen dagegen
-    /// InvalidOperationException. Das Lock macht die Zusicherung explizit,
-    /// statt sich auf ein undokumentiertes Implementierungsdetail zu
-    /// verlassen - Kosten: rund 150 ms für die genannten 200 Sends.
+    /// The WebSocket contract allows only one outstanding send; whether a
+    /// violation is noticed depends on the implementation. On .NET 10
+    /// ClientWebSocket serialises internally, and there 200 parallel sends of
+    /// 40 kB each stayed error-free and undamaged. Other implementations (older
+    /// runtimes, browser WebSockets under WASM) throw
+    /// InvalidOperationException instead. The lock makes the assurance
+    /// explicit rather than relying on an undocumented implementation detail -
+    /// cost: around 150 ms for the 200 sends mentioned.
     /// </remarks>
     private readonly SemaphoreSlim _sendLock = new(1, 1);
 
     /// <summary>
-    /// Wie lange beim Verbindungsabbau auf das Ende der Hintergrund-Schleifen
-    /// gewartet wird, bevor sie aufgegeben werden.
+    /// How long the teardown waits for the background loops to end before
+    /// giving up on them.
     /// </summary>
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// Wie lange auf den WebSocket-Close-Handshake der Gegenseite gewartet
-    /// wird. Ohne Grenze blockiert CloseAsync unbegrenzt, wenn der Server das
-    /// Close-Frame nicht beantwortet.
+    /// How long the WebSocket close handshake of the other side is waited for.
+    /// Without a bound, CloseAsync blocks indefinitely when the server does not
+    /// answer the close frame.
     /// </summary>
     private static readonly TimeSpan CloseHandshakeTimeout = TimeSpan.FromSeconds(3);
 
-    /// <summary>Namespace der Stream-Ebene (RFC 6120, Abschnitt 4.8.2).</summary>
+    /// <summary>Namespace of the stream layer (RFC 6120, section 4.8.2).</summary>
     private const string StreamNamespace = StreamNegotiation.StreamNamespace;
 
-    /// <summary>Namespace von XEP-0198 Stream Management.</summary>
+    /// <summary>Namespace of XEP-0198 stream management.</summary>
     private const string StreamManagementNamespace = StreamManagementManager.Namespace;
 
     /// <summary>
-    /// Wie lange die Aufbauphase auf die Antwort auf eines ihrer IQs wartet.
+    /// How long the setup phase waits for the answer to one of its IQs.
     /// </summary>
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// IQs, auf deren Antwort gerade jemand wartet, nach ihrer id.
+    /// IQs whose answer someone is waiting for right now, by their id.
     ///
-    /// Ersetzt das frühere Vorgehen der Aufbauphase, bis zu zehn Rahmen selbst
-    /// vom Socket zu lesen und alles zu verwerfen, was nicht nach der
-    /// erwarteten Antwort aussah. Verworfen wurden dabei auch Nachrichten,
-    /// Presence und Roster-Pushes; und weil "sieht aus wie" ein
-    /// <c>Contains("id='roster1'")</c> auf dem Rohtext war, konnte eine
-    /// Nachricht mit dieser Zeichenfolge im Text die Antwort auch ersetzen.
+    /// Replaces the earlier approach of the setup phase, which read up to ten
+    /// frames from the socket itself and discarded everything that did not look
+    /// like the expected answer. Discarded that way were messages, presence and
+    /// roster pushes too; and because "looks like" was a
+    /// <c>Contains("id='roster1'")</c> on the raw text, a message with that
+    /// character sequence in it could also replace the answer.
     /// </summary>
     private readonly Dictionary<string, TaskCompletionSource<XElement>> _pendingIqs = new();
 
     /// <summary>
-    /// Der letzte Fehler aus <see cref="ConnectInternalAsync"/> - damit
-    /// <see cref="ConnectAsync"/> ihn dem Aufrufer weiterreichen kann, statt
-    /// ihn nur zu melden.
+    /// The last error from <see cref="ConnectInternalAsync"/> - so that
+    /// <see cref="ConnectAsync"/> can pass it on to the caller instead of
+    /// merely reporting it.
     /// </summary>
     private Exception? _lastConnectError;
     private readonly object _iqLock = new();
 
     /// <summary>
-    /// Die Untergrenze für die SASL-Aushandlung. Gehört an die Verbindung und
-    /// nicht an den einzelnen Verbindungsaufbau: Ihr Wert entsteht gerade
-    /// dadurch, dass sie den Reconnect überlebt.
+    /// The lower bound for the SASL negotiation. Belongs to the connection and
+    /// not to the individual connection attempt: its value arises precisely
+    /// from the fact that it survives the reconnect.
     /// </summary>
     private readonly SaslMechanismPolicy _saslPolicy = new();
 
@@ -146,10 +146,10 @@ public sealed class XMPPConnection : IAsyncDisposable
     private bool _intentionalDisconnect;
 
     /// <summary>
-    /// Gesetzt, wenn der Server den Stream mit einer nicht wiederholbaren
-    /// Bedingung beendet hat (RFC 6120, Abschnitt 4.9). Unterdrückt den
-    /// automatischen Reconnect, der sonst denselben Fehler erneut auslösen
-    /// würde. Wird bei jedem bewussten Verbindungsaufbau zurückgesetzt.
+    /// Set when the server ended the stream with a non-recoverable condition
+    /// (RFC 6120, section 4.9). Suppresses the automatic reconnect, which would
+    /// otherwise trigger the same error again. Reset on every deliberate
+    /// connection attempt.
     /// </summary>
     private bool _fatalStreamError;
 
@@ -157,55 +157,54 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     #region Properties
 
-    // Reconnect-Einstellungen
+    // Reconnect settings
     public int MaxReconnectAttempts { get; set; } = 5;
     public TimeSpan InitialReconnectDelay { get; set; } = TimeSpan.FromSeconds(1);
     public TimeSpan MaxReconnectDelay { get; set; } = TimeSpan.FromSeconds(30);
 
-    // Keepalive - verhindert Inactivity Timeout vom Server
+    // Keepalive - prevents the inactivity timeout from the server
     public TimeSpan KeepaliveInterval { get; set; } = TimeSpan.FromSeconds(25);
     public bool KeepaliveEnabled { get; set; } = true;
 
     /// <summary>
-    /// Die Priorität, die jede Presence dieses Clients trägt (RFC 6121,
-    /// Abschnitt 4.7.2.3); <c>null</c> lässt das Element weg.
+    /// The priority that every presence of this client carries (RFC 6121,
+    /// section 4.7.2.3); <c>null</c> leaves the element out.
     /// </summary>
     /// <remarks>
-    /// Sie ist die einzige Möglichkeit eines Clients zu sagen, wie sehr er
-    /// gemeint ist, wenn eine Nachricht an das Konto und nicht an ihn geht.
-    /// Negativ heisst: gar nicht - das Gerät bleibt gerichtet ansprechbar und
-    /// hält sich aus dem Übrigen heraus. Der Server richtet sich danach
-    /// (RFC 6121, Abschnitt 8.5.2.1.1), und auch die Offline-Ablage wird erst
-    /// einer Resource mit nicht-negativer Priorität nachgereicht (XEP-0160).
+    /// It is the only way for a client to say how much it is meant when a
+    /// message goes to the account and not to it. Negative means: not at all -
+    /// the device stays addressable directly and keeps out of the rest. The
+    /// server goes by it (RFC 6121, section 8.5.2.1.1), and offline storage,
+    /// too, is only delivered late to a resource with a non-negative priority
+    /// (XEP-0160).
     ///
-    /// Der Bereich ist auf -128 bis +127 begrenzt; ein Wert daneben wird vom
-    /// Server abgeklemmt statt abgelehnt.
+    /// The range is bounded to -128 up to +127; a value beside it gets clamped
+    /// by the server rather than refused.
     /// </remarks>
     public int? PresencePriority { get; set; }
 
-    // XEP-0198: Stream Management. Die frühere Abschaltung wegen
-    // "ejabberd-Kompatibilitätsproblemen" ging auf die fehlerhafte Zählung
-    // zurück. Die ist behoben, gegen XMPPServer getestet und inzwischen gegen
-    // Prosody 13 belegt: nach einem vollständigen Sitzungsaufbau melden beide
-    // Seiten denselben Stand, auf den Zähler genau.
+    // XEP-0198: Stream management. The earlier switching-off because of
+    // "ejabberd compatibility problems" went back to the faulty counting. That
+    // is fixed, tested against XMPPServer and by now evidenced against
+    // Prosody 13: after a complete session setup both sides report the same
+    // state, down to the counter.
     //
-    // Damit ist der Grund für den ausgeschalteten Default weggefallen. Wer
-    // ihn nicht will, schaltet ihn ab - zur Laufzeit mit /sm off. Angefordert
-    // wird er ohnehin nur, wenn der Server ihn ankündigt; ein Server ohne
-    // XEP-0198 merkt von dieser Zeile nichts.
+    // With that the reason for the switched-off default has fallen away.
+    // Whoever does not want it switches it off - at runtime with /sm off. It is
+    // requested anyway only when the server announces it; a server without
+    // XEP-0198 notices nothing of this line.
     public bool StreamManagementEnabled { get; set; } = true;
 
     /// <summary>
-    /// Der schwächste SASL-Mechanismus, der noch benutzt werden darf - null
-    /// verlangt nichts und überlässt die Wahl allein der Ankündigung des
-    /// Servers.
+    /// The weakest SASL mechanism that may still be used - null demands nothing
+    /// and leaves the choice to the server's announcement alone.
     /// </summary>
     /// <remarks>
-    /// Zulässig sind PLAIN, SCRAM-SHA-1 und SCRAM-SHA-256; ein anderer Name
-    /// wird abgewiesen, statt lautlos gar nichts zu verlangen. Wer weiss, dass
-    /// sein Server SCRAM kann, setzt das hier: Dann greift die Untergrenze
-    /// schon beim allerersten Verbindungsaufbau, den
-    /// <see cref="PinnedSaslMechanism"/> naturgemäss noch nicht schützen kann.
+    /// Permitted are PLAIN, SCRAM-SHA-1 and SCRAM-SHA-256; another name is
+    /// refused instead of silently demanding nothing at all. Whoever knows that
+    /// their server can do SCRAM sets it here: then the lower bound takes hold
+    /// already on the very first connection attempt, which
+    /// <see cref="PinnedSaslMechanism"/> naturally cannot protect yet.
     /// </remarks>
     public string? MinimumSaslMechanism
     {
@@ -214,40 +213,40 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Der Mechanismus, über den die letzte Anmeldung gelang - und damit die
-    /// Untergrenze für die nächste. Null vor der ersten.
+    /// The mechanism the last login succeeded with - and thereby the lower
+    /// bound for the next one. Null before the first.
     /// </summary>
     /// <remarks>
-    /// Bietet der Server danach weniger an, kommt keine Verbindung mehr
-    /// zustande. Das ist beabsichtigt: Ein Server, der SCRAM konnte und
-    /// plötzlich nur noch PLAIN anbietet, ist entweder umkonfiguriert worden
-    /// oder gar nicht mehr derselbe.
+    /// If the server offers less afterwards, no connection comes about any
+    /// more. That is intended: a server that could do SCRAM and suddenly offers
+    /// only PLAIN has either been reconfigured or is not the same one at all
+    /// any more.
     /// </remarks>
     public string? PinnedSaslMechanism => _saslPolicy.Pinned;
 
     /// <summary>
-    /// Die beim Resource Binding gewünschte Resource; null überlässt die Wahl
-    /// dem Server (RFC 6120, Abschnitt 7.6).
+    /// The resource wished for during resource binding; null leaves the choice
+    /// to the server (RFC 6120, section 7.6).
     /// </summary>
     /// <remarks>
-    /// Der Vorgabewert stammt aus der Konsolenanwendung und ist für eine
-    /// Bibliothek eigentlich zu eng - zwei Nutzer im selben Prozess wünschen
-    /// sich damit dieselbe Resource. Er bleibt aus Rücksicht auf bestehende
-    /// Aufrufer, lässt sich aber jetzt setzen.
+    /// The default value comes from the console application and is really too
+    /// narrow for a library - two users in the same process thereby wish for
+    /// the same resource. It stays out of consideration for existing callers,
+    /// but can now be set.
     /// </remarks>
     public string? Resource { get; set; } = $"console-{Environment.ProcessId}";
 
     /// <summary>
-    /// Prüfung des Serverzertifikats bei <c>wss://</c>. Null überlässt sie dem
-    /// Betriebssystem - der Server braucht dann ein Zertifikat, dem der Rechner
-    /// ohnehin vertraut.
+    /// Validation of the server certificate with <c>wss://</c>. Null leaves it
+    /// to the operating system - the server then needs a certificate the
+    /// machine trusts anyway.
     /// </summary>
     /// <remarks>
-    /// Gedacht für Zertifikate, die keine bekannte CA unterschrieben hat: ein
-    /// Testserver, eine firmeneigene CA, ein angehefteter Fingerabdruck. Wer
-    /// hier eine Prüfung einsetzt, die immer true liefert, hat TLS auf
-    /// Verschlüsselung ohne Authentifizierung reduziert - gegen einen
-    /// Mitschnitt hilft das, gegen einen Zwischenmann nicht.
+    /// Intended for certificates that no known CA has signed: a test server, a
+    /// company's own CA, a pinned fingerprint. Whoever puts a validation in
+    /// here that always returns true has reduced TLS to encryption without
+    /// authentication - that helps against a recording, not against a man in
+    /// the middle.
     /// </remarks>
     public RemoteCertificateValidationCallback? ServerCertificateValidator { get; set; }
 
@@ -258,34 +257,33 @@ public sealed class XMPPConnection : IAsyncDisposable
     public string Domain => _domain;
 
     /// <summary>
-    /// Der Endpunkt, zu dem verbunden wird: der angegebene, der über XEP-0156
-    /// gefundene oder der Vorgabewert - in dieser Rangfolge.
+    /// The endpoint that is connected to: the one given, the one found through
+    /// XEP-0156 or the default value - in that order of precedence.
     /// </summary>
     public string WebSocketUri => _wsUri ?? _defaultWsUri;
 
     /// <summary>
-    /// XEP-0156: Womit der Endpunkt gesucht wird, wenn der Aufrufer keinen
-    /// genannt hat. Ohne Angabe wird das <c>host-meta</c> der Domain über
-    /// HTTPS geladen.
+    /// XEP-0156: What the endpoint is searched with when the caller has named
+    /// none. Without one the <c>host-meta</c> of the domain is loaded over
+    /// HTTPS.
     /// </summary>
     public AltConnectionsResolver? EndpointDiscovery { get; set; }
     public List<string> ServerFeatures { get; } = [];
 
     /// <summary>
-    /// XEP-0352: Hat der Server Client State Indication angekündigt?
+    /// XEP-0352: Has the server announced client state indication?
     /// </summary>
     public bool SupportsClientStateIndication { get; private set; }
 
     /// <summary>
-    /// XEP-0352: Sieht gerade ein Mensch hin? Vorgabe true - ein Stream
-    /// beginnt immer aktiv (Abschnitt 4.2).
+    /// XEP-0352: Is a human being looking right now? Default true - a stream
+    /// always begins active (section 4.2).
     /// </summary>
     /// <remarks>
-    /// Der Wert überdauert einen Verbindungsabriss, der Zustand auf dem Server
-    /// nicht: Nach Abschnitt 5.2 fängt auch ein wiederaufgenommener Stream
-    /// wieder aktiv an. Deshalb erklärt sich der Client nach jedem Aufbau
-    /// erneut für inaktiv, solange er es ist - das Telefon liegt ja immer noch
-    /// in derselben Tasche.
+    /// The value outlasts a connection drop, the state on the server does not:
+    /// per section 5.2 a resumed stream, too, begins active again. That is why
+    /// the client declares itself inactive anew after every setup, as long as
+    /// it is - the phone is, after all, still lying in the same pocket.
     /// </remarks>
     public bool ClientIsActive { get; private set; } = true;
 
@@ -307,18 +305,18 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     // Events - Core
     /// <summary>
-    /// Eine empfangene Nachricht - fertig zusammengesetzt.
+    /// A received message - fully assembled.
     /// </summary>
     /// <remarks>
-    /// Hier stand eine Liste einzelner Werte, die mit jeder Erweiterung länger
-    /// wurde: erst fünf, mit dem Verzugsstempel acht, mit der Korrektur neun.
-    /// Eine Reihe gleichartiger Zeichenketten, deren Bedeutung nur an ihrer
-    /// Stellung hängt, ist eine Verwechslung, die auf ihre Gelegenheit wartet.
+    /// Here stood a list of individual values that grew longer with every
+    /// extension: first five, with the delay stamp eight, with the correction
+    /// nine. A row of alike strings whose meaning hangs on their position alone
+    /// is a mix-up waiting for its opportunity.
     ///
-    /// Zusammengesetzt wird sie hier und nicht beim Aufrufer: <b>Nur hier
-    /// liegt die Stanza noch vor.</b> Genau daran ist der Verzugsstempel
-    /// vorbeigegangen - der Aufrufer setzte die Uhrzeit selbst und konnte gar
-    /// nicht wissen, dass in der Stanza eine andere stand (siehe D59).
+    /// It is assembled here and not at the caller: <b>only here is the stanza
+    /// still available.</b> That is exactly what the delay stamp went past -
+    /// the caller set the time of day itself and could not possibly know that a
+    /// different one stood in the stanza (see D59).
     /// </remarks>
     public event Action<XMPPMessage>? OnMessage;
     public event Action<string, string>? OnPresence;
@@ -328,15 +326,14 @@ public sealed class XMPPConnection : IAsyncDisposable
     public event Action<PubSubEvent>? OnPubSubEvent;
 
     /// <summary>
-    /// Jemand beantragt ein Abonnement an einem eigenen Knoten (XEP-0060,
-    /// Abschnitt 8.6.1).
+    /// Someone applies for a subscription to a node of our own (XEP-0060,
+    /// section 8.6.1).
     /// </summary>
     /// <remarks>
-    /// <b>Ein Ereignis und keine Rückfrage.</b> Beantwortet wird der Antrag
-    /// mit <see cref="PubSubAnswerSubscriptionRequestAsync"/>, und zwar von
-    /// dem, der die Meldung sieht - ein Client, der von sich aus zusagte,
-    /// entschiede über fremden Zugang nach einer Regel, die niemand gesehen
-    /// hat.
+    /// <b>An event and not a callback.</b> The application is answered with
+    /// <see cref="PubSubAnswerSubscriptionRequestAsync"/>, and by whoever sees
+    /// the report - a client that agreed of its own accord would decide about
+    /// someone else's access by a rule nobody has seen.
     /// </remarks>
     public event Action<PubSubSubscribeAuthorization>? OnPubSubSubscriptionRequest;
     public event Action<string>? OnRawXml;
@@ -349,15 +346,16 @@ public sealed class XMPPConnection : IAsyncDisposable
     public event Action<string, DiscoInfo>? OnCapsDiscovered;
 
     /// <summary>
-    /// RFC 6120, Abschnitt 8.3: Eine Stanza wurde von der Gegenstelle
-    /// abgelehnt. Der erste Parameter ist der Absender des Fehlers; er ist
-    /// null, wenn der Fehler vom eigenen Server kam.
+    /// RFC 6120, section 8.3: A stanza was refused by the peer. The first
+    /// parameter is the sender of the error; it is null when the error came
+    /// from one's own server.
     /// </summary>
     public event Action<string?, StanzaError>? OnStanzaError;
 
     /// <summary>
-    /// RFC 6120, Abschnitt 4.9: Der Server hat den Stream mit einem Fehler
-    /// beendet. Ob ein Reconnect folgt, sagt <see cref="StreamError.IsRecoverable"/>.
+    /// RFC 6120, section 4.9: The server ended the stream with an error.
+    /// Whether a reconnect follows is said by
+    /// <see cref="StreamError.IsRecoverable"/>.
     /// </summary>
     public event Action<StreamError>? OnStreamError;
 
@@ -366,16 +364,16 @@ public sealed class XMPPConnection : IAsyncDisposable
     #region Constructor(s)
 
     /// <summary>
-    /// Erstellt eine neue WebSocket-basierte XMPP-Verbindung
+    /// Creates a new WebSocket-based XMPP connection
     /// </summary>
-    /// <param name="jid">Bare-JID im Format user@domain</param>
-    /// <param name="password">Passwort für die SASL-Authentifizierung</param>
+    /// <param name="jid">Bare JID in the format user@domain</param>
+    /// <param name="password">Password for the SASL authentication</param>
     /// <param name="wsUri">
-    /// WebSocket-Endpunkt. Ohne Angabe wird vor dem ersten Verbinden das
-    /// <c>host-meta</c> der Domain gefragt (XEP-0156); findet sich dort keiner,
-    /// bleibt es bei wss://{domain}:5443/ws (ejabberd-Vorgabe).
+    /// WebSocket endpoint. Without one the <c>host-meta</c> of the domain is
+    /// asked before the first connect (XEP-0156); if none is found there, it
+    /// stays at wss://{domain}:5443/ws (the ejabberd default).
     /// </param>
-    /// <param name="LoggerFactory">Optionale Logger-Factory; ohne Angabe wird nicht geloggt</param>
+    /// <param name="LoggerFactory">Optional logger factory; without one nothing is logged</param>
     public XMPPConnection(string             jid,
                           string             password,
                           string?            wsUri           = null,
@@ -387,15 +385,14 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var parts  = jid.Split('@');
         if (parts.Length != 2)
-            throw new ArgumentException("JID muss im Format 'user@domain' sein", nameof(jid));
+            throw new ArgumentException("The JID has to be in the format 'user@domain'", nameof(jid));
 
         _username  = parts[0];
         _domain    = parts[1];
 
-        // Getrennt gehalten: Ohne Angabe wird vor dem ersten Verbinden das
-        // host-meta der Domain gefragt (XEP-0156). Wer einen Endpunkt nennt,
-        // wird nicht gefragt - das XEP ist ausdrücklich der Rückfallweg, nicht
-        // die erste Adresse.
+        // Kept apart: without one, the host-meta of the domain is asked before
+        // the first connect (XEP-0156). Whoever names an endpoint is not asked
+        // - the XEP is explicitly the fallback route, not the first address.
         _wsUri         = wsUri;
         _defaultWsUri  = $"wss://{_domain}:5443/ws";
 
@@ -422,37 +419,36 @@ public sealed class XMPPConnection : IAsyncDisposable
 
 
     /// <summary>
-    /// Baut die Verbindung auf und meldet sich an.
+    /// Establishes the connection and logs in.
     /// </summary>
     /// <exception cref="AuthenticationException">
-    /// Die Anmeldung wurde abgelehnt.
+    /// The login was refused.
     /// </exception>
     /// <exception cref="XMPPProtocolException">
-    /// Die Aushandlung ist gescheitert - etwa durch eine Zeitüberschreitung.
+    /// The negotiation failed - through a timeout, for instance.
     /// </exception>
     /// <remarks>
-    /// Ein gescheiterter Aufbau <b>wirft</b> und kehrt nicht stillschweigend
-    /// zurück. Bis D31 tat er genau das: Der Fehler ging an <c>OnError</c> und
-    /// an den Zustand, und wer nichts abonniert hatte, sah zwischen gelungen
-    /// und gescheitert keinen Unterschied - und arbeitete auf einer Verbindung
-    /// weiter, die es nicht gibt.
+    /// A failed setup <b>throws</b> and does not return silently. Until D31 it
+    /// did exactly that: the error went to <c>OnError</c> and to the state, and
+    /// whoever had subscribed to nothing saw no difference between succeeded
+    /// and failed - and carried on working on a connection that does not exist.
     ///
-    /// Geworfen wird der ursprüngliche Fehler und keine Hülle darum: Ein
-    /// falsches Passwort ist etwas anderes als eine Zeitüberschreitung, und der
-    /// Aufrufer soll das unterscheiden können, ohne in einer Meldung zu lesen.
+    /// Thrown is the original error and not a shell around it: a wrong password
+    /// is something other than a timeout, and the caller shall be able to tell
+    /// them apart without reading a message.
     ///
-    /// Nur dieser Weg wirft. Der Wiederverbindungsversuch im Hintergrund läuft
-    /// durch dieselbe <see cref="ConnectInternalAsync"/>, hat aber keinen
-    /// Aufrufer, dem er etwas schulden könnte - er meldet weiterhin über
-    /// Ereignisse. Deshalb steht die Entscheidung hier und nicht dort.
+    /// Only this route throws. The reconnect attempt in the background runs
+    /// through the same <see cref="ConnectInternalAsync"/>, but has no caller
+    /// it could owe anything to - it keeps reporting through events. That is
+    /// why the decision stands here and not there.
     /// </remarks>
     public async Task ConnectAsync(CancellationToken ct = default)
     {
         _intentionalDisconnect = false;
         _reconnectAttempts = 0;
 
-        // Ein bewusster Verbindungsaufbau hebt die Sperre aus einem früheren
-        // Stream-Fehler auf: der Aufrufer weiss, was er tut.
+        // A deliberate connection attempt lifts the lock from an earlier stream
+        // error: the caller knows what they are doing.
         _fatalStreamError = false;
 
         _lastConnectError = null;
@@ -462,33 +458,34 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (State == ConnectionState.Connected)
             return;
 
-        // Den ursprünglichen Fehler mit seinem eigenen Stapel weiterwerfen -
-        // nicht neu verpacken. Für den Aufrufer ist die Stelle interessant, an
-        // der es schiefging, und nicht diese hier.
+        // Rethrow the original error with its own stack - do not repackage it.
+        // For the caller the interesting place is the one where it went wrong,
+        // and not this one here.
         if (_lastConnectError is not null)
             ExceptionDispatchInfo.Capture(_lastConnectError).Throw();
 
-        // Ohne festgehaltenen Fehler bleibt nur der Befund selbst: Das kommt
-        // vor, wenn die Wiederverbindungsversuche aufgebraucht sind, ohne dass
-        // der letzte Versuch überhaupt begonnen hätte.
+        // Without a recorded error only the finding itself remains: that
+        // happens when the reconnect attempts are used up without the last
+        // attempt having even begun.
         throw new XMPPProtocolException(
-                  $"Der Verbindungsaufbau zu {WebSocketUri} ist gescheitert, Zustand: {State}.");
+                  $"Establishing the connection to {WebSocketUri} failed, state: {State}.");
 
     }
 
     /// <summary>
-    /// Sucht den Endpunkt über XEP-0156, falls der Aufrufer keinen genannt hat.
+    /// Searches for the endpoint through XEP-0156, in case the caller has named
+    /// none.
     /// </summary>
     /// <remarks>
-    /// <b>Höchstens einmal je Verbindung, auch über Wiederverbindungen
-    /// hinweg.</b> Der Wiederverbindungsversuch läuft in einer Schleife; eine
-    /// Abfrage je Durchgang hiesse, bei einem Server, der gerade weg ist,
-    /// zwanzigmal auf eine HTTPS-Antwort zu warten, die es nicht gibt.
+    /// <b>At most once per connection, across reconnects too.</b> The reconnect
+    /// attempt runs in a loop; one query per pass would mean, with a server
+    /// that is currently away, waiting twenty times for an HTTPS answer that
+    /// does not exist.
     ///
-    /// Bleibt die Suche ohne Ergebnis, wird sie nicht wiederholt und der
-    /// Vorgabewert bleibt stehen. Das ist die Rangfolge des XEPs: Die Discovery
-    /// ist der Rückfallweg, und ein Rückfallweg, der selbst scheitert, darf den
-    /// Verbindungsaufbau nicht aufhalten.
+    /// If the search stays without a result, it is not repeated and the default
+    /// value stays. That is the order of precedence of the XEP: the discovery
+    /// is the fallback route, and a fallback route that fails itself must not
+    /// hold up the connection setup.
     /// </remarks>
     private async Task DiscoverEndpointAsync(CancellationToken ct)
     {
@@ -498,31 +495,31 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         _endpointDiscovered = true;
 
-        var gefunden = await (EndpointDiscovery ?? new AltConnectionsResolver()).
-                                 DiscoverWebSocketAsync(_domain, ct);
+        var found = await (EndpointDiscovery ?? new AltConnectionsResolver()).
+                              DiscoverWebSocketAsync(_domain, ct);
 
-        if (gefunden is not null)
+        if (found is not null)
         {
-            _logger.LogInformation("XEP-0156: {WebSocketUri} aus dem host-meta von {Domain}",
-                                   gefunden, _domain);
-            _wsUri = gefunden;
+            _logger.LogInformation("XEP-0156: {WebSocketUri} from the host-meta of {Domain}",
+                                   found, _domain);
+            _wsUri = found;
         }
 
         else
-            _logger.LogDebug("XEP-0156: kein WebSocket-Endpunkt für {Domain}, es bleibt bei {WebSocketUri}",
+            _logger.LogDebug("XEP-0156: no WebSocket endpoint for {Domain}, it stays at {WebSocketUri}",
                              _domain, _defaultWsUri);
 
     }
 
     /// <summary>
-    /// Beendet Empfangs- und Keepalive-Schleife der aktuellen Verbindung,
-    /// wartet auf deren Ende und gibt CancellationTokenSource und Socket frei.
+    /// Ends the receive and keepalive loop of the current connection, waits for
+    /// their end and releases the CancellationTokenSource and the socket.
     /// </summary>
     /// <remarks>
-    /// Ohne diesen Abbau überschreibt ein Reconnect die alte
-    /// CancellationTokenSource, ohne sie abzubrechen: Die Schleifen der
-    /// vorigen Verbindung laufen dann weiter, greifen über die Felder auf den
-    /// neuen Socket zu und summieren sich mit jedem Reconnect auf.
+    /// Without this teardown a reconnect overwrites the old
+    /// CancellationTokenSource without cancelling it: the loops of the previous
+    /// connection then keep running, reach the new socket through the fields
+    /// and accumulate with every reconnect.
     /// </remarks>
     private async Task ShutdownConnectionAsync()
     {
@@ -550,7 +547,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Abbruch der Hintergrund-Tasks fehlgeschlagen (ignoriert)");
+                _logger.LogDebug(ex, "Cancelling the background tasks failed (ignored)");
             }
         }
 
@@ -562,12 +559,12 @@ public sealed class XMPPConnection : IAsyncDisposable
         {
             try
             {
-                // Warten, damit die alten Schleifen den neuen Socket nicht mehr anfassen.
+                // Wait, so that the old loops no longer touch the new socket.
                 await Task.WhenAll(pending).WaitAsync(ShutdownTimeout);
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Hintergrund-Tasks nicht innerhalb von {Timeout}s beendet",
+                _logger.LogDebug(ex, "Background tasks not ended within {Timeout}s",
                                  ShutdownTimeout.TotalSeconds);
             }
         }
@@ -580,7 +577,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     private async Task ConnectInternalAsync(CancellationToken ct)
     {
 
-        // Reste einer vorigen Verbindung abräumen, bevor eine neue entsteht.
+        // Clear away the remains of a previous connection before a new one comes into being.
         await ShutdownConnectionAsync();
 
         SetState(ConnectionState.Connecting);
@@ -589,7 +586,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         try
         {
-            // WebSocket verbinden
+            // Connect the WebSocket
             var webSocket = new ClientWebSocket();
             webSocket.Options.AddSubProtocol("xmpp");  // RFC 7395
 
@@ -598,19 +595,19 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             _webSocket = webSocket;
 
-            _logger.LogInformation("Verbinde zu {WebSocketUri} ...", WebSocketUri);
+            _logger.LogInformation("Connecting to {WebSocketUri} ...", WebSocketUri);
 
-            // Der Endpunkt gehört in die Ausnahme, und zwar nur hier. Was der
-            // Transport wirft, lautet „Unable to connect to the remote server"
-            // und sagt nicht, wohin - seit XEP-0156 (D41) muss die Adresse
-            // nicht einmal mehr vom Aufrufer stammen, und dann steht sie in
-            // keinem Quelltext, den er lesen könnte.
+            // The endpoint belongs in the exception, and only here. What the
+            // transport throws reads "Unable to connect to the remote server"
+            // and does not say where to - since XEP-0156 (D41) the address does
+            // not even have to come from the caller any more, and then it
+            // stands in no source text they could read.
             //
-            // Das ist kein Rückzieher gegenüber D31: Dort geht es um den
-            // *Stapel* des ursprünglichen Fehlers, und der ist hier ohne Wert
-            // (er endet in ClientWebSocket.ConnectAsync). Die Ausnahme bleibt
-            // als InnerException erhalten; die Aushandlungs- und
-            // Anmeldefehler danach werden nicht angefasst.
+            // This is not a retreat from D31: there it is about the *stack* of
+            // the original error, and that one is without value here (it ends
+            // in ClientWebSocket.ConnectAsync). The exception is preserved as
+            // the InnerException; the negotiation and login errors after it are
+            // not touched.
             try
             {
                 await webSocket.ConnectAsync(new Uri(WebSocketUri), ct);
@@ -618,20 +615,20 @@ public sealed class XMPPConnection : IAsyncDisposable
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 throw new XMPPProtocolException(
-                          $"Der Verbindungsaufbau zu {WebSocketUri} ist gescheitert: {ex.Message}",
+                          $"Establishing the connection to {WebSocketUri} failed: {ex.Message}",
                           ex);
             }
 
-            _logger.LogInformation("WebSocket verbunden");
+            _logger.LogInformation("WebSocket connected");
 
             _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-            // ===== Aushandlung =====
+            // ===== Negotiation =====
             //
-            // Bis zum Resource Binding liest dieser Abschnitt selbst vom
-            // Socket. Das ist hier richtig: der Server hat noch keine Resource,
-            // an die er etwas routen könnte, es kann also nichts anderes
-            // eintreffen als die Aushandlung selbst.
+            // Up to the resource binding this section reads from the socket
+            // itself. That is right here: the server has no resource yet that
+            // it could route anything to, so nothing else can arrive than the
+            // negotiation itself.
 
             await SendAsync(OpenStream());
 
@@ -640,26 +637,26 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             if (mechanisms.Count > 0)
             {
-                _logger.LogDebug("Verfügbare SASL-Mechanismen: {Mechanisms}", string.Join(", ", mechanisms));
+                _logger.LogDebug("Available SASL mechanisms: {Mechanisms}", string.Join(", ", mechanisms));
             }
 
-            // SASL Auth - Präferenz: SCRAM-SHA-256 > SCRAM-SHA-1 > PLAIN
+            // SASL auth - preference: SCRAM-SHA-256 > SCRAM-SHA-1 > PLAIN
             var chosen = SaslMechanismPolicy.Strongest(mechanisms);
 
             if (chosen is null)
                 throw new AuthenticationException(
                           mechanisms.Count > 0
-                              ? $"Keine unterstützten SASL-Mechanismen. Verfügbar: {string.Join(", ", mechanisms)}"
-                              : "Server bietet keine SASL-Mechanismen an. Features: " +
+                              ? $"No supported SASL mechanisms. Available: {string.Join(", ", mechanisms)}"
+                              : "The server offers no SASL mechanisms. Features: " +
                                 Shorten(features.ToString(), 200));
 
-            // Die Untergrenze wird geprüft, bevor der erste Rahmen hinausgeht,
-            // nicht danach: Bei PLAIN steht das Passwort in genau diesem
-            // <auth/>. Wer das Downgrade erst an der Antwort bemerkt, hat es
-            // dem Zwischenmann schon gegeben.
+            // The lower bound is checked before the first frame goes out, not
+            // afterwards: with PLAIN the password stands in exactly this
+            // <auth/>. Whoever notices the downgrade only from the answer has
+            // already given it to the man in the middle.
             _saslPolicy.EnsureAcceptable(chosen);
 
-            _logger.LogInformation("{Mechanism} Authentifizierung ...", chosen);
+            _logger.LogInformation("{Mechanism} authentication ...", chosen);
 
             switch (chosen)
             {
@@ -673,25 +670,25 @@ public sealed class XMPPConnection : IAsyncDisposable
                     break;
 
                 case SaslMechanismPolicy.Plain:
-                    // PLAIN überträgt das Passwort im Klartext (nur durch TLS geschützt)
-                    // und ist der schwächste hier unterstützte Mechanismus.
-                    _logger.LogWarning("SASL PLAIN Authentifizierung - Server bietet kein SCRAM an");
+                    // PLAIN transmits the password in the clear (protected only by TLS)
+                    // and is the weakest mechanism supported here.
+                    _logger.LogWarning("SASL PLAIN authentication - the server offers no SCRAM");
                     await PerformSaslPlainAsync(ct);
                     break;
 
-                // Ein Mechanismus, der in der Rangfolge steht, aber hier kein
-                // Verfahren hat, ist ein Fehler in dieser Datei - und keiner,
-                // der auf PLAIN zurückfallen darf.
+                // A mechanism that stands in the ranking but has no procedure
+                // here is a mistake in this file - and not one that may fall
+                // back to PLAIN.
                 default:
                     throw new AuthenticationException(
-                              $"Für den gewählten Mechanismus {chosen} ist kein Verfahren hinterlegt.");
+                              $"For the chosen mechanism {chosen} no procedure is on file.");
 
             }
 
-            // Erst jetzt, nach der gelungenen Anmeldung.
+            // Only now, after the successful login.
             _saslPolicy.Remember(chosen);
 
-            // Neuen Stream öffnen nach Auth (RFC 6120, Abschnitt 6.4.6)
+            // Open a new stream after auth (RFC 6120, section 6.4.6)
             await SendAsync(OpenStream());
             features = await ReceiveFeaturesAsync(ct);
 
@@ -700,70 +697,70 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             SupportsClientStateIndication = StreamNegotiation.OffersClientStateIndication(features);
 
-            // XEP-0198, Abschnitt 5: der Versuch, an den früheren Stream
-            // anzuknüpfen, gehört genau hierhin - nach der Anmeldung, vor dem
-            // Binding. Gelingt er, gibt es keine neue Resource: die alte
-            // Full-JID gilt weiter, und alles, was seit dem Abriss an sie
-            // adressiert war, kommt nach.
-            var wiederaufgenommen = await TryResumeAsync(features, ct);
+            // XEP-0198, section 5: the attempt to tie in with the earlier
+            // stream belongs exactly here - after the login, before the
+            // binding. If it succeeds, there is no new resource: the old full
+            // JID still holds, and everything addressed to it since the drop
+            // comes after.
+            var resumed = await TryResumeAsync(features, ct);
 
-            if (!wiederaufgenommen && StreamNegotiation.OffersBind(features))
+            if (!resumed && StreamNegotiation.OffersBind(features))
             {
-                _logger.LogDebug("Resource Binding ...");
+                _logger.LogDebug("Resource binding ...");
                 FullJid = await PerformBindAsync(ct);
-                _logger.LogInformation("Verbunden als {FullJid}", FullJid);
+                _logger.LogInformation("Connected as {FullJid}", FullJid);
             }
 
-            // ===== Ab hier ist die Sitzung nutzbar =====
+            // ===== From here on the session is usable =====
             //
-            // Die Manager entstehen vor der Empfangsschleife: sobald die
-            // Resource gebunden ist, darf der Server zustellen, und die erste
-            // Stanza kann eintreffen, bevor die nächste Zeile läuft.
+            // The managers come into being before the receive loop: as soon as
+            // the resource is bound, the server may deliver, and the first
+            // stanza can arrive before the next line runs.
 
             InitialiseManagers();
 
-            // Die Empfangsschleife bekommt ihren Socket explizit mit, damit sie
-            // nach einem Reconnect nicht am neuen Socket hängt.
+            // The receive loop gets its socket handed to it explicitly, so that
+            // after a reconnect it does not hang on the new socket.
             _receiveTask = ReceiveLoopAsync(webSocket, _cts.Token);
 
-            // Ein wiederaufgenommener Stream ist keine neue Sitzung: Session,
-            // Stream Management, Carbons, Roster und Presence stehen alle
-            // schon. Sie noch einmal zu durchlaufen wäre nicht bloss
-            // überflüssig - eine zweite Presence meldete die Resource neu an,
-            // und den Kontakten sähe es aus wie das Wiederkommen, das die
-            // Wiederaufnahme gerade vermeiden soll.
-            if (!wiederaufgenommen)
+            // A resumed stream is not a new session: session, stream
+            // management, carbons, roster and presence are all in place
+            // already. Going through them once more would not merely be
+            // superfluous - a second presence would announce the resource anew,
+            // and to the contacts it would look like the return that the
+            // resumption is meant to avoid in the first place.
+            if (!resumed)
             {
 
-                // Session (falls nötig - in RFC 6121 entfallen)
+                // Session (if necessary - dropped in RFC 6121)
                 if (StreamNegotiation.RequiresSession(features))
                     await PerformSessionAsync(ct);
 
-                // XEP-0198: Stream Management, standardmässig an. Die Zählung ist
-                // gegen Prosody 13 belegt (ProsodyStreamManagementTests); der
-                // Grund für die frühere Abschaltung - eine fehlerhafte Zählung -
-                // besteht nicht mehr.
+                // XEP-0198: stream management, on by default. The counting is
+                // evidenced against Prosody 13 (ProsodyStreamManagementTests);
+                // the reason for the earlier switching-off - a faulty counting
+                // - no longer exists.
                 //
-                // Mit Wiederaufnahme: sie kostet nichts, solange sie nicht
-                // gebraucht wird, und ohne sie wirft jeder Abriss die
-                // unbestätigten Stanzas weg.
+                // With resumption: it costs nothing as long as it is not
+                // needed, and without it every drop throws the unacknowledged
+                // stanzas away.
                 if (StreamManagementEnabled && StreamNegotiation.OffersStreamManagement(features))
                 {
-                    _logger.LogInformation("Aktiviere Stream Management ...");
+                    _logger.LogInformation("Enabling stream management ...");
 
                     if (!await StreamManagement!.NegotiateAsync(requestResume: true, SetupTimeout, ct))
-                        _logger.LogWarning("Stream Management vom Server abgelehnt");
+                        _logger.LogWarning("Stream management refused by the server");
                 }
 
-                // Carbons aktivieren
-                _logger.LogDebug("Aktiviere Message Carbons ...");
+                // Enable carbons
+                _logger.LogDebug("Enabling message carbons ...");
                 await EnableCarbonsAsync(ct);
 
-                // Roster laden
-                _logger.LogDebug("Lade Roster ...");
+                // Load the roster
+                _logger.LogDebug("Loading the roster ...");
                 await RequestRosterAsync(StreamNegotiation.OffersRosterVersioning(features), ct);
 
-                // Online gehen
+                // Go online
                 await SendPresenceAsync();
 
             }
@@ -771,12 +768,12 @@ public sealed class XMPPConnection : IAsyncDisposable
             else
                 await ResendUnackedAsync();
 
-            // XEP-0352, Abschnitt 5.2: „stream resumption does not affect the
+            // XEP-0352, section 5.2: "stream resumption does not affect the
             // current CSI state, which always defaults to 'active' for new and
-            // resumed streams". Der Server hat den Zustand also vergessen, das
-            // Gerät liegt aber immer noch in der Tasche - deshalb hier und
-            // ausserhalb des Zweigs darüber: Es gilt für den neu gebundenen
-            // wie für den wiederaufgenommenen Stream.
+            // resumed streams". The server has thus forgotten the state, but
+            // the device is still lying in the pocket - hence here and outside
+            // the branch above: it holds for the newly bound as well as for the
+            // resumed stream.
             if (!ClientIsActive && SupportsClientStateIndication)
                 await SendAsync(ClientStateIndication.InactiveXml);
 
@@ -784,28 +781,28 @@ public sealed class XMPPConnection : IAsyncDisposable
             _reconnectAttempts = 0;
             _logger.LogInformation("Online");
 
-            // Keepalive-Loop starten (verhindert Server-Timeout)
+            // Start the keepalive loop (prevents the server timeout)
             if (KeepaliveEnabled)
             {
-                _logger.LogDebug("Starte Keepalive (Interval: {Seconds}s) ...", KeepaliveInterval.TotalSeconds);
+                _logger.LogDebug("Starting keepalive (interval: {Seconds}s) ...", KeepaliveInterval.TotalSeconds);
                 _keepaliveTask = KeepaliveLoopAsync(_cts.Token);
             }
         }
         catch (AuthenticationException ex)
         {
-            // Auth-Fehler sind permanent - kein Reconnect sinnvoll
+            // Auth errors are permanent - no reconnect makes sense
             _lastConnectError = ex;
             SetState(ConnectionState.Disconnected);
-            _logger.LogError(ex, "Authentifizierungsfehler");
-            OnError?.Invoke($"Authentifizierungsfehler: {ex.Message}");
-            // KEIN Reconnect bei Auth-Fehlern!
+            _logger.LogError(ex, "Authentication error");
+            OnError?.Invoke($"Authentication error: {ex.Message}");
+            // NO reconnect on auth errors!
         }
         catch (Exception ex)
         {
             _lastConnectError = ex;
             SetState(ConnectionState.Disconnected);
-            _logger.LogError(ex, "Verbindungsfehler");
-            OnError?.Invoke($"Verbindungsfehler: {ex.Message}");
+            _logger.LogError(ex, "Connection error");
+            OnError?.Invoke($"Connection error: {ex.Message}");
 
             if (!_intentionalDisconnect)
             {
@@ -814,24 +811,24 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
     }
 
-    /// <summary>Der Stream-Kopf nach RFC 7395.</summary>
+    /// <summary>The stream header per RFC 7395.</summary>
     private string OpenStream()
         => $"<open xmlns='{StreamNegotiation.FramingNamespace}' " +
            $"to='{XmlEscaping.Escape(_domain)}' version='1.0'/>";
 
     /// <summary>
-    /// Liest den nächsten Rahmen der Aushandlung und gibt ihn geparst zurück.
+    /// Reads the next frame of the negotiation and returns it parsed.
     /// </summary>
-    /// <param name="erwartet">
-    /// Worauf gewartet wird - erscheint in der Meldung, wenn die Frist abläuft.
-    /// Eine abgelaufene Frist ohne Angabe verschiebt die Suche nur: Der
-    /// Aufrufer weiss dann, dass etwas nicht kam, aber nicht, was.
+    /// <param name="expected">
+    /// What is being waited for - appears in the message when the deadline
+    /// expires. An expired deadline without it only shifts the search: the
+    /// caller then knows that something did not come, but not what.
     /// </param>
     private async Task<XElement> ReceiveElementAsync(CancellationToken ct,
-                                                     string            erwartet = "der Aushandlung")
+                                                     string            expected = "the negotiation")
     {
 
-        var xml = await ReceiveStanzaAsync(ct, erwartet);
+        var xml = await ReceiveStanzaAsync(ct, expected);
 
         try
         {
@@ -840,46 +837,46 @@ public sealed class XMPPConnection : IAsyncDisposable
         catch (XmlException ex)
         {
             throw new XMPPProtocolException(
-                      $"Rahmen der Aushandlung ist kein wohlgeformtes XML: {ex.Message}", ex);
+                      $"A frame of the negotiation is not well-formed XML: {ex.Message}", ex);
         }
 
     }
 
     /// <summary>
-    /// Wartet auf die Stream-Features. Ob der Server <c>&lt;open/&gt;</c> und
-    /// <c>&lt;features/&gt;</c> in einem oder in zwei Rahmen schickt, ist ihm
-    /// überlassen.
+    /// Waits for the stream features. Whether the server sends
+    /// <c>&lt;open/&gt;</c> and <c>&lt;features/&gt;</c> in one frame or in two
+    /// is left to it.
     /// </summary>
     private async Task<XElement> ReceiveFeaturesAsync(CancellationToken ct)
     {
 
-        var element = await ReceiveElementAsync(ct, "den Stream-Kopf");
+        var element = await ReceiveElementAsync(ct, "the stream header");
 
         if (StreamNegotiation.IsStreamOpen(element))
-            element = await ReceiveElementAsync(ct, "die Stream-Features");
+            element = await ReceiveElementAsync(ct, "the stream features");
 
         if (!StreamNegotiation.IsFeatures(element))
             throw new XMPPProtocolException(
-                      $"Erwartet wurden die Stream-Features, empfangen wurde <{element.Name.LocalName}/>.");
+                      $"Expected were the stream features, received was <{element.Name.LocalName}/>.");
 
         return element;
 
     }
 
     /// <summary>
-    /// XEP-0198, Abschnitt 5: Versucht, an den früheren Stream anzuknüpfen.
+    /// XEP-0198, section 5: Tries to tie in with the earlier stream.
     /// </summary>
     /// <remarks>
-    /// Gelesen wird hier noch direkt vom Socket, wie im ganzen Abschnitt der
-    /// Aushandlung: die Empfangsschleife läuft erst, wenn die Sitzung steht.
-    /// Ein Umweg über sie wäre auch inhaltlich falsch - solange nicht
-    /// feststeht, ob dieser Stream der alte ist, gibt es niemanden, an den
-    /// eine Stanza zuzustellen wäre.
+    /// Read is still directly from the socket here, as in the whole section of
+    /// the negotiation: the receive loop only runs once the session is in
+    /// place. A detour through it would also be wrong in substance - as long as
+    /// it is not settled whether this stream is the old one, there is nobody a
+    /// stanza could be delivered to.
     ///
-    /// Ein <c>&lt;failed/&gt;</c> ist kein Fehler, sondern der Normalfall nach
-    /// einer längeren Störung. Der Aufrufer bindet dann eine neue Resource.
+    /// A <c>&lt;failed/&gt;</c> is not an error but the normal case after a
+    /// longer disturbance. The caller then binds a new resource.
     /// </remarks>
-    /// <returns>true, wenn der alte Stream weitergeht.</returns>
+    /// <returns>true when the old stream carries on.</returns>
     private async Task<bool> TryResumeAsync(XElement features, CancellationToken ct)
     {
 
@@ -888,57 +885,57 @@ public sealed class XMPPConnection : IAsyncDisposable
             !StreamNegotiation.OffersStreamManagement(features))
             return false;
 
-        _logger.LogInformation("Versuche, den Stream wieder aufzunehmen ...");
+        _logger.LogInformation("Trying to resume the stream ...");
 
         await StreamManagement.ResumeAsync();
 
-        var antwort = await ReceiveElementAsync(ct);
-        var name    = antwort.Name.LocalName;
+        var answer = await ReceiveElementAsync(ct);
+        var name   = answer.Name.LocalName;
 
         if (name == "resumed")
         {
-            StreamManagement.ProcessResumed(antwort.ToString());
-            _logger.LogInformation("Stream wieder aufgenommen als {FullJid}", FullJid);
+            StreamManagement.ProcessResumed(answer.ToString());
+            _logger.LogInformation("Stream resumed as {FullJid}", FullJid);
             return true;
         }
 
-        // Alles andere als ein <resumed/> heisst: der alte Stream ist fort.
-        // ProcessFailed räumt die Kennung ab und meldet, was dabei verloren
-        // ging - ohne das versuchte der nächste Reconnect es wieder mit einer
-        // Kennung, die der Server längst vergessen hat.
+        // Anything other than a <resumed/> means: the old stream is gone.
+        // ProcessFailed clears away the identifier and reports what was lost in
+        // the process - without that the next reconnect would try it again with
+        // an identifier the server has long forgotten.
         if (name != "failed")
-            _logger.LogWarning("Unerwartete Antwort auf <resume/>: <{Name}/>", name);
+            _logger.LogWarning("Unexpected answer to <resume/>: <{Name}/>", name);
 
-        // Mit dem Rahmen: ein <failed h='…'/> nennt den Stand des alten
-        // Streams, und was der Server verarbeitet hat, ist nicht verloren.
-        StreamManagement.ProcessFailed(antwort.ToString());
+        // Together with the frame: a <failed h='…'/> names the state of the old
+        // stream, and what the server has processed is not lost.
+        StreamManagement.ProcessFailed(answer.ToString());
 
         return false;
 
     }
 
     /// <summary>
-    /// Erzeugt die XEP-Manager für diese Verbindung.
+    /// Creates the XEP managers for this connection.
     /// </summary>
     /// <remarks>
-    /// Muss vor dem Start der Empfangsschleife laufen: <c>ProcessStanza</c>
-    /// greift auf alle davon zu, und nach dem Resource Binding darf der Server
-    /// jederzeit zustellen.
+    /// Has to run before the receive loop starts: <c>ProcessStanza</c> reaches
+    /// all of them, and after the resource binding the server may deliver at
+    /// any time.
     /// </remarks>
     private void InitialiseManagers()
     {
 
-        // XEP-0198, Abschnitt 5: dieser eine Manager überlebt den Reconnect.
-        // An ihm hängen die Kennung des aufgehobenen Streams und die noch
-        // unbestätigten Stanzas - würde er hier wie die übrigen neu erzeugt,
-        // wäre nach einem Abriss beides fort, und die Wiederaufnahme hätte
-        // nichts, woran sie anknüpfen könnte. Seinen Sitzungszustand setzt er
-        // selbst zurück, sobald ein <enabled/> kommt.
+        // XEP-0198, section 5: this one manager survives the reconnect. On it
+        // hang the identifier of the preserved stream and the stanzas not yet
+        // acknowledged - were it created anew here like the rest, both would be
+        // gone after a drop, and the resumption would have nothing to tie in
+        // with. It resets its session state itself as soon as an <enabled/>
+        // arrives.
         if (StreamManagement is null)
         {
             StreamManagement = new StreamManagementManager(xml => SendAsync(xml), CreateLogger<StreamManagementManager>());
             StreamManagement.OnAckReceived += count =>
-                _logger.LogTrace("Stream Management: {Count} Stanzas bestätigt", count);
+                _logger.LogTrace("Stream management: {Count} stanzas acknowledged", count);
         }
 
         Carbons = new CarbonManager(BareJid);
@@ -950,7 +947,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         // XEP-0199: Ping Manager
         Ping = new PingManager(xml => SendAsync(xml));
-        Ping.OnPingTimeout += target => OnError?.Invoke($"Ping Timeout: {target}");
+        Ping.OnPingTimeout += target => OnError?.Invoke($"Ping timeout: {target}");
 
         // XEP-0030: Service Discovery
         Disco = new DiscoManager(xml => SendAsync(xml));
@@ -968,13 +965,13 @@ public sealed class XMPPConnection : IAsyncDisposable
     {
         if (_intentionalDisconnect || _reconnectAttempts >= MaxReconnectAttempts)
         {
-            _logger.LogWarning("Reconnect aufgegeben nach {Attempts} Versuchen", _reconnectAttempts);
+            _logger.LogWarning("Reconnect given up after {Attempts} attempts", _reconnectAttempts);
             return;
         }
 
         _reconnectAttempts++;
 
-        // Exponential Backoff
+        // Exponential backoff
         var delay = TimeSpan.FromMilliseconds(
             Math.Min(
                 InitialReconnectDelay.TotalMilliseconds * Math.Pow(2, _reconnectAttempts - 1),
@@ -983,7 +980,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         );
 
         SetState(ConnectionState.Reconnecting);
-        _logger.LogInformation("Reconnect-Versuch {Attempt}/{Max} in {Seconds:F1}s ...",
+        _logger.LogInformation("Reconnect attempt {Attempt}/{Max} in {Seconds:F1}s ...",
                                _reconnectAttempts, MaxReconnectAttempts, delay.TotalSeconds);
 
         try
@@ -993,12 +990,12 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            // Abgebrochen
+            // Cancelled
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Reconnect fehlgeschlagen");
-            OnError?.Invoke($"Reconnect fehlgeschlagen: {ex.Message}");
+            _logger.LogError(ex, "Reconnect failed");
+            OnError?.Invoke($"Reconnect failed: {ex.Message}");
         }
     }
 
@@ -1008,7 +1005,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (oldState != newState)
         {
             State = newState;
-            _logger.LogDebug("Verbindungszustand: {OldState} -> {NewState}", oldState, newState);
+            _logger.LogDebug("Connection state: {OldState} -> {NewState}", oldState, newState);
             OnStateChanged?.Invoke(oldState, newState);
         }
     }
@@ -1016,39 +1013,40 @@ public sealed class XMPPConnection : IAsyncDisposable
     // ===== WEBSOCKET I/O =====
 
     /// <summary>
-    /// XEP-0198, Abschnitt 5: Schickt nach einer Wiederaufnahme nach, was der
-    /// alte Stream nicht mehr bestätigt bekommen hat.
+    /// XEP-0198, section 5: After a resumption, sends afterwards what the old
+    /// stream did not get acknowledged any more.
     /// </summary>
     /// <remarks>
-    /// Ohne Mitzählen: diese Stanzas tragen ihre Sequenznummer bereits und
-    /// stehen weiter in der Warteschlange, bis der Server sie bestätigt. Wer
-    /// sie beim Nachsenden erneut zählte, verschöbe seinen Ausgangszähler
-    /// gegen den Empfangszähler der Gegenstelle - und ab da bestätigte jedes
-    /// <c>&lt;a h='…'/&gt;</c> die falschen Stanzas.
+    /// Without counting along: these stanzas already carry their sequence
+    /// number and remain in the queue until the server acknowledges them.
+    /// Whoever counted them again while sending them after would shift their
+    /// outgoing counter against the incoming counter of the peer - and from
+    /// then on every <c>&lt;a h='…'/&gt;</c> would acknowledge the wrong
+    /// stanzas.
     /// </remarks>
     private async Task ResendUnackedAsync()
     {
 
-        var offen = StreamManagement?.GetUnackedStanzas() ?? [];
+        var open = StreamManagement?.GetUnackedStanzas() ?? [];
 
-        if (offen.Count == 0)
+        if (open.Count == 0)
             return;
 
-        _logger.LogInformation("Sende {Count} unbestätigte Stanzas nach", offen.Count);
+        _logger.LogInformation("Sending {Count} unacknowledged stanzas afterwards", open.Count);
 
-        foreach (var stanza in offen)
+        foreach (var stanza in open)
             await SendAsync(stanza, track: false);
 
-        // Und danach nach einer Bestätigung fragen.
+        // And afterwards ask for an acknowledgement.
         //
-        // Ohne das bleibt die Warteschlange stehen. Das <resumed h='…'/> hat
-        // sie nur bis zum Stand des Servers geleert; was darüber hinaus
-        // offen war, ist gerade noch einmal hinausgegangen und wartet nun auf
-        // ein <a/>, das von selbst nie kommt: Der Server bestätigt, wenn er
-        // gefragt wird, und der Keepalive fragt nur, wenn er eingeschaltet
-        // ist. Aus einer Störung wurde so eine Warteschlange, die bis zum
-        // Ende der Sitzung nicht mehr leer wird - und bei jeder weiteren
-        // Wiederaufnahme noch einmal komplett hinausging.
+        // Without that the queue stays put. The <resumed h='…'/> has only
+        // emptied it up to the state of the server; what was open beyond that
+        // has just gone out once more and is now waiting for an <a/> that never
+        // comes by itself: the server acknowledges when it is asked, and the
+        // keepalive only asks when it is switched on. A disturbance thereby
+        // turned into a queue that does not become empty again until the end of
+        // the session - and went out completely once more at every further
+        // resumption.
         await StreamManagement!.RequestAckAsync();
 
     }
@@ -1056,19 +1054,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     private async Task SendAsync(string xml, bool track = true)
     {
 
-        // RFC 7395, Abschnitt 3.3.3: über WebSocket gibt es kein umschliessendes
-        // <stream:stream>, von dem eine Stanza ihren Namensraum erben könnte -
-        // sie muss ihn selbst tragen. Hier und nicht an den rund 25 Aufrufern,
-        // aus demselben Grund, aus dem auch gezählt wird: das ist die einzige
-        // Stelle, durch die jeder ausgehende Rahmen läuft.
+        // RFC 7395, section 3.3.3: over WebSocket there is no enclosing
+        // <stream:stream> from which a stanza could inherit its namespace - it
+        // has to carry it itself. Here and not at the roughly 25 callers, for
+        // the same reason that counting happens here too: this is the only
+        // place every outgoing frame runs through.
         xml = StanzaNamespace.Apply(xml, StanzaNamespace.Client);
 
-        // Socket lokal festhalten: das Feld kann während eines Reconnects
-        // ausgetauscht werden, während wir noch auf das Lock warten.
+        // Hold on to the socket locally: the field can be swapped during a
+        // reconnect while we are still waiting for the lock.
         var webSocket = _webSocket;
 
         if (webSocket?.State != WebSocketState.Open)
-            throw new InvalidOperationException("WebSocket nicht verbunden");
+            throw new InvalidOperationException("WebSocket not connected");
 
         var bytes = Encoding.UTF8.GetBytes(xml);
         var token = _cts?.Token ?? CancellationToken.None;
@@ -1078,19 +1076,19 @@ public sealed class XMPPConnection : IAsyncDisposable
         try
         {
 
-            // Nach dem Warten erneut prüfen - die Verbindung kann inzwischen
-            // geschlossen worden sein.
+            // Check again after the wait - the connection may have been closed
+            // in the meantime.
             if (webSocket.State != WebSocketState.Open)
-                throw new InvalidOperationException("WebSocket nicht verbunden");
+                throw new InvalidOperationException("WebSocket not connected");
 
             await webSocket.SendAsync(bytes, WebSocketMessageType.Text, true, token);
 
-            // XEP-0198: hier ist die einzige Stelle, durch die jede ausgehende
-            // Stanza läuft - deshalb wird hier gezählt und nicht an den rund
-            // 25 Aufrufern. Erst nach dem erfolgreichen Senden, damit eine
-            // fehlgeschlagene Stanza den Zähler nicht dauerhaft verschiebt,
-            // und noch unter dem Sende-Lock, damit die Sequenznummern der
-            // Reihenfolge auf der Leitung entsprechen.
+            // XEP-0198: this is the only place every outgoing stanza runs
+            // through - which is why counting happens here and not at the
+            // roughly 25 callers. Only after the successful send, so that a
+            // failed stanza does not shift the counter permanently, and still
+            // under the send lock, so that the sequence numbers match the order
+            // on the wire.
             if (track)
                 StreamManagement?.TrackOutgoing(xml);
 
@@ -1106,23 +1104,23 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Sendet ein IQ und wartet auf die Antwort mit derselben id.
+    /// Sends an IQ and waits for the answer with the same id.
     /// </summary>
     /// <remarks>
-    /// Dasselbe Verfahren, das <see cref="DiscoManager"/> und
-    /// <see cref="PingManager"/> schon benutzen: die Antwort kommt über die
-    /// Empfangsschleife herein und wird über ihre id zugeordnet, statt dass der
-    /// Wartende selbst vom Socket liest.
+    /// The same procedure that <see cref="DiscoManager"/> and
+    /// <see cref="PingManager"/> already use: the answer comes in through the
+    /// receive loop and is assigned by its id, instead of the waiting party
+    /// reading from the socket itself.
     /// </remarks>
-    /// <returns>Die Antwort, oder null bei Zeitüberschreitung.</returns>
+    /// <returns>The answer, or null on a timeout.</returns>
     private async Task<XElement?> SendIqAsync(string             id,
                                               string             xml,
                                               CancellationToken  ct)
     {
 
-        // RunContinuationsAsynchronously: die Antwort wird im Thread der
-        // Empfangsschleife abgeliefert; ohne das liefe der wartende Aufbau dort
-        // weiter und hielte das Lesen der nächsten Stanzas auf.
+        // RunContinuationsAsynchronously: the answer is delivered on the thread
+        // of the receive loop; without this the waiting setup would carry on
+        // there and hold up the reading of the next stanzas.
         var tcs = new TaskCompletionSource<XElement>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         lock (_iqLock)
@@ -1141,7 +1139,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            _logger.LogWarning("Keine Antwort auf IQ '{Id}' innerhalb von {Seconds}s",
+            _logger.LogWarning("No answer to IQ '{Id}' within {Seconds}s",
                                id, SetupTimeout.TotalSeconds);
             return null;
         }
@@ -1154,7 +1152,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Liefert eine IQ-Antwort an den Wartenden aus, falls es einen gibt.
+    /// Delivers an IQ answer to the waiting party, if there is one.
     /// </summary>
     private bool TryCompleteIq(string id, XElement element)
     {
@@ -1174,9 +1172,9 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Bricht alle offenen IQ-Anfragen ab. Ohne das wartete ein Reconnect erst
-    /// deren Zeitüberschreitung ab, obwohl die Antwort über den alten Socket
-    /// gar nicht mehr kommen kann.
+    /// Cancels all open IQ requests. Without that a reconnect would first wait
+    /// out their timeout, although the answer cannot possibly come over the old
+    /// socket any more.
     /// </summary>
     private void CancelPendingIqs()
     {
@@ -1194,23 +1192,23 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
-    private async Task<string> ReceiveStanzaAsync(CancellationToken ct, string erwartet = "der Aushandlung")
+    private async Task<string> ReceiveStanzaAsync(CancellationToken ct, string expected = "the negotiation")
     {
         var buffer = new byte[8192];
         var sb = new StringBuilder();
 
-        // Eine Frist für den Schritt, nicht für den einzelnen Lesevorgang: Ein
-        // Rahmen, der in Stücken ankommt, darf zusammen nicht länger brauchen
-        // als einer am Stück.
+        // One deadline for the step, not for the individual read: a frame that
+        // arrives in pieces must not take longer altogether than one in a
+        // single piece.
         //
-        // Ohne sie wartete die Aushandlung unbegrenzt. Ein Fehler kommt an, ein
-        // geschlossener Socket kommt an - Schweigen kommt nicht an, und dann
-        // kehrte ConnectAsync nie zurück. Aufgefallen ist das an fünf
-        // Mutationen quer durch D25 bis D29, die alle den Lauf haengen liessen
-        // statt ihn scheitern zu lassen: ein Ergebnis, das keines ist.
+        // Without it the negotiation waited indefinitely. An error arrives, a
+        // closed socket arrives - silence does not arrive, and then ConnectAsync
+        // never returned. This showed up in five mutations across D25 to D29,
+        // all of which made the run hang instead of letting it fail: a result
+        // that is none.
         //
-        // Das Resource Binding war nie betroffen - SendIqAsync hat seine Frist
-        // seit jeher. Betroffen war alles davor, was hier liest.
+        // The resource binding was never affected - SendIqAsync has had its
+        // deadline all along. Affected was everything before it that reads here.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(SetupTimeout);
 
@@ -1225,13 +1223,13 @@ public sealed class XMPPConnection : IAsyncDisposable
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
                 throw new XMPPProtocolException(
-                          $"Zeitüberschreitung in der Aushandlung: Auf {erwartet} kam " +
-                          $"innerhalb von {SetupTimeout.TotalSeconds:0} Sekunden keine Antwort.");
+                          $"Timeout in the negotiation: to {expected} came no answer " +
+                          $"within {SetupTimeout.TotalSeconds:0} seconds.");
             }
 
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                throw new IOException("WebSocket geschlossen");
+                throw new IOException("WebSocket closed");
             }
 
             sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
@@ -1246,14 +1244,14 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0198: zählt eine empfangene Stanza.
+    /// XEP-0198: counts a received stanza.
     ///
-    /// Sitzt bewusst auf beiden Empfangspfaden. Zu zählen gibt es auf dem
-    /// direkten Pfad heute zwar nichts mehr - <see cref="ReceiveStanzaAsync"/>
-    /// liest nur noch die Aushandlung, und die endet vor
-    /// <c>&lt;enabled/&gt;</c> -, aber die Zusicherung "jede empfangene Stanza
-    /// kommt hier vorbei" soll nicht davon abhängen, wo die Grenze zwischen
-    /// den beiden Pfaden gerade verläuft.
+    /// Sits deliberately on both receive paths. On the direct path there is
+    /// nothing left to count today - <see cref="ReceiveStanzaAsync"/> only
+    /// reads the negotiation any more, and that ends before
+    /// <c>&lt;enabled/&gt;</c> - but the assurance "every received stanza comes
+    /// past here" shall not depend on where the boundary between the two paths
+    /// currently runs.
     /// </summary>
     private void NoteInboundStanza(string xml)
     {
@@ -1277,7 +1275,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        _logger.LogWarning("Server hat Verbindung geschlossen");
+                        _logger.LogWarning("The server has closed the connection");
                         break;
                     }
 
@@ -1304,30 +1302,30 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
         catch (WebSocketException ex)
         {
-            _logger.LogError(ex, "WebSocket-Fehler");
-            OnError?.Invoke($"WebSocket-Fehler: {ex.Message}");
+            _logger.LogError(ex, "WebSocket error");
+            OnError?.Invoke($"WebSocket error: {ex.Message}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Empfangsfehler");
-            OnError?.Invoke($"Empfangsfehler: {ex.Message}");
+            _logger.LogError(ex, "Receive error");
+            OnError?.Invoke($"Receive error: {ex.Message}");
         }
 
-        // Eine Schleife einer bereits abgelösten Verbindung darf keinen
-        // Reconnect mehr auslösen.
+        // A loop of an already superseded connection must not trigger a
+        // reconnect any more.
         if (!ReferenceEquals(webSocket, _webSocket))
         {
-            _logger.LogDebug("Empfangsschleife einer abgelösten Verbindung beendet");
+            _logger.LogDebug("Receive loop of a superseded connection ended");
             return;
         }
 
-        // Verbindung verloren - Reconnect versuchen.
-        // Bewusst über Task.Run entkoppelt: der Reconnect räumt via
-        // ShutdownConnectionAsync unter anderem diese Schleife ab und würde
-        // sonst auf sich selbst warten.
+        // Connection lost - try a reconnect.
+        // Deliberately decoupled through Task.Run: the reconnect clears away,
+        // among other things, this very loop via ShutdownConnectionAsync and
+        // would otherwise wait on itself.
         if (_fatalStreamError)
         {
-            _logger.LogDebug("Kein Reconnect nach nicht wiederholbarem Stream-Fehler");
+            _logger.LogDebug("No reconnect after a non-recoverable stream error");
             SetState(ConnectionState.Disconnected);
             return;
         }
@@ -1341,7 +1339,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private async Task KeepaliveLoopAsync(CancellationToken ct)
     {
-        _logger.LogDebug("Keepalive-Loop gestartet (Interval: {Seconds}s)", KeepaliveInterval.TotalSeconds);
+        _logger.LogDebug("Keepalive loop started (interval: {Seconds}s)", KeepaliveInterval.TotalSeconds);
 
         try
         {
@@ -1351,64 +1349,64 @@ public sealed class XMPPConnection : IAsyncDisposable
 
                 if (State != ConnectionState.Connected)
                 {
-                    _logger.LogDebug("Keepalive-Abbruch - nicht mehr verbunden");
+                    _logger.LogDebug("Keepalive stopped - no longer connected");
                     break;
                 }
 
-                // Bevorzugt: Stream Management <r/> (weniger Overhead)
+                // Preferred: stream management <r/> (less overhead)
                 if (StreamManagement?.IsEnabled == true)
                 {
-                    _logger.LogTrace("Keepalive: sende Stream-Management <r/>");
+                    _logger.LogTrace("Keepalive: sending stream management <r/>");
                     await StreamManagement.RequestAckAsync();
                 }
-                // Fallback: XEP-0199 Ping
+                // Fallback: XEP-0199 ping
                 else if (Ping != null)
                 {
-                    _logger.LogTrace("Keepalive: sende Ping");
+                    _logger.LogTrace("Keepalive: sending ping");
                     var rtt = await Ping.PingAsync(ct: ct);
                     if (rtt.HasValue)
-                        _logger.LogTrace("Keepalive: Pong nach {Milliseconds:F0}ms", rtt.Value.TotalMilliseconds);
+                        _logger.LogTrace("Keepalive: pong after {Milliseconds:F0}ms", rtt.Value.TotalMilliseconds);
                     else
-                        _logger.LogWarning("Keepalive: Ping Timeout");
+                        _logger.LogWarning("Keepalive: ping timeout");
                 }
                 else
                 {
-                    _logger.LogWarning("Keepalive: weder Stream Management noch Ping verfügbar");
+                    _logger.LogWarning("Keepalive: neither stream management nor ping available");
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            _logger.LogDebug("Keepalive-Loop beendet (cancelled)");
+            _logger.LogDebug("Keepalive loop ended (cancelled)");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Keepalive-Fehler");
-            OnError?.Invoke($"Keepalive-Fehler: {ex.Message}");
+            _logger.LogError(ex, "Keepalive error");
+            OnError?.Invoke($"Keepalive error: {ex.Message}");
         }
     }
 
     // ===== STANZA PROCESSING =====
 
     /// <summary>
-    /// Zerlegt einen empfangenen Rahmen und leitet ihn weiter.
+    /// Takes a received frame apart and passes it on.
     ///
-    /// Der Rahmen wird genau einmal geparst; die Weiterverarbeitung arbeitet
-    /// auf dem <see cref="XElement"/>. Die frühere Erkennung über
-    /// <c>StartsWith</c> scheiterte an gültigen Schreibweisen: ein an
-    /// <c>jabber:client</c> gebundenes Präfix (<c>&lt;c:message/&gt;</c>) liess
-    /// die Stanza komplett durchfallen, und <c>StartsWith("&lt;a")</c> traf
-    /// auch <c>&lt;auth/&gt;</c>.
+    /// The frame is parsed exactly once; the further processing works on the
+    /// <see cref="XElement"/>. The earlier detection through
+    /// <c>StartsWith</c> failed on valid spellings: a prefix bound to
+    /// <c>jabber:client</c> (<c>&lt;c:message/&gt;</c>) made the stanza fall
+    /// through completely, and <c>StartsWith("&lt;a")</c> also hit
+    /// <c>&lt;auth/&gt;</c>.
     ///
-    /// Der Rohtext wird zusätzlich durchgereicht, weil die XEP-Manager ihn noch
-    /// erwarten - deren Umstellung steht aus.
+    /// The raw text is additionally passed through, because the XEP managers
+    /// still expect it - their conversion is outstanding.
     /// </summary>
     private void ProcessStanza(string stanza)
     {
         try
         {
-            // XEP-0198: das Mitzählen passiert bewusst nicht hier, sondern in
-            // NoteInboundStanza auf beiden Empfangspfaden.
+            // XEP-0198: the counting along deliberately does not happen here
+            // but in NoteInboundStanza on both receive paths.
 
             XElement element;
 
@@ -1418,15 +1416,15 @@ public sealed class XMPPConnection : IAsyncDisposable
             }
             catch (XmlException ex)
             {
-                // Nicht wohlgeformt - in der Praxis vor allem ein
-                // <stream:error/>, dessen Präfix der Server nur auf dem
-                // Stream-Root deklariert hat. Dafür bleibt der Textpfad.
-                _logger.LogWarning("Stanza ist kein wohlgeformtes XML: {Reason}", ex.Message);
+                // Not well-formed - in practice above all a <stream:error/>
+                // whose prefix the server declared only on the stream root. For
+                // that the text path remains.
+                _logger.LogWarning("The stanza is not well-formed XML: {Reason}", ex.Message);
 
                 if (StreamError.TryParse(stanza, out var rawStreamError) && rawStreamError is not null)
                     ProcessStreamError(rawStreamError);
                 else
-                    OnError?.Invoke($"Stanza ist kein wohlgeformtes XML: {ex.Message}");
+                    OnError?.Invoke($"The stanza is not well-formed XML: {ex.Message}");
 
                 return;
             }
@@ -1450,18 +1448,18 @@ public sealed class XMPPConnection : IAsyncDisposable
                     return;
 
                 case "close":
-                    _logger.LogWarning("Stream vom Server geschlossen");
-                    OnError?.Invoke("Stream vom Server geschlossen");
+                    _logger.LogWarning("Stream closed by the server");
+                    OnError?.Invoke("Stream closed by the server");
                     return;
 
-                // RFC 6120, Abschnitt 4.9: Stream-Fehler. Danach ist der Stream tot.
+                // RFC 6120, section 4.9: a stream error. After it the stream is dead.
                 case "error" when ns == StreamNamespace:
                     if (StreamError.TryParse(stanza, out var streamError) && streamError is not null)
                         ProcessStreamError(streamError);
                     return;
 
-                // XEP-0198: Stream Management. Jetzt über den Namespace geprüft
-                // statt über den Anfangsbuchstaben.
+                // XEP-0198: stream management. Now checked through the
+                // namespace instead of through the initial letter.
                 case "enabled" when ns == StreamManagementNamespace:
                     StreamManagement?.ProcessEnabled(stanza);
                     return;
@@ -1483,41 +1481,41 @@ public sealed class XMPPConnection : IAsyncDisposable
                     return;
 
                 default:
-                    _logger.LogDebug("Unbehandelter Rahmen <{Name}/> aus {Namespace}", name, ns);
+                    _logger.LogDebug("Unhandled frame <{Name}/> from {Namespace}", name, ns);
                     return;
 
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Stanza-Verarbeitung fehlgeschlagen");
-            OnError?.Invoke($"Stanza-Verarbeitung fehlgeschlagen: {ex.Message}");
+            _logger.LogError(ex, "Stanza processing failed");
+            OnError?.Invoke($"Stanza processing failed: {ex.Message}");
         }
     }
 
     /// <summary>
-    /// RFC 6120, Abschnitt 4.9: Nach einem Stream-Fehler schliesst der Server
-    /// den Stream unmittelbar. Ein Reconnect lohnt nur bei vorübergehenden
-    /// Bedingungen - bei allem anderen liefe er in dieselbe Ablehnung und
-    /// erzeugte eine Schleife.
+    /// RFC 6120, section 4.9: After a stream error the server closes the stream
+    /// immediately. A reconnect is only worthwhile with temporary conditions -
+    /// with everything else it would run into the same refusal and produce a
+    /// loop.
     /// </summary>
     private void ProcessStreamError(StreamError streamError)
     {
 
         if (streamError.IsRecoverable)
-            _logger.LogWarning("Stream-Fehler vom Server: {Error} - Reconnect wird versucht", streamError);
+            _logger.LogWarning("Stream error from the server: {Error} - a reconnect is attempted", streamError);
 
         else
         {
-            _logger.LogError("Stream-Fehler vom Server: {Error} - kein Reconnect", streamError);
+            _logger.LogError("Stream error from the server: {Error} - no reconnect", streamError);
 
-            // Verhindert, dass die Empfangsschleife gleich einen Reconnect
-            // anstösst; der Fehler wiederholte sich nur.
+            // Prevents the receive loop from starting a reconnect right away;
+            // the error would only repeat itself.
             _fatalStreamError = true;
         }
 
         OnStreamError?.Invoke(streamError);
-        OnError?.Invoke($"Stream-Fehler: {streamError}");
+        OnError?.Invoke($"Stream error: {streamError}");
 
     }
 
@@ -1527,8 +1525,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         var to = element.Attr("to") ?? FullJid;
         var msgId = element.Attr("id");
 
-        // RFC 6120, Abschnitt 8.3: Eine Fehler-Stanza trägt keine Nutzlast,
-        // sondern die Begründung. Früher lief sie als normale Nachricht durch.
+        // RFC 6120, section 8.3: An error stanza carries no payload but the
+        // reason. Previously it ran through as an ordinary message.
         if (element.Attr("type") == "error")
         {
 
@@ -1536,30 +1534,29 @@ public sealed class XMPPConnection : IAsyncDisposable
                              ? stanzaError
                              : new StanzaError(StanzaErrorType.Cancel, "undefined-condition");
 
-            _logger.LogDebug("Nachricht an {From} abgelehnt: {Error}", from, parsed);
+            _logger.LogDebug("Message to {From} refused: {Error}", from, parsed);
 
             OnStanzaError?.Invoke(from, parsed);
             return;
 
         }
 
-        // XEP-0384: verschlüsselt eingetroffen.
+        // XEP-0384: arrived encrypted.
         //
-        // Vor allem anderen, denn was hier steht, ist von aussen nicht zu
-        // sehen: Die Stanza hat keinen <body/>, und jede Auswertung danach
-        // hielte sie für leer.
-        if (element.Attr("from") is String von && TryProcessEncrypted(element, von))
+        // Before everything else, because what stands here cannot be seen from
+        // the outside: the stanza has no <body/>, and every evaluation after
+        // this would take it for empty.
+        if (element.Attr("from") is String sender && TryProcessEncrypted(element, sender))
             return;
 
-        // XEP-0060/XEP-0163: eine PubSub-Benachrichtigung.
+        // XEP-0060/XEP-0163: a PubSub notification.
         //
-        // Sie kommt in der Praxis fast immer als <message type='headline'/> -
-        // und wurde bis hierher nur in ProcessIq behandelt, wo sie so gut wie
-        // nie ankommt. Der Kommentar dort behauptete seit jeher „kann als
-        // message oder iq kommen"; die message-Hälfte gab es nicht. Aufgefallen
-        // ist es erst, als mit OMEMO zum ersten Mal jemand auf eine
-        // Benachrichtigung angewiesen war - dieselbe halb verdrahtete Ecke wie
-        // in D38.
+        // In practice it almost always comes as a <message type='headline'/> -
+        // and up to here was only handled in ProcessIq, where it as good as
+        // never arrives. The comment there claimed all along "can come as a
+        // message or an iq"; the message half did not exist. It only showed up
+        // when, with OMEMO, someone depended on a notification for the first
+        // time - the same half-wired corner as in D38.
         if (element.Child(PubSubManager.EventNamespace, "event") is not null &&
             element.Attr("from") is not null)
         {
@@ -1572,49 +1569,50 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         }
 
-        // XEP-0060, Abschnitt 8.6.1: Ein Antrag auf ein Abonnement an einem
-        // eigenen Knoten.
+        // XEP-0060, section 8.6.1: An application for a subscription to a node
+        // of our own.
         //
-        // <b>Nur weitergereicht und nicht beantwortet.</b> Wer zusagt, ist ein
-        // Mensch; dieser Client zeigt ihm die Frage und wartet. Ein Client, der
-        // von sich aus antwortete, entschiede über fremden Zugang nach einer
-        // Regel, die niemand gesehen hat.
-        if (element.Child(DataForm.Namespace, "x") is { } formular &&
-            PubSubSubscribeAuthorization.TryReadRequest(formular, out var antrag))
+        // <b>Only passed on and not answered.</b> Whoever agrees is a human
+        // being; this client shows them the question and waits. A client that
+        // answered of its own accord would decide about someone else's access
+        // by a rule nobody has seen.
+        if (element.Child(DataForm.Namespace, "x") is { } form &&
+            PubSubSubscribeAuthorization.TryReadRequest(form, out var application))
         {
 
-            _logger.LogInformation("PubSub: {Wer} beantragt {Node}", antrag!.SubscriberJid, antrag.NodeId);
+            _logger.LogInformation("PubSub: {Who} applies for {Node}", application!.SubscriberJid, application.NodeId);
 
-            OnPubSubSubscriptionRequest?.Invoke(antrag);
+            OnPubSubSubscriptionRequest?.Invoke(application);
 
             return;
 
         }
 
-        // XEP-0280 und XEP-0384 zusammen: Ein Carbon bringt die Nachricht
-        // eines anderen eigenen Geräts mit, und die kann verschlüsselt sein.
+        // XEP-0280 and XEP-0384 together: A carbon brings along the message of
+        // another device of our own, and that one can be encrypted.
         //
-        // Der eingepackten Nachricht gilt dabei alles, was der äusseren gälte -
-        // ausser dem Absender: Steht die eigene Adresse aussen, kommt die
-        // Nachricht vom eigenen Konto, und der wirkliche Absender steht innen.
+        // Everything that would hold for the outer message holds for the
+        // wrapped one - except the sender: if one's own address stands on the
+        // outside, the message comes from one's own account, and the real
+        // sender stands on the inside.
         //
-        // Ohne diesen Zweig sieht das eigene zweite Gerät nicht, was das erste
-        // geschrieben hat: Der Schlüsseleintrag ist da, die Nachricht kommt an -
-        // und niemand sieht sie an, weil sie im <forwarded/> steckt.
+        // Without this branch one's own second device does not see what the
+        // first one wrote: the key entry is there, the message arrives - and
+        // nobody looks at it, because it sits in the <forwarded/>.
         if (Omemo is not null &&
             element.HasNamespace(CarbonManager.Namespace) &&
             element.Descendants()
                    .FirstOrDefault(e => e.Name.LocalName     == "forwarded" &&
                                         e.Name.NamespaceName == "urn:xmpp:forward:0")
                   ?.Elements()
-                   .FirstOrDefault(e => e.Name.LocalName == "message") is XElement eingepackt &&
-            (eingepackt.Attr("from") ?? eingepackt.Attr("to")) is String innererAbsender &&
-            TryProcessEncrypted(eingepackt, innererAbsender))
+                   .FirstOrDefault(e => e.Name.LocalName == "message") is XElement wrapped &&
+            (wrapped.Attr("from") ?? wrapped.Attr("to")) is String innerSender &&
+            TryProcessEncrypted(wrapped, innerSender))
         {
             return;
         }
 
-        // XEP-0280: Carbon Check
+        // XEP-0280: Carbon check
         if (element.HasNamespace(CarbonManager.Namespace))
         {
             if (Carbons != null)
@@ -1624,20 +1622,20 @@ public sealed class XMPPConnection : IAsyncDisposable
                 switch (result)
                 {
                     case CarbonResult.Success:
-                        return; // Carbon wurde verarbeitet
+                        return; // the carbon was processed
 
                     case CarbonResult.SpoofingDetected:
-                        _logger.LogWarning("Carbon-Spoofing von {From}", from);
-                        OnSpoofingAttempt?.Invoke($"Carbon-Spoofing von {from}");
+                        _logger.LogWarning("Carbon spoofing from {From}", from);
+                        OnSpoofingAttempt?.Invoke($"Carbon spoofing from {from}");
                         return;
 
                     case CarbonResult.ParseError:
-                        _logger.LogError("Carbon-Parse-Fehler von {From}", from);
-                        OnError?.Invoke($"Carbon-Parse-Fehler von {from}");
+                        _logger.LogError("Carbon parse error from {From}", from);
+                        OnError?.Invoke($"Carbon parse error from {from}");
                         return;
 
                     case CarbonResult.NotACarbon:
-                        // Kein Carbon, weiter verarbeiten als normale Nachricht
+                        // Not a carbon, carry on processing it as an ordinary message
                         break;
                 }
             }
@@ -1656,7 +1654,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (receiptId != null)
         {
             if (!Receipts.ProcessReceipt(receiptId, from))
-                OnSpoofingAttempt?.Invoke($"Receipt-Spoofing: {receiptId} von {from}");
+                OnSpoofingAttempt?.Invoke($"Receipt spoofing: {receiptId} from {from}");
             return;
         }
 
@@ -1667,46 +1665,46 @@ public sealed class XMPPConnection : IAsyncDisposable
             OnChatState?.Invoke(from, chatState.Value);
         }
 
-        // Normale Nachricht. Nur direkte Kinder: eine weitergeleitete Nachricht
-        // in <forwarded/> bringt ihren eigenen <body/> mit.
+        // An ordinary message. Only direct children: a forwarded message in
+        // <forwarded/> brings along its own <body/>.
         var body = element.ChildValue("body");
         if (!string.IsNullOrEmpty(body))
         {
 
             var messageType = MessageTypeExtensions.Parse(element.Attr("type"));
 
-            // XEP-0203: Wurde sie aufgehoben, gilt ihre eigene Zeit und nicht
-            // die des Empfangs. Der Stempel steht nur an der äusseren Stanza -
-            // deshalb hier und nicht im Carbon-Zweig, der seine eigene innere
-            // Nachricht mitbringt.
-            var empfangen  = DateTime.Now;
-            var geschrieben = DelayedDelivery.TryRead(element, out var stempel, out var aufgehobenVon)
-                                  ? stempel.ToLocalTime().DateTime
-                                  : empfangen;
+            // XEP-0203: If it was held, its own time holds and not the one of
+            // the reception. The stamp only stands on the outer stanza - hence
+            // here and not in the carbon branch, which brings along its own
+            // inner message.
+            var received = DateTime.Now;
+            var written  = DelayedDelivery.TryRead(element, out var stamp, out var heldBy)
+                               ? stamp.ToLocalTime().DateTime
+                               : received;
 
             OnMessage?.Invoke(new XMPPMessage(from,
                                               to,
                                               body,
                                               msgId,
-                                              geschrieben,
+                                              written,
                                               messageType,
-                                              empfangen,
-                                              aufgehobenVon,
+                                              received,
+                                              heldBy,
                                               MessageCorrection.ReplacedId(element)));
 
-            // Von selbst geantwortet wird nur, wo eine Antwort hingehört.
-            // Einem Zuruf ist nicht zu quittieren, und in einen Raum schon gar
-            // nicht - dort bekämen alle Anwesenden die Quittung zu sehen.
+            // Answered of its own accord is only where an answer belongs. A
+            // shout is not to be acknowledged, and into a room least of all -
+            // there everyone present would get to see the acknowledgement.
             if (!messageType.ExpectsAReply())
                 return;
 
-            // Auto-Receipt (XEP-0184)
+            // Auto-receipt (XEP-0184)
             if (ReceiptBuilder.HasReceiptRequest(element) && msgId != null)
             {
                 _ = SendReceiptAsync(from, msgId);
             }
 
-            // Auto-Received Marker (XEP-0333)
+            // Auto-received marker (XEP-0333)
             if (ChatMarkers.IsMarkable(element) && msgId != null)
             {
                 _ = SendChatMarkerAsync(from, msgId, ChatMarkerType.Received);
@@ -1719,9 +1717,9 @@ public sealed class XMPPConnection : IAsyncDisposable
         var from = element.Attr("from") ?? "unknown";
         var type = element.Attr("type") ?? "available";
 
-        // RFC 6120, Abschnitt 8.3: 'error' ist kein Präsenzzustand. Früher
-        // wanderte er über UpdatePresence in den Roster, wo der Kontakt dann
-        // als im Zustand "error" geführt wurde.
+        // RFC 6120, section 8.3: 'error' is not a presence state. Previously it
+        // wandered through UpdatePresence into the roster, where the contact was
+        // then carried as being in the state "error".
         if (type == "error")
         {
 
@@ -1729,7 +1727,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                              ? stanzaError
                              : new StanzaError(StanzaErrorType.Cancel, "undefined-condition");
 
-            _logger.LogDebug("Presence von/an {From} abgelehnt: {Error}", from, parsed);
+            _logger.LogDebug("Presence from/to {From} refused: {Error}", from, parsed);
 
             OnStanzaError?.Invoke(from, parsed);
             return;
@@ -1741,10 +1739,10 @@ public sealed class XMPPConnection : IAsyncDisposable
             Roster.RaiseSubscriptionRequest(from, element.ChildValue("status") ?? "");
         }
 
-        // RFC 6121, Abschnitt 3: Zustandsänderungen, keine Anwesenheit. Sie
-        // liefen früher durch UpdatePresence, und weil dort alles ohne
-        // 'unavailable' als anwesend gilt, machte ausgerechnet ein
-        // <presence type='unsubscribed'/> den Kontakt online.
+        // RFC 6121, section 3: state changes, not presence. They previously ran
+        // through UpdatePresence, and because everything there without
+        // 'unavailable' counts as present, it was of all things a
+        // <presence type='unsubscribed'/> that made the contact online.
         else if (type is "subscribed" or "unsubscribed" or "unsubscribe")
         {
             Roster.ProcessSubscriptionChange(from, type);
@@ -1757,8 +1755,8 @@ public sealed class XMPPConnection : IAsyncDisposable
             Roster.UpdatePresence(from, type, show, status);
 
             // XEP-0115: Entity Capabilities
-            // WICHTIG: Eigene Presences überspringen - wir kennen unsere Caps bereits!
-            // Sonst Query-Loop an uns selbst → Server-Error → Disconnect
+            // IMPORTANT: skip our own presences - we know our caps already!
+            // Otherwise a query loop to ourselves → server error → disconnect
             var fromBareJid = JidUtilities.Bare(from);
             var isOwnPresence = fromBareJid.Equals(BareJid, StringComparison.OrdinalIgnoreCase);
 
@@ -1767,12 +1765,12 @@ public sealed class XMPPConnection : IAsyncDisposable
                 var caps = EntityCapsManager.ParseCaps(element);
                 if (caps.HasValue && EntityCaps != null)
                 {
-                    // Query an Full-JID (für korrekte Resource), nicht Bare-JID
-                    // Server routet die Antwort korrekt
+                    // Query to the full JID (for the correct resource), not the bare JID
+                    // The server routes the answer correctly
                     //
-                    // Das hash-Attribut geht mit: Ohne es lässt sich der
-                    // ver-Wert nicht nachrechnen, und was sich nicht
-                    // nachrechnen lässt, wird nicht abgelegt.
+                    // The hash attribute goes along: without it the ver value
+                    // cannot be recomputed, and what cannot be recomputed is not
+                    // stored.
                     _ = EntityCaps.ProcessCapsAsync(from,
                                                     caps.Value.Node,
                                                     caps.Value.Ver,
@@ -1790,30 +1788,31 @@ public sealed class XMPPConnection : IAsyncDisposable
         var id = element.Attr("id");
         var from = element.Attr("from");
 
-        // RFC 6120, Abschnitt 8.2.3, Regel 2: Ohne einen der vier vorgesehenen
-        // Werte ist diese Stanza weder Frage noch Antwort - hier trifft die
-        // Regel den Client in der Rolle "the recipient".
+        // RFC 6120, section 8.2.3, rule 2: Without one of the four intended
+        // values this stanza is neither a question nor an answer - here the rule
+        // meets the client in the role of "the recipient".
         //
-        // Ganz vorn, weil jede Zeile darunter den Typ schon voraussetzt: Die
-        // Zuordnung zu einer offenen Frage nimmt nur result und error, und der
-        // Fallback am Ende fragt nach get oder set. Ein fünfter Wert fiel damit
-        // stillschweigend hinten heraus.
+        // Right at the front, because every line below already presupposes the
+        // type: the assignment to an open question only takes result and error,
+        // and the fallback at the end asks for get or set. A fifth value thereby
+        // fell out silently at the back.
         if (!IqTypes.IsKnown(type))
         {
             RefuseMalformedIq(id, from);
             return;
         }
 
-        // Wartet jemand auf genau diese Antwort? Die Zuordnung über die id geht
-        // allem anderen vor - auch dem Fehlerpfad, denn für den Wartenden ist
-        // ein 'error' genauso eine Antwort wie ein 'result'.
+        // Is somebody waiting for exactly this answer? The assignment through
+        // the id goes before everything else - before the error path too,
+        // because for the waiting party an 'error' is just as much an answer as
+        // a 'result'.
         if (id is not null && type is "result" or "error" && TryCompleteIq(id, element))
             return;
 
-        // RFC 6120, Abschnitt 8.3: Ein iq 'error' ist keine Antwort mit Inhalt,
-        // sondern eine Ablehnung. Früher lief er durch dieselben Handler wie ein
-        // 'result' - ein abgelehnter Ping wurde damit als gemessene Laufzeit
-        // gewertet und eine abgelehnte disco-Abfrage als leeres Ergebnis.
+        // RFC 6120, section 8.3: An iq 'error' is not an answer with content but
+        // a refusal. Previously it ran through the same handlers as a 'result' -
+        // a refused ping was thereby taken for a measured round-trip time and a
+        // refused disco query for an empty result.
         if (type == "error")
         {
 
@@ -1821,8 +1820,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                              ? stanzaError
                              : new StanzaError(StanzaErrorType.Cancel, "undefined-condition");
 
-            _logger.LogDebug("Stanza-Fehler auf IQ '{Id}' von {From}: {Error}",
-                             id ?? "(ohne id)", from ?? "(Server)", parsed);
+            _logger.LogDebug("Stanza error on IQ '{Id}' from {From}: {Error}",
+                             id ?? "(without id)", from ?? "(server)", parsed);
 
             if (id != null)
             {
@@ -1838,26 +1837,26 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         }
 
-        // IQ Result für pending queries
+        // IQ result for pending queries
         if (type == "result")
         {
             if (id != null)
             {
-                // XEP-0199: Ping Antwort
+                // XEP-0199: ping answer
                 if (id.StartsWith("ping-"))
                 {
                     Ping?.ProcessPong(id);
                     return;
                 }
 
-                // XEP-0030: Disco Info Antwort
+                // XEP-0030: disco info answer
                 if (id.StartsWith("disco-info-") && from != null)
                 {
                     Disco?.ProcessInfoResult(id, element, from);
                     return;
                 }
 
-                // XEP-0030: Disco Items Antwort
+                // XEP-0030: disco items answer
                 if (id.StartsWith("disco-items-") && from != null)
                 {
                     Disco?.ProcessItemsResult(id, element, from);
@@ -1866,34 +1865,35 @@ public sealed class XMPPConnection : IAsyncDisposable
             }
         }
 
-        // IQ Get - Anfragen
+        // IQ get - requests
         //
-        // Kein 'from' bedeutet nicht "nicht beantwortbar": nach RFC 6120,
-        // Abschnitt 8.1.1.1 kommt die Anfrage dann vom eigenen Server. Früher
-        // wurden solche Anfragen still verworfen; jetzt antworten die Manager
-        // ohne 'to'. Ist der zuständige Manager noch nicht initialisiert, fällt
-        // die Anfrage bewusst durch bis zum <service-unavailable/> unten -
-        // das ist die ehrlichere Antwort als Schweigen.
+        // No 'from' does not mean "cannot be answered": per RFC 6120,
+        // section 8.1.1.1 the request then comes from one's own server.
+        // Previously such requests were discarded silently; now the managers
+        // answer without a 'to'. If the manager in charge is not initialised
+        // yet, the request deliberately falls through to the
+        // <service-unavailable/> below - that is the more honest answer than
+        // silence.
         if (type == "get" && id != null)
         {
-            // XEP-0199: Ping Anfrage
+            // XEP-0199: ping request
             if (PingManager.IsPing(element) && Ping is not null)
             {
                 _ = Ping.RespondAsync(id, from);
                 return;
             }
 
-            // XEP-0030: Disco Info Anfrage
+            // XEP-0030: disco info request
             if (element.Child(DiscoManager.InfoNamespace, "query") is XElement discoQuery && Disco is not null)
             {
 
                 var node = discoQuery.Attr("node");
 
-                // XEP-0030, Abschnitt 3.2: Das 'node' der Frage gehört in die
-                // Antwort - und beantwortet wird nur, was diese Entity auch
-                // bezeichnet. Ohne diese Unterscheidung bekäme jeder erdachte
-                // Node die volle Merkmalsliste, und diese Seite behauptete
-                // damit, jeden davon zu führen.
+                // XEP-0030, section 3.2: The 'node' of the question belongs in
+                // the answer - and answered is only what this entity actually
+                // denotes. Without this distinction every made-up node would get
+                // the full feature list, and this side would thereby claim to
+                // carry every one of them.
                 if (node is not null && EntityCaps?.IsOwnNode(node) != true)
                     RefuseUnknownNode(id, from, node);
 
@@ -1904,12 +1904,12 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             }
 
-            // XEP-0030, Abschnitt 4: Disco Items Anfrage
+            // XEP-0030, section 4: disco items request
             //
-            // Ein 'node' ist hier ein Ast im Baum der Untereinheiten, nicht der
-            // Caps-Node aus XEP-0115. Dieser Client hat keinen einzigen, und
-            // eine leere Liste wäre die falsche Antwort: Sie hiesse „diesen
-            // Zweig gibt es, er ist leer" statt „diesen Zweig gibt es nicht".
+            // A 'node' is here a branch in the tree of sub-entities, not the
+            // caps node from XEP-0115. This client has not a single one, and an
+            // empty list would be the wrong answer: it would mean "this branch
+            // exists, it is empty" instead of "this branch does not exist".
             if (element.Child(DiscoManager.ItemsNamespace, "query") is XElement itemsQuery && Disco is not null)
             {
 
@@ -1926,28 +1926,28 @@ public sealed class XMPPConnection : IAsyncDisposable
             }
         }
 
-        // IQ Set
+        // IQ set
         if (type == "set")
         {
-            // Roster-Push
+            // Roster push
             if (element.Child(RosterStanzaBuilder.Namespace, "query") is not null)
             {
-                // RFC 6121, Abschnitt 2.1.6: Ein Roster-Push darf nur
-                // akzeptiert werden, wenn er kein 'from' trägt (dann kommt er
-                // implizit vom eigenen Konto) oder das 'from' dem eigenen
-                // Bare-JID entspricht. Ohne diese Prüfung könnte jeder
-                // Absender den lokalen Roster manipulieren.
+                // RFC 6121, section 2.1.6: A roster push may only be accepted
+                // when it carries no 'from' (then it comes implicitly from one's
+                // own account) or the 'from' corresponds to one's own bare JID.
+                // Without this check any sender could manipulate the local
+                // roster.
                 if (!IsAuthorizedRosterPush(from))
                 {
-                    _logger.LogWarning("Roster-Push von nicht autorisiertem Absender {From} verworfen", from);
-                    OnSpoofingAttempt?.Invoke($"Roster-Push-Spoofing von {from}");
+                    _logger.LogWarning("Roster push from the unauthorised sender {From} discarded", from);
+                    OnSpoofingAttempt?.Invoke($"Roster push spoofing from {from}");
 
-                    // Bewusst ohne Antwort. RFC 6121, Abschnitt 2.1.6 erlaubt
-                    // das ausdrücklich: der Client darf "refuse to return a
-                    // stanza error at all (the latter behavior overrides a
-                    // MUST-level requirement from [XMPP-CORE] for the purpose
-                    // of preventing a presence leak)". Eine Antwort würde dem
-                    // Absender bestätigen, dass dieses Konto online ist.
+                    // Deliberately without an answer. RFC 6121, section 2.1.6
+                    // permits that explicitly: the client may "refuse to return
+                    // a stanza error at all (the latter behavior overrides a
+                    // MUST-level requirement from [XMPP-CORE] for the purpose of
+                    // preventing a presence leak)". An answer would confirm to
+                    // the sender that this account is online.
                     return;
                 }
 
@@ -1957,56 +1957,56 @@ public sealed class XMPPConnection : IAsyncDisposable
             }
         }
 
-        // PubSub Event (kann als message oder iq kommen)
+        // PubSub event (can come as a message or an iq)
         if (element.Child(PubSubManager.EventNamespace, "event") is not null && from != null)
         {
             PubSub?.ProcessEvent(element, from, PubSub.PubSubService);
 
-            // XEP-0384, Abschnitt 5.2: Die Geräteliste kommt über denselben
-            // Weg, verlangt aber eine Antwort - fehlt das eigene Gerät darin,
-            // muss es sich wieder eintragen.
+            // XEP-0384, section 5.2: The device list comes over the same route
+            // but demands an answer - if one's own device is missing from it, it
+            // has to enter itself again.
             _ = ProcessPepEventAsync(element, from);
 
-            // Kommt das Event als iq set statt als message, ist es eine
-            // Anfrage und braucht nach Abschnitt 8.2.3 ein Ergebnis.
+            // If the event comes as an iq set instead of as a message, it is a
+            // request and needs a result per section 8.2.3.
             if (type is "get" or "set" && id != null)
                 _ = SendAsync($"<iq type='result' id='{XmlEscaping.Escape(id)}' to='{XmlEscaping.Escape(from)}'/>");
 
             return;
         }
 
-        // RFC 6120, Abschnitt 8.2.3: Auf ein iq 'get' oder 'set' MUSS eine
-        // Antwort folgen. Alles, was oben niemand beansprucht hat, wird hier
-        // abschliessend beantwortet.
+        // RFC 6120, section 8.2.3: An iq 'get' or 'set' MUST be followed by an
+        // answer. Everything that nobody above has claimed is answered
+        // conclusively here.
         if (type is "get" or "set")
             RespondUnhandledIq(id, from);
     }
 
     /// <summary>
-    /// Weist eine IQ-Stanza zurück, deren <c>type</c> fehlt oder keiner der
-    /// vier vorgesehenen Werte ist (RFC 6120, Abschnitt 8.2.3, Regel 2).
+    /// Refuses an IQ stanza whose <c>type</c> is missing or is none of the four
+    /// intended values (RFC 6120, section 8.2.3, rule 2).
     /// </summary>
     /// <remarks>
-    /// <c>modify</c> und nicht <c>cancel</c>: Abschnitt 8.3.3.1 sieht es für
-    /// <c>&lt;bad-request/&gt;</c> so vor, und die Art ist eine Auskunft -
-    /// richtig gestellt kann der Absender es noch einmal versuchen.
+    /// <c>modify</c> and not <c>cancel</c>: section 8.3.3.1 provides for it that
+    /// way for <c>&lt;bad-request/&gt;</c>, and the kind is a piece of
+    /// information - put right, the sender can try again.
     ///
-    /// Anders als <see cref="RespondUnhandledIq"/> geht diese Antwort auch ohne
-    /// <c>id</c> hinaus. Dort wäre sie eine Antwort auf eine Frage, die sich
-    /// ohne <c>id</c> keiner zuordnen lässt und deshalb niemandem nützt; hier
-    /// sagt sie etwas über die Stanza selbst - dass ihre Form nicht stimmt.
-    /// Zumal die fehlende <c>id</c> nach Regel 1 selbst dazugehört. Was sie
-    /// nicht bekommt, ist ein leeres <c>id=''</c>: Das gehört zu keiner Frage
-    /// und sähe aus, als gehörte es zu einer.
+    /// Unlike <see cref="RespondUnhandledIq"/>, this answer goes out without an
+    /// <c>id</c> too. There it would be an answer to a question that cannot be
+    /// assigned without an <c>id</c> and therefore is of no use to anyone; here
+    /// it says something about the stanza itself - that its form is not right.
+    /// All the more since the missing <c>id</c> belongs to that per rule 1. What
+    /// it does not get is an empty <c>id=''</c>: that belongs to no question and
+    /// would look as though it belonged to one.
     /// </remarks>
     private void RefuseMalformedIq(string? id, string? from)
     {
 
-        _logger.LogDebug("IQ mit unbrauchbarem 'type' von {From} mit <bad-request/> beantwortet",
-                         from ?? "(Server)");
+        _logger.LogDebug("IQ with an unusable 'type' from {From} answered with <bad-request/>",
+                         from ?? "(server)");
 
-        // Ohne 'from' kam die Stanza vom eigenen Server; die Antwort geht dann
-        // ohne 'to' implizit dorthin zurück (Abschnitt 8.1.1.1).
+        // Without a 'from' the stanza came from one's own server; the answer
+        // then goes back there implicitly without a 'to' (section 8.1.1.1).
         var idAttr  = id   != null ? $" id='{XmlEscaping.Escape(id)}'"   : "";
         var toAttr  = from != null ? $" to='{XmlEscaping.Escape(from)}'" : "";
 
@@ -2018,23 +2018,23 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Beantwortet eine disco-Anfrage nach einem Node, den es hier nicht gibt,
-    /// mit <c>&lt;item-not-found/&gt;</c>.
+    /// Answers a disco query for a node that does not exist here with
+    /// <c>&lt;item-not-found/&gt;</c>.
     /// </summary>
     /// <param name="ns">
-    /// Der Namensraum der Anfrage - disco#info oder disco#items. Die
-    /// zurückgenommene Anfrage muss die gestellte sein; ein Fehler, der die
-    /// falsche Frage nennt, ist schlechter als einer ohne.
+    /// The namespace of the request - disco#info or disco#items. The request
+    /// carried back has to be the one that was posed; an error naming the wrong
+    /// question is worse than one without.
     /// </param>
     /// <remarks>
-    /// XEP-0030, Abschnitt 7 verlangt „an appropriate error" und lässt die
-    /// Wahl; <c>item-not-found</c> ist die Auskunft, um die es geht: Die
-    /// Adresse stimmt, der Node nicht.
+    /// XEP-0030, section 7 demands "an appropriate error" and leaves the choice;
+    /// <c>item-not-found</c> is the piece of information it is about: the
+    /// address is right, the node is not.
     ///
-    /// Der Fehler trägt die ursprüngliche Anfrage samt <c>node</c> zurück
-    /// (RFC 6120, Abschnitt 8.3.1). Das ist hier mehr als Form: Ein Frager, der
-    /// mehrere Nodes derselben Entity abfragt, erfährt sonst nur, dass
-    /// <i>irgendeiner</i> fehlt.
+    /// The error carries the original request including the <c>node</c> back
+    /// (RFC 6120, section 8.3.1). That is more than form here: an asker who
+    /// queries several nodes of the same entity otherwise only learns that
+    /// <i>one of them</i> is missing.
     /// </remarks>
     private void RefuseUnknownNode(string   id,
                                    string?  from,
@@ -2042,11 +2042,11 @@ public sealed class XMPPConnection : IAsyncDisposable
                                    string   ns    = DiscoManager.InfoNamespace)
     {
 
-        _logger.LogDebug("disco-Abfrage nach unbekanntem Node '{Node}' von {From} mit <item-not-found/> beantwortet",
-                         node, from ?? "(Server)");
+        _logger.LogDebug("disco query for the unknown node '{Node}' from {From} answered with <item-not-found/>",
+                         node, from ?? "(server)");
 
-        // Ohne 'from' kam die Anfrage vom eigenen Server; die Antwort geht
-        // dann ohne 'to' implizit dorthin zurück (Abschnitt 8.1.1.1).
+        // Without a 'from' the request came from one's own server; the answer
+        // then goes back there implicitly without a 'to' (section 8.1.1.1).
         var toAttr = from != null ? $" to='{XmlEscaping.Escape(from)}'" : "";
 
         _ = SendAsync($"<iq type='error' id='{XmlEscaping.Escape(id)}'{toAttr}>" +
@@ -2058,33 +2058,31 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Beantwortet ein IQ, für das es keinen Handler gibt.
+    /// Answers an IQ for which there is no handler.
     ///
-    /// RFC 6120, Abschnitt 8.2.3 verlangt auf jedes <c>iq</c> vom Typ
-    /// <c>get</c> oder <c>set</c> eine Antwort - <c>result</c> oder
-    /// <c>error</c>. Bleibt sie aus, wartet die Gegenstelle bis in ihren
-    /// Timeout; bei einem Server kann das die Sitzung kosten. Für nicht
-    /// unterstützte Anfragen ist die richtige Antwort nach Abschnitt 8.4
+    /// RFC 6120, section 8.2.3 demands an answer to every <c>iq</c> of the type
+    /// <c>get</c> or <c>set</c> - <c>result</c> or <c>error</c>. If it fails to
+    /// come, the peer waits into its timeout; with a server that can cost the
+    /// session. For unsupported requests the right answer per section 8.4 is
     /// <c>&lt;service-unavailable/&gt;</c>.
     /// </summary>
     private void RespondUnhandledIq(string? id, string? from)
     {
 
-        // Ohne 'id' liesse sich die Antwort nicht zuordnen - dort ist das
-        // Attribut nach Abschnitt 8.2.3 zwingend, die Anfrage ist also selbst
-        // fehlerhaft.
+        // Without an 'id' the answer could not be assigned - there the attribute
+        // is mandatory per section 8.2.3, so the request is itself faulty.
         if (id is null)
         {
-            _logger.LogWarning("IQ ohne 'id' von {From} - nicht beantwortbar", from ?? "(Server)");
+            _logger.LogWarning("IQ without an 'id' from {From} - cannot be answered", from ?? "(server)");
             return;
         }
 
-        // Ohne 'from' kam die Anfrage vom eigenen Server; die Antwort geht
-        // dann ohne 'to' implizit dorthin zurück (Abschnitt 8.1.1.1).
+        // Without a 'from' the request came from one's own server; the answer
+        // then goes back there implicitly without a 'to' (section 8.1.1.1).
         var toAttr = from != null ? $" to='{XmlEscaping.Escape(from)}'" : "";
 
-        _logger.LogDebug("Unbekanntes IQ '{Id}' von {From} mit <service-unavailable/> beantwortet",
-                         id, from ?? "(Server)");
+        _logger.LogDebug("Unknown IQ '{Id}' from {From} answered with <service-unavailable/>",
+                         id, from ?? "(server)");
 
         _ = SendAsync($"<iq type='error' id='{XmlEscaping.Escape(id)}'{toAttr}>" +
                        "<error type='cancel'>" +
@@ -2094,19 +2092,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// RFC 6121, Abschnitt 2.1.6: Prüft, ob ein Roster-Push vom eigenen Konto
-    /// stammt und damit angewendet werden darf.
+    /// RFC 6121, section 2.1.6: Checks whether a roster push stems from one's
+    /// own account and may therefore be applied.
     /// </summary>
-    /// <param name="from">Das 'from'-Attribut des IQ; null, wenn nicht gesetzt.</param>
+    /// <param name="from">The 'from' attribute of the IQ; null when not set.</param>
     internal bool IsAuthorizedRosterPush(string? from)
     {
 
-        // Kein 'from' bedeutet: implizit vom Bare-JID des eigenen Kontos.
+        // No 'from' means: implicitly from the bare JID of one's own account.
         if (from is null)
             return true;
 
-        // Vor dem Resource Binding gibt es noch keinen eigenen JID, gegen den
-        // geprüft werden könnte - dann im Zweifel ablehnen.
+        // Before the resource binding there is no own JID yet that could be
+        // checked against - then refuse when in doubt.
         if (string.IsNullOrEmpty(FullJid))
             return false;
 
@@ -2115,13 +2113,13 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Wendet einen Roster-Push an.
+    /// Applies a roster push.
     ///
-    /// Das frühere Muster verlangte die Attribute in der Reihenfolge
-    /// <c>jid</c>, <c>name</c>, <c>subscription</c>. Ein
-    /// <c>&lt;item subscription='both' jid='…'/&gt;</c> - gültig und je nach
-    /// Server üblich - passte darauf nicht und der Push wurde still verworfen.
-    /// Gruppen las es überhaupt nicht.
+    /// The earlier pattern demanded the attributes in the order <c>jid</c>,
+    /// <c>name</c>, <c>subscription</c>. An
+    /// <c>&lt;item subscription='both' jid='…'/&gt;</c> - valid and, depending
+    /// on the server, customary - did not fit that and the push was discarded
+    /// silently. Groups it did not read at all.
     /// </summary>
     private void ProcessRosterPush(XElement element)
     {
@@ -2146,19 +2144,18 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         }
 
-        // RFC 6121, Abschnitt 2.6.3: Der Push trägt die Fassung, auf der der
-        // Roster nach dieser Änderung steht. Sie zu übernehmen ist der ganze
-        // Zweck der Übung - ohne das fragt der Client beim nächsten Anmelden
-        // mit einer veralteten Fassung und bekommt alles noch einmal.
-        if (query.Attr("ver") is string fassung)
-            Roster.Version = fassung;
+        // RFC 6121, section 2.6.3: The push carries the version the roster
+        // stands at after this change. Taking it over is the whole point of the
+        // exercise - without that the client asks with an outdated version at
+        // the next login and gets everything all over again.
+        if (query.Attr("ver") is string version)
+            Roster.Version = version;
 
     }
 
     /// <summary>
-    /// Baut aus einem <c>&lt;item/&gt;</c> des Rosters einen
-    /// <see cref="RosterItem"/> - inklusive der Gruppen, die vorher verloren
-    /// gingen.
+    /// Builds a <see cref="RosterItem"/> out of an <c>&lt;item/&gt;</c> of the
+    /// roster - including the groups, which previously got lost.
     /// </summary>
     private static RosterItem ToRosterItem(XElement itemElement, string jid)
     {
@@ -2180,26 +2177,26 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private async Task PerformSaslPlainAsync(CancellationToken ct)
     {
-        // RFC 4616, Abschnitt 2: Auch PLAIN schickt Benutzername und Passwort
-        // in der SASLprep-Form. Sonst hinge es am Mechanismus, ob dasselbe
-        // Passwort passt - über SCRAM vorbereitet, über PLAIN nicht.
+        // RFC 4616, section 2: PLAIN, too, sends user name and password in the
+        // SASLprep form. Otherwise it would hang on the mechanism whether the
+        // same password fits - prepared over SCRAM, not over PLAIN.
         var authData = $"\0{SaslPrep.Prepare(_username)}\0{SaslPrep.Prepare(_password)}";
         var authBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(authData));
 
         await SendAsync($"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>{authBase64}</auth>");
 
-        var response = await ReceiveElementAsync(ct, "die Antwort auf SASL PLAIN");
+        var response = await ReceiveElementAsync(ct, "the answer to SASL PLAIN");
 
         if (StreamNegotiation.IsSasl(response, "success"))
-            _logger.LogInformation("Authentifizierung erfolgreich (PLAIN)");
+            _logger.LogInformation("Authentication successful (PLAIN)");
 
         else if (StreamNegotiation.IsSasl(response, "failure"))
             throw new AuthenticationException(
-                      $"SASL PLAIN abgelehnt: {StreamNegotiation.SaslFailureCondition(response) ?? "ohne Angabe"}");
+                      $"SASL PLAIN refused: {StreamNegotiation.SaslFailureCondition(response) ?? "without a reason given"}");
 
         else
             throw new AuthenticationException(
-                      $"Unerwartete Antwort auf SASL PLAIN: <{response.Name.LocalName}/>");
+                      $"Unexpected answer to SASL PLAIN: <{response.Name.LocalName}/>");
 
     }
 
@@ -2207,66 +2204,66 @@ public sealed class XMPPConnection : IAsyncDisposable
     {
         var scram = new SCRAMAuthenticator(_username, _password, mechanism);
 
-        // Schritt 1: client-first-message
+        // Step 1: client-first-message
         var clientFirst = scram.CreateClientFirstMessage();
         await SendAsync($"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='{scram.MechanismName}'>{clientFirst}</auth>");
 
-        // Schritt 2: server-first-message (challenge)
-        var challenge = await ReceiveElementAsync(ct, "die SCRAM-Challenge");
+        // Step 2: server-first-message (challenge)
+        var challenge = await ReceiveElementAsync(ct, "the SCRAM challenge");
 
         if (!StreamNegotiation.IsSasl(challenge, "challenge"))
         {
 
             if (StreamNegotiation.IsSasl(challenge, "failure"))
                 throw new AuthenticationException(
-                          $"SCRAM abgelehnt: {StreamNegotiation.SaslFailureCondition(challenge) ?? "ohne Angabe"}");
+                          $"SCRAM refused: {StreamNegotiation.SaslFailureCondition(challenge) ?? "without a reason given"}");
 
             throw new AuthenticationException(
-                      $"Unerwartete Antwort auf die client-first-message: <{challenge.Name.LocalName}/>");
+                      $"Unexpected answer to the client-first-message: <{challenge.Name.LocalName}/>");
 
         }
 
         var serverFirst = StreamNegotiation.SaslPayload(challenge);
 
         if (serverFirst.Length == 0)
-            throw new AuthenticationException("Die SASL-Challenge des Servers ist leer.");
+            throw new AuthenticationException("The SASL challenge of the server is empty.");
 
-        // Schritt 3: client-final-message
+        // Step 3: client-final-message
         var clientFinal = scram.ProcessServerFirstMessage(serverFirst);
         await SendAsync($"<response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{clientFinal}</response>");
 
-        // Schritt 4: server-final-message (success oder failure)
-        var final = await ReceiveElementAsync(ct, "die SCRAM-Serversignatur");
+        // Step 4: server-final-message (success or failure)
+        var final = await ReceiveElementAsync(ct, "the SCRAM server signature");
 
         if (StreamNegotiation.IsSasl(final, "success"))
         {
 
             var serverFinal = StreamNegotiation.SaslPayload(final);
 
-            // RFC 5802, Abschnitt 5: Die Serversignatur zu prüfen ist die
-            // zweite Hälfte von SCRAM - sie belegt, dass die Gegenstelle das
-            // Passwort ebenfalls kennt. Früher war das eine Kür: kam ein
-            // <success/> ohne Nutzlast, unterblieb die Prüfung stillschweigend
-            // und die gegenseitige Authentifizierung war damit wertlos.
+            // RFC 5802, section 5: Checking the server signature is the second
+            // half of SCRAM - it proves that the peer knows the password as
+            // well. Previously that was optional: if a <success/> came without a
+            // payload, the check was silently omitted and the mutual
+            // authentication was thereby worthless.
             if (serverFinal.Length == 0)
                 throw new AuthenticationException(
-                          "Der Server hat SCRAM ohne server-final-message bestätigt - " +
-                          "seine Signatur ist damit nicht prüfbar.");
+                          "The server confirmed SCRAM without a server-final-message - " +
+                          "its signature is thereby not checkable.");
 
             if (!scram.VerifyServerFinalMessage(serverFinal))
-                throw new AuthenticationException("Server-Signatur ungültig - möglicher MITM-Angriff!");
+                throw new AuthenticationException("Server signature invalid - possible MITM attack!");
 
-            _logger.LogInformation("Authentifizierung erfolgreich ({Mechanism})", scram.MechanismName);
+            _logger.LogInformation("Authentication successful ({Mechanism})", scram.MechanismName);
 
         }
 
         else if (StreamNegotiation.IsSasl(final, "failure"))
             throw new AuthenticationException(
-                      $"SCRAM fehlgeschlagen: {StreamNegotiation.SaslFailureCondition(final) ?? "ohne Angabe"}");
+                      $"SCRAM failed: {StreamNegotiation.SaslFailureCondition(final) ?? "without a reason given"}");
 
         else
             throw new AuthenticationException(
-                      $"Unerwartete Antwort auf die client-final-message: <{final.Name.LocalName}/>");
+                      $"Unexpected answer to the client-final-message: <{final.Name.LocalName}/>");
 
     }
 
@@ -2279,18 +2276,18 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (jid is not null)
             return jid;
 
-        // RFC 6120, Abschnitt 7.7.2.2: Ist die gewünschte Resource schon
-        // gebunden, darf der Server sie mit <conflict/> ablehnen - andere
-        // Server vergeben stattdessen selbst eine abweichende. Auf die
-        // Ablehnung gehört der zweite Versuch ohne Wunsch; nur so kommt ein
-        // zweiter Client desselben Kontos überhaupt herein.
+        // RFC 6120, section 7.7.2.2: If the wished-for resource is already
+        // bound, the server may refuse it with <conflict/> - other servers hand
+        // out a differing one themselves instead. The refusal calls for the
+        // second attempt without a wish; only that way does a second client of
+        // the same account get in at all.
         //
-        // Nur bei <conflict/>: jede andere Bedingung käme beim zweiten Versuch
-        // genauso wieder.
+        // Only on <conflict/>: every other condition would come back just the
+        // same on the second attempt.
         if (Resource is not null && IsConflict(response))
         {
 
-            _logger.LogInformation("Resource '{Resource}' ist belegt - der Server soll eine vergeben", Resource);
+            _logger.LogInformation("The resource '{Resource}' is taken - the server shall hand one out", Resource);
 
             response = await RequestBindAsync("bind2", null, ct);
             jid      = StreamNegotiation.ReadBoundJid(response);
@@ -2300,30 +2297,30 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         }
 
-        throw new XMPPProtocolException($"Resource Binding abgelehnt: {DescribeRejection(response)}");
+        throw new XMPPProtocolException($"Resource binding refused: {DescribeRejection(response)}");
 
     }
 
     /// <summary>
-    /// Wurde die Anfrage mit <c>&lt;conflict/&gt;</c> abgelehnt?
+    /// Was the request refused with <c>&lt;conflict/&gt;</c>?
     /// </summary>
     private static bool IsConflict(XElement response)
         => StanzaError.TryParse(response.ToString(), out var error) &&
            error?.Condition == "conflict";
 
     /// <summary>
-    /// Schickt eine Bind-Anfrage und liest die Antwort.
+    /// Sends a bind request and reads the answer.
     /// </summary>
-    /// <param name="resource">Die gewünschte Resource, oder null für "vergib du".</param>
+    /// <param name="resource">The wished-for resource, or null for "you hand one out".</param>
     private async Task<XElement> RequestBindAsync(string id, string? resource, CancellationToken ct)
     {
 
-        var wunsch = resource is not null
-                         ? $"<resource>{XmlEscaping.Escape(resource)}</resource>"
-                         : "";
+        var wish = resource is not null
+                       ? $"<resource>{XmlEscaping.Escape(resource)}</resource>"
+                       : "";
 
         await SendAsync($"<iq type='set' id='{id}'>" +
-                        $"<bind xmlns='{StreamNegotiation.BindNamespace}'>{wunsch}</bind>" +
+                        $"<bind xmlns='{StreamNegotiation.BindNamespace}'>{wish}</bind>" +
                         $"</iq>");
 
         return await ReceiveElementAsync(ct);
@@ -2331,7 +2328,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Beschreibt eine abgelehnte Anfrage für die Fehlermeldung.
+    /// Describes a refused request for the error message.
     /// </summary>
     private static string DescribeRejection(XElement response)
         => StanzaError.TryParse(response.ToString(), out var error) && error is not null
@@ -2349,10 +2346,10 @@ public sealed class XMPPConnection : IAsyncDisposable
                            ct);
 
         if (response is null)
-            _logger.LogWarning("Keine Antwort auf die Session-Anfrage");
+            _logger.LogWarning("No answer to the session request");
 
         else if (response.Attr("type") != "result")
-            _logger.LogWarning("Session-Anfrage abgelehnt: {Reason}", DescribeRejection(response));
+            _logger.LogWarning("Session request refused: {Reason}", DescribeRejection(response));
 
     }
 
@@ -2363,40 +2360,39 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         if (response is null)
         {
-            _logger.LogWarning("Message Carbons: keine Antwort vom Server");
+            _logger.LogWarning("Message carbons: no answer from the server");
             return;
         }
 
         if (response.Attr("type") == "result")
         {
             Carbons!.SetEnabled(true);
-            _logger.LogInformation("Message Carbons aktiviert");
+            _logger.LogInformation("Message carbons enabled");
         }
         else
-            _logger.LogWarning("Message Carbons nicht verfügbar: {Reason}", DescribeRejection(response));
+            _logger.LogWarning("Message carbons not available: {Reason}", DescribeRejection(response));
 
     }
-
-    #region OMEMO (XEP-0384), PEP-Verteilung
+    #region OMEMO (XEP-0384), PEP distribution
 
     /// <summary>
-    /// XEP-0384: Veröffentlicht die eigene Geräteliste.
+    /// XEP-0384: Publishes one's own device list.
     /// </summary>
-    /// <returns>false, wenn der Server es abgelehnt hat.</returns>
+    /// <returns>false when the server has refused it.</returns>
     /// <remarks>
-    /// <b>Der Rückgabewert ist der Punkt.</b> Bis hierher hat dieses Haus
-    /// PubSub-Anfragen abgeschickt und nicht nachgesehen, was zurückkam (siehe
-    /// D38) - für ein Abonnement war das lässlich. Hier ist es das nicht: Wer
-    /// seine Geräteliste veröffentlicht und nicht erfährt, dass es misslang,
-    /// ist für alle seine Kontakte unerreichbar und merkt nichts davon. Alles
-    /// sieht aus wie immer, nur schreibt ihm niemand mehr verschlüsselt.
+    /// <b>The return value is the point.</b> Up to here this house has sent
+    /// PubSub requests off and not looked at what came back (see D38) - for a
+    /// subscription that was venial. Here it is not: whoever publishes their
+    /// device list and does not learn that it went wrong is unreachable for all
+    /// their contacts and notices nothing of it. Everything looks as it always
+    /// does, only nobody writes to them encrypted any more.
     /// </remarks>
     public async Task<bool> PublishOmemoDeviceListAsync(OmemoDeviceList   list,
                                                         CancellationToken ct = default)
         => await PublishPepAsync(OmemoDeviceList.Node, OmemoDeviceList.ItemId, list.ToXml(), ct);
 
     /// <summary>
-    /// XEP-0384: Veröffentlicht das eigene Bundle unter der Gerätekennung.
+    /// XEP-0384: Publishes one's own bundle under the device identifier.
     /// </summary>
     public async Task<bool> PublishOmemoBundleAsync(UInt32             deviceId,
                                                     OmemoBundle        bundle,
@@ -2414,13 +2410,13 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         if (response is null)
         {
-            _logger.LogWarning("PEP: keine Antwort auf das Veröffentlichen in {Node}", node);
+            _logger.LogWarning("PEP: no answer to the publishing in {Node}", node);
             return false;
         }
 
         if (response.Attr("type") != "result")
         {
-            _logger.LogWarning("PEP: {Node} abgelehnt: {Reason}", node, DescribeRejection(response));
+            _logger.LogWarning("PEP: {Node} refused: {Reason}", node, DescribeRejection(response));
             return false;
         }
 
@@ -2429,47 +2425,47 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0384: Holt die Geräteliste eines Kontos.
+    /// XEP-0384: Fetches the device list of an account.
     /// </summary>
     /// <returns>
-    /// null, wenn es keine gibt - dieser Mensch benutzt OMEMO nicht, oder
-    /// sein Server hält nichts bereit. Beides ist dasselbe für den, der
-    /// schreiben will.
+    /// null when there is none - this person does not use OMEMO, or their
+    /// server keeps nothing ready. Both are the same thing for whoever wants to
+    /// write.
     /// </returns>
     public async Task<OmemoDeviceList?> FetchOmemoDeviceListAsync(string             bareJid,
                                                                   CancellationToken  ct = default)
     {
 
-        var inhalt = await FetchPepAsync(bareJid, OmemoDeviceList.Node, OmemoDeviceList.ItemId, ct);
+        var content = await FetchPepAsync(bareJid, OmemoDeviceList.Node, OmemoDeviceList.ItemId, ct);
 
-        return inhalt is not null && OmemoDeviceList.TryRead(inhalt, out var liste)
-                   ? liste
+        return content is not null && OmemoDeviceList.TryRead(content, out var list)
+                   ? list
                    : null;
 
     }
 
     /// <summary>
-    /// XEP-0384: Holt das Bundle eines bestimmten Geräts.
+    /// XEP-0384: Fetches the bundle of a particular device.
     /// </summary>
     /// <remarks>
-    /// <b>Die Signatur wird hier geprüft und nicht erst beim Aufrufer.</b> Ein
-    /// Bundle kommt vom Server der Gegenstelle - also von der Partei, gegen
-    /// die OMEMO schützt. Ein ungeprüftes Bundle weiterzureichen hiesse, die
-    /// Prüfung dem zu überlassen, der sie am ehesten vergisst.
+    /// <b>The signature is checked here and not only at the caller.</b> A bundle
+    /// comes from the server of the peer - that is, from the party OMEMO
+    /// protects against. Passing an unchecked bundle on would mean leaving the
+    /// check to whoever is most likely to forget it.
     /// </remarks>
     public async Task<OmemoBundle?> FetchOmemoBundleAsync(string             bareJid,
                                                           UInt32             deviceId,
                                                           CancellationToken  ct = default)
     {
 
-        var inhalt = await FetchPepAsync(bareJid, OmemoPep.BundlesNode, deviceId.ToString(), ct);
+        var content = await FetchPepAsync(bareJid, OmemoPep.BundlesNode, deviceId.ToString(), ct);
 
-        if (inhalt is null || !OmemoPep.TryReadBundle(inhalt, out var bundle))
+        if (content is null || !OmemoPep.TryReadBundle(content, out var bundle))
             return null;
 
         if (!bundle!.SignatureIsValid())
         {
-            _logger.LogWarning("OMEMO: Das Bundle von {Jid}/{Device} ist nicht gültig unterschrieben",
+            _logger.LogWarning("OMEMO: The bundle of {Jid}/{Device} is not validly signed",
                                bareJid, deviceId);
             return null;
         }
@@ -2498,31 +2494,30 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Eine fremde Geräteliste ist eingetroffen - über PEP, ohne dass jemand
-    /// gefragt hätte.
+    /// Someone else's device list has arrived - through PEP, without anyone
+    /// having asked.
     /// </summary>
     public event Action<string, OmemoDeviceList>? OnOmemoDeviceListChanged;
 
     /// <summary>
-    /// Die eigene Gerätekennung, sobald sie feststeht - daran hängt der
-    /// Wiedereintrag nach Abschnitt 5.2.
+    /// One's own device identifier, as soon as it is settled - on it hangs the
+    /// re-entry per section 5.2.
     /// </summary>
     public UInt32? OmemoDeviceId { get; set; }
 
     /// <summary>
-    /// Verarbeitet eine PEP-Benachrichtigung (XEP-0163).
+    /// Processes a PEP notification (XEP-0163).
     /// </summary>
     /// <remarks>
-    /// <b>Der Wiedereintrag ist ein MUSS der Spezifikation</b>, und der Grund
-    /// ist unangenehm: Ein anderes Gerät desselben Menschen - oder ein
-    /// aufräumender Server - kann die Liste neu schreiben und dieses Gerät
-    /// dabei vergessen. Von da an schreibt niemand mehr an dieses Gerät
-    /// verschlüsselt, und es merkt nichts davon, weil ihm nichts fehlt: Es
-    /// bekommt weiterhin alles, was unverschlüsselt kommt.
+    /// <b>The re-entry is a MUST of the specification</b>, and the reason is
+    /// unpleasant: another device of the same person - or a tidying server - can
+    /// rewrite the list and forget this device while doing so. From then on
+    /// nobody writes to this device encrypted any more, and it notices nothing
+    /// of it, because nothing is missing for it: it keeps getting everything
+    /// that comes unencrypted.
     ///
-    /// Ergänzt wird, nicht ersetzt: Wer hier eine Liste mit nur dem eigenen
-    /// Gerät veröffentlichte, machte aus dem Wiedereintrag eine Verdrängung
-    /// aller anderen Geräte.
+    /// Added to, not replaced: whoever published a list here with only their own
+    /// device turned the re-entry into a displacement of all other devices.
     /// </remarks>
     internal async Task ProcessPepEventAsync(XElement stanza, string from)
     {
@@ -2536,41 +2531,41 @@ public sealed class XMPPConnection : IAsyncDisposable
         var payload = items.Elements().FirstOrDefault(e => e.Name.LocalName == "item")
                           ?.Elements().FirstOrDefault();
 
-        if (payload is null || !OmemoDeviceList.TryRead(payload, out var liste) || liste is null)
+        if (payload is null || !OmemoDeviceList.TryRead(payload, out var list) || list is null)
             return;
 
-        OnOmemoDeviceListChanged?.Invoke(JidUtilities.Bare(from), liste);
+        OnOmemoDeviceListChanged?.Invoke(JidUtilities.Bare(from), list);
 
-        if (OmemoDeviceId is not UInt32 eigenes ||
+        if (OmemoDeviceId is not UInt32 own ||
             !string.Equals(JidUtilities.Bare(from), BareJid, StringComparison.OrdinalIgnoreCase) ||
-            liste.Contains(eigenes))
+            list.Contains(own))
             return;
 
-        _logger.LogWarning("OMEMO: Das eigene Gerät {Device} fehlt in der Geräteliste - trage es wieder ein",
-                           eigenes);
+        _logger.LogWarning("OMEMO: One's own device {Device} is missing from the device list - entering it again",
+                           own);
 
-        await PublishOmemoDeviceListAsync(liste.With(new OmemoDevice(eigenes)));
+        await PublishOmemoDeviceListAsync(list.With(new OmemoDevice(own)));
 
     }
 
     /// <summary>
-    /// XEP-0384: der OMEMO-Verwalter, sobald er eingeschaltet ist.
+    /// XEP-0384: the OMEMO manager, as soon as it is switched on.
     /// </summary>
     public OmemoManager? Omemo { get; private set; }
 
     /// <summary>
-    /// Eine verschlüsselt eingetroffene Nachricht - schon entschlüsselt.
+    /// A message that arrived encrypted - already decrypted.
     /// </summary>
     public event Action<XMPPMessage, OmemoDecrypted>? OnEncryptedMessage;
 
     /// <summary>
-    /// XEP-0384: Schaltet OMEMO ein - Schlüsselmaterial aus dem Speicher,
-    /// Geräteliste und Bundle veröffentlicht.
+    /// XEP-0384: Switches OMEMO on - key material from the store, device list
+    /// and bundle published.
     /// </summary>
     /// <remarks>
-    /// <b>Die Geräteliste wird ergänzt und nicht ersetzt.</b> Wer sie neu
-    /// schriebe, verdrängte damit jedes andere Gerät desselben Menschen - und
-    /// die bekämen von da an nichts mehr, ohne dass jemand etwas bemerkt.
+    /// <b>The device list is added to and not replaced.</b> Whoever rewrote it
+    /// would thereby displace every other device of the same person - and those
+    /// would get nothing any more from then on, without anyone noticing.
     /// </remarks>
     public async Task<bool> EnableOmemoAsync(IOmemoStore store, CancellationToken ct = default)
     {
@@ -2583,12 +2578,12 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         OmemoDeviceId = Omemo.Identity.DeviceId;
 
-        var vorhanden = await FetchOmemoDeviceListAsync(BareJid, ct)
-                            ?? new OmemoDeviceList([]);
+        var existing = await FetchOmemoDeviceListAsync(BareJid, ct)
+                           ?? new OmemoDeviceList([]);
 
-        var ergaenzt = vorhanden.With(new OmemoDevice(Omemo.Identity.DeviceId));
+        var extended = existing.With(new OmemoDevice(Omemo.Identity.DeviceId));
 
-        if (!await PublishOmemoDeviceListAsync(ergaenzt, ct))
+        if (!await PublishOmemoDeviceListAsync(extended, ct))
             return false;
 
         return await PublishOmemoBundleAsync(Omemo.Identity.DeviceId, Omemo.Identity.Bundle(), ct);
@@ -2596,16 +2591,15 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0384: Schickt eine verschlüsselte Nachricht.
+    /// XEP-0384: Sends an encrypted message.
     /// </summary>
     /// <returns>
-    /// Die übersprungenen Geräte - <b>leer heisst: alle lesen mit</b>.
+    /// The devices skipped - <b>empty means: everyone reads along</b>.
     /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// Wenn OMEMO nicht eingeschaltet ist. <b>Hier wird geworfen und nicht
-    /// unverschlüsselt gesendet:</b> Wer verschlüsselt schreiben wollte und
-    /// unverschlüsselt sendet, hat den schlimmsten aller Fehler gemacht - und
-    /// zwar lautlos.
+    /// When OMEMO is not switched on. <b>Here it throws and does not send
+    /// unencrypted:</b> whoever wanted to write encrypted and sends unencrypted
+    /// has made the worst of all mistakes - and silently at that.
     /// </exception>
     public async Task<IReadOnlyList<OmemoSkippedDevice>> SendEncryptedMessageAsync(
         string to, string body, CancellationToken ct = default)
@@ -2613,50 +2607,50 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         if (Omemo is null)
             throw new InvalidOperationException(
-                      "OMEMO ist nicht eingeschaltet. Diese Nachricht wird nicht unverschlüsselt " +
-                      "gesendet - das wäre der schlimmste aller Fehler, und lautlos.");
+                      "OMEMO is not switched on. This message will not be sent unencrypted - " +
+                      "that would be the worst of all mistakes, and a silent one.");
 
         XNamespace client = "jabber:client";
 
-        var ergebnis = await Omemo.EncryptAsync([to], [new XElement(client + "body", body)]);
+        var result = await Omemo.EncryptAsync([to], [new XElement(client + "body", body)]);
 
-        // Ein <store/> nach XEP-0334, damit die Ablage sie aufhebt: Von aussen
-        // sieht diese Nachricht wie eine ohne Inhalt aus, und ein Server, der
-        // nach dem <body/> entscheidet, würde sie wegwerfen.
+        // A <store/> per XEP-0334, so that the storage keeps it: from the
+        // outside this message looks like one without content, and a server
+        // deciding by the <body/> would throw it away.
         var stanza = new XElement(client + "message",
                                   new XAttribute("to",   JidUtilities.Bare(to)),
                                   new XAttribute("type", "chat"),
                                   new XAttribute("id",   GenerateMessageId()),
-                                  ergebnis.Element.ToXml(),
+                                  result.Element.ToXml(),
                                   new XElement(XNamespace.Get("urn:xmpp:hints") + "store"));
 
         await SendAsync(stanza.ToString(SaveOptions.DisableFormatting));
 
-        return ergebnis.Skipped;
+        return result.Skipped;
 
     }
 
     /// <summary>
-    /// Nimmt eine verschlüsselte Nachricht entgegen.
+    /// Takes an encrypted message in.
     /// </summary>
-    /// <returns>true, wenn sie verarbeitet wurde - dann geht sie nicht mehr den gewöhnlichen Weg.</returns>
+    /// <returns>true when it was processed - then it no longer goes the ordinary way.</returns>
     private bool TryProcessEncrypted(XElement element, string from)
     {
 
-        if (Omemo is null || !OmemoEncryptedElement.TryRead(element, out var verschluesselt))
+        if (Omemo is null || !OmemoEncryptedElement.TryRead(element, out var encrypted))
             return false;
 
         _ = Task.Run(async () =>
         {
 
-            var entschluesselt = await Omemo.DecryptAsync(verschluesselt!, from);
+            var decrypted = await Omemo.DecryptAsync(encrypted!, from);
 
-            if (entschluesselt is null)
+            if (decrypted is null)
                 return;
 
-            var body = entschluesselt.Content
-                                     .FirstOrDefault(e => e.Name.LocalName == "body")
-                                    ?.Value;
+            var body = decrypted.Content
+                                .FirstOrDefault(e => e.Name.LocalName == "body")
+                               ?.Value;
 
             if (body is null)
                 return;
@@ -2668,7 +2662,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                                 element.Attr("id"),
                                 DateTime.Now,
                                 MessageType.Chat),
-                entschluesselt);
+                decrypted);
 
         });
 
@@ -2679,24 +2673,24 @@ public sealed class XMPPConnection : IAsyncDisposable
     #endregion
 
     /// <summary>
-    /// XEP-0352: Sagt dem Server, ob gerade ein Mensch hinsieht.
+    /// XEP-0352: Tells the server whether a human being is looking right now.
     /// </summary>
     /// <param name="active">
-    /// false, wenn das Gerät in der Tasche liegt - der Server hält dann
-    /// zurück, was warten kann.
+    /// false when the device is lying in the pocket - the server then holds back
+    /// what can wait.
     /// </param>
     /// <returns>
-    /// false, wenn der Server die Erweiterung nicht angekündigt hat. Dann
-    /// bleibt es beim aktiven Zustand, und zwar auf beiden Seiten: Ein
-    /// Client, der seinen Wunsch trotzdem vermerkte, hielte den Server für
-    /// sparsam, während dieser weiterhin alles schickt.
+    /// false when the server has not announced the extension. Then it stays at
+    /// the active state, and on both sides at that: a client that noted its wish
+    /// down anyway would take the server for thrifty while it keeps sending
+    /// everything.
     /// </returns>
     public async Task<bool> SetClientStateAsync(bool active)
     {
 
         if (!SupportsClientStateIndication)
         {
-            _logger.LogWarning("XEP-0352: Der Server bietet keine Client State Indication an.");
+            _logger.LogWarning("XEP-0352: The server offers no client state indication.");
             return false;
         }
 
@@ -2704,9 +2698,9 @@ public sealed class XMPPConnection : IAsyncDisposable
                             ? ClientStateIndication.ActiveXml
                             : ClientStateIndication.InactiveXml);
 
-        // Erst nach dem erfolgreichen Senden. Wirft das Senden, ist der
-        // Zustand auf dem Server unverändert, und die beiden Seiten wären
-        // sich sonst uneinig darüber, was gerade zurückgehalten wird.
+        // Only after the successful send. If the send throws, the state on the
+        // server is unchanged, and the two sides would otherwise disagree about
+        // what is being held back right now.
         ClientIsActive = active;
 
         return true;
@@ -2714,55 +2708,55 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Holt den Roster (RFC 6121, Abschnitt 2.1) - versioniert, wenn der
-    /// Server es anbietet.
+    /// Fetches the roster (RFC 6121, section 2.1) - versioned when the server
+    /// offers it.
     /// </summary>
     /// <remarks>
-    /// Beim ersten Mal geht ein leeres <c>ver=''</c> hinaus. Das ist kein
-    /// Platzhalter, sondern die Ansage „ich kann Versionierung, habe aber noch
-    /// nichts" (RFC 6121, Abschnitt 2.6.1): Der Server schickt den vollen
-    /// Roster und diesmal mit einer Fassung dazu.
+    /// The first time an empty <c>ver=''</c> goes out. That is not a placeholder
+    /// but the statement "I can do versioning, but I have nothing yet"
+    /// (RFC 6121, section 2.6.1): the server sends the full roster and this time
+    /// with a version along with it.
     /// </remarks>
-    private async Task RequestRosterAsync(Boolean versioniert, CancellationToken ct)
+    private async Task RequestRosterAsync(Boolean versioned, CancellationToken ct)
     {
 
         var response = await SendIqAsync(
                            "roster1",
-                           RosterStanzaBuilder.GetRoster(versioniert ? Roster.Version ?? "" : null),
+                           RosterStanzaBuilder.GetRoster(versioned ? Roster.Version ?? "" : null),
                            ct);
 
         if (response is null)
         {
-            _logger.LogWarning("Keine Antwort auf die Roster-Anfrage");
+            _logger.LogWarning("No answer to the roster request");
             return;
         }
 
         if (response.Attr("type") != "result")
         {
-            _logger.LogWarning("Roster-Anfrage abgelehnt: {Reason}", DescribeRejection(response));
+            _logger.LogWarning("Roster request refused: {Reason}", DescribeRejection(response));
             return;
         }
 
         var query = response.Child(RosterStanzaBuilder.Namespace, "query");
 
-        // RFC 6121, Abschnitt 2.6.2: Ein Ergebnis ganz ohne <query/> heisst
-        // „unverändert" - der Zwischenspeicher bleibt, wie er ist. Das gilt
-        // aber nur, wenn wir überhaupt versioniert gefragt haben; sonst wäre es
-        // schlicht ein Server, der nichts geschickt hat.
+        // RFC 6121, section 2.6.2: A result entirely without a <query/> means
+        // "unchanged" - the cache stays as it is. That only holds, though, when
+        // we asked in a versioned manner at all; otherwise it would simply be a
+        // server that has sent nothing.
         if (query is null)
         {
 
-            if (versioniert)
-                _logger.LogDebug("Roster unverändert (Fassung {Version}), {Count} Kontakte aus dem Zwischenspeicher",
+            if (versioned)
+                _logger.LogDebug("Roster unchanged (version {Version}), {Count} contacts from the cache",
                                  Roster.Version, Roster.Items.Count);
             else
-                _logger.LogWarning("Roster-Antwort ohne <query/>");
+                _logger.LogWarning("Roster answer without a <query/>");
 
             return;
 
         }
 
-        var stand = new List<RosterItem>();
+        var state = new List<RosterItem>();
 
         foreach (var itemElement in query.Children(RosterStanzaBuilder.Namespace, "item"))
         {
@@ -2770,22 +2764,22 @@ public sealed class XMPPConnection : IAsyncDisposable
             var jid = itemElement.Attr("jid");
 
             if (!string.IsNullOrEmpty(jid))
-                stand.Add(ToRosterItem(itemElement, jid));
+                state.Add(ToRosterItem(itemElement, jid));
 
         }
 
-        // Ersetzen und nicht ergänzen: Das Ergebnis ist der vollständige
-        // Roster (RFC 6121, Abschnitt 2.1.4). Wer hier nur einarbeitet,
-        // behält einen Kontakt, den der Server längst nicht mehr führt.
-        Roster.ReplaceAll(stand);
+        // Replace and do not add to: the result is the complete roster
+        // (RFC 6121, section 2.1.4). Whoever only merges here keeps a contact
+        // the server has long stopped carrying.
+        Roster.ReplaceAll(state);
 
-        // Die Fassung gehört zu genau diesem Stand und wird deshalb erst
-        // übernommen, nachdem er eingearbeitet ist.
-        if (query.Attr("ver") is string fassung)
-            Roster.Version = fassung;
+        // The version belongs to exactly this state and is therefore only taken
+        // over after that state has been merged in.
+        if (query.Attr("ver") is string version)
+            Roster.Version = version;
 
-        _logger.LogInformation("Roster geladen: {Count} Kontakte (Fassung {Version})",
-                               Roster.Items.Count, Roster.Version ?? "ohne");
+        _logger.LogInformation("Roster loaded: {Count} contacts (version {Version})",
+                               Roster.Items.Count, Roster.Version ?? "none");
     }
 
     // ===== PUBLIC API =====
@@ -2798,8 +2792,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (!string.IsNullOrEmpty(status))
             sb.Append($"<status>{XmlEscaping.Escape(status)}</status>");
 
-        // RFC 6121, Abschnitt 4.7.2.3: Die Priorität steht hinter show und
-        // status, wie der Abschnitt sie aufzählt.
+        // RFC 6121, section 4.7.2.3: The priority stands behind show and status,
+        // the way the section enumerates them.
         if (PresencePriority.HasValue)
             sb.Append($"<priority>{PresencePriority.Value}</priority>");
 
@@ -2815,18 +2809,17 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Schickt eine Nachricht.
+    /// Sends a message.
     /// </summary>
     /// <param name="type">
-    /// Die Art der Nachricht (RFC 6121, Abschnitt 5.2.2). Vorgabe ist
-    /// <see cref="MessageType.Chat"/> - dieser Client ist einer für Gespräche
-    /// unter vier Augen.
+    /// The kind of the message (RFC 6121, section 5.2.2). The default is
+    /// <see cref="MessageType.Chat"/> - this client is one for one-on-one
+    /// conversations.
     /// </param>
     /// <param name="requestReceipt">
-    /// Eine Empfangsbestätigung anfordern (XEP-0184). Wird für Nachrichten
-    /// übergangen, bei denen keine Antwort zu erwarten ist: In einem Raum
-    /// bekämen alle Anwesenden die Quittungen zu sehen, und ein Zuruf will
-    /// keine.
+    /// Request a delivery receipt (XEP-0184). Is passed over for messages where
+    /// no answer is to be expected: in a room everyone present would get to see
+    /// the acknowledgements, and a shout wants none.
     /// </param>
     public async Task<string> SendMessageAsync(string       to,
                                                string       body,
@@ -2843,21 +2836,21 @@ public sealed class XMPPConnection : IAsyncDisposable
         sb.Append($"<message to='{XmlEscaping.Escape(to)}'{typeAttr} id='{messageId}'>");
         sb.Append($"<body>{XmlEscaping.Escape(body)}</body>");
 
-        // XEP-0308: Eine eigene id und der volle neue Text - das <replace/>
-        // nennt nur, welche Nachricht abgelöst wird. Ein Empfänger ohne diese
-        // Erweiterung zeigt sie als zweite Nachricht an, und das ist
-        // beabsichtigt: unschön, aber vollständig.
+        // XEP-0308: An id of its own and the full new text - the <replace/> only
+        // names which message is being superseded. A recipient without this
+        // extension displays it as a second message, and that is intended: ugly,
+        // but complete.
         if (corrects is not null)
             sb.Append(MessageCorrection.ReplaceXml(corrects));
 
-        // Was keine Antwort erwartet, bekommt auch keine angefordert.
+        // What expects no answer gets none requested either.
         if (!type.ExpectsAReply())
         {
             requestReceipt  = false;
             markable        = false;
         }
 
-        // XEP-0184: Receipt Request
+        // XEP-0184: receipt request
         if (requestReceipt)
         {
             sb.Append(ReceiptBuilder.RequestXml);
@@ -2876,7 +2869,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var xml = sb.ToString();
 
-        // XEP-0198: das Mitzählen passiert zentral in SendAsync.
+        // XEP-0198: the counting along happens centrally in SendAsync.
         await SendAsync(xml);
         return messageId;
     }
@@ -2892,7 +2885,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0333: Sendet einen Chat Marker
+    /// XEP-0333: Sends a chat marker
     /// </summary>
     public async Task SendChatMarkerAsync(string to, string refMessageId, ChatMarkerType type)
     {
@@ -2900,7 +2893,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0199: Sendet einen Ping
+    /// XEP-0199: Sends a ping
     /// </summary>
     public Task<TimeSpan?> PingAsync(string? to = null, CancellationToken ct = default)
     {
@@ -2908,7 +2901,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0030: Fragt Service Discovery Info ab
+    /// XEP-0030: Queries service discovery info
     /// </summary>
     public Task<DiscoInfo?> DiscoverInfoAsync(string jid, CancellationToken ct = default)
     {
@@ -2916,7 +2909,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0030: Fragt Service Discovery Items ab
+    /// XEP-0030: Queries service discovery items
     /// </summary>
     public Task<DiscoItems?> DiscoverItemsAsync(string jid, CancellationToken ct = default)
     {
@@ -2924,7 +2917,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0198: Fordert Ack vom Server an
+    /// XEP-0198: Requests an ack from the server
     /// </summary>
     public Task RequestAckAsync()
     {
@@ -2933,7 +2926,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     public async Task SendRawAsync(string xml) => await SendAsync(xml);
 
-    // Roster Operations
+    // Roster operations
     public async Task AddContactAsync(string jid, string? name = null, IEnumerable<string>? groups = null)
     {
         await SendAsync(RosterStanzaBuilder.SetItem(jid, name, groups));
@@ -2945,32 +2938,32 @@ public sealed class XMPPConnection : IAsyncDisposable
     public async Task DenySubscriptionAsync(string jid) => await SendAsync(RosterStanzaBuilder.Unsubscribed(jid));
 
     /// <summary>
-    /// Kündigt das eigene Abonnement auf die Presence eines Kontakts
-    /// (RFC 6121, Abschnitt 3.3).
+    /// Cancels one's own subscription to the presence of a contact (RFC 6121,
+    /// section 3.3).
     /// </summary>
     /// <remarks>
-    /// Der vierte der vier Übergänge aus Abschnitt 3 - und bis D57 der einzige,
-    /// den dieser Client nicht anbieten konnte, obwohl der Baustein dafür
-    /// dastand und der Server ihn seit S3b beherrscht. Wer den Kontakt ganz
-    /// loswerden will, nimmt <see cref="RemoveContactAsync"/>; hier bleibt er
-    /// im Roster stehen, nur seine Presence kommt nicht mehr.
+    /// The fourth of the four transitions from section 3 - and until D57 the
+    /// only one this client could not offer, although the building block for it
+    /// stood there and the server has mastered it since S3b. Whoever wants to
+    /// get rid of the contact entirely takes
+    /// <see cref="RemoveContactAsync"/>; here they stay in the roster, only
+    /// their presence no longer comes.
     ///
-    /// Der Unterschied zu <see cref="DenySubscriptionAsync"/> ist die Richtung:
-    /// Dort geht es darum, was der Kontakt von mir sieht, hier darum, was ich
-    /// von ihm sehe.
+    /// The difference to <see cref="DenySubscriptionAsync"/> is the direction:
+    /// there it is about what the contact sees of me, here about what I see of
+    /// them.
     /// </remarks>
     public async Task CancelSubscriptionAsync(string jid) => await SendAsync(RosterStanzaBuilder.Unsubscribe(jid));
-
-    #region PubSub (XEP-0060) - ausgehend
+    #region PubSub (XEP-0060) - outgoing
 
     /// <summary>
-    /// Die Kennung der nächsten PubSub-Anfrage.
+    /// The identifier of the next PubSub request.
     /// </summary>
     /// <remarks>
-    /// Eine je Anfrage, und deshalb ein Zähler. Bis D71 trugen alle
-    /// <c>subscribe</c> dieselbe feste Kennung <c>pubsub-sub</c> - solange
-    /// niemand die Antworten zuordnete, fiel das nicht auf; sobald jemand es
-    /// tut, bekäme die zweite Anfrage die Antwort auf die erste.
+    /// One per request, and therefore a counter. Until D71 every
+    /// <c>subscribe</c> carried the same fixed identifier <c>pubsub-sub</c> - as
+    /// long as nobody assigned the answers, that did not show; as soon as
+    /// somebody does, the second request would get the answer to the first.
     /// </remarks>
     private Int32 _pubSubCounter;
 
@@ -2978,99 +2971,98 @@ public sealed class XMPPConnection : IAsyncDisposable
         => $"pubsub-{Interlocked.Increment(ref _pubSubCounter)}";
 
     /// <summary>
-    /// XEP-0060, Abschnitt 6.1: Abonniert einen Knoten und <b>wartet die
-    /// Antwort ab</b>.
+    /// XEP-0060, section 6.1: Subscribes to a node and <b>waits for the
+    /// answer</b>.
     /// </summary>
     /// <param name="service">
-    /// Der Dienst oder das Konto, bei dem abonniert wird; ohne Angabe der
-    /// PubSub-Dienst der eigenen Domain.
+    /// The service or the account subscribed at; without one the PubSub service
+    /// of one's own domain.
     /// </param>
     /// <returns>
-    /// Was der Dienst gesagt hat - <b>samt seinem Zustand</b> -, oder null bei
-    /// einer Absage, bei einer Antwort ohne Zusage und bei Schweigen.
+    /// What the service has said - <b>together with its state</b> - or null on a
+    /// rejection, on an answer without a promise and on silence.
     /// </returns>
     /// <remarks>
-    /// <b>Ein <c>pending</c> ist keine Zusage, aber eine Auskunft.</b> Bis D95
-    /// wurde es verworfen und der Aufrufer bekam <c>null</c> - dieselbe
-    /// Antwort wie auf eine Absage. Das war richtig auf die Frage „bin ich
-    /// abonniert" und falsch auf die Frage „was habe ich beantragt": Die
-    /// Kennung des Antrags kommt vom Dienst, und ohne sie kann dieser Client
-    /// die spätere Zusage keiner eigenen Frage zuordnen.
+    /// <b>A <c>pending</c> is not a promise, but it is information.</b> Until
+    /// D95 it was discarded and the caller got <c>null</c> - the same answer as
+    /// to a rejection. That was right for the question "am I subscribed" and
+    /// wrong for the question "what have I applied for": the identifier of the
+    /// application comes from the service, and without it this client cannot
+    /// assign the later promise to any question of its own.
     ///
-    /// Eingetragen wird es deshalb, aber als das, was es ist.
-    /// <see cref="PubSubManager.IsSubscribed"/> zählt nur Zugesagtes - wer ein
-    /// <c>pending</c> als Abonnement buchte, wartete auf Meldungen, über die
-    /// noch gar nicht entschieden ist.
+    /// It is therefore entered, but as what it is.
+    /// <see cref="PubSubManager.IsSubscribed"/> counts only what was promised -
+    /// whoever booked a <c>pending</c> as a subscription waited for reports that
+    /// have not even been decided on yet.
     /// </remarks>
     public async Task<PubSubSubscription?> PubSubSubscribeAsync(String             nodeId,
                                                                 String?            service  = null,
                                                                 CancellationToken  ct       = default)
     {
 
-        var ziel     = service ?? PubSub!.PubSubService;
+        var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id, PubSubBuilder.Subscribe(ziel, nodeId, BareJid, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.Subscribe(target, nodeId, BareJid, id), ct);
 
-        if (antwort is null)
+        if (answer is null)
         {
-            _logger.LogWarning("PubSub: keine Antwort auf das Abonnieren von {Node} bei {Service}", nodeId, ziel);
+            _logger.LogWarning("PubSub: no answer to the subscribing to {Node} at {Service}", nodeId, target);
             return null;
         }
 
-        if (antwort.Attr("type") != "result")
+        if (answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: {Node} bei {Service} abgelehnt: {Reason}",
-                               nodeId, ziel, DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: {Node} at {Service} refused: {Reason}",
+                               nodeId, target, DescribeRejection(answer));
             return null;
         }
 
-        if (!PubSubSubscription.TryRead(antwort, ziel, out var abo))
+        if (!PubSubSubscription.TryRead(answer, target, out var subscription))
         {
-            _logger.LogWarning("PubSub: die Antwort auf das Abonnieren von {Node} enthält keine Zusage", nodeId);
+            _logger.LogWarning("PubSub: the answer to the subscribing to {Node} contains no promise", nodeId);
             return null;
         }
 
-        // Nur was der Dienst kennt: Ein Zustand, den dieser Client nicht lesen
-        // konnte, ist bei PubSubSubscription.StateOf zu None geworden - und
-        // ein Abonnement, das keines ist, gehört nicht in die Buchführung.
-        if (abo!.State is not (PubSubSubscriptionState.Subscribed or PubSubSubscriptionState.Pending))
+        // Only what the service knows: a state this client could not read has
+        // become None at PubSubSubscription.StateOf - and a subscription that is
+        // none does not belong in the bookkeeping.
+        if (subscription!.State is not (PubSubSubscriptionState.Subscribed or PubSubSubscriptionState.Pending))
         {
-            _logger.LogInformation("PubSub: {Node} bei {Service} steht auf {State} - kein Abonnement",
-                                   nodeId, ziel, abo.State);
+            _logger.LogInformation("PubSub: {Node} at {Service} stands at {State} - not a subscription",
+                                   nodeId, target, subscription.State);
             return null;
         }
 
-        if (abo.State == PubSubSubscriptionState.Pending)
-            _logger.LogInformation("PubSub: {Node} bei {Service} ist beantragt und noch nicht zugesagt",
-                                   nodeId, ziel);
+        if (subscription.State == PubSubSubscriptionState.Pending)
+            _logger.LogInformation("PubSub: {Node} at {Service} is applied for and not promised yet",
+                                   nodeId, target);
 
-        PubSub!.AddSubscription(abo);
+        PubSub!.AddSubscription(subscription);
 
-        return abo;
+        return subscription;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 6.2: Beendet ein Abonnement.
+    /// XEP-0060, section 6.2: Ends a subscription.
     /// </summary>
     /// <param name="subId">
-    /// Welches Abonnement gemeint ist. Ohne Angabe geht es nur, solange es
-    /// genau eines gibt.
+    /// Which subscription is meant. Without one this only works as long as there
+    /// is exactly one.
     /// </param>
     /// <remarks>
-    /// Die <c>subid</c> aus der Zusage geht mit, wenn es eine gibt. Sie ist
-    /// vorgeschrieben, sobald ein JID mehrere Abonnements auf denselben Knoten
-    /// hält (Abschnitt 6.2.3.1), und benennt auch das eine eindeutig.
+    /// The <c>subid</c> from the promise goes along when there is one. It is
+    /// prescribed as soon as a JID holds several subscriptions to the same node
+    /// (section 6.2.3.1), and names the single one unambiguously too.
     ///
-    /// <b>Bei mehreren und ohne Kennung wird gar nicht erst gefragt.</b> Der
-    /// Dienst wiese es mit <c>&lt;subid-required/&gt;</c> ab; das weiss dieser
-    /// Client selbst. Was er nicht tut, ist wichtiger: sich eines aussuchen.
-    /// Das beendete vielleicht das falsche, und der Aufrufer hielte es für das
-    /// gemeinte.
+    /// <b>With several and without an identifier it is not even asked.</b> The
+    /// service would refuse it with <c>&lt;subid-required/&gt;</c>; this client
+    /// knows that itself. What it does not do is more important: pick one. That
+    /// might end the wrong one, and the caller would take it for the one meant.
     ///
-    /// Der Eintrag fällt erst nach dem <c>result</c>. Ihn vorher zu löschen
-    /// wäre derselbe Fehler wie vorher einzutragen, nur andersherum: Man
-    /// verlöre die Meldungen eines Abonnements, das noch besteht.
+    /// The entry only falls after the <c>result</c>. Deleting it beforehand
+    /// would be the same mistake as entering it beforehand, only the other way
+    /// round: one would lose the reports of a subscription that still exists.
     /// </remarks>
     public async Task<Boolean> PubSubUnsubscribeAsync(String             nodeId,
                                                       String?            service  = null,
@@ -3078,104 +3070,102 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                       CancellationToken  ct       = default)
     {
 
-        if (!TryPickSubscription(nodeId, subId, service, out var ziel, out var verwendet))
+        if (!TryPickSubscription(nodeId, subId, service, out var target, out var used))
             return false;
 
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id,
-                                         PubSubBuilder.Unsubscribe(ziel, nodeId, BareJid, id, verwendet),
+        var answer   = await SendIqAsync(id,
+                                         PubSubBuilder.Unsubscribe(target, nodeId, BareJid, id, used),
                                          ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: {Node} bei {Service} nicht abbestellt: {Reason}",
-                               nodeId, ziel,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: {Node} at {Service} not unsubscribed: {Reason}",
+                               nodeId, target,
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return false;
         }
 
-        PubSub!.RemoveSubscription(nodeId, verwendet);
+        PubSub!.RemoveSubscription(nodeId, used);
 
         return true;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 5.6: Holt die eigenen Abonnements beim Dienst und
-    /// übernimmt sie in die Buchführung.
+    /// XEP-0060, section 5.6: Fetches one's own subscriptions from the service
+    /// and takes them over into the bookkeeping.
     /// </summary>
     /// <returns>
-    /// Was der Dienst sagt, oder null bei Absage und Schweigen. <b>Eine leere
-    /// Liste ist etwas anderes als null</b>: Sie heisst „keine", und die
-    /// Buchführung wird entsprechend geleert.
+    /// What the service says, or null on a rejection and on silence. <b>An empty
+    /// list is something other than null</b>: it means "none", and the
+    /// bookkeeping is emptied accordingly.
     /// </returns>
     /// <remarks>
-    /// <b>Der Weg aus der Klemme nach einem Verbindungsabriss.</b> Die
-    /// Buchführung dieses Clients steht im Arbeitsspeicher und wird bei jedem
-    /// Verbindungsaufbau neu erzeugt; die Abonnements bestehen beim Dienst
-    /// weiter. Ohne diese Anfrage kennt der Client danach keine einzige
-    /// Kennung mehr - und kann bei mehreren Abonnements auf denselben Knoten
-    /// keines davon beenden.
+    /// <b>The way out of the fix after a connection drop.</b> The bookkeeping of
+    /// this client lives in memory and is created anew at every connection
+    /// setup; the subscriptions continue to exist at the service. Without this
+    /// request the client afterwards knows not a single identifier any more -
+    /// and with several subscriptions to the same node cannot end any of them.
     ///
-    /// Sie geschieht <b>nicht von selbst</b>: Ein Client, der bei jedem
-    /// Verbindungsaufbau ungefragt einen PubSub-Dienst anspräche, schickte
-    /// eine Anfrage für ein Merkmal, das die meisten nie benutzen - und gegen
-    /// eine Adresse, die es womöglich gar nicht gibt.
+    /// It does <b>not</b> happen by itself: a client that spoke to a PubSub
+    /// service unasked at every connection setup would send a request for a
+    /// feature most never use - and against an address that possibly does not
+    /// exist at all.
     /// </remarks>
     public async Task<IReadOnlyList<PubSubSubscription>?> PubSubGetSubscriptionsAsync(String?            service  = null,
                                                                                       String?            nodeId   = null,
                                                                                       CancellationToken  ct       = default)
     {
 
-        var ziel     = service ?? PubSub!.PubSubService;
+        var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id, PubSubBuilder.GetSubscriptions(ziel, id, nodeId), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetSubscriptions(target, id, nodeId), ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: die Abonnements bei {Service} nicht gelesen: {Reason}",
-                               ziel,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: the subscriptions at {Service} not read: {Reason}",
+                               target,
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return null;
         }
 
-        var liste = antwort.Child(PubSubSubscription.Namespace, "pubsub")
-                          ?.Child(PubSubSubscription.Namespace, "subscriptions");
+        var list = answer.Child(PubSubSubscription.Namespace, "pubsub")
+                        ?.Child(PubSubSubscription.Namespace, "subscriptions");
 
-        if (liste is null)
+        if (list is null)
         {
-            _logger.LogWarning("PubSub: die Antwort von {Service} enthält keine Aufzählung", ziel);
+            _logger.LogWarning("PubSub: the answer from {Service} contains no enumeration", target);
             return null;
         }
 
-        var gelesen = liste.Children(PubSubSubscription.Namespace, "subscription")
-                           .Where (e => e.Attr("node") is not null)
-                           .Select(e => new PubSubSubscription(e.Attr("node")!,
-                                                               ziel,
-                                                               e.Attr("subid"),
-                                                               PubSubSubscription.StateOf(e.Attr("subscription"))))
-                           .Where (a => a.State == PubSubSubscriptionState.Subscribed)
-                           .ToList();
+        var entries = list.Children(PubSubSubscription.Namespace, "subscription")
+                          .Where (e => e.Attr("node") is not null)
+                          .Select(e => new PubSubSubscription(e.Attr("node")!,
+                                                              target,
+                                                              e.Attr("subid"),
+                                                              PubSubSubscription.StateOf(e.Attr("subscription"))))
+                          .Where (a => a.State == PubSubSubscriptionState.Subscribed)
+                          .ToList();
 
-        // Nur eine Einschränkung auf einen Knoten sagt nichts über die
-        // übrigen: Was der Dienst nicht aufzählen sollte, darf hier nicht als
-        // beendet gelten.
+        // A restriction to one node says nothing about the rest: what the
+        // service was not supposed to enumerate must not count as ended here.
         if (nodeId is null)
-            PubSub!.ReplaceSubscriptionsOf(ziel, gelesen);
+            PubSub!.ReplaceSubscriptionsOf(target, entries);
 
         else
-            foreach (var abo in gelesen)
-                PubSub!.AddSubscription(abo);
+            foreach (var subscription in entries)
+                PubSub!.AddSubscription(subscription);
 
-        return gelesen;
+        return entries;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 5.7: Holt die eigenen Rollen - was bin ich wo?
+    /// XEP-0060, section 5.7: Fetches one's own roles - what am I where?
     /// </summary>
     /// <returns>
-    /// Je Knoten die Rolle, oder null bei Absage und Schweigen.
+    /// Per node the role, or null on a rejection and on silence.
     /// </returns>
     public async Task<IReadOnlyList<(String NodeId, PubSubAffiliation Affiliation)>?>
         PubSubGetAffiliationsAsync(String? service = null, CancellationToken ct = default)
@@ -3185,13 +3175,12 @@ public sealed class XMPPConnection : IAsyncDisposable
                                        PubSubSubscription.Namespace, "node", ct);
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.9.1: Holt als Eigentümer die Rollen an einem
-    /// Knoten.
+    /// XEP-0060, section 8.9.1: Fetches, as the owner, the roles at a node.
     /// </summary>
     /// <returns>
-    /// Je Eintrag der JID und seine Rolle, oder null - <b>etwa, weil der
-    /// Knoten einem anderen gehört.</b> Das ist keine leere Liste: „Ich weiss
-    /// es nicht" und „da ist niemand" sind zwei Antworten.
+    /// Per entry the JID and its role, or null - <b>because the node belongs to
+    /// someone else, for instance.</b> That is not an empty list: "I do not
+    /// know" and "there is nobody" are two answers.
     /// </returns>
     public async Task<IReadOnlyList<(String Jid, PubSubAffiliation Affiliation)>?>
         PubSubGetNodeAffiliationsAsync(String             nodeId,
@@ -3203,7 +3192,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                                        PubSubBuilder.OwnerNamespace, "jid", ct);
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.9.2: Setzt als Eigentümer eine Rolle.
+    /// XEP-0060, section 8.9.2: Sets, as the owner, a role.
     /// </summary>
     public async Task<Boolean> PubSubSetAffiliationAsync(String             nodeId,
                                                          String             jid,
@@ -3214,27 +3203,26 @@ public sealed class XMPPConnection : IAsyncDisposable
         => await PubSubRequestAsync(PubSubBuilder.SetAffiliation(service ?? PubSub!.PubSubService,
                                                                  nodeId, NextPubSubId(), jid,
                                                                  PubSubAffiliations.NameOf(affiliation)),
-                                    "Rolle setzen", nodeId, ct);
+                                    "setting a role", nodeId, ct);
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.8.1: Holt als Eigentümer die Abonnenten eines
-    /// Knotens.
+    /// XEP-0060, section 8.8.1: Fetches, as the owner, the subscribers of a
+    /// node.
     /// </summary>
     /// <returns>
-    /// Je Eintrag der JID, die Kennung und der Zustand, oder null bei Absage
-    /// und Schweigen - <b>etwa, weil der Knoten einem anderen gehört</b>. Das
-    /// ist keine leere Liste: „Ich weiss es nicht" und „da ist niemand" sind
-    /// zwei Antworten.
+    /// Per entry the JID, the identifier and the state, or null on a rejection
+    /// and on silence - <b>because the node belongs to someone else, for
+    /// instance</b>. That is not an empty list: "I do not know" and "there is
+    /// nobody" are two answers.
     /// </returns>
     /// <remarks>
-    /// <b>Der Zustand wird hier streng gelesen, anders als in der eigenen
-    /// Zusage.</b> Dort ist ein unbekannter Name als „nicht abonniert" die
-    /// vorsichtige Annahme: Wer sich zu Unrecht für nicht abonniert hält,
-    /// fragt noch einmal. Hier wäre dieselbe Nachsicht das Gegenteil von
-    /// vorsichtig - der Eigentümer hielte einen Abonnenten für abwesend, den
-    /// der Dienst führt, und entfernte womöglich einen anderen an seiner
-    /// Stelle. Ein unlesbarer Eintrag lässt deshalb die ganze Liste
-    /// scheitern, wie bei den Rollen.
+    /// <b>The state is read strictly here, unlike in one's own promise.</b>
+    /// There an unknown name as "not subscribed" is the cautious assumption:
+    /// whoever wrongly considers themselves not subscribed asks again. Here the
+    /// same leniency would be the opposite of cautious - the owner would take a
+    /// subscriber the service carries for absent, and might remove another one
+    /// in their place. An unreadable entry therefore makes the whole list fail,
+    /// as with the roles.
     /// </remarks>
     public async Task<IReadOnlyList<(String Jid, String? SubId, PubSubSubscriptionState State)>?>
         PubSubGetNodeSubscribersAsync(String             nodeId,
@@ -3242,56 +3230,55 @@ public sealed class XMPPConnection : IAsyncDisposable
                                       CancellationToken  ct       = default)
     {
 
-        var ziel     = service ?? PubSub!.PubSubService;
+        var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id, PubSubBuilder.GetNodeSubscriptions(ziel, nodeId, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetNodeSubscriptions(target, nodeId, id), ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: die Abonnenten von {Node} nicht gelesen: {Reason}",
+            _logger.LogWarning("PubSub: the subscribers of {Node} not read: {Reason}",
                                nodeId,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return null;
         }
 
-        var liste = antwort.Child(PubSubBuilder.OwnerNamespace, "pubsub")
-                          ?.Child(PubSubBuilder.OwnerNamespace, "subscriptions");
+        var list = answer.Child(PubSubBuilder.OwnerNamespace, "pubsub")
+                        ?.Child(PubSubBuilder.OwnerNamespace, "subscriptions");
 
-        if (liste is null)
+        if (list is null)
         {
-            _logger.LogWarning("PubSub: die Antwort zu {Node} enthält keine Abonnentenliste", nodeId);
+            _logger.LogWarning("PubSub: the answer about {Node} contains no subscriber list", nodeId);
             return null;
         }
 
-        var gelesen = new List<(String, String?, PubSubSubscriptionState)>();
+        var entries = new List<(String, String?, PubSubSubscriptionState)>();
 
-        foreach (var eintrag in liste.Children(PubSubBuilder.OwnerNamespace, "subscription"))
+        foreach (var entry in list.Children(PubSubBuilder.OwnerNamespace, "subscription"))
         {
 
-            if (eintrag.Attr("jid") is not String wer ||
-                !PubSubSubscription.TryReadState(eintrag.Attr("subscription"), out var zustand))
+            if (entry.Attr("jid") is not String who ||
+                !PubSubSubscription.TryReadState(entry.Attr("subscription"), out var state))
             {
-                _logger.LogWarning("PubSub: unlesbarer Eintrag in der Abonnentenliste: {Eintrag}", eintrag);
+                _logger.LogWarning("PubSub: unreadable entry in the subscriber list: {Entry}", entry);
                 return null;
             }
 
-            // Die Kennung darf fehlen - ein Dienst muss keine vergeben, solange
-            // es nur eine gibt (Abschnitt 12.19).
-            gelesen.Add((wer, eintrag.Attr("subid"), zustand));
+            // The identifier may be missing - a service does not have to hand
+            // one out as long as there is only one (section 12.19).
+            entries.Add((who, entry.Attr("subid"), state));
 
         }
 
-        return gelesen;
+        return entries;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.8.2: Beendet als Eigentümer ein Abonnement an
-    /// einem eigenen Knoten.
+    /// XEP-0060, section 8.8.2: Ends, as the owner, a subscription to a node of
+    /// one's own.
     /// </summary>
     /// <param name="subId">
-    /// Ein bestimmtes Abonnement, oder null für alle dieses JIDs an diesem
-    /// Knoten.
+    /// A particular subscription, or null for all of this JID at this node.
     /// </param>
     public async Task<Boolean> PubSubRemoveSubscriberAsync(String             nodeId,
                                                            String             jid,
@@ -3301,17 +3288,17 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         => await PubSubRequestAsync(PubSubBuilder.RemoveSubscriber(service ?? PubSub!.PubSubService,
                                                                     nodeId, NextPubSubId(), jid, subId),
-                                    "Abonnent entfernen", nodeId, ct);
+                                    "removing a subscriber", nodeId, ct);
 
     /// <summary>
-    /// Liest eine Rollenliste - beide sehen gleich aus, nur der Namensraum und
-    /// das kennzeichnende Attribut unterscheiden sich.
+    /// Reads a role list - both look the same, only the namespace and the
+    /// identifying attribute differ.
     /// </summary>
     /// <remarks>
-    /// <b>Ein Eintrag mit einer unbekannten Rolle lässt die ganze Liste
-    /// scheitern</b>, statt still zu fehlen. Eine Liste, aus der einzelne
-    /// Zeilen verschwinden, ist schlimmer als keine: Wer sie ansieht, hält
-    /// jemanden für rechtlos, der es nicht ist.
+    /// <b>An entry with an unknown role makes the whole list fail</b>, instead
+    /// of being silently missing. A list from which individual lines disappear
+    /// is worse than none: whoever looks at it takes someone for without rights
+    /// who is not.
     /// </remarks>
     private async Task<IReadOnlyList<(String, PubSubAffiliation)>?> ReadAffiliationsAsync(String             iq,
                                                                                           String             ns,
@@ -3320,55 +3307,55 @@ public sealed class XMPPConnection : IAsyncDisposable
     {
 
         var id       = XElement.Parse(iq).Attr("id")!;
-        var antwort  = await SendIqAsync(id, iq, ct);
+        var answer   = await SendIqAsync(id, iq, ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: die Rollen nicht gelesen: {Reason}",
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: the roles not read: {Reason}",
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return null;
         }
 
-        var liste = antwort.Child(ns, "pubsub")?.Child(ns, "affiliations");
+        var list = answer.Child(ns, "pubsub")?.Child(ns, "affiliations");
 
-        if (liste is null)
+        if (list is null)
         {
-            _logger.LogWarning("PubSub: die Antwort enthält keine Rollenliste");
+            _logger.LogWarning("PubSub: the answer contains no role list");
             return null;
         }
 
-        var gelesen = new List<(String, PubSubAffiliation)>();
+        var entries = new List<(String, PubSubAffiliation)>();
 
-        foreach (var eintrag in liste.Children(ns, "affiliation"))
+        foreach (var entry in list.Children(ns, "affiliation"))
         {
 
-            if (eintrag.Attr(key) is not String wer ||
-                !PubSubAffiliations.TryRead(eintrag.Attr("affiliation"), out var rolle))
+            if (entry.Attr(key) is not String who ||
+                !PubSubAffiliations.TryRead(entry.Attr("affiliation"), out var role))
             {
-                _logger.LogWarning("PubSub: unlesbarer Eintrag in der Rollenliste: {Eintrag}", eintrag);
+                _logger.LogWarning("PubSub: unreadable entry in the role list: {Entry}", entry);
                 return null;
             }
 
-            gelesen.Add((wer, rolle));
+            entries.Add((who, role));
 
         }
 
-        return gelesen;
+        return entries;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 6.3.1: Holt die Einstellungen eines Abonnements.
+    /// XEP-0060, section 6.3.1: Fetches the settings of a subscription.
     /// </summary>
     /// <returns>
-    /// Was der Dienst sagt, oder null bei Absage und Schweigen.
+    /// What the service says, or null on a rejection and on silence.
     /// </returns>
     /// <remarks>
-    /// <b>Gefragt wird auch dann, wenn die Einstellungen schon in der eigenen
-    /// Buchführung stehen.</b> Dort steht, was dieser Client gesetzt hat - ein
-    /// anderes Gerät desselben Kontos kann dasselbe Abonnement inzwischen
-    /// umgestellt haben, und dann wäre die eigene Angabe eine Erinnerung und
-    /// keine Auskunft.
+    /// <b>It is asked even when the settings already stand in one's own
+    /// bookkeeping.</b> There stands what this client has set - another device
+    /// of the same account may have reconfigured the same subscription in the
+    /// meantime, and then one's own entry would be a memory and not a piece of
+    /// information.
     /// </remarks>
     public async Task<PubSubSubscriptionOptions?> PubSubGetOptionsAsync(String             nodeId,
                                                                         String?            service  = null,
@@ -3376,44 +3363,44 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                         CancellationToken  ct       = default)
     {
 
-        if (!TryPickSubscription(nodeId, subId, service, out var ziel, out var verwendet))
+        if (!TryPickSubscription(nodeId, subId, service, out var target, out var used))
             return null;
 
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id, PubSubBuilder.GetOptions(ziel, nodeId, BareJid, id, verwendet), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetOptions(target, nodeId, BareJid, id, used), ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: Einstellungen von {Node} bei {Service} nicht gelesen: {Reason}",
-                               nodeId, ziel,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: settings of {Node} at {Service} not read: {Reason}",
+                               nodeId, target,
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return null;
         }
 
-        var formular = antwort.Child(PubSubSubscription.Namespace, "pubsub")
-                             ?.Child(PubSubSubscription.Namespace, "options")
-                             ?.Child(PubSubSubscriptionOptions.DataFormNamespace, "x");
+        var form = answer.Child(PubSubSubscription.Namespace, "pubsub")
+                        ?.Child(PubSubSubscription.Namespace, "options")
+                        ?.Child(PubSubSubscriptionOptions.DataFormNamespace, "x");
 
-        if (formular is null || !PubSubSubscriptionOptions.TryReadForm(formular, out var optionen))
+        if (form is null || !PubSubSubscriptionOptions.TryReadForm(form, out var options))
         {
-            _logger.LogWarning("PubSub: die Antwort auf die Einstellungen von {Node} enthält kein lesbares Formular",
+            _logger.LogWarning("PubSub: the answer about the settings of {Node} contains no readable form",
                                nodeId);
             return null;
         }
 
-        PubSub!.SetOptions(nodeId, verwendet, optionen!);
+        PubSub!.SetOptions(nodeId, used, options!);
 
-        return optionen;
+        return options;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 6.3.5: Stellt ein Abonnement ein.
+    /// XEP-0060, section 6.3.5: Configures a subscription.
     /// </summary>
     /// <remarks>
-    /// Vermerkt wird erst nach dem <c>result</c>. Ein abgelehnter Wunsch als
-    /// geltender Zustand wäre derselbe Fehler wie ein Abonnement, das vor der
-    /// Zusage eingetragen wird - nur eine Ebene tiefer.
+    /// It is noted down only after the <c>result</c>. A refused wish as the
+    /// state in force would be the same mistake as a subscription entered before
+    /// the promise - only one level down.
     /// </remarks>
     public async Task<Boolean> PubSubSetOptionsAsync(String                     nodeId,
                                                      PubSubSubscriptionOptions  options,
@@ -3422,38 +3409,37 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                      CancellationToken          ct       = default)
     {
 
-        if (!TryPickSubscription(nodeId, subId, service, out var ziel, out var verwendet))
+        if (!TryPickSubscription(nodeId, subId, service, out var target, out var used))
             return false;
 
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id,
-                                         PubSubBuilder.SetOptions(ziel, nodeId, BareJid, id, verwendet,
+        var answer   = await SendIqAsync(id,
+                                         PubSubBuilder.SetOptions(target, nodeId, BareJid, id, used,
                                                                   options.ToSubmit()
                                                                          .ToString(SaveOptions.DisableFormatting)),
                                          ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: Einstellungen von {Node} bei {Service} nicht gesetzt: {Reason}",
-                               nodeId, ziel,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: settings of {Node} at {Service} not set: {Reason}",
+                               nodeId, target,
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return false;
         }
 
-        PubSub!.SetOptions(nodeId, verwendet, options);
+        PubSub!.SetOptions(nodeId, used, options);
 
         return true;
 
     }
 
     /// <summary>
-    /// Sucht heraus, welches Abonnement gemeint ist und wohin die Anfrage
-    /// geht.
+    /// Works out which subscription is meant and where the request goes.
     /// </summary>
     /// <returns>
-    /// false, wenn es mehrere gibt und keine Kennung sagt, welches - dann wird
-    /// gar nicht erst gefragt. Dieselbe Regel wie beim Abbestellen, und aus
-    /// demselben Grund: Der Client sucht sich keines aus.
+    /// false when there are several and no identifier says which - then it is
+    /// not even asked. The same rule as when unsubscribing, and for the same
+    /// reason: the client does not pick one.
     /// </returns>
     private Boolean TryPickSubscription(String       nodeId,
                                         String?      subId,
@@ -3462,31 +3448,31 @@ public sealed class XMPPConnection : IAsyncDisposable
                                         out String?  usedSubId)
     {
 
-        var abos = PubSub!.SubscriptionsOf(nodeId);
+        var subscriptions = PubSub!.SubscriptionsOf(nodeId);
 
         target     = service ?? PubSub!.PubSubService;
         usedSubId  = subId;
 
-        if (subId is null && abos.Count > 1)
+        if (subId is null && subscriptions.Count > 1)
         {
-            _logger.LogWarning("PubSub: {Count} Abonnements auf {Node} - ohne subid ist nicht zu sagen, welches gemeint ist",
-                               abos.Count, nodeId);
+            _logger.LogWarning("PubSub: {Count} subscriptions to {Node} - without a subid there is no saying which one is meant",
+                               subscriptions.Count, nodeId);
             return false;
         }
 
-        var gemeint = subId is not null
-                          ? abos.FirstOrDefault(a => String.Equals(a.SubId, subId, StringComparison.Ordinal))
-                          : abos.FirstOrDefault();
+        var meant = subId is not null
+                        ? subscriptions.FirstOrDefault(a => String.Equals(a.SubId, subId, StringComparison.Ordinal))
+                        : subscriptions.FirstOrDefault();
 
-        target     = service ?? gemeint?.ServiceJid ?? PubSub!.PubSubService;
-        usedSubId  = subId ?? gemeint?.SubId;
+        target     = service ?? meant?.ServiceJid ?? PubSub!.PubSubService;
+        usedSubId  = subId ?? meant?.SubId;
 
         return true;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 7.1: Veröffentlicht einen Eintrag.
+    /// XEP-0060, section 7.1: Publishes an item.
     /// </summary>
     public async Task<Boolean> PubSubPublishAsync(String             nodeId,
                                                   String             itemId,
@@ -3496,16 +3482,16 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         => await PubSubRequestAsync(PubSubBuilder.Publish(service ?? PubSub!.PubSubService,
                                                           nodeId, itemId, payload, NextPubSubId()),
-                                    "Veröffentlichen", nodeId, ct);
+                                    "publishing", nodeId, ct);
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.1: Legt einen Knoten an, wahlweise gleich mit
-    /// seinen Einstellungen.
+    /// XEP-0060, section 8.1: Creates a node, optionally right away with its
+    /// settings.
     /// </summary>
     /// <remarks>
-    /// Anlegen und einstellen in einem Zug, weil zwei Schritte eine Lücke
-    /// hätten: Zwischen dem Anlegen und dem Einstellen stünde der Knoten
-    /// offen, und wer in dieser Zeit fragt, bekommt.
+    /// Creating and configuring in one go, because two steps would have a gap:
+    /// between the creating and the configuring the node would stand open, and
+    /// whoever asks during that time gets in.
     /// </remarks>
     public async Task<Boolean> PubSubCreateNodeAsync(String                    nodeId,
                                                      PubSubNodeConfiguration?  configuration  = null,
@@ -3516,48 +3502,48 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                              nodeId, NextPubSubId(),
                                                              configuration?.ToSubmit()
                                                                            .ToString(SaveOptions.DisableFormatting)),
-                                    "Anlegen", nodeId, ct);
+                                    "creating", nodeId, ct);
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.2.1: Holt die Einstellungen eines Knotens.
+    /// XEP-0060, section 8.2.1: Fetches the settings of a node.
     /// </summary>
     /// <returns>
-    /// Was der Dienst sagt, oder null bei Absage und Schweigen - und auch
-    /// dann, wenn im Angebot nichts steht, was dieser Client versteht.
+    /// What the service says, or null on a rejection and on silence - and also
+    /// when there is nothing in the offer this client understands.
     /// </returns>
     public async Task<PubSubNodeConfiguration?> PubSubGetNodeConfigAsync(String             nodeId,
                                                                          String?            service  = null,
                                                                          CancellationToken  ct       = default)
     {
 
-        var ziel     = service ?? PubSub!.PubSubService;
+        var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id, PubSubBuilder.GetNodeConfig(ziel, nodeId, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetNodeConfig(target, nodeId, id), ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: Einstellungen des Knotens {Node} bei {Service} nicht gelesen: {Reason}",
-                               nodeId, ziel,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: settings of the node {Node} at {Service} not read: {Reason}",
+                               nodeId, target,
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return null;
         }
 
-        var formular = antwort.Child(PubSubBuilder.OwnerNamespace, "pubsub")
-                             ?.Child(PubSubBuilder.OwnerNamespace, "configure")
-                             ?.Child(DataForm.Namespace, "x");
+        var form = answer.Child(PubSubBuilder.OwnerNamespace, "pubsub")
+                        ?.Child(PubSubBuilder.OwnerNamespace, "configure")
+                        ?.Child(DataForm.Namespace, "x");
 
-        if (formular is null || !PubSubNodeConfiguration.TryReadForm(formular, out var einstellung))
+        if (form is null || !PubSubNodeConfiguration.TryReadForm(form, out var configuration))
         {
-            _logger.LogWarning("PubSub: die Antwort über den Knoten {Node} enthält kein lesbares Formular", nodeId);
+            _logger.LogWarning("PubSub: the answer about the node {Node} contains no readable form", nodeId);
             return null;
         }
 
-        return einstellung;
+        return configuration;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.2.4: Stellt einen Knoten ein.
+    /// XEP-0060, section 8.2.4: Configures a node.
     /// </summary>
     public async Task<Boolean> PubSubConfigureNodeAsync(String                   nodeId,
                                                         PubSubNodeConfiguration  configuration,
@@ -3568,31 +3554,31 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                 nodeId, NextPubSubId(),
                                                                 configuration.ToSubmit()
                                                                              .ToString(SaveOptions.DisableFormatting)),
-                                    "Einstellen", nodeId, ct);
+                                    "configuring", nodeId, ct);
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.6.2: Beantwortet einen Antrag auf ein Abonnement.
+    /// XEP-0060, section 8.6.2: Answers an application for a subscription.
     /// </summary>
-    /// <param name="request">Der Antrag, wie er vorgelegt wurde.</param>
-    /// <param name="allow">Zusagen oder ablehnen.</param>
+    /// <param name="request">The application as it was presented.</param>
+    /// <param name="allow">Agree or refuse.</param>
     /// <remarks>
-    /// <b>Der Antrag geht zurück, wie er kam</b> - mit Knoten, Antragsteller
-    /// und Kennung. Sie erfunden oder weggelassen zu bekommen wäre für den
-    /// Dienst nicht zu unterscheiden von der Antwort auf einen anderen Antrag;
-    /// derselbe JID darf mehrfach fragen.
+    /// <b>The application goes back the way it came</b> - with the node, the
+    /// applicant and the identifier. Getting them made up or left out would be
+    /// indistinguishable, for the service, from the answer to a different
+    /// application; the same JID may ask several times.
     ///
-    /// Ohne Antwort des Dienstes: Eine Nachricht wird nicht beantwortet. Ob es
-    /// gewirkt hat, sagt die Abonnentenliste - oder die Meldung, die beim
-    /// Antragsteller ankommt.
+    /// Without an answer from the service: a message is not answered. Whether it
+    /// took effect is said by the subscriber list - or by the report that
+    /// arrives at the applicant.
     /// </remarks>
     public async Task PubSubAnswerSubscriptionRequestAsync(PubSubSubscribeAuthorization  request,
                                                            Boolean                       allow,
                                                            String?                       service  = null)
     {
 
-        var ziel = service ?? PubSub!.PubSubService;
+        var target = service ?? PubSub!.PubSubService;
 
-        await SendAsync($"<message to='{XmlEscaping.Escape(ziel)}'>" +
+        await SendAsync($"<message to='{XmlEscaping.Escape(target)}'>" +
                         (request with { Allow = allow }).ToSubmit()
                                                         .ToString(SaveOptions.DisableFormatting) +
                         "</message>");
@@ -3600,13 +3586,13 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 7.2: Nimmt einen einzelnen Eintrag zurück.
+    /// XEP-0060, section 7.2: Retracts a single item.
     /// </summary>
     /// <remarks>
-    /// <b>Die Buchführung bleibt unberührt</b>, und zwar aus zwei Richtungen:
-    /// Der Knoten besteht weiter, also auch jedes Abonnement darauf - und was
-    /// dieser Client von dem Eintrag hat, führt er nicht. Was er führt, sind
-    /// Abonnements; die Einträge liegen beim Dienst.
+    /// <b>The bookkeeping stays untouched</b>, and that from two directions: the
+    /// node continues to exist, and so does every subscription to it - and what
+    /// this client has of the item, it does not carry. What it carries are
+    /// subscriptions; the items lie at the service.
     /// </remarks>
     public async Task<Boolean> PubSubRetractAsync(String             nodeId,
                                                   String             itemId,
@@ -3615,44 +3601,43 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         => await PubSubRequestAsync(PubSubBuilder.Retract(service ?? PubSub!.PubSubService,
                                                           nodeId, itemId, NextPubSubId()),
-                                    "Zurücknehmen", nodeId, ct);
+                                    "retracting", nodeId, ct);
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.4: Löscht einen Knoten.
+    /// XEP-0060, section 8.4: Deletes a node.
     /// </summary>
     /// <remarks>
-    /// <b>Danach ist auch das eigene Abonnement darauf fort</b>, und dieser
-    /// Client muss es selbst streichen: Die Meldung nach Abschnitt 8.4.2 geht
-    /// an alle ausser den, der gelöscht hat. Wer sich darauf verliesse,
-    /// behielte als einziger einen Eintrag über einen Knoten, den er selbst
-    /// beseitigt hat.
+    /// <b>Afterwards one's own subscription to it is gone too</b>, and this
+    /// client has to strike it out itself: the report per section 8.4.2 goes to
+    /// everyone except the one who deleted. Whoever relied on it would be the
+    /// only one left holding an entry about a node they removed themselves.
     /// </remarks>
     public async Task<Boolean> PubSubDeleteNodeAsync(String             nodeId,
                                                      String?            service  = null,
                                                      CancellationToken  ct       = default)
     {
 
-        var ziel = service ?? PubSub!.PubSubService;
+        var target = service ?? PubSub!.PubSubService;
 
-        if (!await PubSubRequestAsync(PubSubBuilder.DeleteNode(ziel, nodeId, NextPubSubId()),
-                                      "Löschen", nodeId, ct))
+        if (!await PubSubRequestAsync(PubSubBuilder.DeleteNode(target, nodeId, NextPubSubId()),
+                                      "deleting", nodeId, ct))
         {
             return false;
         }
 
-        PubSub!.RemoveSubscriptionsOf(nodeId, ziel);
+        PubSub!.RemoveSubscriptionsOf(nodeId, target);
 
         return true;
 
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.5: Leert einen Knoten.
+    /// XEP-0060, section 8.5: Purges a node.
     /// </summary>
     /// <remarks>
-    /// Und lässt die Buchführung in Ruhe: Den Knoten gibt es weiter, das
-    /// Abonnement darauf auch - die nächste Veröffentlichung kommt an dieselbe
-    /// Adresse.
+    /// And leaves the bookkeeping alone: the node continues to exist, the
+    /// subscription to it as well - the next publication comes to the same
+    /// address.
     /// </remarks>
     public async Task<Boolean> PubSubPurgeNodeAsync(String             nodeId,
                                                     String?            service  = null,
@@ -3660,30 +3645,30 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         => await PubSubRequestAsync(PubSubBuilder.PurgeNode(service ?? PubSub!.PubSubService,
                                                              nodeId, NextPubSubId()),
-                                    "Leeren", nodeId, ct);
+                                    "purging", nodeId, ct);
 
     /// <summary>
-    /// Schickt eine PubSub-Anfrage und meldet, ob der Dienst zugestimmt hat.
+    /// Sends a PubSub request and reports whether the service agreed.
     /// </summary>
     /// <remarks>
-    /// Die Kennung steht schon im fertigen XML - deshalb wird sie hier wieder
-    /// herausgelesen statt neu vergeben. Zwei Stellen, die sich eine Kennung
-    /// ausdenken, denken sich irgendwann zwei verschiedene aus.
+    /// The identifier already stands in the finished XML - which is why it is
+    /// read back out here instead of handed out anew. Two places that make up an
+    /// identifier will at some point make up two different ones.
     /// </remarks>
     private async Task<Boolean> PubSubRequestAsync(String             iq,
-                                                   String             was,
+                                                   String             what,
                                                    String             nodeId,
                                                    CancellationToken  ct)
     {
 
         var id       = XElement.Parse(iq).Attr("id")!;
-        var antwort  = await SendIqAsync(id, iq, ct);
+        var answer   = await SendIqAsync(id, iq, ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: {Was} in {Node} gescheitert: {Reason}",
-                               was, nodeId,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: {What} in {Node} failed: {Reason}",
+                               what, nodeId,
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return false;
         }
 
@@ -3694,16 +3679,16 @@ public sealed class XMPPConnection : IAsyncDisposable
     #endregion
 
     /// <summary>
-    /// XEP-0060, Abschnitt 6.5: Holt die Einträge eines Knotens.
+    /// XEP-0060, section 6.5: Fetches the items of a node.
     /// </summary>
     /// <returns>
-    /// Die Einträge, oder null bei Absage und Schweigen. Eine leere Liste ist
-    /// etwas anderes: Der Knoten war erreichbar und hatte nichts.
+    /// The items, or null on a rejection and on silence. An empty list is
+    /// something else: the node was reachable and had nothing.
     /// </returns>
     /// <remarks>
-    /// Bis D71 verschickte diese Methode die Anfrage und war fertig. Die
-    /// Antwort kam an, wurde keinem Wartenden zugeordnet und fiel aus dem
-    /// Empfang heraus - die Einträge, um die es ging, hat nie jemand gesehen.
+    /// Until D71 this method sent the request off and was done. The answer
+    /// arrived, was assigned to no waiting party and fell out of the reception -
+    /// the items it was about, nobody ever saw.
     /// </remarks>
     public async Task<IReadOnlyList<PubSubItem>?> PubSubGetItemsAsync(String             nodeId,
                                                                       Int32?             maxItems  = null,
@@ -3711,20 +3696,20 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                       CancellationToken  ct        = default)
     {
 
-        var ziel     = service ?? PubSub!.PubSubService;
+        var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var antwort  = await SendIqAsync(id, PubSubBuilder.GetItems(ziel, nodeId, maxItems, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetItems(target, nodeId, maxItems, id), ct);
 
-        if (antwort is null || antwort.Attr("type") != "result")
+        if (answer is null || answer.Attr("type") != "result")
         {
-            _logger.LogWarning("PubSub: {Node} bei {Service} nicht abgerufen: {Reason}",
-                               nodeId, ziel,
-                               antwort is null ? "keine Antwort" : DescribeRejection(antwort));
+            _logger.LogWarning("PubSub: {Node} at {Service} not retrieved: {Reason}",
+                               nodeId, target,
+                               answer is null ? "no answer" : DescribeRejection(answer));
             return null;
         }
 
-        var items = antwort.Child(PubSubSubscription.Namespace, "pubsub")
-                          ?.Child(PubSubSubscription.Namespace, "items");
+        var items = answer.Child(PubSubSubscription.Namespace, "pubsub")
+                         ?.Child(PubSubSubscription.Namespace, "items");
 
         if (items is null)
             return null;
@@ -3741,14 +3726,14 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private string GenerateMessageId() => $"msg-{Interlocked.Increment(ref _messageIdCounter)}-{Guid.NewGuid():N}";
 
-    // ExtractAttribute, ExtractAttributeValue und ExtractElement sind entfallen.
-    // Sie fanden Attribute und Elemente irgendwo im Text statt am gemeinten
-    // Element, verlangten <body> ohne Attribute und lieferten Entities roh
-    // zurück. Ersatz sind die Erweiterungsmethoden in StanzaExtensions, die auf
-    // dem geparsten XElement arbeiten.
+    // ExtractAttribute, ExtractAttributeValue and ExtractElement have been
+    // dropped. They found attributes and elements somewhere in the text instead
+    // of at the element meant, demanded a <body> without attributes and returned
+    // entities raw. The replacement are the extension methods in
+    // StanzaExtensions, which work on the parsed XElement.
 
-    // ExtractSaslMechanisms ist entfallen; die Aushandlung liest jetzt über
-    // StreamNegotiation aus dem geparsten <features/>.
+    // ExtractSaslMechanisms has been dropped; the negotiation now reads through
+    // StreamNegotiation from the parsed <features/>.
 
     private static SubscriptionState ParseSubscription(string? sub) => sub switch
     {
@@ -3760,19 +3745,18 @@ public sealed class XMPPConnection : IAsyncDisposable
     };
 
     /// <summary>
-    /// Reisst die Verbindung ohne Close-Handshake ab - simuliert einen
-    /// Netzwerkausfall und löst den Reconnect aus.
+    /// Tears the connection down without a close handshake - simulates a network
+    /// outage and triggers the reconnect.
     /// </summary>
     /// <remarks>
-    /// Das Gegenstück zu <c>XMPPSession.Kill()</c> auf der Serverseite. Für
-    /// einen Lauf gegen eine <b>fremde</b> Gegenstelle gibt es keinen anderen
-    /// Weg: dort lässt sich die Sitzung nicht von der anderen Seite kappen,
-    /// und ein ordentliches <see cref="DisconnectAsync"/> ist gerade nicht,
-    /// was geprüft werden soll - ein verabschiedeter Stream wird nicht wieder
-    /// aufgenommen.
+    /// The counterpart to <c>XMPPSession.Kill()</c> on the server side. For a
+    /// run against a <b>foreign</b> peer there is no other way: there the
+    /// session cannot be cut from the other side, and a proper
+    /// <see cref="DisconnectAsync"/> is precisely not what is to be checked - a
+    /// stream that said goodbye is not resumed.
     ///
-    /// <c>Abort</c> und nicht <c>CloseAsync</c>: nur das legt den Socket
-    /// nieder, ohne ein Close-Frame zu schicken.
+    /// <c>Abort</c> and not <c>CloseAsync</c>: only that lays the socket down
+    /// without sending a close frame.
     /// </remarks>
     public void KillConnection()
         => _webSocket?.Abort();
@@ -3782,9 +3766,8 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         _intentionalDisconnect = true;
 
-        // Stream zuerst sauber schließen, dann abbrechen: SendAsync nutzt das
-        // Token der Verbindung, ein vorheriges Cancel würde das <close/>
-        // verhindern.
+        // Close the stream cleanly first, then cancel: SendAsync uses the token
+        // of the connection, an earlier cancel would prevent the <close/>.
         try
         {
             var webSocket = _webSocket;
@@ -3800,16 +3783,16 @@ public sealed class XMPPConnection : IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
-                    // Gegenstelle antwortet nicht auf das Close-Frame - Socket hart beenden,
-                    // sonst blockiert der Abbau unbegrenzt.
-                    _logger.LogDebug(ex, "Close-Handshake nicht abgeschlossen, breche Socket ab");
+                    // The peer does not answer the close frame - end the socket hard,
+                    // otherwise the teardown blocks indefinitely.
+                    _logger.LogDebug(ex, "Close handshake not completed, aborting the socket");
                     webSocket.Abort();
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Fehler beim Schließen der Verbindung (ignoriert)");
+            _logger.LogDebug(ex, "Error while closing the connection (ignored)");
         }
 
         await ShutdownConnectionAsync();

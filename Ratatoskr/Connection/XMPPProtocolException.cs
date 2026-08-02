@@ -18,14 +18,14 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Gegenstelle hat sich beim Verbindungsaufbau nicht ans Protokoll
-/// gehalten oder einen Schritt abgelehnt.
+/// The peer did not keep to the protocol while the connection was being
+/// established, or refused a step.
 /// </summary>
 /// <remarks>
-/// Bewusst nicht <see cref="AuthenticationException"/>: die verhindert jeden
-/// Reconnect, weil ein falsches Passwort beim nächsten Versuch genauso falsch
-/// ist. Ein abgelehntes Resource Binding kann dagegen an einer belegten
-/// Resource liegen und beim nächsten Versuch klappen.
+/// Deliberately not <see cref="AuthenticationException"/>: that one prevents
+/// every reconnect, because a wrong password is just as wrong on the next
+/// attempt. A refused resource binding, by contrast, can be due to an occupied
+/// resource and may work on the next attempt.
 /// </remarks>
 public class XMPPProtocolException : Exception
 {

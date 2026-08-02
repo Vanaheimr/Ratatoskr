@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Zustand der XMPP-Verbindung.
+/// The state of the XMPP connection.
 /// </summary>
 public enum ConnectionState
 {
