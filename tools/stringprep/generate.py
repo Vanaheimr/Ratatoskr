@@ -46,7 +46,7 @@ TABLES = {
 
 HEADER = """/*
  * Copyright (c) 2010-2026 GraphDefined GmbH <achim.friedland@graphdefined.com>
- * This file is part of Hermod <https://www.github.com/Vanaheimr/Hermod>
+ * This file is part of Ratatoskr <https://www.github.com/Vanaheimr/Ratatoskr>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ HEADER = """/*
  * limitations under the License.
  */
 
-namespace org.GraphDefined.Vanaheimr.Hermod.XMPP;
+namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
 /// Die Tabellen aus RFC 3454 (StringPrep), auf denen SASLprep aufsetzt.

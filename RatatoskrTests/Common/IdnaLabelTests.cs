@@ -320,7 +320,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(Grund("exam_ple.example"), Does.Contain("U+005F"));
                 Assert.That(Grund("-abc.example"),     Does.Contain("-abc"));
-                Assert.That(Grund("a..example"),       Does.Contain("leer"));
+                Assert.That(Grund("a..example"),       Does.Contain("empty"));
             });
 
         }

@@ -25,64 +25,64 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die abgeleitete Eigenschaft eines Codepoints nach RFC 8264, Abschnitt 8.
+/// The derived property of a code point per RFC 8264, section 8.
 /// </summary>
 public enum PrecisProperty
 {
 
-    /// <summary>In beiden Klassen zulässig.</summary>
+    /// <summary>Permitted in both classes.</summary>
     PValid,
 
     /// <summary>
-    /// Nur in der FreeformClass zulässig (im RFC <c>ID_DIS or FREE_PVAL</c>).
+    /// Permitted in the FreeformClass only (in the RFC <c>ID_DIS or FREE_PVAL</c>).
     /// </summary>
     FreePValid,
 
     /// <summary>
-    /// Zulässig, wenn die Regel aus RFC 5892, Anhang A.1/A.2 erfüllt ist
-    /// (die beiden Joiner).
+    /// Permitted if the rule from RFC 5892, appendix A.1/A.2 is satisfied (the
+    /// two joiners).
     /// </summary>
     ContextJ,
 
     /// <summary>
-    /// Zulässig, wenn die Regel aus RFC 5892, Anhang A.3 bis A.9 erfüllt ist.
+    /// Permitted if the rule from RFC 5892, appendix A.3 to A.9 is satisfied.
     /// </summary>
     ContextO,
 
-    /// <summary>In keiner Klasse zulässig.</summary>
+    /// <summary>Permitted in neither class.</summary>
     Disallowed,
 
     /// <summary>
-    /// In der zugrunde liegenden Unicode-Fassung nicht vergeben - und deshalb
-    /// nirgends zulässig.
+    /// Unassigned in the underlying Unicode version - and therefore permitted
+    /// nowhere.
     /// </summary>
     Unassigned
 
 }
 
 /// <summary>
-/// PRECIS nach RFC 8264: die IdentifierClass und die FreeformClass, bestimmt
-/// aus den abgeleiteten Eigenschaften.
+/// PRECIS per RFC 8264: the IdentifierClass and the FreeformClass, determined
+/// from the derived properties.
 /// </summary>
 /// <remarks>
-/// <b>Die Leiter aus Abschnitt 8 ist eine Reihenfolge, keine Menge.</b> Viele
-/// Codepoints gehören in mehrere Kategorien, und welche zuerst greift,
-/// entscheidet über die Antwort: U+0640 (ARABIC TATWEEL) ist ein Modifier
-/// Letter und damit in LetterDigits — aber die Ausnahmeliste steht davor und
-/// verbietet ihn. U+2163 (ROMAN NUMERAL FOUR) ist Nl und damit in
-/// OtherLetterDigits — HasCompat steht davor. Wer die Kategorien als Menge
-/// prüft, bekommt in genau diesen Fällen die falsche Antwort.
+/// <b>The ladder from section 8 is an order, not a set.</b> Many code points
+/// belong to several categories, and which one bites first decides the answer:
+/// U+0640 (ARABIC TATWEEL) is a modifier letter and therefore in LetterDigits —
+/// but the exception list comes before it and forbids it. U+2163 (ROMAN NUMERAL
+/// FOUR) is Nl and therefore in OtherLetterDigits — HasCompat comes before it.
+/// Whoever checks the categories as a set gets the wrong answer in exactly those
+/// cases.
 ///
-/// Vorher stand hier eine Näherung: Kategorie plus die Frage, ob der Codepoint
-/// eine Kompatibilitätszerlegung hat. Sie traf die Beispiele aus RFC 7622 und
-/// liess die Ausnahmeliste, die Joiner und die alten Hangul-Jamo aussen vor.
+/// What stood here before was an approximation: category plus the question of
+/// whether the code point has a compatibility decomposition. It matched the
+/// examples from RFC 7622 and left the exception list, the joiners and the old
+/// Hangul jamo out of it.
 ///
-/// <b>Was .NET nicht kennt, steht hier als Tabelle.</b>
-/// <c>Default_Ignorable_Code_Point</c>, <c>Noncharacter_Code_Point</c> und
-/// <c>Hangul_Syllable_Type</c> liefert die Laufzeit nicht; sie sind als
-/// Bereiche eingetragen und mit ihrer Unicode-Fassung benannt. Das ist keine
-/// Näherung, sondern eine Kopie — sie kann veralten, aber sie kann nicht
-/// danebenliegen.
+/// <b>What .NET does not know sits here as a table.</b> The runtime does not
+/// provide <c>Default_Ignorable_Code_Point</c>, <c>Noncharacter_Code_Point</c>
+/// or <c>Hangul_Syllable_Type</c>; they are entered as ranges and named with
+/// their Unicode version. That is not an approximation but a copy — it can go
+/// stale, but it cannot be beside the point.
 /// </remarks>
 public static class Precis
 {
@@ -90,7 +90,7 @@ public static class Precis
     #region Data
 
     /// <summary>
-    /// Die Unicode-Fassung, aus der die verwendeten Bereiche stammen.
+    /// The Unicode version the ranges in use came from.
     /// </summary>
     public const String UnicodeVersion = UnicodeSets.UnicodeVersion;
 
@@ -99,40 +99,40 @@ public static class Precis
     #region DerivedProperty(CodePoint)
 
     /// <summary>
-    /// Die abgeleitete Eigenschaft nach RFC 8264, Abschnitt 8.
+    /// The derived property per RFC 8264, section 8.
     /// </summary>
     /// <remarks>
-    /// Die Zweige stehen in der Reihenfolge des Abschnitts, und daran darf
-    /// nicht gerührt werden - siehe die Beispiele in der Klassenbeschreibung.
+    /// The branches stand in the order of that section, and that must not be
+    /// touched - see the examples in the class description.
     /// </remarks>
     public static PrecisProperty DerivedProperty(UInt32 CodePoint)
     {
 
-        // Exceptions (RFC 5892, Abschnitt 2.6)
-        if (UnicodeSets.TryException(CodePoint, out var ausnahme))
-            return ausnahme switch {
+        // Exceptions (RFC 5892, section 2.6)
+        if (UnicodeSets.TryException(CodePoint, out var exception))
+            return exception switch {
                        UnicodeSets.ExceptionValue.PValid    => PrecisProperty.PValid,
                        UnicodeSets.ExceptionValue.ContextO  => PrecisProperty.ContextO,
                        _                                    => PrecisProperty.Disallowed
                    };
 
-        // Ebenfalls Ausnahmen, nur als Bereich: die beiden Ziffernreihen wären
-        // über ihre Kategorie Nd sonst PVALID.
+        // Exceptions as well, only as a range: the two digit series would
+        // otherwise be PVALID through their category Nd.
         if (UnicodeSets.IsContextODigit(CodePoint))
             return PrecisProperty.ContextO;
 
-        // BackwardCompatible (Abschnitt 2.7) ist bis heute leer. Der Zweig
-        // steht trotzdem hier, denn er ist kein Versehen des RFCs: Er nimmt
-        // auf, was eine neue Unicode-Fassung sonst umdrehen würde.
+        // BackwardCompatible (section 2.7) is empty to this day. The branch is
+        // named here nonetheless, because it is not an oversight of the RFC: it
+        // catches what a new Unicode version would otherwise reverse.
 
         if (UnicodeSets.IsUnassigned(CodePoint))
             return PrecisProperty.Unassigned;
 
-        // ASCII7: druckbares ASCII ohne Leerzeichen
+        // ASCII7: printable ASCII without the space
         if (CodePoint is >= 0x21 and <= 0x7E)
             return PrecisProperty.PValid;
 
-        // JoinControl (Abschnitt 2.8)
+        // JoinControl (section 2.8)
         if (UnicodeSets.IsJoinControl(CodePoint))
             return PrecisProperty.ContextJ;
 
@@ -142,36 +142,36 @@ public static class Precis
         if (UnicodeSets.IsDefaultIgnorable(CodePoint) || UnicodeSets.IsNoncharacter(CodePoint))
             return PrecisProperty.Disallowed;
 
-        var kategorie = UnicodeSets.Category(CodePoint);
+        var category = UnicodeSets.Category(CodePoint);
 
-        if (kategorie == UnicodeCategory.Control)
+        if (category == UnicodeCategory.Control)
             return PrecisProperty.Disallowed;
 
-        // HasCompat: hat eine Kompatibilitätszerlegung. Steht vor
-        // LetterDigits, und das ist der Unterschied ums Ganze - sonst wäre die
-        // Ligatur fi ein Buchstabe wie jeder andere.
+        // HasCompat: has a compatibility decomposition. Stands before
+        // LetterDigits, and that is the difference that decides everything -
+        // otherwise the fi ligature would be a letter like any other.
         if (UnicodeSets.HasCompat(CodePoint))
             return PrecisProperty.FreePValid;
 
         if (UnicodeSets.IsLetterDigits(CodePoint))
             return PrecisProperty.PValid;
 
-        if (kategorie is UnicodeCategory.TitlecaseLetter      or
-                         UnicodeCategory.LetterNumber         or
-                         UnicodeCategory.OtherNumber          or
-                         UnicodeCategory.EnclosingMark        or
-                         UnicodeCategory.SpaceSeparator       or
-                         UnicodeCategory.MathSymbol           or
-                         UnicodeCategory.CurrencySymbol       or
-                         UnicodeCategory.ModifierSymbol       or
-                         UnicodeCategory.OtherSymbol          or
-                         UnicodeCategory.ConnectorPunctuation or
-                         UnicodeCategory.DashPunctuation      or
-                         UnicodeCategory.OpenPunctuation      or
-                         UnicodeCategory.ClosePunctuation     or
-                         UnicodeCategory.InitialQuotePunctuation or
-                         UnicodeCategory.FinalQuotePunctuation   or
-                         UnicodeCategory.OtherPunctuation)
+        if (category is UnicodeCategory.TitlecaseLetter      or
+                        UnicodeCategory.LetterNumber         or
+                        UnicodeCategory.OtherNumber          or
+                        UnicodeCategory.EnclosingMark        or
+                        UnicodeCategory.SpaceSeparator       or
+                        UnicodeCategory.MathSymbol           or
+                        UnicodeCategory.CurrencySymbol       or
+                        UnicodeCategory.ModifierSymbol       or
+                        UnicodeCategory.OtherSymbol          or
+                        UnicodeCategory.ConnectorPunctuation or
+                        UnicodeCategory.DashPunctuation      or
+                        UnicodeCategory.OpenPunctuation      or
+                        UnicodeCategory.ClosePunctuation     or
+                        UnicodeCategory.InitialQuotePunctuation or
+                        UnicodeCategory.FinalQuotePunctuation   or
+                        UnicodeCategory.OtherPunctuation)
             return PrecisProperty.FreePValid;
 
         return PrecisProperty.Disallowed;
@@ -183,11 +183,11 @@ public static class Precis
     #region IsIdentifierClass(CodePoint) / IsFreeformClass(CodePoint)
 
     /// <summary>
-    /// Gehört der Codepoint zur IdentifierClass (RFC 8264, Abschnitt 4.2)?
+    /// Does the code point belong to the IdentifierClass (RFC 8264, section 4.2)?
     /// </summary>
     /// <remarks>
-    /// Kontextabhängige Codepoints zählen hier nicht mit - ob sie zulässig
-    /// sind, hängt an der ganzen Zeichenkette und beantwortet
+    /// Contextual code points do not count here - whether they are permitted
+    /// depends on the whole string, and that is answered by
     /// <see cref="ContextRuleSatisfied"/>.
     /// </remarks>
     public static Boolean IsIdentifierClass(UInt32 CodePoint)
@@ -195,7 +195,7 @@ public static class Precis
         => DerivedProperty(CodePoint) == PrecisProperty.PValid;
 
     /// <summary>
-    /// Gehört der Codepoint zur FreeformClass (RFC 8264, Abschnitt 4.3)?
+    /// Does the code point belong to the FreeformClass (RFC 8264, section 4.3)?
     /// </summary>
     public static Boolean IsFreeformClass(UInt32 CodePoint)
 
@@ -207,22 +207,22 @@ public static class Precis
     #region ContextRuleSatisfied(CodePoints, Index)
 
     /// <summary>
-    /// Ist die kontextabhängige Regel für diesen Codepoint an dieser Stelle
-    /// erfüllt (RFC 5892, Anhang A)?
+    /// Is the contextual rule for this code point at this position satisfied
+    /// (RFC 5892, appendix A)?
     /// </summary>
     /// <remarks>
-    /// <b>Kontextabhängig heisst: Der Codepoint allein sagt es nicht.</b>
-    /// Deshalb geht hier die ganze Zeichenkette und die Stelle darin hinein und
-    /// nicht nur das Zeichen - drei der neun Regeln fragen nach dem Zeichen
-    /// davor oder danach, eine nach allen zusammen.
+    /// <b>Contextual means: the code point alone does not say.</b> Which is why
+    /// the whole string and the position in it go in here and not just the
+    /// character - three of the nine rules ask about the character before or
+    /// after, one about all of them together.
     ///
-    /// Die Eigenschaften, die dafür nötig sind - <c>Canonical_Combining_Class</c>,
-    /// <c>Joining_Type</c> und <c>Script</c> - liefert .NET nicht; sie stehen
-    /// in <see cref="ContextTables"/>, erzeugt aus der Unicode-Datenbank.
+    /// The properties needed for that - <c>Canonical_Combining_Class</c>,
+    /// <c>Joining_Type</c> and <c>Script</c> - are not provided by .NET; they
+    /// sit in <see cref="ContextTables"/>, generated from the Unicode database.
     ///
-    /// Was nicht kontextabhängig ist, bekommt hier <c>false</c>: Diese Funktion
-    /// beantwortet nur die Frage „darf dieser Sonderfall stehen", nicht die
-    /// allgemeine nach der Zulässigkeit.
+    /// What is not contextual gets <c>false</c> here: this function answers only
+    /// the question "may this special case stand", not the general one about
+    /// permissibility.
     /// </remarks>
     public static Boolean ContextRuleSatisfied(IReadOnlyList<UInt32> CodePoints, Int32 Index)
     {
@@ -238,26 +238,26 @@ public static class Precis
             // A.2: ZERO WIDTH JOINER
             0x200D  => AfterVirama(CodePoints, Index),
 
-            // A.3: MIDDLE DOT - nur zwischen zwei 'l' (katalanisch l·l)
+            // A.3: MIDDLE DOT - only between two 'l' (Catalan l·l)
             0x00B7  => Before(CodePoints, Index) == 0x006C &&
                        After (CodePoints, Index) == 0x006C,
 
-            // A.4: GREEK LOWER NUMERAL SIGN - vor einem griechischen Zeichen
-            0x0375  => After(CodePoints, Index) is UInt32 danach &&
-                       ContextTables.Contains(ContextTables.ScriptGreek, danach),
+            // A.4: GREEK LOWER NUMERAL SIGN - before a Greek character
+            0x0375  => After(CodePoints, Index) is UInt32 following &&
+                       ContextTables.Contains(ContextTables.ScriptGreek, following),
 
-            // A.5 und A.6: GERESH und GERSHAYIM - nach einem hebräischen Zeichen
+            // A.5 and A.6: GERESH and GERSHAYIM - after a Hebrew character
             0x05F3 or
-            0x05F4  => Before(CodePoints, Index) is UInt32 davor &&
-                       ContextTables.Contains(ContextTables.ScriptHebrew, davor),
+            0x05F4  => Before(CodePoints, Index) is UInt32 preceding &&
+                       ContextTables.Contains(ContextTables.ScriptHebrew, preceding),
 
-            // A.7: KATAKANA MIDDLE DOT - nur in japanischem Text
+            // A.7: KATAKANA MIDDLE DOT - only in Japanese text
             0x30FB  => CodePoints.Any(cp => ContextTables.Contains(ContextTables.ScriptHiragana, cp) ||
                                             ContextTables.Contains(ContextTables.ScriptKatakana, cp) ||
                                             ContextTables.Contains(ContextTables.ScriptHan,      cp)),
 
-            // A.8: eine arabisch-indische Ziffer verträgt sich nicht mit der
-            // erweiterten Reihe - und A.9 sagt dasselbe andersherum.
+            // A.8: an Arabic-Indic digit does not get along with the extended
+            // series - and A.9 says the same the other way round.
             >= UnicodeSets.ArabicIndicZero and
             <= UnicodeSets.ArabicIndicNine
                     => !CodePoints.Any(cp => cp is >= UnicodeSets.ExtendedArabicIndicZero
@@ -276,7 +276,7 @@ public static class Precis
 
     #endregion
 
-    #region (private) Nachbarn und Verbindungsarten
+    #region (private) Neighbours and joining types
 
     private static UInt32? Before(IReadOnlyList<UInt32> CodePoints, Int32 Index)
 
@@ -287,51 +287,50 @@ public static class Precis
         => Index + 1 < CodePoints.Count ? CodePoints[Index + 1] : null;
 
     /// <summary>
-    /// Steht unmittelbar davor ein Virama (RFC 5892, Anhang A.1 und A.2)?
+    /// Is there a virama immediately before (RFC 5892, appendix A.1 and A.2)?
     /// </summary>
     /// <remarks>
-    /// Ein Virama tilgt den eingebauten Vokal des Zeichens davor; ein Joiner
-    /// dahinter entscheidet, ob die beiden Zeichen zu einer Ligatur
-    /// zusammenwachsen. In dieser Stellung trägt er Bedeutung und ist deshalb
-    /// zugelassen - überall sonst wäre er ein unsichtbares Zeichen in einer
-    /// Adresse.
+    /// A virama deletes the inherent vowel of the character before it; a joiner
+    /// after it decides whether the two characters grow together into a
+    /// ligature. In that position it carries meaning and is therefore permitted
+    /// - everywhere else it would be an invisible character in an address.
     /// </remarks>
     private static Boolean AfterVirama(IReadOnlyList<UInt32> CodePoints, Int32 Index)
 
-        => Before(CodePoints, Index) is UInt32 davor &&
-           ContextTables.Contains(ContextTables.Virama, davor);
+        => Before(CodePoints, Index) is UInt32 preceding &&
+           ContextTables.Contains(ContextTables.Virama, preceding);
 
     /// <summary>
-    /// Der zweite Weg aus A.1: <c>(L|D) T* ZWNJ T* (R|D)</c>.
+    /// The second route out of A.1: <c>(L|D) T* ZWNJ T* (R|D)</c>.
     /// </summary>
     /// <remarks>
-    /// Der Ausdruck aus dem RFC in Worten: Links vom Joiner steht - über
-    /// beliebig viele durchsichtige Zeichen hinweg - ein Buchstabe, der nach
-    /// rechts verbindet, und rechts einer, der nach links verbindet. Genau dort
-    /// verhindert der Joiner eine Verbindung, die es sonst gäbe. Steht er
-    /// woanders, verhindert er nichts und ist bloss unsichtbar.
+    /// The RFC's expression in words: to the left of the joiner - across any
+    /// number of transparent characters - there is a letter that joins to the
+    /// right, and to its right one that joins to the left. In exactly that spot
+    /// the joiner prevents a connection that would otherwise happen. Anywhere
+    /// else it prevents nothing and is merely invisible.
     /// </remarks>
     private static Boolean BetweenJoiners(IReadOnlyList<UInt32> CodePoints, Int32 Index)
     {
 
-        var links = Index - 1;
+        var left = Index - 1;
 
-        while (links >= 0 && ContextTables.Contains(ContextTables.JoiningT, CodePoints[links]))
-            links--;
+        while (left >= 0 && ContextTables.Contains(ContextTables.JoiningT, CodePoints[left]))
+            left--;
 
-        if (links < 0 ||
-            !(ContextTables.Contains(ContextTables.JoiningL, CodePoints[links]) ||
-              ContextTables.Contains(ContextTables.JoiningD, CodePoints[links])))
+        if (left < 0 ||
+            !(ContextTables.Contains(ContextTables.JoiningL, CodePoints[left]) ||
+              ContextTables.Contains(ContextTables.JoiningD, CodePoints[left])))
             return false;
 
-        var rechts = Index + 1;
+        var right = Index + 1;
 
-        while (rechts < CodePoints.Count && ContextTables.Contains(ContextTables.JoiningT, CodePoints[rechts]))
-            rechts++;
+        while (right < CodePoints.Count && ContextTables.Contains(ContextTables.JoiningT, CodePoints[right]))
+            right++;
 
-        return rechts < CodePoints.Count &&
-               (ContextTables.Contains(ContextTables.JoiningR, CodePoints[rechts]) ||
-                ContextTables.Contains(ContextTables.JoiningD, CodePoints[rechts]));
+        return right < CodePoints.Count &&
+               (ContextTables.Contains(ContextTables.JoiningR, CodePoints[right]) ||
+                ContextTables.Contains(ContextTables.JoiningD, CodePoints[right]));
 
     }
 

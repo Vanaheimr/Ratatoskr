@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Gemeinsames Handwerkszeug fuer die Generatoren aus dem Unicode Character Database.
+"""Shared tooling for the generators reading the Unicode Character Database.
 
-Die Dateien der UCD haben alle dieselbe Form:
+The UCD files all have the same shape:
 
     0370..0373    ; Greek # L&  [4] GREEK CAPITAL LETTER HETA..
 
-also ein Bereich, ein Wert, ein Kommentar. Was sich unterscheidet, ist nur, aus
-welcher Datei gelesen und welcher Wert gesucht wird - deshalb steht das Lesen
-hier und nicht zweimal daneben.
+that is, a range, a value, a comment. All that differs is which file is read and
+which value is looked for - which is why the reading sits here and not twice
+next to each other.
 """
 
 import re
@@ -16,7 +16,7 @@ from pathlib import Path
 
 LICENSE_HEADER = """/*
  * Copyright (c) 2010-2026 GraphDefined GmbH <achim.friedland@graphdefined.com>
- * This file is part of Hermod <https://www.github.com/Vanaheimr/Hermod>
+ * This file is part of Ratatoskr <https://www.github.com/Vanaheimr/Ratatoskr>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ LINE = re.compile(r"^([0-9A-F]{4,6})(?:\.\.([0-9A-F]{4,6}))?\s*;\s*([^#]+?)\s*$"
 
 
 def load(url, source=None):
-    """Die Zeilen einer UCD-Datei - aus dem Netz oder aus einer oertlichen Kopie."""
+    """The lines of a UCD file - from the net or from a local copy."""
 
     if source:
         return Path(source).read_text(encoding="utf-8").splitlines()
@@ -46,12 +46,11 @@ def load(url, source=None):
 
 
 def ranges(lines, value):
-    """Die Bereiche mit diesem Wert, aufsteigend sortiert und zusammengefasst.
+    """The ranges carrying this value, sorted ascending and merged.
 
-    Zeilen mit '@missing' beschreiben Vorgabewerte fuer nicht zugewiesene
-    Codepoints und bleiben aussen vor: Was nicht zugewiesen ist, kommt in einem
-    JID ohnehin nicht vor - die Leitern aus RFC 8264 und RFC 5892 weisen es
-    vorher ab.
+    Lines with '@missing' describe default values for unassigned code points and
+    stay out of it: what is unassigned does not occur in a JID anyway - the
+    ladders from RFC 8264 and RFC 5892 reject it beforehand.
     """
 
     found = []
@@ -66,7 +65,7 @@ def ranges(lines, value):
         match = LINE.match(line)
 
         if not match:
-            raise SystemExit(f"unverstandene Zeile {line!r}")
+            raise SystemExit(f"unintelligible line {line!r}")
 
         if match.group(3) != value:
             continue
@@ -77,7 +76,7 @@ def ranges(lines, value):
         found.append((first, last))
 
     if not found:
-        raise SystemExit(f"Wert {value!r}: kein einziger Bereich gefunden")
+        raise SystemExit(f"value {value!r}: not a single range found")
 
     found.sort()
 
@@ -93,9 +92,9 @@ def ranges(lines, value):
 
 
 def emit(field, comment, values, visibility="internal"):
-    """Eine Tabelle als flache Folge von Bereichsgrenzen."""
+    """One table as a flat sequence of range bounds."""
 
-    out = [f"    /// <summary>{comment} ({len(values)} Bereiche).</summary>",
+    out = [f"    /// <summary>{comment} ({len(values)} ranges).</summary>",
            f"    {visibility} static readonly UInt32[] {field} = ["]
 
     line = "       "
@@ -115,8 +114,8 @@ def emit(field, comment, values, visibility="internal"):
 
 
 def write(target, text):
-    """Die Datei schreiben - mit BOM und CRLF, wie der Rest des Projekts."""
+    """Write the file - with BOM and CRLF, like the rest of the project."""
 
     target.write_bytes(b"\xef\xbb\xbf" + text.replace("\n", "\r\n").encode("utf-8"))
 
-    print(f"{target} geschrieben")
+    print(f"{target} written")

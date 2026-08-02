@@ -27,63 +27,60 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die abgeleitete Eigenschaft eines Codepoints nach RFC 5892, Abschnitt 1.
+/// The derived property of a code point per RFC 5892, section 1.
 /// </summary>
 public enum IdnaProperty
 {
 
-    /// <summary>In einem Label zulässig.</summary>
+    /// <summary>Permitted in a label.</summary>
     PValid,
 
     /// <summary>
-    /// Zulässig, wenn die Regel aus RFC 5892, Anhang A.1/A.2 erfüllt ist
-    /// (die beiden Joiner).
+    /// Permitted if the rule from RFC 5892, appendix A.1/A.2 is satisfied (the
+    /// two joiners).
     /// </summary>
     ContextJ,
 
     /// <summary>
-    /// Zulässig, wenn die Regel aus RFC 5892, Anhang A.3 bis A.9 erfüllt ist.
+    /// Permitted if the rule from RFC 5892, appendix A.3 to A.9 is satisfied.
     /// </summary>
     ContextO,
 
-    /// <summary>In einem Label unzulässig.</summary>
+    /// <summary>Not permitted in a label.</summary>
     Disallowed,
 
     /// <summary>
-    /// In der zugrunde liegenden Unicode-Fassung nicht vergeben - und damit in
-    /// einem Label unzulässig (RFC 5891, Abschnitt 4.2.2 lässt Unassigned nur
-    /// beim Nachschlagen zu, nicht beim Registrieren).
+    /// Unassigned in the underlying Unicode version - and therefore not
+    /// permitted in a label (RFC 5891, section 4.2.2 allows unassigned only on
+    /// lookup, not on registration).
     /// </summary>
     Unassigned
 
 }
 
 /// <summary>
-/// IDNA2008 auf Codepoint-Ebene: RFC 5892, Abschnitt 1.
+/// IDNA2008 at the code point level: RFC 5892, section 1.
 /// </summary>
 /// <remarks>
-/// <b>Dieselben Bausteine wie PRECIS, eine andere Leiter.</b> Beide Leitern
-/// stehen auf <see cref="UnicodeSets"/>, und die Unterschiede sind keine
-/// Feinheiten:
+/// <b>The same building blocks as PRECIS, a different ladder.</b> Both ladders
+/// stand on <see cref="UnicodeSets"/>, and the differences are not subtleties:
 ///
 /// <list type="bullet">
-///   <item>Statt ASCII7 steht hier <b>LDH</b> - Bindestrich, Ziffern,
-///         Kleinbuchstaben. Ein Unterstrich, ein Pluszeichen, ein
-///         Grossbuchstabe: alles keine Label-Zeichen.</item>
-///   <item><b>Unstable</b> gibt es nur hier, und dieser Zweig wirft alles
-///         hinaus, was sich unter Normalisierung und Kleinschreibung
-///         verändert.</item>
-///   <item><b>IgnorableProperties</b> schliesst hier auch <c>White_Space</c>
-///         ein.</item>
-///   <item>Am Ende steht <b>DISALLOWED</b> und kein Auffangzweig für Symbole
-///         und Satzzeichen: Was nicht ausdrücklich zugelassen ist, gehört nicht
-///         in einen Domainnamen.</item>
+///   <item>Instead of ASCII7 there is <b>LDH</b> here - hyphen, digits,
+///         lowercase letters. An underscore, a plus sign, an uppercase letter:
+///         none of them are label characters.</item>
+///   <item><b>Unstable</b> exists only here, and that branch throws out
+///         everything that changes under normalisation and lowercasing.</item>
+///   <item><b>IgnorableProperties</b> includes <c>White_Space</c> here as
+///         well.</item>
+///   <item>At the end stands <b>DISALLOWED</b> and no catch-all branch for
+///         symbols and punctuation: whatever is not explicitly permitted does
+///         not belong in a domain name.</item>
 /// </list>
 ///
-/// Das ist der Grund, aus dem die beiden Leitern getrennt bleiben. Ein
-/// gemeinsames Verfahren mit Schaltern wäre kürzer und würde beim Lesen die
-/// Frage „gilt das jetzt für Labels oder für Localparts?" bei jeder Zeile neu
-/// stellen.
+/// That is the reason the two ladders stay separate. A shared procedure with
+/// switches would be shorter and would raise the question "does this apply to
+/// labels or to localparts now?" anew on every line you read.
 /// </remarks>
 public static class Idna
 {
@@ -91,14 +88,14 @@ public static class Idna
     #region DerivedProperty(CodePoint)
 
     /// <summary>
-    /// Die abgeleitete Eigenschaft nach RFC 5892, Abschnitt 1.
+    /// The derived property per RFC 5892, section 1.
     /// </summary>
     public static IdnaProperty DerivedProperty(UInt32 CodePoint)
     {
 
-        // Exceptions (Abschnitt 2.6)
-        if (UnicodeSets.TryException(CodePoint, out var ausnahme))
-            return ausnahme switch {
+        // Exceptions (section 2.6)
+        if (UnicodeSets.TryException(CodePoint, out var exception))
+            return exception switch {
                        UnicodeSets.ExceptionValue.PValid    => IdnaProperty.PValid,
                        UnicodeSets.ExceptionValue.ContextO  => IdnaProperty.ContextO,
                        _                                    => IdnaProperty.Disallowed
@@ -107,21 +104,21 @@ public static class Idna
         if (UnicodeSets.IsContextODigit(CodePoint))
             return IdnaProperty.ContextO;
 
-        // BackwardCompatible (Abschnitt 2.7) ist leer.
+        // BackwardCompatible (section 2.7) is empty.
 
         if (UnicodeSets.IsUnassigned(CodePoint))
             return IdnaProperty.Unassigned;
 
-        // LDH (Abschnitt 2.5) - und nicht ASCII7 wie bei PRECIS.
+        // LDH (section 2.5) - and not ASCII7 as with PRECIS.
         if (UnicodeSets.IsLdh(CodePoint))
             return IdnaProperty.PValid;
 
         if (UnicodeSets.IsJoinControl(CodePoint))
             return IdnaProperty.ContextJ;
 
-        // Unstable (Abschnitt 2.2): Was sich unter Normalisierung und
-        // Kleinschreibung verändert, hat in einem Domainnamen nichts zu suchen
-        // - sonst gäbe es zwei Schreibweisen für dieselbe Adresse.
+        // Unstable (section 2.2): whatever changes under normalisation and
+        // lowercasing has no business in a domain name - otherwise there would
+        // be two spellings for the same address.
         if (UnicodeSets.IsUnstable(CodePoint))
             return IdnaProperty.Disallowed;
 
@@ -137,8 +134,8 @@ public static class Idna
         if (UnicodeSets.IsLetterDigits(CodePoint))
             return IdnaProperty.PValid;
 
-        // Kein Auffangzweig: Was bis hierher gekommen ist, gehört nicht in
-        // einen Domainnamen.
+        // No catch-all branch: whatever got this far does not belong in a
+        // domain name.
         return IdnaProperty.Disallowed;
 
     }
@@ -147,27 +144,27 @@ public static class Idna
 
     #region IsValidDomain(Domain, out Reason)
 
-    /// <summary>Das Präfix eines A-Labels (RFC 5890, Abschnitt 2.3.2.1).</summary>
+    /// <summary>The prefix of an A-label (RFC 5890, section 2.3.2.1).</summary>
     public const String AcePrefix = "xn--";
 
-    /// <summary>Die Höchstlänge eines Labels in Oktetten (RFC 1035).</summary>
+    /// <summary>The maximum length of a label in octets (RFC 1035).</summary>
     public const Int32 MaxLabelOctets = 63;
 
     /// <summary>
-    /// Ist dieser Domainpart nach IDNA2008 gültig?
+    /// Is this domainpart valid per IDNA2008?
     /// </summary>
-    /// <param name="Domain">Der bereits kleingeschriebene Domainpart.</param>
-    /// <param name="Reason">Woran es scheitert - für die Fehlermeldung.</param>
+    /// <param name="Domain">The already lowercased domainpart.</param>
+    /// <param name="Reason">What it fails on - for the error message.</param>
     /// <remarks>
-    /// <b>Adressliterale gehen daran vorbei</b>, und zwar nach Vorschrift:
-    /// RFC 7622, Abschnitt 3.2 lässt neben dem Domainnamen ausdrücklich eine
-    /// IPv4-Adresse und ein eingeklammertes IPv6-Literal zu. Sie sind keine
-    /// Domainnamen, und IDNA hat über sie nichts zu sagen.
+    /// <b>Address literals go past this</b>, and they do so by the book:
+    /// RFC 7622, section 3.2 explicitly permits an IPv4 address and a bracketed
+    /// IPv6 literal alongside the domain name. They are not domain names, and
+    /// IDNA has nothing to say about them.
     ///
-    /// <b>Zuletzt die Bidi-Regel</b> (RFC 5893, Abschnitt 2): Sie gilt erst,
-    /// wenn ein Label rechtsläufige Zeichen trägt - dann aber für alle Labels
-    /// dieses Namens. Deshalb steht sie hier und nicht in der Label-Prüfung:
-    /// Ein Label allein kann die Frage nicht beantworten.
+    /// <b>The bidi rule comes last</b> (RFC 5893, section 2): it applies only
+    /// once a label carries right-to-left characters - but then to all labels of
+    /// that name. Which is why it sits here and not in the label check: a label
+    /// on its own cannot answer the question.
     /// </remarks>
     public static Boolean IsValidDomain(String Domain, out String? Reason)
     {
@@ -176,12 +173,12 @@ public static class Idna
 
         if (Domain.Length == 0)
         {
-            Reason = "Ein JID braucht einen Domainpart.";
+            Reason = "A JID needs a domainpart.";
             return false;
         }
 
-        // RFC 7622, Abschnitt 3.2: Adressliterale sind erlaubt und keine
-        // Domainnamen.
+        // RFC 7622, section 3.2: address literals are allowed and are not
+        // domain names.
         if (IsAddressLiteral(Domain))
             return true;
 
@@ -199,18 +196,18 @@ public static class Idna
 
         }
 
-        // RFC 5893, Abschnitt 2: Die Bidi-Regel gilt für einen „Bidi domain
-        // name" - und einer ist er, sobald ein einziges Label rechtsläufige
-        // Zeichen trägt. Dann gilt sie für alle Labels, auch für die aus
-        // reinem ASCII.
+        // RFC 5893, section 2: the bidi rule applies to a "bidi domain name" -
+        // and one it is as soon as a single label carries right-to-left
+        // characters. Then it applies to all labels, including the pure-ASCII
+        // ones.
         if (!uLabels.Any(IsRtlLabel))
             return true;
 
         foreach (var uLabel in uLabels)
-            if (!SatisfiesBidiRule(uLabel, out var verstoss))
+            if (!SatisfiesBidiRule(uLabel, out var violation))
             {
-                Reason = $"Das Label '{uLabel}' verstösst gegen die Bidi-Regel " +
-                         $"(RFC 5893, Abschnitt 2): {verstoss}";
+                Reason = $"The label '{uLabel}' violates the bidi rule " +
+                         $"(RFC 5893, section 2): {violation}";
                 return false;
             }
 
@@ -223,7 +220,8 @@ public static class Idna
     #region (private) IsValidLabel(Label, out Reason)
 
     /// <summary>
-    /// Ein Label nach RFC 5891, Abschnitt 4.2 - samt A-Label-Rückprobe.
+    /// A label per RFC 5891, section 4.2 - including the A-label re-encoding
+    /// check.
     /// </summary>
     private static Boolean IsValidLabel(String Label, out String? Reason)
     {
@@ -232,18 +230,18 @@ public static class Idna
 
         if (Label.Length == 0)
         {
-            Reason = "Ein Domain-Label darf nicht leer sein.";
+            Reason = "A domain label must not be empty.";
             return false;
         }
 
-        // A-Label: Der ASCII-Text ist nur die Verpackung. Geprüft wird, was
-        // darin steht - und dass die Verpackung die einzig mögliche ist.
+        // A-label: the ASCII text is only the wrapping. What is checked is what
+        // is inside it - and that the wrapping is the only possible one.
         if (Label.StartsWith(AcePrefix, StringComparison.Ordinal))
         {
 
             if (Label.Length > MaxLabelOctets)
             {
-                Reason = $"Das Label '{Label}' ist länger als {MaxLabelOctets} Oktette.";
+                Reason = $"The label '{Label}' is longer than {MaxLabelOctets} octets.";
                 return false;
             }
 
@@ -251,26 +249,26 @@ public static class Idna
 
             if (uLabel is null)
             {
-                Reason = $"'{Label}' beginnt wie ein A-Label, ist aber kein Punycode.";
+                Reason = $"'{Label}' begins like an A-label but is not Punycode.";
                 return false;
             }
 
-            // RFC 5890, Abschnitt 2.3.2.1: Ein U-Label trägt mindestens ein
-            // Zeichen ausserhalb von ASCII. Sonst gäbe es dasselbe Label
-            // zweimal - einmal als es selbst und einmal verpackt.
+            // RFC 5890, section 2.3.2.1: a U-label carries at least one
+            // character outside ASCII. Otherwise the same label would exist
+            // twice - once as itself and once wrapped.
             if (uLabel.All(Char.IsAscii))
             {
-                Reason = $"'{Label}' verpackt reines ASCII ('{uLabel}') als A-Label.";
+                Reason = $"'{Label}' wraps pure ASCII ('{uLabel}') as an A-label.";
                 return false;
             }
 
-            // RFC 5891, Abschnitt 5.4: Zu einer Bedeutung gehört genau eine
-            // Schreibweise. Kodiert die Rückrechnung etwas anderes, ist dieses
-            // A-Label eine zweite Adresse für dieselbe Sache.
-            if (Punycode.Encode(uLabel) is not String zurueck ||
-                !String.Equals(AcePrefix + zurueck, Label, StringComparison.Ordinal))
+            // RFC 5891, section 5.4: one meaning has exactly one spelling. If
+            // the re-encoding produces something else, this A-label is a second
+            // address for the same thing.
+            if (Punycode.Encode(uLabel) is not String reEncoded ||
+                !String.Equals(AcePrefix + reEncoded, Label, StringComparison.Ordinal))
             {
-                Reason = $"'{Label}' ist nicht die kanonische Schreibweise von '{uLabel}'.";
+                Reason = $"'{Label}' is not the canonical spelling of '{uLabel}'.";
                 return false;
             }
 
@@ -280,7 +278,7 @@ public static class Idna
 
         if (Encoding.UTF8.GetByteCount(Label) > MaxLabelOctets)
         {
-            Reason = $"Das Label '{Label}' ist länger als {MaxLabelOctets} Oktette.";
+            Reason = $"The label '{Label}' is longer than {MaxLabelOctets} octets.";
             return false;
         }
 
@@ -290,62 +288,61 @@ public static class Idna
 
     #endregion
 
-    #region (private) IsValidULabel(ULabel, Angezeigt, out Reason)
+    #region (private) IsValidULabel(ULabel, Shown, out Reason)
 
     /// <summary>
-    /// Die Regeln aus RFC 5891, Abschnitt 4.2.3 und 4.2.4 über dem
-    /// Unicode-Label.
+    /// The rules from RFC 5891, sections 4.2.3 and 4.2.4 over the Unicode
+    /// label.
     /// </summary>
-    private static Boolean IsValidULabel(String ULabel, String Angezeigt, out String? Reason)
+    private static Boolean IsValidULabel(String ULabel, String Shown, out String? Reason)
     {
 
         Reason = null;
 
-        // Abschnitt 4.2.3.1: kein Bindestrich am Anfang oder Ende ...
+        // Section 4.2.3.1: no hyphen at the beginning or the end ...
         if (ULabel[0] == '-' || ULabel[^1] == '-')
         {
-            Reason = $"Das Label '{Angezeigt}' beginnt oder endet mit einem Bindestrich.";
+            Reason = $"The label '{Shown}' begins or ends with a hyphen.";
             return false;
         }
 
-        // ... und keine zwei an der dritten und vierten Stelle. Dort steht das
-        // Präfix eines A-Labels, und ein U-Label darf nicht so aussehen wie
-        // eines.
+        // ... and no two at the third and fourth position. That is where an
+        // A-label's prefix sits, and a U-label must not look like one.
         if (ULabel.Length >= 4 && ULabel[2] == '-' && ULabel[3] == '-')
         {
-            Reason = $"Das Label '{Angezeigt}' trägt '--' an dritter und vierter Stelle.";
+            Reason = $"The label '{Shown}' carries '--' at the third and fourth position.";
             return false;
         }
 
-        // Abschnitt 4.2.3.2: kein kombinierendes Zeichen am Anfang - es hätte
-        // nichts, womit es sich verbinden könnte.
+        // Section 4.2.3.2: no combining character at the start - it would have
+        // nothing to combine with.
         if (Char.GetUnicodeCategory(ULabel, 0) is UnicodeCategory.NonSpacingMark       or
                                                   UnicodeCategory.SpacingCombiningMark or
                                                   UnicodeCategory.EnclosingMark)
         {
-            Reason = $"Das Label '{Angezeigt}' beginnt mit einem kombinierenden Zeichen.";
+            Reason = $"The label '{Shown}' begins with a combining character.";
             return false;
         }
 
-        // Als Feld und nicht als Folge: Die kontextabhängigen Regeln fragen
-        // nach dem Zeichen davor und danach (RFC 5892, Anhang A).
-        var punkte = CodePoints(ULabel).ToArray();
+        // As an array and not as a sequence: the contextual rules ask about the
+        // character before and after (RFC 5892, appendix A).
+        var points = CodePoints(ULabel).ToArray();
 
-        for (var i = 0; i < punkte.Length; i++)
+        for (var i = 0; i < points.Length; i++)
         {
 
-            var codePoint   = punkte[i];
-            var eigenschaft = DerivedProperty(codePoint);
+            var codePoint = points[i];
+            var property  = DerivedProperty(codePoint);
 
-            if (eigenschaft == IdnaProperty.PValid)
+            if (property == IdnaProperty.PValid)
                 continue;
 
-            if (eigenschaft is IdnaProperty.ContextJ or IdnaProperty.ContextO &&
-                Precis.ContextRuleSatisfied(punkte, i))
+            if (property is IdnaProperty.ContextJ or IdnaProperty.ContextO &&
+                Precis.ContextRuleSatisfied(points, i))
                 continue;
 
-            Reason = $"U+{codePoint:X4} gehört nicht in ein Domain-Label " +
-                     $"('{Angezeigt}', RFC 5892: {eigenschaft}).";
+            Reason = $"U+{codePoint:X4} does not belong in a domain label " +
+                     $"('{Shown}', RFC 5892: {property}).";
 
             return false;
 
@@ -360,8 +357,8 @@ public static class Idna
     #region SatisfiesBidiRule(ULabel, out Reason)
 
     /// <summary>
-    /// Trägt dieses Label mindestens ein rechtsläufiges Zeichen (RFC 5893,
-    /// Abschnitt 1.4)?
+    /// Does this label carry at least one right-to-left character (RFC 5893,
+    /// section 1.4)?
     /// </summary>
     private static Boolean IsRtlLabel(String ULabel)
 
@@ -370,73 +367,72 @@ public static class Idna
                                                                    BidiClass.AN);
 
     /// <summary>
-    /// Die sechs Bedingungen der Bidi-Regel (RFC 5893, Abschnitt 2).
+    /// The six conditions of the bidi rule (RFC 5893, section 2).
     /// </summary>
     /// <remarks>
-    /// <b>Die Richtung eines Labels bestimmt sein erstes Zeichen</b>, und daran
-    /// hängt alles Weitere: Ein Label, das mit einem lateinischen Buchstaben
-    /// beginnt und ein hebräisches Zeichen enthält, ist kein rechtsläufiges
-    /// Label mit einem Gast darin, sondern ein linksläufiges mit einem Verstoss
-    /// (Bedingungen 1 und 5).
+    /// <b>A label's direction is determined by its first character</b>, and
+    /// everything else hangs on that: a label beginning with a Latin letter and
+    /// containing a Hebrew character is not a right-to-left label with a guest
+    /// in it, but a left-to-right one with a violation (conditions 1 and 5).
     ///
-    /// Bedingung 3 und 6 - woran ein Label enden darf - sind über
-    /// <see cref="IsValidDomain"/> nicht erreichbar: Die Zeichen, mit denen ein
-    /// Label falsch enden könnte, fallen schon auf der Codepoint-Ebene heraus.
-    /// Sie stehen hier trotzdem, denn diese Funktion ist die Regel aus dem RFC
-    /// und nicht die Teilmenge, die ein bestimmter Aufrufer übriglässt.
+    /// Conditions 3 and 6 - what a label may end with - are unreachable through
+    /// <see cref="IsValidDomain"/>: the characters a label could wrongly end
+    /// with already drop out at the code point level. They stand here
+    /// nonetheless, because this function is the rule from the RFC and not the
+    /// subset one particular caller happens to leave over.
     /// </remarks>
     internal static Boolean SatisfiesBidiRule(String ULabel, out String? Reason)
     {
 
         Reason = null;
 
-        var klassen = CodePoints(ULabel).Select(BidiClasses.ClassOf).ToList();
+        var classes = CodePoints(ULabel).Select(BidiClasses.ClassOf).ToList();
 
-        if (klassen.Count == 0)
+        if (classes.Count == 0)
         {
-            Reason = "Das Label ist leer.";
+            Reason = "The label is empty.";
             return false;
         }
 
-        // Bedingung 1
-        if (klassen[0] is not (BidiClass.L or BidiClass.R or BidiClass.AL))
+        // Condition 1
+        if (classes[0] is not (BidiClass.L or BidiClass.R or BidiClass.AL))
         {
-            Reason = $"Das erste Zeichen ist {klassen[0]} und weder L noch R noch AL.";
+            Reason = $"The first character is {classes[0]} and neither L nor R nor AL.";
             return false;
         }
 
-        var rechtslaeufig = klassen[0] is BidiClass.R or BidiClass.AL;
+        var rightToLeft = classes[0] is BidiClass.R or BidiClass.AL;
 
-        // Das letzte Zeichen, das kein NSM ist - Bedingung 3 und 6 lassen
-        // danach beliebig viele NSM zu.
-        var letztes = klassen.FindLastIndex(k => k != BidiClass.NSM);
+        // The last character that is not an NSM - conditions 3 and 6 allow any
+        // number of NSM after it.
+        var last = classes.FindLastIndex(k => k != BidiClass.NSM);
 
-        if (rechtslaeufig)
+        if (rightToLeft)
         {
 
-            // Bedingung 2
-            foreach (var klasse in klassen)
-                if (klasse is not (BidiClass.R  or BidiClass.AL or BidiClass.AN or
-                                   BidiClass.EN or BidiClass.ES or BidiClass.CS or
-                                   BidiClass.ET or BidiClass.ON or BidiClass.BN or
-                                   BidiClass.NSM))
+            // Condition 2
+            foreach (var cls in classes)
+                if (cls is not (BidiClass.R  or BidiClass.AL or BidiClass.AN or
+                                BidiClass.EN or BidiClass.ES or BidiClass.CS or
+                                BidiClass.ET or BidiClass.ON or BidiClass.BN or
+                                BidiClass.NSM))
                 {
-                    Reason = $"In einem rechtsläufigen Label ist {klasse} nicht zulässig.";
+                    Reason = $"In a right-to-left label {cls} is not permitted.";
                     return false;
                 }
 
-            // Bedingung 3
-            if (letztes < 0 || klassen[letztes] is not (BidiClass.R  or BidiClass.AL or
-                                                        BidiClass.EN or BidiClass.AN))
+            // Condition 3
+            if (last < 0 || classes[last] is not (BidiClass.R  or BidiClass.AL or
+                                                  BidiClass.EN or BidiClass.AN))
             {
-                Reason = "Ein rechtsläufiges Label endet auf R, AL, EN oder AN.";
+                Reason = "A right-to-left label ends in R, AL, EN or AN.";
                 return false;
             }
 
-            // Bedingung 4
-            if (klassen.Contains(BidiClass.EN) && klassen.Contains(BidiClass.AN))
+            // Condition 4
+            if (classes.Contains(BidiClass.EN) && classes.Contains(BidiClass.AN))
             {
-                Reason = "Europäische und arabische Ziffern stehen nicht im selben Label.";
+                Reason = "European and Arabic digits do not appear in the same label.";
                 return false;
             }
 
@@ -445,20 +441,20 @@ public static class Idna
         else
         {
 
-            // Bedingung 5
-            foreach (var klasse in klassen)
-                if (klasse is not (BidiClass.L  or BidiClass.EN or BidiClass.ES or
-                                   BidiClass.CS or BidiClass.ET or BidiClass.ON or
-                                   BidiClass.BN or BidiClass.NSM))
+            // Condition 5
+            foreach (var cls in classes)
+                if (cls is not (BidiClass.L  or BidiClass.EN or BidiClass.ES or
+                                BidiClass.CS or BidiClass.ET or BidiClass.ON or
+                                BidiClass.BN or BidiClass.NSM))
                 {
-                    Reason = $"In einem linksläufigen Label ist {klasse} nicht zulässig.";
+                    Reason = $"In a left-to-right label {cls} is not permitted.";
                     return false;
                 }
 
-            // Bedingung 6
-            if (letztes < 0 || klassen[letztes] is not (BidiClass.L or BidiClass.EN))
+            // Condition 6
+            if (last < 0 || classes[last] is not (BidiClass.L or BidiClass.EN))
             {
-                Reason = "Ein linksläufiges Label endet auf L oder EN.";
+                Reason = "A left-to-right label ends in L or EN.";
                 return false;
             }
 
@@ -473,17 +469,16 @@ public static class Idna
     #region (private) IsAddressLiteral(Domain) / CodePoints(Text)
 
     /// <summary>
-    /// Ein IPv4-Literal oder ein eingeklammertes IPv6-Literal (RFC 7622,
-    /// Abschnitt 3.2).
+    /// An IPv4 literal or a bracketed IPv6 literal (RFC 7622, section 3.2).
     /// </summary>
     private static Boolean IsAddressLiteral(String Domain)
 
-        // Voll ausgeschrieben: Hermod bringt einen eigenen Typ dieses Namens
-        // mit, und der beantwortet eine andere Frage.
+        // Spelled out in full: Hermod brings a type of its own by that name, and
+        // that one answers a different question.
         => Domain.Length > 2 && Domain[0] == '[' && Domain[^1] == ']'
                ? System.Net.IPAddress.TryParse(Domain[1..^1], out _)
-               : System.Net.IPAddress.TryParse(Domain, out var adresse) &&
-                 adresse.AddressFamily == AddressFamily.InterNetwork;
+               : System.Net.IPAddress.TryParse(Domain, out var address) &&
+                 address.AddressFamily == AddressFamily.InterNetwork;
 
     private static IEnumerable<UInt32> CodePoints(String Text)
     {

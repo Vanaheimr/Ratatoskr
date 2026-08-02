@@ -25,37 +25,35 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// JIDs nach RFC 7622: zerlegen, vorbereiten, vergleichen.
+/// JIDs per RFC 7622: splitting, preparing, comparing.
 /// </summary>
 /// <remarks>
-/// Der Kern des Ganzen ist eine Ungleichbehandlung, die leicht untergeht:
-/// <b>Local- und Domainpart sind unabhängig von der Schreibweise, der
-/// Resourcepart nicht.</b> Vorher lief der Vergleich überall über
-/// <c>OrdinalIgnoreCase</c> auf der ganzen Zeichenkette, und damit galten
-/// <c>alice@example.com/Handy</c> und <c>alice@example.com/handy</c> als
-/// dieselbe Adresse - zwei verschiedene Geräte desselben Kontos. Die
-/// Resource-Vergabe im Server hat sie immer schon unterschieden (dort wird
-/// ordinal verglichen); nur das Nachschlagen nicht, und so konnte eine
-/// Nachricht auf dem falschen Gerät landen.
+/// At the heart of it is an asymmetry that is easily missed: <b>local and domain
+/// part are independent of spelling, the resourcepart is not.</b> Before, the
+/// comparison ran through <c>OrdinalIgnoreCase</c> over the whole string
+/// everywhere, and so <c>alice@example.com/Phone</c> and
+/// <c>alice@example.com/phone</c> counted as the same address - two different
+/// devices of the same account. The server's resource assignment always did tell
+/// them apart (it compares ordinally); only the lookup did not, and so a message
+/// could end up on the wrong device.
 ///
-/// <b>Zerlegt wird in der Reihenfolge aus Abschnitt 3.2</b>, und die ist nicht
-/// beliebig: erst am ersten <c>/</c> trennen, dann im vorderen Stück am ersten
-/// <c>@</c>. Andersherum machte RFC 7622 aus dem Beispiel 15
-/// <c>a.example.com/b@example.net</c> einen JID mit Localpart
-/// <c>a.example.com/b</c> - der Resourcepart darf ein <c>@</c> enthalten, der
-/// Localpart nicht.
+/// <b>Splitting happens in the order given by section 3.2</b>, and that order is
+/// not arbitrary: split at the first <c>/</c> first, then in the front piece at
+/// the first <c>@</c>. The other way round, RFC 7622's example 15
+/// <c>a.example.com/b@example.net</c> would become a JID with the localpart
+/// <c>a.example.com/b</c> - a resourcepart may contain an <c>@</c>, a localpart
+/// may not.
 ///
-/// <b>Local- und Resourcepart</b> sind nach RFC 7622 Instanzen der
-/// PRECIS-Profile UsernameCaseMapped und OpaqueString (RFC 8264/8265). Die
-/// Abbildungsregeln - Breitenabbildung, Kleinschreibung, NFC,
-/// Leerzeichenabbildung - stehen hier; die Klassenzugehörigkeit kommt aus
-/// <see cref="Precis"/> und damit aus den abgeleiteten Eigenschaften nach
-/// RFC 8264, Abschnitt 8.
+/// <b>Local and resource part</b> are, per RFC 7622, instances of the PRECIS
+/// profiles UsernameCaseMapped and OpaqueString (RFC 8264/8265). The mapping
+/// rules - width mapping, lowercasing, NFC, space mapping - live here; class
+/// membership comes from <see cref="Precis"/> and thus from the derived
+/// properties per RFC 8264, section 8.
 ///
-/// <b>Der Domainpart</b> ist ein internationalisierter Domainname; er geht
-/// Label für Label durch <see cref="Idna"/> (RFC 5891/5892). Ein
-/// Adressliteral - IPv4 oder eingeklammertes IPv6 - ist davon ausgenommen, so
-/// wie RFC 7622, Abschnitt 3.2 es vorsieht.
+/// <b>The domainpart</b> is an internationalised domain name; it goes label by
+/// label through <see cref="Idna"/> (RFC 5891/5892). An address literal - IPv4
+/// or bracketed IPv6 - is exempt from that, just as RFC 7622, section 3.2
+/// prescribes.
 /// </remarks>
 public static class JidUtilities
 {
@@ -63,20 +61,18 @@ public static class JidUtilities
     #region Data
 
     /// <summary>
-    /// Die Höchstlänge jedes Teils in Oktetten (RFC 7622, Abschnitte 3.2
-    /// bis 3.4) - gemessen an der UTF-8-Kodierung, nicht an der Zahl der
-    /// Zeichen.
+    /// The maximum length of each part in octets (RFC 7622, sections 3.2 to
+    /// 3.4) - measured on the UTF-8 encoding, not on the number of characters.
     /// </summary>
     public const Int32 MaxPartOctets = 1023;
 
     /// <summary>
-    /// Zeichen, die RFC 7622, Abschnitt 3.3.1 im Localpart zusätzlich
-    /// ausschliesst, obwohl die IdentifierClass sie zuliesse.
+    /// Characters that RFC 7622, section 3.3.1 additionally excludes from the
+    /// localpart, although the IdentifierClass would permit them.
     /// </summary>
     /// <remarks>
-    /// Sie alle haben in der Adressierung selbst eine Bedeutung oder in XML
-    /// eine Sonderrolle. XEP-0106 beschreibt, wie sie sich bei Bedarf
-    /// umschreiben lassen.
+    /// All of them have a meaning in addressing itself or a special role in XML.
+    /// XEP-0106 describes how they can be escaped when needed.
     /// </remarks>
     public const String LocalpartExcluded = "\"&'/:<>@";
 
@@ -85,13 +81,13 @@ public static class JidUtilities
     #region Bare(jid)
 
     /// <summary>
-    /// Der Bare-JID (<c>localpart@domainpart</c>) in vorbereiteter Form.
+    /// The bare JID (<c>localpart@domainpart</c>) in prepared form.
     /// </summary>
     /// <remarks>
-    /// Wirft bewusst nicht: Diese Funktion läuft an Dutzenden Stellen über
-    /// das, was von der Leitung kommt, und ein unbrauchbarer JID soll dort zu
-    /// „passt auf nichts" führen und nicht zu einer Ausnahme mitten in der
-    /// Stanza-Behandlung. Wer wissen will, ob etwas ein JID <i>ist</i>, fragt
+    /// Deliberately does not throw: this function runs at dozens of places over
+    /// whatever comes off the wire, and an unusable JID should lead to "matches
+    /// nothing" there and not to an exception in the middle of stanza handling.
+    /// Whoever wants to know whether something <i>is</i> a JID asks
     /// <see cref="TryParse"/>.
     /// </remarks>
     public static String Bare(String jid)
@@ -100,8 +96,8 @@ public static class JidUtilities
         if (TryParse(jid, out var parts))
             return parts.Bare;
 
-        // Nicht zerlegbar: wie bisher der Teil vor dem ersten '/',
-        // kleingeschrieben.
+        // Not splittable: as before, the part in front of the first '/',
+        // lowercased.
         var slash = jid.IndexOf('/');
 
         return (slash > 0 ? jid[..slash] : jid).ToLowerInvariant();
@@ -113,7 +109,7 @@ public static class JidUtilities
     #region Resource(jid)
 
     /// <summary>
-    /// Der Resourcepart, oder null - unverändert in seiner Schreibweise.
+    /// The resourcepart, or null - unchanged in its spelling.
     /// </summary>
     public static String? Resource(String jid)
     {
@@ -131,11 +127,11 @@ public static class JidUtilities
     #region AreEqual(a, b)
 
     /// <summary>
-    /// Bezeichnen die beiden JIDs dieselbe Adresse (RFC 7622, Abschnitt 3.4)?
+    /// Do the two JIDs denote the same address (RFC 7622, section 3.4)?
     /// </summary>
     /// <remarks>
-    /// Local- und Domainpart werden dabei ohne Rücksicht auf die Schreibweise
-    /// verglichen, der Resourcepart mit.
+    /// Local and domain part are compared without regard to spelling, the
+    /// resourcepart with it.
     /// </remarks>
     public static Boolean AreEqual(String? a, String? b)
     {
@@ -143,12 +139,12 @@ public static class JidUtilities
         if (a is null || b is null)
             return a is null && b is null;
 
-        if (!TryParse(a, out var links) || !TryParse(b, out var rechts))
-            // Mindestens einer ist kein JID - dann hilft nur der wörtliche
-            // Vergleich, und der ist hier die sichere Antwort.
+        if (!TryParse(a, out var left) || !TryParse(b, out var right))
+            // At least one of them is not a JID - then only the literal
+            // comparison helps, and that is the safe answer here.
             return String.Equals(a, b, StringComparison.Ordinal);
 
-        return links == rechts;
+        return left == right;
 
     }
 
@@ -157,9 +153,9 @@ public static class JidUtilities
     #region TryParse(jid, out Parts) / Parse(jid)
 
     /// <summary>
-    /// Zerlegt und prüft einen JID nach RFC 7622.
+    /// Splits and validates a JID per RFC 7622.
     /// </summary>
-    /// <returns>false, wenn es keiner ist.</returns>
+    /// <returns>false if it is not one.</returns>
     public static Boolean TryParse(String? jid, out JidParts Parts)
     {
 
@@ -178,25 +174,24 @@ public static class JidUtilities
     }
 
     /// <summary>
-    /// Zerlegt und prüft einen JID nach RFC 7622 und gibt ihn in
-    /// vorbereiteter Form zurück.
+    /// Splits and validates a JID per RFC 7622 and returns it in prepared form.
     /// </summary>
-    /// <exception cref="JidFormatException">Wenn es keiner ist.</exception>
+    /// <exception cref="JidFormatException">If it is not one.</exception>
     public static JidParts Parse(String jid)
     {
 
         if (String.IsNullOrEmpty(jid))
-            throw new JidFormatException(jid, "Ein JID ist nicht die leere Zeichenkette.");
+            throw new JidFormatException(jid, "A JID is not the empty string.");
 
-        // RFC 7622, Abschnitt 3.2: erst am ersten '/', dann am ersten '@'.
-        // Die Reihenfolge entscheidet - siehe Beispiel 15.
-        var slash         = jid.IndexOf('/');
-        var vorDemSlash   = slash >= 0 ? jid[..slash]        : jid;
-        var resourcepart  = slash >= 0 ? jid[(slash + 1)..]  : null;
+        // RFC 7622, section 3.2: first at the first '/', then at the first '@'.
+        // The order decides - see example 15.
+        var slash          = jid.IndexOf('/');
+        var beforeSlash    = slash >= 0 ? jid[..slash]        : jid;
+        var resourcepart   = slash >= 0 ? jid[(slash + 1)..]  : null;
 
-        var at            = vorDemSlash.IndexOf('@');
-        var localpart     = at >= 0 ? vorDemSlash[..at]        : null;
-        var domainpart    = at >= 0 ? vorDemSlash[(at + 1)..]  : vorDemSlash;
+        var at             = beforeSlash.IndexOf('@');
+        var localpart      = at >= 0 ? beforeSlash[..at]        : null;
+        var domainpart     = at >= 0 ? beforeSlash[(at + 1)..]  : beforeSlash;
 
         return new JidParts(localpart  is null ? null : PrepareLocalpart (jid, localpart),
                             PrepareDomainpart(jid, domainpart),
@@ -209,27 +204,26 @@ public static class JidUtilities
     #region (private) PrepareDomainpart(jid, value)
 
     /// <summary>
-    /// RFC 7622, Abschnitt 3.2: Der Domainpart ist das einzige Pflichtstück.
+    /// RFC 7622, section 3.2: the domainpart is the only mandatory piece.
     /// </summary>
     private static String PrepareDomainpart(String jid, String value)
     {
 
         if (value.Length == 0)
-            throw new JidFormatException(jid, "Ein JID braucht einen Domainpart.");
+            throw new JidFormatException(jid, "A JID needs a domainpart.");
 
-        // Kleinschreibung und NFC - für den Vergleich zweier Domains ist die
-        // Schreibweise ohne Belang.
-        var vorbereitet = value.ToLowerInvariant().Normalize(NormalizationForm.FormC);
+        // Lowercasing and NFC - for comparing two domains the spelling is of no
+        // consequence.
+        var prepared = value.ToLowerInvariant().Normalize(NormalizationForm.FormC);
 
-        CheckLength(jid, vorbereitet, "Domainpart");
+        CheckLength(jid, prepared, "domainpart");
 
-        // Der Domainpart ist nach RFC 7622, Abschnitt 3.2 ein
-        // internationalisierter Domainname - und damit gilt IDNA2008, Label
-        // für Label.
-        if (!Idna.IsValidDomain(vorbereitet, out var grund))
-            throw new JidFormatException(jid, grund!);
+        // Per RFC 7622, section 3.2 the domainpart is an internationalised
+        // domain name - and therefore IDNA2008 applies, label by label.
+        if (!Idna.IsValidDomain(prepared, out var reason))
+            throw new JidFormatException(jid, reason!);
 
-        return vorbereitet;
+        return prepared;
 
     }
 
@@ -238,47 +232,47 @@ public static class JidUtilities
     #region (private) PrepareLocalpart(jid, value)
 
     /// <summary>
-    /// RFC 7622, Abschnitt 3.3: UsernameCaseMapped aus RFC 8265, plus die
-    /// zusätzlich ausgeschlossenen Zeichen aus Abschnitt 3.3.1.
+    /// RFC 7622, section 3.3: UsernameCaseMapped from RFC 8265, plus the
+    /// additionally excluded characters from section 3.3.1.
     /// </summary>
     private static String PrepareLocalpart(String jid, String value)
     {
 
         if (value.Length == 0)
-            throw new JidFormatException(jid, "Ein Localpart darf nicht leer sein.");
+            throw new JidFormatException(jid, "A localpart must not be empty.");
 
-        // RFC 8265, Abschnitt 3.3: Breitenabbildung, dann Kleinschreibung,
-        // dann NFC. Die Breitenabbildung steckt in NFKC; angewandt wird sie
-        // hier zeichenweise, damit sie nur Breiten trifft und nicht auch
-        // Zeichen wie U+2163 zerlegt - die sollen gerade auffallen.
-        var vorbereitet = MapWidth(value).ToLowerInvariant().Normalize(NormalizationForm.FormC);
+        // RFC 8265, section 3.3: width mapping, then lowercasing, then NFC. The
+        // width mapping is part of NFKC; it is applied here character by
+        // character so that it only hits widths and does not also decompose
+        // characters such as U+2163 - those are meant to stand out.
+        var prepared = MapWidth(value).ToLowerInvariant().Normalize(NormalizationForm.FormC);
 
-        CheckLength(jid, vorbereitet, "Localpart");
+        CheckLength(jid, prepared, "localpart");
 
-        // Als Feld und nicht als Folge: Die kontextabhängigen Regeln fragen
-        // nach dem Zeichen davor und danach (RFC 5892, Anhang A).
-        var punkte = CodePoints(jid, vorbereitet).ToArray();
+        // As an array and not as a sequence: the contextual rules ask about the
+        // character before and after (RFC 5892, appendix A).
+        var points = CodePoints(jid, prepared).ToArray();
 
-        for (var i = 0; i < punkte.Length; i++)
+        for (var i = 0; i < points.Length; i++)
         {
 
-            var codePoint = punkte[i];
+            var codePoint = points[i];
 
             if (codePoint < 0x80 && LocalpartExcluded.Contains((Char) codePoint))
                 throw new JidFormatException(
                           jid,
-                          $"'{(Char) codePoint}' ist in einem Localpart ausgeschlossen " +
-                          "(RFC 7622, Abschnitt 3.3.1).");
+                          $"'{(Char) codePoint}' is excluded from a localpart " +
+                          "(RFC 7622, section 3.3.1).");
 
-            if (!IsAllowed(punkte, i, freeform: false))
+            if (!IsAllowed(points, i, freeform: false))
                 throw new JidFormatException(
                           jid,
-                          $"U+{codePoint:X4} gehört nicht zur PRECIS-IdentifierClass " +
-                          "und damit nicht in einen Localpart.");
+                          $"U+{codePoint:X4} does not belong to the PRECIS IdentifierClass " +
+                          "and therefore not into a localpart.");
 
         }
 
-        return vorbereitet;
+        return prepared;
 
     }
 
@@ -287,64 +281,63 @@ public static class JidUtilities
     #region (private) PrepareResourcepart(jid, value)
 
     /// <summary>
-    /// RFC 7622, Abschnitt 3.4: OpaqueString aus RFC 8265, Abschnitt 4.2.
+    /// RFC 7622, section 3.4: OpaqueString from RFC 8265, section 4.2.
     /// </summary>
     /// <remarks>
-    /// Keine Breitenabbildung, <b>keine</b> Kleinschreibung, Leerzeichen
-    /// ausserhalb von ASCII werden zu U+0020, dann NFC.
+    /// No width mapping, <b>no</b> lowercasing, spaces outside ASCII become
+    /// U+0020, then NFC.
     /// </remarks>
     private static String PrepareResourcepart(String jid, String value)
     {
 
         if (value.Length == 0)
-            throw new JidFormatException(jid, "Ein Resourcepart darf nicht leer sein.");
+            throw new JidFormatException(jid, "A resourcepart must not be empty.");
 
         var sb = new StringBuilder(value.Length);
 
-        var punkte = CodePoints(jid, value).ToArray();
+        var points = CodePoints(jid, value).ToArray();
 
-        for (var i = 0; i < punkte.Length; i++)
+        for (var i = 0; i < points.Length; i++)
         {
 
-            var codePoint = punkte[i];
+            var codePoint = points[i];
 
-            if (!IsAllowed(punkte, i, freeform: true))
+            if (!IsAllowed(points, i, freeform: true))
                 throw new JidFormatException(
                           jid,
-                          $"U+{codePoint:X4} gehört nicht zur PRECIS-FreeformClass " +
-                          "und damit nicht in einen Resourcepart.");
+                          $"U+{codePoint:X4} does not belong to the PRECIS FreeformClass " +
+                          "and therefore not into a resourcepart.");
 
-            var zeichen = Char.ConvertFromUtf32((Int32) codePoint);
+            var character = Char.ConvertFromUtf32((Int32) codePoint);
 
             sb.Append(codePoint != ' ' &&
-                      CharUnicodeInfo.GetUnicodeCategory(zeichen, 0) == UnicodeCategory.SpaceSeparator
+                      CharUnicodeInfo.GetUnicodeCategory(character, 0) == UnicodeCategory.SpaceSeparator
                           ? " "
-                          : zeichen);
+                          : character);
 
         }
 
-        var vorbereitet = sb.ToString().Normalize(NormalizationForm.FormC);
+        var prepared = sb.ToString().Normalize(NormalizationForm.FormC);
 
-        CheckLength(jid, vorbereitet, "Resourcepart");
+        CheckLength(jid, prepared, "resourcepart");
 
-        return vorbereitet;
+        return prepared;
 
     }
 
     #endregion
 
-    #region (private) Zeichenklassen
+    #region (private) Character classes
 
     /// <summary>
-    /// Die Breitenabbildung aus RFC 8265: Zeichen voller und halber Breite
-    /// werden auf ihre Zerlegung abgebildet.
+    /// The width mapping from RFC 8265: full-width and half-width characters are
+    /// mapped onto their decomposition.
     /// </summary>
     /// <remarks>
-    /// Zeichenweise und nur für die Kategorie, um die es geht. Ein NFKC über
-    /// die ganze Zeichenkette bildete auch U+2163 (ROMAN NUMERAL FOUR) auf
-    /// „IV" ab - und genau dieses Zeichen soll nach RFC 7622, Beispiel 20,
-    /// den Localpart ungültig machen, statt lautlos zu etwas anderem zu
-    /// werden.
+    /// Character by character and only for the category in question. An NFKC
+    /// over the whole string would also map U+2163 (ROMAN NUMERAL FOUR) onto
+    /// "IV" - and that very character is meant to make the localpart invalid per
+    /// RFC 7622, example 20, rather than silently become something else.
     /// </remarks>
     private static String MapWidth(String value)
     {
@@ -354,13 +347,13 @@ public static class JidUtilities
         foreach (var rune in value.EnumerateRunes())
         {
 
-            var zeichen = rune.ToString();
-            var zerlegt = zeichen.Normalize(NormalizationForm.FormKC);
+            var character  = rune.ToString();
+            var decomposed = character.Normalize(NormalizationForm.FormKC);
 
-            // Voll- und Halbbreitenformen liegen in diesen beiden Blöcken.
+            // The full- and half-width forms live in these two blocks.
             sb.Append(rune.Value is (>= 0xFF00 and <= 0xFFEF) or 0x3000
-                          ? zerlegt
-                          : zeichen);
+                          ? decomposed
+                          : character);
 
         }
 
@@ -369,14 +362,14 @@ public static class JidUtilities
     }
 
     /// <summary>
-    /// Darf der Codepoint an dieser Stelle stehen - IdentifierClass für den
-    /// Localpart, FreeformClass für den Resourcepart?
+    /// May the code point stand at this position - IdentifierClass for the
+    /// localpart, FreeformClass for the resourcepart?
     /// </summary>
     /// <remarks>
-    /// Die Klassenzugehörigkeit kommt aus <see cref="Precis"/> und damit aus
-    /// den abgeleiteten Eigenschaften nach RFC 8264, Abschnitt 8. Nur bei den
-    /// kontextabhängigen Codepoints entscheidet nicht der Codepoint allein,
-    /// sondern die ganze Zeichenkette - deshalb geht sie hier mit hinein.
+    /// Class membership comes from <see cref="Precis"/> and thus from the
+    /// derived properties per RFC 8264, section 8. Only for the contextual code
+    /// points is the decision not made by the code point alone but by the whole
+    /// string - which is why it goes in here as well.
     /// </remarks>
     private static Boolean IsAllowed(IReadOnlyList<UInt32> CodePoints, Int32 Index, Boolean freeform)
 
@@ -385,8 +378,8 @@ public static class JidUtilities
                PrecisProperty.PValid      => true,
                PrecisProperty.FreePValid  => freeform,
 
-               // Beide Klassen lassen sie unter derselben Bedingung zu
-               // (RFC 8264, Abschnitte 4.2.1 und 4.3.1).
+               // Both classes permit them under the same condition
+               // (RFC 8264, sections 4.2.1 and 4.3.1).
                PrecisProperty.ContextO or
                PrecisProperty.ContextJ    => Precis.ContextRuleSatisfied(CodePoints, Index),
 
@@ -397,27 +390,27 @@ public static class JidUtilities
 
     #endregion
 
-    #region (private) Hilfsfunktionen
+    #region (private) Helpers
 
     /// <summary>
-    /// Die Höchstlänge gilt in Oktetten nach der Vorbereitung, nicht in
-    /// Zeichen davor (RFC 7622, Abschnitt 3.3).
+    /// The maximum length applies in octets after preparation, not in
+    /// characters before it (RFC 7622, section 3.3).
     /// </summary>
-    private static void CheckLength(String jid, String value, String teil)
+    private static void CheckLength(String jid, String value, String part)
     {
 
-        var oktette = Encoding.UTF8.GetByteCount(value);
+        var octets = Encoding.UTF8.GetByteCount(value);
 
-        if (oktette > MaxPartOctets)
+        if (octets > MaxPartOctets)
             throw new JidFormatException(
                       jid,
-                      $"Der {teil} ist {oktette} Oktette lang, erlaubt sind {MaxPartOctets}.");
+                      $"The {part} is {octets} octets long, {MaxPartOctets} are allowed.");
 
     }
 
     /// <summary>
-    /// Die Codepoints - mit einer verständlichen Meldung statt einer
-    /// Ausnahme aus der Tiefe, wenn ein halbes Zeichen darin steht.
+    /// The code points - with an intelligible message instead of an exception
+    /// from the depths when half a character is in there.
     /// </summary>
     private static IEnumerable<UInt32> CodePoints(String jid, String value)
     {
@@ -437,7 +430,7 @@ public static class JidUtilities
             if (Char.IsSurrogate(c))
                 throw new JidFormatException(
                           jid,
-                          $"U+{(UInt32) c:X4} steht als halbes Zeichen da.");
+                          $"U+{(UInt32) c:X4} stands there as half a character.");
 
             yield return c;
 
