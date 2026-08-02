@@ -26,7 +26,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein Konto auf dem Testserver: Zugangsdaten und serverseitiger Roster.
+    /// An account on the test server: credentials and the server-side roster.
     /// </summary>
     public sealed class XMPPAccount
     {
@@ -39,57 +39,57 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private readonly Lock _lock = new();
 
         /// <summary>
-        /// Die PEP-Knoten dieses Kontos (XEP-0163): je Knoten die Einträge
-        /// nach ihrer Kennung.
+        /// The PEP nodes of this account (XEP-0163): per node the items by
+        /// their identifier.
         /// </summary>
         /// <remarks>
-        /// Am Konto und nicht an der Sitzung, und das ist der ganze Sinn von
-        /// PEP: Ein Bundle muss abrufbar sein, <b>während sein Besitzer
-        /// offline ist</b> - sonst könnte niemand ihm verschlüsselt schreiben,
-        /// bevor er das nächste Mal erscheint. Der Server antwortet hier
-        /// stellvertretend für einen Menschen, der gerade nicht da ist.
+        /// On the account and not on the session, and that is the whole point
+        /// of PEP: a bundle has to be retrievable <b>while its owner is
+        /// offline</b> - otherwise nobody could write to them encrypted before
+        /// they next appear. The server answers here on behalf of a human being
+        /// who is not there just now.
         /// </remarks>
         private readonly Dictionary<String, Dictionary<String, String>> _pepNodes =
             new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Die Einstellungen je Knoten (XEP-0060, Abschnitt 8.2).
+        /// The settings per node (XEP-0060, section 8.2).
         /// </summary>
         /// <remarks>
-        /// Getrennt von den Einträgen, weil ein Knoten und sein Inhalt zwei
-        /// Dinge sind: Ein angelegter Knoten hat noch keine Einträge, und ein
-        /// Knoten ohne Ablage bekommt nie welche - beide gibt es trotzdem.
+        /// Kept apart from the items, because a node and its content are two
+        /// things: a node just created has no items yet, and a node without
+        /// storage never gets any - both exist all the same.
         /// </remarks>
         private readonly Dictionary<String, PubSubNodeConfiguration> _pepNodeConfigs =
             new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Die Rollen je Knoten (XEP-0060, Abschnitt 4.1).
+        /// The roles per node (XEP-0060, section 4.1).
         /// </summary>
         /// <remarks>
-        /// <b>Der Eigentümer steht hier nicht drin.</b> Er ist das Konto, und
-        /// eine Eintragung, die immer dasselbe sagt, kann nur fehlen oder
-        /// falsch werden.
+        /// <b>The owner does not stand in here.</b> The owner is the account,
+        /// and an entry that always says the same thing can only be missing or
+        /// become wrong.
         /// </remarks>
         private readonly Dictionary<String, Dictionary<String, PubSubAffiliation>> _pepAffiliations =
             new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Die Abonnements je Knoten, jedes mit seinem Abonnenten und seiner
-        /// Kennung (XEP-0060, Abschnitt 6.1).
+        /// The subscriptions per node, each with its subscriber and its
+        /// identifier (XEP-0060, section 6.1).
         /// </summary>
         /// <remarks>
-        /// Ebenfalls am Konto und nicht an der Sitzung: Ein Abonnement gilt
-        /// über die Anwesenheit beider Seiten hinaus. Wer abonniert hat und
-        /// dann geht, hat es beim Wiederkommen noch - alles andere wäre kein
-        /// Abonnement, sondern eine Anwesenheitsliste.
+        /// Likewise on the account and not on the session: a subscription holds
+        /// beyond the presence of both sides. Whoever has subscribed and then
+        /// leaves still has it when they come back - anything else would not be
+        /// a subscription but a presence list.
         ///
-        /// <b>Eine Liste und keine Abbildung nach JID</b>: Derselbe JID darf
-        /// mehrere Abonnements auf denselben Knoten halten, und eine Abbildung
-        /// könnte das zweite nur verschlucken. Der Knoten wird nach
-        /// <see cref="StringComparer.Ordinal"/> unterschieden wie in
-        /// <see cref="_pepNodes"/>, der Abonnent beim Vergleichen ohne Rücksicht
-        /// auf Gross- und Kleinschreibung wie jeder JID.
+        /// <b>A list and not a mapping by JID</b>: the same JID may hold
+        /// several subscriptions to the same node, and a mapping could only
+        /// swallow the second one. The node is distinguished by
+        /// <see cref="StringComparer.Ordinal"/> as in <see cref="_pepNodes"/>,
+        /// the subscriber when comparing without regard to upper and lower case
+        /// like every JID.
         /// </remarks>
         private readonly Dictionary<String, List<PepSubscription>> _pepSubscriptions =
             new(StringComparer.Ordinal);
@@ -98,41 +98,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>Bare-JID des Kontos, z.B. alice@localhost.</summary>
+        /// <summary>The bare JID of the account, e.g. alice@localhost.</summary>
         public String BareJid { get; }
 
         /// <summary>
-        /// Die Zugangsdaten für die SASL-Authentifizierung - abgeleitet, nicht
-        /// im Klartext.
+        /// The credentials for the SASL authentication - derived, not in the
+        /// clear.
         /// </summary>
         public XMPPCredentials Credentials { get; }
 
-        /// <summary>Momentaufnahme des serverseitigen Rosters.</summary>
+        /// <summary>A snapshot of the server-side roster.</summary>
         public IReadOnlyList<RosterEntry> Roster
         {
             get { lock (_lock) return _roster.ToList(); }
         }
 
         /// <summary>
-        /// RFC 6121, Abschnitt 2.6: Die Fassung des Rosters - eine
-        /// undurchsichtige Zeichenkette, die sich mit jeder Änderung ändert.
+        /// RFC 6121, section 2.6: the version of the roster - an opaque string
+        /// that changes with every change.
         /// </summary>
         /// <remarks>
-        /// Gerechnet statt gezählt. Ein Zähler wäre die naheliegende Wahl,
-        /// müsste aber mit dem Konto gespeichert werden und überstünde einen
-        /// Neustart nur, wenn jemand daran denkt. Ein Streuwert über den Inhalt
-        /// braucht keinen Speicher, ist nach einem Neustart derselbe und bleibt
-        /// auch dann richtig, wenn jemand den Roster an der Datei vorbei
-        /// ändert.
+        /// Computed rather than counted. A counter would be the obvious choice
+        /// but would have to be stored with the account and would survive a
+        /// restart only if somebody thinks of it. A hash over the content needs
+        /// no storage, is the same after a restart and stays right even when
+        /// somebody changes the roster past the file.
         ///
-        /// Er hat eine Eigenschaft, die ein Zähler nicht hat: Geht der Roster
-        /// von A nach B und wieder zurück nach A, ist die Fassung wieder die
-        /// alte. Das ist kein Mangel, sondern richtig - der Zwischenstand eines
-        /// Clients, der A zwischengespeichert hat, stimmt ja wieder.
+        /// It has a property a counter does not have: if the roster goes from A
+        /// to B and back to A, the version is the old one again. That is not a
+        /// shortcoming but right - the intermediate state of a client that
+        /// cached A is correct once more.
         ///
-        /// Die Trennzeichen sind Steuerzeichen, die in keinem Feld vorkommen
-        /// können. Ohne sie ergäben ein Kontakt „ab" ohne Namen und ein Kontakt
-        /// „a" mit dem Namen „b" dieselbe Zeichenfolge.
+        /// The separators are control characters that can occur in no field.
+        /// Without them a contact "ab" without a name and a contact "a" with
+        /// the name "b" would yield the same character sequence.
         /// </remarks>
         public String RosterVersion
         {
@@ -147,10 +146,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                        Append(e.Subscription).Append('\u001F').
                        Append(e.Ask).         Append('\u001F').
                        Append(e.Approved).    Append('\u001F').
-                       // Die Gruppen gehören dazu, sonst bliebe die Fassung
-                       // nach einem Umgruppieren dieselbe - und ein Client, der
-                       // sie zwischengespeichert hat, holte den Roster nie
-                       // wieder und behielte die alte Einteilung.
+                       // The groups belong in it, otherwise the version would
+                       // stay the same after a regrouping - and a client that
+                       // cached it would never fetch the roster again and would
+                       // keep the old arrangement.
                        AppendJoin('\u001F', e.Groups.OrderBy(g => g, StringComparer.Ordinal)).
                        Append('\u001E');
 
@@ -162,20 +161,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Unbeantwortete Subscription-Anfragen, nach dem Bare-JID des
-        /// Antragstellers (RFC 6121, Abschnitt 3.1.3, Regel 4).
+        /// Unanswered subscription requests, by the bare JID of the applicant
+        /// (RFC 6121, section 3.1.3, rule 4).
         /// </summary>
         /// <remarks>
-        /// Aufbewahrt wird die vollständige Stanza und nicht bloss der
-        /// Absender: der Abschnitt verlangt das ausdrücklich, weil eine
-        /// Anfrage erweiterten Inhalt tragen darf - vor allem das
-        /// <c>&lt;status/&gt;</c>, mit dem ein Mensch begründet, warum er
-        /// fragt. Wer sich nur den Absender merkt, stellt beim nächsten
-        /// Anmelden eine andere Anfrage zu als die, die gestellt wurde.
+        /// What is kept is the complete stanza and not merely the sender: the
+        /// section demands that explicitly, because a request may carry
+        /// extended content - above all the <c>&lt;status/&gt;</c> with which a
+        /// human being gives a reason for asking. Whoever only remembers the
+        /// sender delivers, at the next login, a request other than the one
+        /// that was posed.
         ///
-        /// Neben dem Roster und nicht darin: die Security Warning desselben
-        /// Abschnitts untersagt einen Roster-Eintrag, solange nicht
-        /// zugestimmt wurde.
+        /// Beside the roster and not in it: the security warning of the same
+        /// section forbids a roster entry as long as consent has not been
+        /// given.
         /// </remarks>
         public IReadOnlyDictionary<String, String> PendingSubscriptionRequests
         {
@@ -187,13 +186,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Nachrichten, die aufbewahrt wurden, weil das Konto keine erreichbare
-        /// Resource hatte (RFC 6121, Abschnitt 8.5.2.2.1), älteste zuerst.
+        /// Messages that were kept because the account had no reachable
+        /// resource (RFC 6121, section 8.5.2.2.1), oldest first.
         /// </summary>
         /// <remarks>
-        /// Die Reihenfolge ist nicht Beiwerk. Ein Gespräch, das in falscher
-        /// Ordnung nachgereicht wird, ist schwerer zu lesen als eines, das ganz
-        /// fehlt - der Leser hält die Antwort für die Frage.
+        /// The order is no trimming. A conversation delivered late in the wrong
+        /// order is harder to read than one missing entirely - the reader takes
+        /// the answer for the question.
         /// </remarks>
         public IReadOnlyList<OfflineMessage> OfflineMessages
         {
@@ -201,14 +200,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Wird nach jeder Roster-Änderung gerufen; der Server hängt daran
-        /// seinen Kontenspeicher.
+        /// Called after every roster change; the server hangs its account store
+        /// on it.
         /// </summary>
         /// <remarks>
-        /// Hier und nicht an den Aufrufstellen im Server: der Roster lässt
-        /// sich auch direkt am Konto ändern - Testhilfen tun genau das -, und
-        /// eine Liste von Stellen, an denen man das Speichern nicht vergessen
-        /// darf, wird über kurz oder lang unvollständig.
+        /// Here and not at the call sites in the server: the roster can also be
+        /// changed directly on the account - test helpers do exactly that - and
+        /// a list of places where one must not forget the saving becomes
+        /// incomplete sooner or later.
         /// </remarks>
         internal Action<XMPPAccount>? OnChanged { get; set; }
 
@@ -217,16 +216,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Constructor(s)
 
         /// <summary>
-        /// Legt ein Konto mit einem Klartextpasswort an, das sofort abgeleitet
-        /// und danach verworfen wird.
+        /// Creates an account with a plaintext password, which is derived from
+        /// right away and discarded afterwards.
         /// </summary>
         public XMPPAccount(String bareJid, String password)
             : this(bareJid, XMPPCredentials.FromPassword(password))
         { }
 
         /// <summary>
-        /// Legt ein Konto mit bereits abgeleiteten Zugangsdaten an - der Weg,
-        /// auf dem ein Kontenspeicher sie wieder einliest.
+        /// Creates an account with already derived credentials - the way an
+        /// account store reads them back in.
         /// </summary>
         public XMPPAccount(String bareJid, XMPPCredentials credentials)
         {
@@ -238,7 +237,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
 
         /// <summary>
-        /// Legt einen Roster-Eintrag an oder aktualisiert ihn.
+        /// Creates a roster entry or updates it.
         /// </summary>
         public void SetRosterEntry(RosterEntry entry)
         {
@@ -249,15 +248,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 _roster.Add(entry);
             }
 
-            // Ausserhalb der Sperre: der Speicher schreibt womöglich eine
-            // Datei, und darauf soll niemand warten, der nur den Roster lesen
-            // will.
+            // Outside the lock: the store may write a file, and nobody who only
+            // wants to read the roster shall have to wait for that.
             OnChanged?.Invoke(this);
 
         }
 
         /// <summary>
-        /// Entfernt einen Roster-Eintrag.
+        /// Removes a roster entry.
         /// </summary>
         public void RemoveRosterEntry(String jid)
         {
@@ -270,26 +268,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Bewahrt eine Subscription-Anfrage auf, bis sie beantwortet ist.
+        /// Keeps a subscription request until it is answered.
         /// </summary>
         /// <param name="maxStored">
-        /// Obergrenze für die Zahl aufbewahrter Anfragen. Ist sie erreicht,
-        /// wird die neue verworfen statt eine bereits aufbewahrte zu
-        /// verdrängen - sonst könnte ein Angreifer die echte Anfrage eines
-        /// Bekannten gezielt hinausdrängen.
+        /// An upper bound for the number of requests kept. Once it is reached,
+        /// the new one is discarded instead of displacing one already kept -
+        /// otherwise an attacker could deliberately push out the real request
+        /// of an acquaintance.
         /// </param>
         /// <returns>
-        /// false, wenn nichts aufbewahrt wurde: entweder liegt von diesem
-        /// Absender bereits eine Anfrage vor, oder die Grenze ist erreicht.
-        /// In beiden Fällen soll auch nichts zugestellt werden.
+        /// false when nothing was kept: either a request from this sender is
+        /// already on hand, or the bound is reached. In both cases nothing
+        /// shall be delivered either.
         /// </returns>
         /// <remarks>
-        /// Abschnitt 3.1.3 stellt frei, ob die erste oder die letzte Anfrage
-        /// eines Absenders aufbewahrt wird, verlangt aber, dass es genau eine
-        /// bleibt ("this helps to prevent 'subscription request spam'"). Hier
-        /// bleibt die erste stehen: sonst bestimmte derjenige, der zuletzt
-        /// fragt, den Inhalt dessen, was der Kontakt beim nächsten Anmelden zu
-        /// sehen bekommt, und könnte ihn beliebig oft austauschen.
+        /// Section 3.1.3 leaves it open whether the first or the last request
+        /// of a sender is kept, but demands that it stay exactly one ("this
+        /// helps to prevent 'subscription request spam'"). Here the first one
+        /// stays: otherwise whoever asks last would determine the content of
+        /// what the contact gets to see at the next login, and could exchange
+        /// it as often as they liked.
         /// </remarks>
         public Boolean RememberSubscriptionRequest(String   fromBareJid,
                                                    String   stanza,
@@ -316,31 +314,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Vergisst eine aufbewahrte Anfrage - sie ist beantwortet.
+        /// Forgets a request that was kept - it has been answered.
         /// </summary>
-        /// <returns>true, wenn eine vorlag.</returns>
+        /// <returns>true when one was on hand.</returns>
         public Boolean ForgetSubscriptionRequest(String fromBareJid)
         {
 
-            Boolean entfernt;
+            Boolean removed;
 
             lock (_lock)
-                entfernt = _pendingRequests.Remove(fromBareJid);
+                removed = _pendingRequests.Remove(fromBareJid);
 
-            if (entfernt)
+            if (removed)
                 OnChanged?.Invoke(this);
 
-            return entfernt;
+            return removed;
 
         }
 
         /// <summary>
-        /// Liegt von diesem Kontakt eine unbeantwortete Anfrage vor?
+        /// Is an unanswered request from this contact on hand?
         /// </summary>
         /// <remarks>
-        /// Die Frage, an der nach Abschnitt 3.4.2 hängt, ob ein
-        /// <c>&lt;presence type='subscribed'/&gt;</c> eine Zustimmung ist oder
-        /// eine Vormerkung.
+        /// The question on which, per section 3.4.2, it hangs whether a
+        /// <c>&lt;presence type='subscribed'/&gt;</c> is a consent or an
+        /// advance admission.
         /// </remarks>
         public Boolean HasPendingRequestFrom(String bareJid)
         {
@@ -351,27 +349,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region PEP (XEP-0163)
 
         /// <summary>
-        /// Legt einen Eintrag in einem PEP-Knoten ab und ersetzt einen
-        /// gleichnamigen.
+        /// Stores an item in a PEP node and replaces one of the same name.
         /// </summary>
         /// <remarks>
-        /// <b>Ersetzen und nicht danebenlegen</b>: Die Kennung <i>ist</i> die
-        /// Aussage. Die Geräteliste steht unter <c>current</c>, ein Bundle
-        /// unter der Gerätekennung - zwei Einträge unter derselben Kennung
-        /// wären keine zwei Angaben, sondern eine Unklarheit darüber, welche
-        /// gilt.
+        /// <b>Replacing and not placing beside</b>: the identifier <i>is</i> the
+        /// statement. The device list stands under <c>current</c>, a bundle
+        /// under the device identifier - two items under the same identifier
+        /// would not be two pieces of information but an unclarity about which
+        /// one holds.
         ///
-        /// Hier weicht der älteste Eintrag, anders als bei der Offline-Ablage
-        /// (siehe <see cref="StoreOfflineMessage"/>), wo die <i>neue</i>
-        /// Nachricht abgewiesen wird. Der Unterschied ist der Inhalt: Eine
-        /// Nachricht ist einmalig und ihr Verlust endgültig; ein PEP-Eintrag
-        /// ist der aktuelle Stand einer Sache, und der neueste ist der, auf
-        /// den es ankommt.
+        /// Here the oldest item gives way, unlike with the offline storage (see
+        /// <see cref="StoreOfflineMessage"/>), where the <i>new</i> message is
+        /// refused. The difference is the content: a message is unique and its
+        /// loss final; a PEP item is the current state of a thing, and the
+        /// newest is the one that matters.
         ///
-        /// <b>Wie viele es sein dürfen und ob überhaupt abgelegt wird, sagt
-        /// der Knoten</b> (seit K7). Ein Knoten ohne Ablage meldet nur - wer
-        /// nicht zuhörte, hat es verpasst. Er entsteht trotzdem: Eine
-        /// Veröffentlichung legt ihn an, auch wenn nichts von ihr bleibt.
+        /// <b>How many there may be and whether anything is stored at all is
+        /// said by the node</b> (since K7). A node without storage only reports
+        /// - whoever was not listening has missed it. It comes into being all
+        /// the same: a publication creates it, even when nothing of it remains.
         /// </remarks>
         public void PublishPepItem(String  node,
                                    String  itemId,
@@ -381,37 +377,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                if (!_pepNodeConfigs.TryGetValue(node, out var einstellung))
-                    _pepNodeConfigs[node] = einstellung = PubSubNodeConfiguration.Default;
+                if (!_pepNodeConfigs.TryGetValue(node, out var configuration))
+                    _pepNodeConfigs[node] = configuration = PubSubNodeConfiguration.Default;
 
-                if (!einstellung.PersistItems)
+                if (!configuration.PersistItems)
                     return;
 
-                var maxItems = einstellung.MaxItems;
+                var maxItems = configuration.MaxItems;
 
-                if (!_pepNodes.TryGetValue(node, out var eintraege))
-                    _pepNodes[node] = eintraege = new Dictionary<String, String>(StringComparer.Ordinal);
+                if (!_pepNodes.TryGetValue(node, out var entries))
+                    _pepNodes[node] = entries = new Dictionary<String, String>(StringComparer.Ordinal);
 
-                eintraege[itemId] = payload;
+                entries[itemId] = payload;
 
-                while (eintraege.Count > maxItems)
-                    eintraege.Remove(eintraege.Keys.First());
+                while (entries.Count > maxItems)
+                    entries.Remove(entries.Keys.First());
 
             }
 
         }
 
         /// <summary>
-        /// Die Einträge eines PEP-Knotens.
+        /// The items of a PEP node.
         /// </summary>
         /// <param name="itemId">
-        /// Ein bestimmter Eintrag, oder null für alle.
+        /// A particular item, or null for all.
         /// </param>
         /// <returns>
-        /// Die Einträge, oder eine leere Liste - <b>auch dann, wenn es den
-        /// Knoten gar nicht gibt</b>. Der Unterschied zwischen „leerer Knoten"
-        /// und „kein Knoten" beantwortet die Frage nicht, die der Abrufer
-        /// stellt: Er will wissen, ob es etwas abzuholen gibt.
+        /// The items, or an empty list - <b>also when the node does not exist
+        /// at all</b>. The difference between "empty node" and "no node" does
+        /// not answer the question the retriever is asking: they want to know
+        /// whether there is anything to fetch.
         /// </returns>
         public IReadOnlyList<(String ItemId, String Payload)> GetPepItems(String node, String? itemId = null)
         {
@@ -419,41 +415,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                if (!_pepNodes.TryGetValue(node, out var eintraege))
+                if (!_pepNodes.TryGetValue(node, out var entries))
                     return [];
 
                 if (itemId is not null)
-                    return eintraege.TryGetValue(itemId, out var einer)
-                               ? [(itemId, einer)]
+                    return entries.TryGetValue(itemId, out var single)
+                               ? [(itemId, single)]
                                : [];
 
-                return [.. eintraege.Select(e => (e.Key, e.Value))];
+                return [.. entries.Select(e => (e.Key, e.Value))];
 
             }
 
         }
 
-        /// <summary>Die Knoten, in denen dieses Konto etwas veröffentlicht hat.</summary>
+        /// <summary>The nodes this account has published something in.</summary>
         public IReadOnlyCollection<String> PepNodes
         {
             get { lock (_lock) return [.. _pepNodes.Keys]; }
         }
 
         /// <summary>
-        /// Gibt es diesen Knoten?
+        /// Does this node exist?
         /// </summary>
         /// <remarks>
-        /// <b>Etwas anderes als „hat Einträge".</b> Ein angelegter Knoten
-        /// existiert, bevor irgendetwas darin steht, und ein Knoten ohne
-        /// Ablage bekommt nie welche - beide muss man abonnieren können, sonst
-        /// wäre das Anlegen folgenlos.
+        /// <b>Something other than "has items".</b> A node just created exists
+        /// before anything stands in it, and a node without storage never gets
+        /// any - both have to be subscribable, otherwise the creating would be
+        /// without consequence.
         ///
-        /// <b>Die Einstellung ist die Spur, an der ein Knoten hängt</b>, und
-        /// zwar die einzige: Sowohl <see cref="CreatePepNode"/> als auch
-        /// <see cref="PublishPepItem"/> legen sie an, bevor irgendetwas anderes
-        /// entsteht. Hier stand deshalb einmal ein „oder es gibt Einträge" -
-        /// eine zweite Antwort auf dieselbe Frage, die keinen Fall mehr
-        /// abdeckte und beim Leeren der Ablage zur Falle geworden wäre.
+        /// <b>The settings are the trace a node hangs on</b>, and the only one
+        /// at that: both <see cref="CreatePepNode"/> and
+        /// <see cref="PublishPepItem"/> create them before anything else comes
+        /// into being. That is why an "or there are items" once stood here - a
+        /// second answer to the same question that covered no case any more and
+        /// would have become a trap when the storage was purged.
         /// </remarks>
         public Boolean PepNodeExists(String node)
         {
@@ -462,13 +458,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Legt einen Knoten an (XEP-0060, Abschnitt 8.1).
+        /// Creates a node (XEP-0060, section 8.1).
         /// </summary>
         /// <returns>
-        /// false, wenn es ihn schon gibt - <c>&lt;conflict/&gt;</c>. Ein
-        /// zweites Anlegen stillschweigend gelten zu lassen hiesse, eine
-        /// bestehende Einstellung durch eine neue zu ersetzen, ohne dass
-        /// jemand danach gefragt hat.
+        /// false when it already exists - <c>&lt;conflict/&gt;</c>. Silently
+        /// letting a second creation stand would mean replacing an existing
+        /// setting with a new one without anyone having asked for it.
         /// </returns>
         public Boolean CreatePepNode(String node, PubSubNodeConfiguration? configuration = null)
         {
@@ -488,9 +483,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Stellt einen bestehenden Knoten ein (XEP-0060, Abschnitt 8.2).
+        /// Configures an existing node (XEP-0060, section 8.2).
         /// </summary>
-        /// <returns>false, wenn es den Knoten nicht gibt.</returns>
+        /// <returns>false when the node does not exist.</returns>
         public Boolean ConfigurePepNode(String node, PubSubNodeConfiguration configuration)
         {
 
@@ -502,12 +497,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 _pepNodeConfigs[node] = configuration;
 
-                // Eine kleinere Grenze gilt sofort und nicht erst beim nächsten
-                // Mal: Wer sie setzt, will nicht so viele aufbewahrt wissen -
-                // und der Bestand ist genau das, was aufbewahrt wird.
-                if (_pepNodes.TryGetValue(node, out var eintraege))
-                    while (eintraege.Count > configuration.MaxItems)
-                        eintraege.Remove(eintraege.Keys.First());
+                // A smaller bound holds right away and not only from the next
+                // time on: whoever sets it does not want that many kept - and
+                // the stock is exactly what is kept.
+                if (_pepNodes.TryGetValue(node, out var entries))
+                    while (entries.Count > configuration.MaxItems)
+                        entries.Remove(entries.Keys.First());
 
                 return true;
 
@@ -516,45 +511,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Nimmt einen einzelnen Eintrag zurück (XEP-0060, Abschnitt 7.2).
+        /// Retracts a single item (XEP-0060, section 7.2).
         /// </summary>
         /// <returns>
-        /// false, wenn es den Eintrag nicht gibt - <b>und das schliesst den
-        /// Fall ein, dass es den Knoten nicht gibt.</b> Beide Male ist die
-        /// Antwort dieselbe: Da war nichts zurückzunehmen. Der Unterschied
-        /// zwischen „leerer Knoten" und „kein Knoten" beantwortet auch hier
-        /// nicht die Frage, die gestellt wurde.
+        /// false when the item does not exist - <b>and that includes the case
+        /// that the node does not exist.</b> Both times the answer is the same:
+        /// there was nothing to retract. The difference between "empty node"
+        /// and "no node" does not answer the question that was asked here
+        /// either.
         /// </returns>
         /// <remarks>
-        /// Der Knoten bleibt, auch wenn es sein letzter Eintrag war. Ein
-        /// Knoten, der mit seinem Inhalt verschwände, wäre für seine
-        /// Abonnenten ohne Ankündigung fort - und die nächste Veröffentlichung
-        /// legte einen neuen an, den niemand abonniert hat.
+        /// The node stays, even when it was its last item. A node that
+        /// disappeared with its content would be gone for its subscribers
+        /// without announcement - and the next publication would create a new
+        /// one nobody has subscribed to.
         /// </remarks>
         public Boolean RetractPepItem(String node, String itemId)
         {
 
             lock (_lock)
-                return _pepNodes.TryGetValue(node, out var eintraege) &&
-                       eintraege.Remove(itemId);
+                return _pepNodes.TryGetValue(node, out var entries) &&
+                       entries.Remove(itemId);
 
         }
 
         /// <summary>
-        /// Löscht einen Knoten samt allem, was an ihm hängt (XEP-0060,
-        /// Abschnitt 8.4).
+        /// Deletes a node together with everything hanging on it (XEP-0060,
+        /// section 8.4).
         /// </summary>
         /// <returns>
-        /// Die Abonnements, die dabei erloschen sind, oder <c>null</c>, wenn es
-        /// den Knoten nicht gab - das ist etwas anderes als eine leere Liste.
+        /// The subscriptions that expired in the process, or <c>null</c> when
+        /// the node did not exist - that is something other than an empty list.
         /// </returns>
         /// <remarks>
-        /// <b>Alles vier, und die Rollen sind der Grund.</b> Einträge,
-        /// Einstellungen, Abonnements und Rollen gehen zusammen. Blieben die
-        /// Rollen stehen, erbte der nächste Knoten desselben Namens eine
-        /// Ausschlussliste, die niemand mehr sieht - und der Eigentümer
-        /// wunderte sich, warum ein Bekannter an seinen neuen Knoten nicht
-        /// herankommt.
+        /// <b>All four, and the roles are the reason.</b> Items, settings,
+        /// subscriptions and roles go together. If the roles stayed standing,
+        /// the next node of the same name would inherit an exclusion list
+        /// nobody sees any more - and the owner would wonder why an
+        /// acquaintance cannot get at their new node.
         /// </remarks>
         public IReadOnlyList<PepSubscription>? DeletePepNode(String node)
         {
@@ -565,36 +559,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (!PepNodeExists(node))
                     return null;
 
-                var betroffen = _pepSubscriptions.TryGetValue(node, out var abonnements)
-                                    ? (IReadOnlyList<PepSubscription>) [.. abonnements]
-                                    : [];
+                var affected = _pepSubscriptions.TryGetValue(node, out var subscriptions)
+                                   ? (IReadOnlyList<PepSubscription>) [.. subscriptions]
+                                   : [];
 
                 _pepNodes.        Remove(node);
                 _pepNodeConfigs.  Remove(node);
                 _pepAffiliations. Remove(node);
                 _pepSubscriptions.Remove(node);
 
-                return betroffen;
+                return affected;
 
             }
 
         }
 
         /// <summary>
-        /// Leert einen Knoten (XEP-0060, Abschnitt 8.5).
+        /// Purges a node (XEP-0060, section 8.5).
         /// </summary>
-        /// <returns>false, wenn es den Knoten nicht gibt.</returns>
+        /// <returns>false when the node does not exist.</returns>
         /// <remarks>
-        /// <b>Der Knoten bleibt, und mit ihm seine Abonnenten.</b> Das ist der
-        /// ganze Unterschied zum Löschen: Wer geleert hat, veröffentlicht
-        /// weiter an dieselben Empfänger - wer gelöscht hat, an niemanden mehr.
+        /// <b>The node stays, and with it its subscribers.</b> That is the
+        /// whole difference to deleting: whoever purged carries on publishing
+        /// to the same recipients - whoever deleted, to nobody any more.
         ///
-        /// Die Ablage darf dabei ganz verschwinden: Ein Knoten hängt an seiner
-        /// Einstellung und nicht an seinen Einträgen (siehe
-        /// <see cref="PepNodeExists"/>). Solange das nicht so war, hätte diese
-        /// Zeile den Knoten mitgenommen - und ein Leeren wäre ein Löschen
-        /// gewesen, das sich erst bei der nächsten Veröffentlichung wieder
-        /// eingerenkt hätte.
+        /// The storage may disappear entirely in the process: a node hangs on
+        /// its settings and not on its items (see
+        /// <see cref="PepNodeExists"/>). As long as that was not so, this line
+        /// would have taken the node with it - and a purge would have been a
+        /// delete that only put itself right again at the next publication.
         /// </remarks>
         public Boolean PurgePepNode(String node)
         {
@@ -614,40 +607,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Die Einstellungen eines Knotens, oder null, wenn es ihn nicht gibt.
+        /// The settings of a node, or null when it does not exist.
         /// </summary>
         public PubSubNodeConfiguration? PepNodeConfiguration(String node)
         {
             lock (_lock)
-                return _pepNodeConfigs.TryGetValue(node, out var einstellung)
-                           ? einstellung
+                return _pepNodeConfigs.TryGetValue(node, out var configuration)
+                           ? configuration
                            : null;
         }
 
         /// <summary>
-        /// Legt ein Abonnement an und gibt seine Kennung zurück (XEP-0060,
-        /// Abschnitt 6.1).
+        /// Creates a subscription and returns its identifier (XEP-0060,
+        /// section 6.1).
         /// </summary>
         /// <remarks>
-        /// <b>Jedes <c>subscribe</c> ist ein eigenes Abonnement</b>, auch das
-        /// zweite desselben JIDs auf denselben Knoten. XEP-0060 sieht das
-        /// ausdrücklich vor - dafür gibt es die <c>subid</c> überhaupt.
+        /// <b>Every <c>subscribe</c> is a subscription of its own</b>, the
+        /// second one of the same JID to the same node included. XEP-0060
+        /// provides for that explicitly - that is what the <c>subid</c> exists
+        /// for in the first place.
         ///
-        /// Der Fall ist nicht ausgedacht: Er entsteht von selbst, wenn ein
-        /// Client neu startet und wieder abonniert, ohne seine alte Kennung zu
-        /// kennen. Von da an ist jedes Abbestellen ohne Kennung zweideutig,
-        /// und genau das muss der Dienst dann auch sagen.
+        /// The case is not made up: it arises by itself when a client restarts
+        /// and subscribes again without knowing its old identifier. From then
+        /// on every unsubscribing without an identifier is ambiguous, and
+        /// exactly that is what the service then has to say.
         ///
-        /// <b>Was hier fehlt</b>, ist der Grund, aus dem sich zwei
-        /// Abonnements sonst unterscheiden: die Konfiguration je Abonnement
-        /// (Abschnitt 6.3). Ohne sie bringt ein zweites nichts ein als eine
-        /// zweite Zustellung - der Server muss trotzdem richtig antworten,
-        /// wenn es eines gibt.
+        /// <b>What is missing here</b> is the reason two subscriptions
+        /// otherwise differ: the configuration per subscription (section 6.3).
+        /// Without it a second one brings nothing but a second delivery - the
+        /// server still has to answer correctly when there is one.
         /// </remarks>
         /// <returns>
-        /// Das angelegte Abonnement - mit seiner Kennung und seinem Zustand.
-        /// <b>Der Zustand wird hier entschieden und nicht beim Aufrufer:</b>
-        /// Er hängt an der Einstellung des Knotens, und die steht hier.
+        /// The subscription created - with its identifier and its state.
+        /// <b>The state is decided here and not at the caller:</b> it hangs on
+        /// the setting of the node, and that stands here.
         /// </returns>
         public PepSubscription AddPepSubscription(String node, String subscriberBareJid)
         {
@@ -655,35 +648,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                if (!_pepSubscriptions.TryGetValue(node, out var abonnements))
-                    _pepSubscriptions[node] = abonnements = [];
+                if (!_pepSubscriptions.TryGetValue(node, out var subscriptions))
+                    _pepSubscriptions[node] = subscriptions = [];
 
-                // XEP-0060, Abschnitt 6.1.3.7: Auf einem Knoten mit
-                // Genehmigungsvorgang ist die Antwort ein `pending` - der
-                // Dienst hat die Anfrage angenommen und mehr nicht.
-                var neu = new PepSubscription(
-                              subscriberBareJid,
-                              Guid.NewGuid().ToString("N")[..12],
-                              new PubSubSubscriptionOptions(),
-                              PepNodeConfiguration(node)?.AccessModel == PubSubAccessModel.Authorize
-                                  ? PubSubSubscriptionState.Pending
-                                  : PubSubSubscriptionState.Subscribed);
+                // XEP-0060, section 6.1.3.7: on a node with an approval
+                // procedure the answer is a `pending` - the service has
+                // accepted the request and nothing more.
+                var fresh = new PepSubscription(
+                                subscriberBareJid,
+                                Guid.NewGuid().ToString("N")[..12],
+                                new PubSubSubscriptionOptions(),
+                                PepNodeConfiguration(node)?.AccessModel == PubSubAccessModel.Authorize
+                                    ? PubSubSubscriptionState.Pending
+                                    : PubSubSubscriptionState.Subscribed);
 
-                abonnements.Add(neu);
+                subscriptions.Add(fresh);
 
-                return neu;
+                return fresh;
 
             }
 
         }
 
         /// <summary>
-        /// Sagt ein beantragtes Abonnement zu (XEP-0060, Abschnitt 8.6).
+        /// Approves an applied-for subscription (XEP-0060, section 8.6).
         /// </summary>
         /// <returns>
-        /// Das zugesagte Abonnement, oder null, wenn es keines zum Zusagen
-        /// gab - <b>auch dann, wenn es schon zugesagt war.</b> Eine zweite
-        /// Zusage ändert nichts und soll deshalb auch nichts melden.
+        /// The subscription approved, or null when there was none to approve -
+        /// <b>also when it was approved already.</b> A second approval changes
+        /// nothing and shall therefore report nothing either.
         /// </returns>
         public PepSubscription? ApprovePepSubscription(String node, String subscriberBareJid, String? subId = null)
         {
@@ -691,35 +684,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                if (FindPepSubscription(node, subscriberBareJid, subId, out var abonnement) != PepSubscriptionResult.Ok ||
-                    abonnement!.State != PubSubSubscriptionState.Pending)
+                if (FindPepSubscription(node, subscriberBareJid, subId, out var found) != PepSubscriptionResult.Ok ||
+                    found!.State != PubSubSubscriptionState.Pending)
                 {
                     return null;
                 }
 
-                var abonnements = _pepSubscriptions[node];
-                var zugesagt    = abonnement with { State = PubSubSubscriptionState.Subscribed };
+                var subscriptions = _pepSubscriptions[node];
+                var approved      = found with { State = PubSubSubscriptionState.Subscribed };
 
-                abonnements[abonnements.IndexOf(abonnement)] = zugesagt;
+                subscriptions[subscriptions.IndexOf(found)] = approved;
 
-                return zugesagt;
+                return approved;
 
             }
 
         }
 
         /// <summary>
-        /// Sucht das gemeinte Abonnement heraus.
+        /// Works out which subscription is meant.
         /// </summary>
         /// <param name="subId">
-        /// Die Kennung aus der Zusage, oder null. Sie darf fehlen, solange es
-        /// nur eines gibt (XEP-0060, Abschnitt 6.2.3.1); gibt es mehrere, ist
-        /// sie die einzige Auskunft darüber, welches gemeint ist.
+        /// The identifier from the promise, or null. It may be missing as long
+        /// as there is only one (XEP-0060, section 6.2.3.1); if there are
+        /// several, it is the only information about which one is meant.
         /// </param>
         /// <remarks>
-        /// Eine Stelle für zwei Fragen: Abbestellen und Einstellen suchen
-        /// dasselbe. Nur die Fehlermeldung darauf unterscheidet sich, und die
-        /// baut der Aufrufer.
+        /// One place for two questions: unsubscribing and configuring search
+        /// for the same thing. Only the error message for it differs, and the
+        /// caller builds that.
         /// </remarks>
         public PepSubscriptionResult FindPepSubscription(String              node,
                                                          String              subscriberBareJid,
@@ -732,21 +725,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                if (!_pepSubscriptions.TryGetValue(node, out var abonnements))
+                if (!_pepSubscriptions.TryGetValue(node, out var subscriptions))
                     return PepSubscriptionResult.NotSubscribed;
 
-                var seine = abonnements.FindAll(
-                                a => String.Equals(a.Jid, subscriberBareJid, StringComparison.OrdinalIgnoreCase));
+                var theirs = subscriptions.FindAll(
+                                 a => String.Equals(a.Jid, subscriberBareJid, StringComparison.OrdinalIgnoreCase));
 
-                if (seine.Count == 0)
+                if (theirs.Count == 0)
                     return PepSubscriptionResult.NotSubscribed;
 
-                if (subId is null && seine.Count > 1)
+                if (subId is null && theirs.Count > 1)
                     return PepSubscriptionResult.SubIdRequired;
 
                 subscription = subId is null
-                                   ? seine[0]
-                                   : seine.Find(a => String.Equals(a.SubId, subId, StringComparison.Ordinal));
+                                   ? theirs[0]
+                                   : theirs.Find(a => String.Equals(a.SubId, subId, StringComparison.Ordinal));
 
                 return subscription is null
                            ? PepSubscriptionResult.WrongSubId
@@ -757,7 +750,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Beendet ein Abonnement (XEP-0060, Abschnitt 6.2).
+        /// Ends a subscription (XEP-0060, section 6.2).
         /// </summary>
         public PepSubscriptionResult RemovePepSubscription(String   node,
                                                            String   subscriberBareJid,
@@ -767,16 +760,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                var befund = FindPepSubscription(node, subscriberBareJid, subId, out var abonnement);
+                var finding = FindPepSubscription(node, subscriberBareJid, subId, out var found);
 
-                if (befund != PepSubscriptionResult.Ok)
-                    return befund;
+                if (finding != PepSubscriptionResult.Ok)
+                    return finding;
 
-                var abonnements = _pepSubscriptions[node];
+                var subscriptions = _pepSubscriptions[node];
 
-                abonnements.Remove(abonnement!);
+                subscriptions.Remove(found!);
 
-                if (abonnements.Count == 0)
+                if (subscriptions.Count == 0)
                     _pepSubscriptions.Remove(node);
 
                 return PepSubscriptionResult.Ok;
@@ -786,33 +779,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Beendet Abonnements auf Anweisung des Eigentümers (XEP-0060,
-        /// Abschnitt 8.8.2).
+        /// Ends subscriptions on the owner's instruction (XEP-0060,
+        /// section 8.8.2).
         /// </summary>
         /// <param name="subId">
-        /// Ein bestimmtes Abonnement, oder null für alle dieses JIDs an diesem
-        /// Knoten.
+        /// A particular subscription, or null for all of this JID at this node.
         /// </param>
         /// <returns>
-        /// Die beendeten Abonnements - eine leere Liste, wenn es keines gab.
-        /// Nicht die Zahl: Wer den Abonnenten benachrichtigen will, muss
-        /// wissen, welche Kennung erloschen ist.
+        /// The subscriptions ended - an empty list when there was none. Not the
+        /// number: whoever wants to notify the subscriber has to know which
+        /// identifier has expired.
         /// </returns>
         /// <remarks>
-        /// <b>Ohne Kennung gehen alle, und das ist kein Widerspruch zu
-        /// Abschnitt 6.2.3.1.</b> Dort muss der Abonnent sagen, welches seiner
-        /// Abonnements er meint, weil die anderen seine bleiben sollen. Hier
-        /// meint der Eigentümer den Menschen und nicht die Buchführung: Eines
-        /// stehen zu lassen hiesse, die Anweisung zur Hälfte auszuführen - und
-        /// der Betroffene bekäme weiter alles.
+        /// <b>Without an identifier all of them go, and that is no
+        /// contradiction to section 6.2.3.1.</b> There the subscriber has to
+        /// say which of their subscriptions they mean, because the others are
+        /// to remain theirs. Here the owner means the person and not the
+        /// bookkeeping: leaving one standing would mean carrying out the
+        /// instruction by half - and the person concerned would keep getting
+        /// everything.
         /// </remarks>
         /// <param name="onlyInState">
-        /// Nur Abonnements in diesem Zustand, oder null für alle.
+        /// Only subscriptions in this state, or null for all.
         ///
-        /// <b>Die Ablehnung eines Antrags braucht das</b> (XEP-0060, Abschnitt
-        /// 8.6): Ein „nein" auf eine Frage von vorhin darf kein Abonnement
-        /// beenden, das inzwischen zugesagt wurde - sonst entschiede die
-        /// Reihenfolge zweier Nachrichten darüber, was gilt.
+        /// <b>The refusal of an application needs this</b> (XEP-0060,
+        /// section 8.6): a "no" to a question from earlier must not end a
+        /// subscription that has been approved in the meantime - otherwise the
+        /// order of two messages would decide what holds.
         /// </param>
         public IReadOnlyList<PepSubscription> RemovePepSubscriptions(String                    node,
                                                                      String                    subscriberBareJid,
@@ -823,28 +816,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                if (!_pepSubscriptions.TryGetValue(node, out var abonnements))
+                if (!_pepSubscriptions.TryGetValue(node, out var subscriptions))
                     return [];
 
-                var betroffen = abonnements.FindAll(
-                                    a => String.Equals(a.Jid, subscriberBareJid, StringComparison.OrdinalIgnoreCase) &&
-                                         (subId is null || String.Equals(a.SubId, subId, StringComparison.Ordinal)) &&
-                                         (onlyInState is null || a.State == onlyInState));
+                var affected = subscriptions.FindAll(
+                                   a => String.Equals(a.Jid, subscriberBareJid, StringComparison.OrdinalIgnoreCase) &&
+                                        (subId is null || String.Equals(a.SubId, subId, StringComparison.Ordinal)) &&
+                                        (onlyInState is null || a.State == onlyInState));
 
-                foreach (var eines in betroffen)
-                    abonnements.Remove(eines);
+                foreach (var one in affected)
+                    subscriptions.Remove(one);
 
-                if (abonnements.Count == 0)
+                if (subscriptions.Count == 0)
                     _pepSubscriptions.Remove(node);
 
-                return betroffen;
+                return affected;
 
             }
 
         }
 
         /// <summary>
-        /// Stellt ein Abonnement ein (XEP-0060, Abschnitt 6.3).
+        /// Configures a subscription (XEP-0060, section 6.3).
         /// </summary>
         public PepSubscriptionResult SetPepSubscriptionOptions(String                     node,
                                                                String                     subscriberBareJid,
@@ -855,14 +848,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                var befund = FindPepSubscription(node, subscriberBareJid, subId, out var abonnement);
+                var finding = FindPepSubscription(node, subscriberBareJid, subId, out var found);
 
-                if (befund != PepSubscriptionResult.Ok)
-                    return befund;
+                if (finding != PepSubscriptionResult.Ok)
+                    return finding;
 
-                var abonnements = _pepSubscriptions[node];
+                var subscriptions = _pepSubscriptions[node];
 
-                abonnements[abonnements.IndexOf(abonnement!)] = abonnement! with { Options = options };
+                subscriptions[subscriptions.IndexOf(found!)] = found! with { Options = options };
 
                 return PepSubscriptionResult.Ok;
 
@@ -871,30 +864,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Die Abonnements dieses Knotens.
+        /// The subscriptions of this node.
         /// </summary>
         /// <remarks>
-        /// Derselbe JID kann mehrfach vorkommen. Wer die Empfänger will und
-        /// nicht die Abonnements, muss also selbst zusammenfassen - und wer
-        /// zustellt, gerade nicht: Jedes Abonnement ist eine eigene Zusage,
-        /// mit eigener Einstellung.
+        /// The same JID can occur several times. Whoever wants the recipients
+        /// and not the subscriptions therefore has to collapse them themselves
+        /// - and whoever delivers, precisely not: every subscription is a
+        /// promise of its own, with a setting of its own.
         /// </remarks>
         public IReadOnlyList<PepSubscription> PepSubscriptions(String node)
         {
             lock (_lock)
-                return _pepSubscriptions.TryGetValue(node, out var abonnements)
-                           ? [.. abonnements]
+                return _pepSubscriptions.TryGetValue(node, out var subscriptions)
+                           ? [.. subscriptions]
                            : [];
         }
 
         /// <summary>
-        /// Was jemand an einem Knoten ist (XEP-0060, Abschnitt 4.1).
+        /// What somebody is at a node (XEP-0060, section 4.1).
         /// </summary>
         /// <remarks>
-        /// <b>Der Eigentümer wird nicht nachgeschlagen, sondern erkannt.</b>
-        /// Ein PEP-Knoten gehört dem Konto, in dem er steht - das ist keine
-        /// Eintragung, die fehlen könnte, sondern eine Tatsache über die
-        /// Adresse.
+        /// <b>The owner is not looked up but recognised.</b> A PEP node belongs
+        /// to the account it stands in - that is not an entry that could be
+        /// missing but a fact about the address.
         /// </remarks>
         public PubSubAffiliation PepAffiliationOf(String node, String bareJid)
         {
@@ -903,43 +895,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return PubSubAffiliation.Owner;
 
             lock (_lock)
-                return _pepAffiliations.TryGetValue(node, out var rollen) &&
-                       rollen.TryGetValue(bareJid, out var rolle)
-                           ? rolle
+                return _pepAffiliations.TryGetValue(node, out var roles) &&
+                       roles.TryGetValue(bareJid, out var role)
+                           ? role
                            : PubSubAffiliation.None;
 
         }
 
         /// <summary>
-        /// Setzt eine Rolle (XEP-0060, Abschnitt 8.9.2).
+        /// Sets a role (XEP-0060, section 8.9.2).
         /// </summary>
         /// <returns>
-        /// false, wenn es den Knoten nicht gibt oder wenn jemand die Rolle des
-        /// Eigentümers ändern will - beides ist kein Formfehler, sondern eine
-        /// Anweisung, die es nicht gibt.
+        /// false when the node does not exist or when somebody wants to change
+        /// the role of the owner - neither is a formal error but an instruction
+        /// that does not exist.
         /// </returns>
         /// <remarks>
-        /// <c>None</c> löscht den Eintrag, statt ihn auf einen Wert zu setzen:
-        /// „keine Rolle" ist die Abwesenheit einer Rolle und nicht eine unter
-        /// mehreren.
+        /// <c>None</c> deletes the entry instead of setting it to a value: "no
+        /// role" is the absence of a role and not one among several.
         /// </remarks>
         public Boolean SetPepAffiliation(String node, String bareJid, PubSubAffiliation affiliation)
 
             => SetPepAffiliation(node, bareJid, affiliation, out _);
 
         /// <summary>
-        /// Dasselbe, und nennt die Abonnements, die dabei erloschen sind.
+        /// The same, and names the subscriptions that expired in the process.
         /// </summary>
         /// <param name="endedSubscriptions">
-        /// Was der Ausschluss beendet hat - leer bei jeder anderen Rolle.
+        /// What the exclusion has ended - empty with every other role.
         /// </param>
         /// <remarks>
-        /// <b>Warum die Auskunft hierher gehört und nicht zum Aufrufer.</b> Wer
-        /// den Betroffenen benachrichtigen will, muss wissen, welche Kennungen
-        /// erloschen sind. Sie sich vorher selbst zusammenzusuchen hiesse,
-        /// dieselbe Frage ein zweites Mal zu beantworten - und die zweite
-        /// Antwort wäre die ungenauere, weil zwischen Nachsehen und Setzen
-        /// etwas dazwischenkommen kann.
+        /// <b>Why the information belongs here and not to the caller.</b>
+        /// Whoever wants to notify the person concerned has to know which
+        /// identifiers have expired. Gathering them beforehand themselves would
+        /// mean answering the same question a second time - and the second
+        /// answer would be the less precise one, because something can come in
+        /// between the looking and the setting.
         /// </remarks>
         public Boolean SetPepAffiliation(String                            node,
                                          String                            bareJid,
@@ -964,12 +955,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (affiliation == PubSubAffiliation.None)
                 {
 
-                    if (_pepAffiliations.TryGetValue(node, out var bestand))
+                    if (_pepAffiliations.TryGetValue(node, out var present))
                     {
 
-                        bestand.Remove(bareJid);
+                        present.Remove(bareJid);
 
-                        if (bestand.Count == 0)
+                        if (present.Count == 0)
                             _pepAffiliations.Remove(node);
 
                     }
@@ -978,19 +969,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 }
 
-                if (!_pepAffiliations.TryGetValue(node, out var rollen))
-                    _pepAffiliations[node] = rollen = new Dictionary<String, PubSubAffiliation>(StringComparer.OrdinalIgnoreCase);
+                if (!_pepAffiliations.TryGetValue(node, out var roles))
+                    _pepAffiliations[node] = roles = new Dictionary<String, PubSubAffiliation>(StringComparer.OrdinalIgnoreCase);
 
-                rollen[bareJid] = affiliation;
+                roles[bareJid] = affiliation;
 
-                // XEP-0060, Abschnitt 8.9.4: Wer ausgeschlossen wird, verliert
-                // seine Abonnements. Ihn nur an neuen zu hindern hiesse, den
-                // Ausschluss von dem Zufall abhängig zu machen, ob er vorher
-                // schon da war.
+                // XEP-0060, section 8.9.4: whoever is excluded loses their
+                // subscriptions. Merely hindering them from new ones would mean
+                // making the exclusion depend on the accident of whether they
+                // were already there beforehand.
                 //
-                // Über denselben Weg wie die Anweisung des Eigentümers
-                // (Abschnitt 8.8.2): Zwei Stellen, die Abonnements beenden,
-                // beenden sie irgendwann verschieden.
+                // Over the same route as the owner's instruction
+                // (section 8.8.2): two places that end subscriptions end them
+                // differently at some point.
                 if (affiliation == PubSubAffiliation.Outcast)
                     endedSubscriptions = RemovePepSubscriptions(node, bareJid);
 
@@ -1001,21 +992,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Alle Rollen an einem Knoten, den Eigentümer eingeschlossen
-        /// (XEP-0060, Abschnitt 8.9.1).
+        /// All roles at a node, the owner included (XEP-0060, section 8.9.1).
         /// </summary>
         public IReadOnlyList<(String Jid, PubSubAffiliation Affiliation)> PepAffiliations(String node)
         {
             lock (_lock)
                 return [(BareJid, PubSubAffiliation.Owner),
-                        .. (_pepAffiliations.TryGetValue(node, out var rollen)
-                                ? rollen.Select(r => (r.Key, r.Value))
+                        .. (_pepAffiliations.TryGetValue(node, out var roles)
+                                ? roles.Select(r => (r.Key, r.Value))
                                 : [])];
         }
 
         /// <summary>
-        /// Die Rollen eines JIDs über alle Knoten dieses Kontos (XEP-0060,
-        /// Abschnitt 5.7).
+        /// The roles of a JID across all nodes of this account (XEP-0060,
+        /// section 5.7).
         /// </summary>
         public IReadOnlyList<(String Node, PubSubAffiliation Affiliation)> PepAffiliationsOf(String bareJid)
         {
@@ -1023,8 +1013,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                // Dem Eigentümer gehören alle seine Knoten - auch die, an
-                // denen nie jemand eine Rolle eingetragen hat.
+                // All their nodes belong to the owner - including those at
+                // which nobody ever entered a role.
                 if (String.Equals(BareJid, bareJid, StringComparison.OrdinalIgnoreCase))
                     return [.. _pepNodeConfigs.Keys
                                .Select(n => (n, PubSubAffiliation.Owner))];
@@ -1038,48 +1028,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Alle Abonnements eines JIDs über alle Knoten dieses Kontos
-        /// (XEP-0060, Abschnitt 5.6).
+        /// All subscriptions of a JID across all nodes of this account
+        /// (XEP-0060, section 5.6).
         /// </summary>
         /// <remarks>
-        /// <b>Die Frage, die sich ein Client nicht selbst beantworten kann.</b>
-        /// Seine Buchführung steht im Arbeitsspeicher und ist nach einem
-        /// Verbindungsabriss leer; die Abonnements bestehen weiter, denn sie
-        /// stehen hier am Konto. Ohne diesen Weg kennt er danach keine einzige
-        /// Kennung mehr - und kann bei mehreren Abonnements auf denselben
-        /// Knoten keines davon beenden.
+        /// <b>The question a client cannot answer for itself.</b> Its
+        /// bookkeeping lives in memory and is empty after a connection drop;
+        /// the subscriptions continue to exist, because they stand here on the
+        /// account. Without this route it afterwards knows not a single
+        /// identifier any more - and with several subscriptions to the same
+        /// node cannot end any of them.
         /// </remarks>
         public IReadOnlyList<(String Node, PepSubscription Subscription)> PepSubscriptionsOf(String subscriberBareJid)
         {
             lock (_lock)
                 return [.. _pepSubscriptions
-                           .SelectMany(knoten => knoten.Value.Select(a => (knoten.Key, a)))
+                           .SelectMany(node => node.Value.Select(a => (node.Key, a)))
                            .Where(e => String.Equals(e.a.Jid, subscriberBareJid, StringComparison.OrdinalIgnoreCase))];
         }
 
         #endregion
 
         /// <summary>
-        /// Bewahrt eine Nachricht auf, bis das Konto wieder erreichbar ist.
+        /// Keeps a message until the account is reachable again.
         /// </summary>
-        /// <param name="stanza">Die vollständige Stanza mit gesetztem <c>from</c>.</param>
-        /// <param name="storedAt">Der Zeitpunkt des Eingangs.</param>
+        /// <param name="stanza">The complete stanza with the <c>from</c> set.</param>
+        /// <param name="storedAt">The moment it came in.</param>
         /// <param name="maxStored">
-        /// Obergrenze für die Zahl aufbewahrter Nachrichten je Konto.
+        /// An upper bound for the number of messages kept per account.
         /// </param>
         /// <returns>
-        /// false, wenn die Grenze erreicht ist - dann ist die Nachricht nicht
-        /// aufbewahrt, und der Absender soll es erfahren.
+        /// false when the bound is reached - then the message is not kept, and
+        /// the sender shall learn of it.
         /// </returns>
         /// <remarks>
-        /// Ist die Grenze erreicht, wird die neue Nachricht abgewiesen und
-        /// keine aufbewahrte verdrängt. Beides verliert eine Nachricht, aber
-        /// nur eines davon sagt es jemandem: Wer abweist, kann dem Absender
-        /// <c>&lt;service-unavailable/&gt;</c> antworten - RFC 6121,
-        /// Abschnitt 8.5.2.2.1 stellt genau diese beiden Wege nebeneinander.
-        /// Wer verdrängt, wirft eine Nachricht weg, von der der Absender
-        /// annimmt, sie liege bereit, und der Empfänger nie erfährt, dass es
-        /// sie gab.
+        /// Once the bound is reached, the new message is refused and none of
+        /// those kept is displaced. Both lose a message, but only one of them
+        /// tells anybody: whoever refuses can answer the sender with
+        /// <c>&lt;service-unavailable/&gt;</c> - RFC 6121, section 8.5.2.2.1
+        /// puts exactly these two routes side by side. Whoever displaces throws
+        /// away a message the sender assumes is lying ready and the recipient
+        /// never learns existed.
         /// </remarks>
         public Boolean StoreOfflineMessage(String          stanza,
                                            DateTimeOffset  storedAt,
@@ -1103,23 +1092,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Gibt die aufbewahrten Nachrichten heraus und leert die Ablage.
+        /// Hands out the messages kept and empties the storage.
         /// </summary>
         /// <remarks>
-        /// Herausgeben und Leeren in einem Schritt, unter derselben Sperre:
-        /// Zwei Resourcen, die sich gleichzeitig anmelden, bekämen die Ablage
-        /// sonst beide zu sehen, und der Nutzer läse alles doppelt.
+        /// Handing out and emptying in one step, under the same lock: two
+        /// resources signing on at the same time would otherwise both get to
+        /// see the storage, and the user would read everything twice.
         ///
-        /// Anders als eine aufbewahrte Subscription-Anfrage
-        /// (<see cref="PendingSubscriptionRequests"/>) bleibt hier nichts
-        /// stehen. Die Anfrage wird nachgereicht, bis sie beantwortet ist -
-        /// eine Nachricht ist mit dem Zustellen erledigt, und wer sie bei jeder
-        /// Anmeldung erneut vorgelegt bekäme, könnte sie nie loswerden.
+        /// Unlike a kept subscription request
+        /// (<see cref="PendingSubscriptionRequests"/>) nothing stays standing
+        /// here. The request is delivered again until it is answered - a
+        /// message is done with once delivered, and whoever got it presented
+        /// again at every login could never get rid of it.
         /// </remarks>
         public IReadOnlyList<OfflineMessage> TakeOfflineMessages()
         {
 
-            List<OfflineMessage> entnommen;
+            List<OfflineMessage> taken;
 
             lock (_lock)
             {
@@ -1127,43 +1116,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (_offlineMessages.Count == 0)
                     return [];
 
-                entnommen = _offlineMessages.ToList();
+                taken = _offlineMessages.ToList();
                 _offlineMessages.Clear();
 
             }
 
             OnChanged?.Invoke(this);
 
-            return entnommen;
+            return taken;
 
         }
 
         /// <summary>
-        /// Darf dieser Kontakt die Presence dieses Kontos sehen?
+        /// May this contact see the presence of this account?
         /// </summary>
         /// <remarks>
-        /// RFC 6121, Abschnitt 4.2.2: das ist genau bei <c>from</c> und
-        /// <c>both</c> der Fall. Die Richtung ist leicht zu verwechseln - ein
-        /// <c>to</c> heisst, dass <b>dieses Konto</b> die Presence des
-        /// Kontakts sieht, und gäbe die eigene an genau die falsche Hälfte des
-        /// Rosters.
+        /// RFC 6121, section 4.2.2: that is the case exactly with <c>from</c>
+        /// and <c>both</c>. The direction is easy to mix up - a <c>to</c> means
+        /// that <b>this account</b> sees the presence of the contact, and would
+        /// give one's own to exactly the wrong half of the roster.
         /// </remarks>
         public Boolean IsPresenceSubscriber(String bareJid)
             => SubscriptionOf(bareJid) is "from" or "both";
 
         /// <summary>
-        /// Steht dieser JID im Roster - und, wenn Gruppen genannt sind, in
-        /// einer davon (XEP-0060, Abschnitt 4.5)?
+        /// Does this JID stand in the roster - and, when groups are named, in
+        /// one of them (XEP-0060, section 4.5)?
         /// </summary>
         /// <param name="groups">
-        /// Die erlaubten Gruppen, oder eine leere Liste für den ganzen Roster.
+        /// The groups permitted, or an empty list for the whole roster.
         /// </param>
         /// <remarks>
-        /// <b>Ein Eintrag genügt, ein Presence-Zustand wird nicht verlangt.</b>
-        /// Der Roster ist die Liste des Eigentümers: Wer darin steht, steht
-        /// dort, weil der Eigentümer ihn eingetragen hat. Ob der Kontakt
-        /// umgekehrt dessen Presence sehen darf, ist eine andere Frage - und
-        /// für sie gibt es ein eigenes Modell.
+        /// <b>An entry suffices, a presence state is not demanded.</b> The
+        /// roster is the owner's list: whoever stands in it stands there
+        /// because the owner entered them. Whether the contact may conversely
+        /// see the owner's presence is another question - and for it there is a
+        /// model of its own.
         /// </remarks>
         public Boolean IsInRosterGroups(String bareJid, IReadOnlyList<String> groups)
         {
@@ -1171,29 +1159,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                var eintrag = _roster.FirstOrDefault(
-                                  e => String.Equals(e.Jid, bareJid, StringComparison.OrdinalIgnoreCase));
+                var entry = _roster.FirstOrDefault(
+                                e => String.Equals(e.Jid, bareJid, StringComparison.OrdinalIgnoreCase));
 
-                if (eintrag is null)
+                if (entry is null)
                     return false;
 
                 return groups.Count == 0 ||
-                       eintrag.Groups.Any(g => groups.Contains(g, StringComparer.Ordinal));
+                       entry.Groups.Any(g => groups.Contains(g, StringComparer.Ordinal));
 
             }
 
         }
 
         /// <summary>
-        /// Bekommt dieses Konto die Presence des Kontakts - also <c>to</c> oder
-        /// <c>both</c>?
+        /// Does this account get the presence of the contact - that is,
+        /// <c>to</c> or <c>both</c>?
         /// </summary>
         public Boolean ReceivesPresenceFrom(String bareJid)
             => SubscriptionOf(bareJid) is "to" or "both";
 
         /// <summary>
-        /// Der Subscription-Zustand zu diesem Kontakt, oder null, wenn er nicht
-        /// im Roster steht.
+        /// The subscription state towards this contact, or null when they do
+        /// not stand in the roster.
         /// </summary>
         public String? SubscriptionOf(String bareJid)
         {
