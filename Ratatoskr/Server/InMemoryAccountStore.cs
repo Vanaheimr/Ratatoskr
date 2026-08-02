@@ -19,14 +19,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein Kontenspeicher, der nichts überdauert - der Vorgabefall für Tests
-    /// und für einen Server, der nur läuft, solange jemand zusieht.
+    /// An account store that outlasts nothing - the default case for tests and
+    /// for a server that only runs as long as somebody is watching.
     /// </summary>
     /// <remarks>
-    /// Hält dieselben Objekte, die der Server benutzt, statt Kopien. Das ist
-    /// hier richtig: es gibt keine zweite Wahrheit, die auseinanderlaufen
-    /// könnte, und ein Speicher, der beim Beenden verschwindet, braucht keine
-    /// Abgrenzung gegen sich selbst.
+    /// Holds the same objects the server uses, instead of copies. That is right
+    /// here: there is no second truth that could drift apart, and a store that
+    /// disappears when the process ends needs no demarcation against itself.
     /// </remarks>
     public sealed class InMemoryAccountStore : IXMPPAccountStore
     {

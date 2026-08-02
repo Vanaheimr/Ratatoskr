@@ -19,45 +19,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Der Weg zu anderen Servern - die Stelle, an der ein
-    /// Server-zu-Server-Transport eingesetzt wird (RFC 6120, Abschnitt 10.4).
+    /// The way to other servers - the place where a server-to-server transport
+    /// is put in (RFC 6120, section 10.4).
     /// </summary>
     /// <remarks>
-    /// Bewusst nur diese eine Methode. Ob dahinter eine bestehende Verbindung
-    /// liegt, ob erst eine aufgebaut wird, ob die Gegenstelle sich per
-    /// Dialback (XEP-0220) oder SASL-EXTERNAL ausgewiesen hat - all das geht
-    /// den Routing-Teil des Servers nichts an. Er will wissen, ob die Stanza
-    /// draussen ist.
+    /// Deliberately only this one method. Whether behind it lies an existing
+    /// connection, whether one is established first, whether the peer has
+    /// identified itself by dialback (XEP-0220) or SASL-EXTERNAL - none of that
+    /// is any of the routing part's business. It wants to know whether the
+    /// stanza is out.
     ///
-    /// Der echte Transport fehlt noch, und zwar mit Absicht in dieser Form:
-    /// die Methode fragt nach einer <b>Domain</b> und nicht nach einer
-    /// Verbindung. Welcher Transport eine Domain erreicht, entscheidet die
-    /// Implementierung - sie kann für die eine Gegenstelle TCP und für die
-    /// andere WebSocket benutzen, ohne dass das Routing davon erfährt.
+    /// The real transport is still missing, and deliberately in this form: the
+    /// method asks for a <b>domain</b> and not for a connection. Which
+    /// transport reaches a domain is decided by the implementation - it can use
+    /// TCP for one peer and WebSocket for another without the routing learning
+    /// of it.
     ///
-    /// Beides ist das Ziel. RFC 6120 sieht für S2S TCP auf Port 5269 mit
-    /// <c>jabber:server</c>-Streams vor - nur damit ist Föderation mit
-    /// ejabberd oder Prosody möglich. RFC 7395 ist auf browserbasierte
-    /// Clients zugeschnitten und sagt zu S2S nichts; es verbietet den
-    /// Transport dort aber auch nicht, und eine WebSocket-Strecke zwischen
-    /// zwei Instanzen dieses Servers ist erheblich schneller zu haben.
+    /// Both is the goal. RFC 6120 provides for S2S over TCP on port 5269 with
+    /// <c>jabber:server</c> streams - only with that is federation with
+    /// ejabberd or Prosody possible. RFC 7395 is cut for browser-based clients
+    /// and says nothing about S2S; it does not forbid the transport there
+    /// either, though, and a WebSocket link between two instances of this
+    /// server is considerably quicker to have.
     ///
-    /// Der teure Teil - Dialback beziehungsweise SASL-EXTERNAL, die
-    /// Absenderprüfung, Adressierung, Lebenszyklus - ist beiden gemeinsam.
-    /// Deshalb ist "beides" nicht doppelte Arbeit.
+    /// The expensive part - dialback resp. SASL-EXTERNAL, the sender check,
+    /// addressing, the life cycle - is common to both. That is why "both" is
+    /// not twice the work.
     /// </remarks>
     public interface IServerLinks
     {
 
         /// <summary>
-        /// Stellt eine Stanza an eine fremde Domain zu.
+        /// Delivers a stanza to a foreign domain.
         /// </summary>
-        /// <param name="remoteDomain">Die Domain des Empfängers.</param>
-        /// <param name="stanza">Die vollständige Stanza, bereits mit <c>from</c> gestempelt.</param>
+        /// <param name="remoteDomain">The domain of the recipient.</param>
+        /// <param name="stanza">The complete stanza, already stamped with <c>from</c>.</param>
         /// <returns>
-        /// false, wenn die Domain nicht erreichbar war. Der Aufrufer erzeugt
-        /// dann den Stanza-Fehler - hier zu antworten hiesse, den
-        /// Fehlerpfad an jeder Implementierung zu wiederholen.
+        /// false when the domain was not reachable. The caller then produces the
+        /// stanza error - answering here would mean repeating the error path at
+        /// every implementation.
         /// </returns>
         Task<Boolean> DeliverAsync(String             remoteDomain,
                                    String             stanza,

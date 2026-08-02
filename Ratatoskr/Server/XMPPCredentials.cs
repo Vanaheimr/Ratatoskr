@@ -26,21 +26,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Die Zugangsdaten eines Kontos in der Form, in der ein Server sie
-    /// aufbewahren darf: Salt, Iterationszahl und je Mechanismus die beiden
-    /// abgeleiteten Schlüssel aus RFC 5802, Abschnitt 3.
+    /// The credentials of an account in the form a server may keep them: salt,
+    /// iteration count and, per mechanism, the two derived keys from RFC 5802,
+    /// section 3.
     /// </summary>
     /// <remarks>
-    /// Das Passwort selbst kommt hier nicht vor und ist aus dem Gespeicherten
-    /// nicht zurückzurechnen. Auch die PLAIN-Anmeldung braucht es nicht
-    /// aufzubewahren: sie leitet aus dem angebotenen Klartext mit demselben
-    /// Salt neu ab und vergleicht die Ergebnisse.
+    /// The password itself does not appear here and cannot be computed back
+    /// from what is stored. The PLAIN login does not need to keep it either: it
+    /// derives anew from the plaintext offered, with the same salt, and
+    /// compares the results.
     ///
-    /// Die Serverseite ist absichtlich unabhängig von
-    /// <see cref="SCRAMAuthenticator"/> geschrieben, wie im Projekt üblich.
-    /// Benutzten beide Seiten dieselben Hilfsfunktionen, prüften die Tests den
-    /// Handshake mit derselben Logik, die ihn erzeugt, und ein gemeinsamer
-    /// Denkfehler bliebe unentdeckt.
+    /// The server side is deliberately written independently of
+    /// <see cref="SCRAMAuthenticator"/>, as is customary in this project. If
+    /// both sides used the same helpers, the tests would check the handshake
+    /// with the same logic that produces it, and a shared mistake in thinking
+    /// would stay undetected.
     /// </remarks>
     public sealed class XMPPCredentials
     {
@@ -52,34 +52,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #endregion
 
-        #region Konstanten
+        #region Constants
 
         /// <summary>
-        /// Iterationszahl für neue Konten.
+        /// The iteration count for new accounts.
         /// </summary>
         /// <remarks>
-        /// RFC 7677, Abschnitt 4 nennt 4096 als Untergrenze für
-        /// SCRAM-SHA-256. Das ist nach heutigen Massstäben wenig - ein echter
-        /// Betrieb sollte deutlich höher gehen. Der Wert steht hier, weil jedes
-        /// angelegte Testkonto ihn zweimal durchläuft und die Suite sonst
-        /// spürbar langsamer würde; er ist je Konto überschreibbar.
+        /// RFC 7677, section 4 names 4096 as the lower bound for
+        /// SCRAM-SHA-256. By today's standards that is little - real operation
+        /// should go considerably higher. The value stands here because every
+        /// test account created runs through it twice and the suite would
+        /// otherwise become noticeably slower; it can be overridden per
+        /// account.
         /// </remarks>
         public const Int32 DefaultIterationCount = 4096;
 
-        /// <summary>Länge des erzeugten Salts in Bytes.</summary>
+        /// <summary>Length of the salt produced, in bytes.</summary>
         public const Int32 SaltLength = 16;
 
         #endregion
 
         #region Properties
 
-        /// <summary>Das Salt dieses Kontos.</summary>
+        /// <summary>The salt of this account.</summary>
         public Byte[] Salt => [.. _salt];
 
-        /// <summary>Die Iterationszahl, mit der abgeleitet wurde.</summary>
+        /// <summary>The iteration count that was derived with.</summary>
         public Int32 IterationCount { get; }
 
-        /// <summary>Für welche Mechanismen Schlüssel vorliegen.</summary>
+        /// <summary>For which mechanisms keys are on hand.</summary>
         public IEnumerable<SCRAMMechanism> Mechanisms => _keys.Keys;
 
         #endregion
@@ -101,12 +102,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region FromPassword(password, salt = null, iterationCount = DefaultIterationCount)
 
         /// <summary>
-        /// Leitet die Zugangsdaten aus einem Klartextpasswort ab. Danach wird
-        /// das Passwort nicht mehr gebraucht.
+        /// Derives the credentials from a plaintext password. Afterwards the
+        /// password is no longer needed.
         /// </summary>
-        /// <param name="password">Das Klartextpasswort.</param>
-        /// <param name="salt">Vorgegebenes Salt; null erzeugt ein zufälliges.</param>
-        /// <param name="iterationCount">Iterationszahl für PBKDF2.</param>
+        /// <param name="password">The plaintext password.</param>
+        /// <param name="salt">A given salt; null produces a random one.</param>
+        /// <param name="iterationCount">The iteration count for PBKDF2.</param>
         public static XMPPCredentials FromPassword(String   password,
                                                    Byte[]?  salt             = null,
                                                    Int32    iterationCount   = DefaultIterationCount)
@@ -130,12 +131,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region FromStored(salt, iterationCount, keys)
 
         /// <summary>
-        /// Setzt Zugangsdaten aus dem Gespeicherten wieder zusammen - der Weg
-        /// zurück für einen <see cref="IXMPPAccountStore"/>.
+        /// Puts credentials back together from what was stored - the way back
+        /// for an <see cref="IXMPPAccountStore"/>.
         /// </summary>
         /// <remarks>
-        /// Ohne Ableitung: die Schlüssel liegen ja bereits vor, und das
-        /// Passwort, aus dem sie stammen, gibt es nicht mehr.
+        /// Without derivation: the keys are already on hand, after all, and the
+        /// password they stem from no longer exists.
         /// </remarks>
         public static XMPPCredentials FromStored(Byte[]                                          salt,
                                                  Int32                                           iterationCount,
@@ -145,7 +146,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             ArgumentOutOfRangeException.ThrowIfLessThan(iterationCount, 1);
 
             if (keys.Count == 0)
-                throw new ArgumentException("Ohne Schlüssel lässt sich keine Anmeldung prüfen.", nameof(keys));
+                throw new ArgumentException("Without keys no login can be checked.", nameof(keys));
 
             return new XMPPCredentials([.. salt],
                                        iterationCount,
@@ -158,38 +159,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Decoy(user, secret)
 
         /// <summary>
-        /// Erfundene Zugangsdaten für ein Konto, das es nicht gibt - damit ein
-        /// unbekannter Benutzername genauso aussieht wie ein bekannter
-        /// (RFC 6120, Abschnitt 13.11).
+        /// Invented credentials for an account that does not exist - so that an
+        /// unknown user name looks just like a known one (RFC 6120,
+        /// section 13.11).
         /// </summary>
         /// <remarks>
-        /// „Not reveal whether or not an account exists at a server when an
-        /// entity attempts to authenticate" - bei SCRAM genügt dafür der
-        /// gleiche Fehler nicht. Wer ein unbekanntes Konto sofort abweist,
-        /// beantwortet die erste Nachricht mit einem Fehlschlag und die eines
-        /// bestehenden Kontos mit einer Aufforderung; die Auskunft steckt dann
-        /// im <b>Ablauf</b> und nicht im Fehlerwort.
+        /// "Not reveal whether or not an account exists at a server when an
+        /// entity attempts to authenticate" - with SCRAM the same error does not
+        /// suffice for that. Whoever refuses an unknown account right away
+        /// answers the first message with a failure and that of an existing
+        /// account with a challenge; the information then sits in the
+        /// <b>sequence</b> and not in the error word.
         ///
-        /// <b>Gleichbleibend, nicht zufällig.</b> Ein Salt, das sich bei jedem
-        /// Versuch ändert, wäre selbst die Auskunft: das eines bestehenden
-        /// Kontos steht fest. Es entsteht deshalb aus dem Benutzernamen und
-        /// einem Serverschlüssel - für jeden Namen ein anderes, für denselben
-        /// Namen immer dasselbe, und keines davon vorherzusagen, ohne den
-        /// Schlüssel zu kennen. Genau deshalb ist die Iterationszahl auch die
-        /// gewöhnliche: eine abweichende wäre wieder ein Erkennungszeichen.
+        /// <b>Constant, not random.</b> A salt that changes on every attempt
+        /// would itself be the information: that of an existing account stands
+        /// fixed. It therefore arises from the user name and a server key - a
+        /// different one for every name, always the same one for the same name,
+        /// and none of them predictable without knowing the key. Exactly for
+        /// that reason the iteration count is the ordinary one too: a differing
+        /// one would again be a distinguishing mark.
         ///
-        /// Die Schlüssel entstehen auf demselben Weg und passen zu keinem
-        /// Passwort. Der Austausch läuft damit zu Ende und scheitert dort, wo
-        /// er auch bei einem falschen Passwort scheitert - am Beweis.
+        /// The keys arise the same way and fit no password. The exchange thus
+        /// runs to its end and fails where it fails with a wrong password too -
+        /// at the proof.
         ///
-        /// <b>Was das nicht leistet:</b> Über einen Neustart hinweg ändern sich
-        /// die erfundenen Salts, die echten nicht. Wer denselben Namen davor
-        /// und danach probiert, sieht den Unterschied. Ein dauerhafter
-        /// Serverschlüssel gehörte in den Kontenspeicher und ist nicht Teil
-        /// dieses Schritts.
+        /// <b>What this does not achieve:</b> across a restart the invented
+        /// salts change, the real ones do not. Whoever tries the same name
+        /// before and after sees the difference. A lasting server key would
+        /// belong in the account store and is not part of this step.
         /// </remarks>
-        /// <param name="user">Der Benutzername aus der client-first-message.</param>
-        /// <param name="secret">Der Serverschlüssel, aus dem abgeleitet wird.</param>
+        /// <param name="user">The user name from the client-first-message.</param>
+        /// <param name="secret">The server key that is derived from.</param>
         public static XMPPCredentials Decoy(String user, Byte[] secret)
         {
 
@@ -198,29 +198,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             foreach (var mechanism in Enum.GetValues<SCRAMMechanism>())
             {
 
-                var laenge = KeyLengthOf(mechanism);
+                var length = KeyLengthOf(mechanism);
 
                 keys[mechanism] = new SCRAMKeys(
-                                      StoredKey: Abgeleitet(secret, $"stored:{mechanism}:{user}", laenge),
-                                      ServerKey: Abgeleitet(secret, $"server:{mechanism}:{user}", laenge));
+                                      StoredKey: Derived(secret, $"stored:{mechanism}:{user}", length),
+                                      ServerKey: Derived(secret, $"server:{mechanism}:{user}", length));
 
             }
 
-            return new XMPPCredentials(Abgeleitet(secret, $"salt:{user}", SaltLength),
+            return new XMPPCredentials(Derived(secret, $"salt:{user}", SaltLength),
                                        DefaultIterationCount,
                                        keys);
 
         }
 
-        private static Byte[] Abgeleitet(Byte[] secret, String zweck, Int32 length)
-            => HMACSHA256.HashData(secret, Encoding.UTF8.GetBytes(zweck))[..length];
+        private static Byte[] Derived(Byte[] secret, String purpose, Int32 length)
+            => HMACSHA256.HashData(secret, Encoding.UTF8.GetBytes(purpose))[..length];
 
         #endregion
 
         #region KeysOf(mechanism)
 
         /// <summary>
-        /// Die Schlüssel für einen Mechanismus.
+        /// The keys for a mechanism.
         /// </summary>
         public SCRAMKeys KeysOf(SCRAMMechanism mechanism)
             => _keys[mechanism];
@@ -230,14 +230,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Verify(password)
 
         /// <summary>
-        /// Prüft ein Klartextpasswort, wie es SASL PLAIN liefert.
+        /// Checks a plaintext password, as SASL PLAIN delivers it.
         /// </summary>
         /// <remarks>
-        /// Abgeleitet wird mit dem gespeicherten Salt und der gespeicherten
-        /// Iterationszahl; verglichen wird der <c>StoredKey</c>. Der Vergleich
-        /// läuft über <see cref="CryptographicOperations.FixedTimeEquals"/> -
-        /// ein Vergleich, der beim ersten abweichenden Byte abbricht, verriete
-        /// über die Laufzeit, wie weit ein Rateversuch gekommen ist.
+        /// Derived with the stored salt and the stored iteration count;
+        /// compared is the <c>StoredKey</c>. The comparison runs through
+        /// <see cref="CryptographicOperations.FixedTimeEquals"/> - a comparison
+        /// that breaks off at the first differing byte would betray, through
+        /// its running time, how far a guessing attempt got.
         /// </remarks>
         public Boolean Verify(String password)
         {
@@ -252,10 +252,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (AuthenticationException)
             {
-                // Ein Passwort, das sich nicht nach SASLprep vorbereiten lässt,
-                // kann auf keinen gespeicherten Schlüssel führen. Das ist ein
-                // Fehlversuch und kein Serverfehler - über die Leitung kommt,
-                // was der Gegenüber schickt, und das darf hier nichts umwerfen.
+                // A password that cannot be prepared per SASLprep can lead to no
+                // stored key. That is a failed attempt and not a server error -
+                // over the wire comes whatever the other side sends, and that
+                // must not knock anything over here.
                 return false;
             }
 
@@ -267,7 +267,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #endregion
 
 
-        #region (private, static) Ableitung nach RFC 5802, Abschnitt 3
+        #region (private, static) Derivation per RFC 5802, section 3
 
         private static SCRAMKeys DeriveKeys(String          password,
                                             Byte[]          salt,
@@ -295,14 +295,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// SASLprep (RFC 4013) - dieselbe Vorbereitung wie auf der Client-Seite.
+        /// SASLprep (RFC 4013) - the same preparation as on the client side.
         /// </summary>
         /// <remarks>
-        /// Dass hier <see cref="SaslPrep"/> steht und nicht eine eigene
-        /// Rechnung, ist der Punkt: Server und Client müssen aus derselben
-        /// Eingabe denselben Schlüssel gewinnen. Zwei Fassungen desselben
-        /// Verfahrens wären zwei Gelegenheiten auseinanderzulaufen, und
-        /// auffallen würde es erst bei einem Passwort ausserhalb von ASCII.
+        /// That <see cref="SaslPrep"/> stands here and not a computation of its
+        /// own is the point: server and client have to win the same key from
+        /// the same input. Two versions of the same procedure would be two
+        /// opportunities to drift apart, and it would only show up with a
+        /// password outside of ASCII.
         /// </remarks>
         internal static String Normalize(String input)
             => SaslPrep.Prepare(input);

@@ -19,23 +19,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein abgerissener Stream, der auf seinen Rückkehrer wartet (XEP-0198,
-    /// Abschnitt 5).
+    /// A dropped stream waiting for its returner (XEP-0198, section 5).
     /// </summary>
     /// <remarks>
-    /// Aufgehoben wird die Sitzung selbst und nicht eine Abschrift ihrer
-    /// Werte: an ihr hängen Full-JID, Konto, Zähler, der Puffer der noch nicht
-    /// bestätigten Stanzas und der Presence-Zustand. Eine Abschrift müsste
-    /// jedes davon einzeln nachführen, und was dabei vergessen würde, fiele
-    /// erst dem Rückkehrer auf.
+    /// What is kept is the session itself and not a copy of its values: on it
+    /// hang the full JID, the account, the counters, the buffer of the stanzas
+    /// not yet acknowledged and the presence state. A copy would have to
+    /// maintain every one of those separately, and whatever was forgotten in
+    /// the process would only show up to the returner.
     ///
-    /// Ihre Verbindung ist tot; gesendet wird über sie nichts mehr
-    /// (<c>SendAsync</c> bricht bei geschlossener Verbindung ab). Sie ist
-    /// hier reiner Zustandsträger, bis jemand ihn übernimmt oder die Frist
-    /// abläuft.
+    /// Its connection is dead; nothing is sent over it any more
+    /// (<c>SendAsync</c> aborts on a closed connection). It is a pure carrier
+    /// of state here, until somebody takes it over or the deadline expires.
     /// </remarks>
-    /// <param name="Session">Die abgerissene Sitzung samt ihrem Zustand.</param>
-    /// <param name="Deadline">Wann die Zusage verfällt.</param>
+    /// <param name="Session">The dropped session together with its state.</param>
+    /// <param name="Deadline">When the promise expires.</param>
     internal sealed record ParkedStream(XMPPSession     Session,
                                         DateTimeOffset  Deadline);
 

@@ -26,20 +26,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Die Serverseite eines SCRAM-Austauschs (RFC 5802, RFC 7677) - ein
-    /// Objekt je laufender Anmeldung.
+    /// The server side of a SCRAM exchange (RFC 5802, RFC 7677) - one object
+    /// per login in progress.
     /// </summary>
     /// <remarks>
-    /// Absichtlich unabhängig von <see cref="SCRAMAuthenticator"/>
-    /// geschrieben, nicht als dessen Spiegelbild. Teilten sich beide Seiten
-    /// den Code, prüften die Tests den Handshake mit derselben Logik, die ihn
-    /// erzeugt: ein falsch zusammengesetzter <c>AuthMessage</c> zum Beispiel
-    /// wäre auf beiden Seiten gleich falsch und fiele nirgends auf.
+    /// Deliberately written independently of <see cref="SCRAMAuthenticator"/>,
+    /// not as its mirror image. If both sides shared the code, the tests would
+    /// check the handshake with the same logic that produces it: a wrongly
+    /// assembled <c>AuthMessage</c>, for example, would be equally wrong on
+    /// both sides and would show up nowhere.
     ///
-    /// Nicht implementiert ist Channel Binding (<c>-PLUS</c>). Der Server
-    /// prüft aber, dass der Client denselben GS2-Header meldet, den er
-    /// geschickt hat - sonst könnte ein Zwischenmann dem Client Channel
-    /// Binding ausreden, ohne dass es auffiele (RFC 5802, Abschnitt 6).
+    /// Not implemented is channel binding (<c>-PLUS</c>). The server does
+    /// check, though, that the client reports the same GS2 header it sent -
+    /// otherwise a man in the middle could talk the client out of channel
+    /// binding without it being noticed (RFC 5802, section 6).
     /// </remarks>
     internal sealed class SCRAMExchange
     {
@@ -59,13 +59,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Properties
 
         /// <summary>
-        /// Das Konto, um dessen Anmeldung es geht - oder null, wenn es den
-        /// Benutzernamen nicht gibt und der Austausch nur zum Schein läuft.
+        /// The account whose login this is about - or null when the user name
+        /// does not exist and the exchange only runs for show.
         /// </summary>
         public XMPPAccount? Account => _account;
 
         /// <summary>
-        /// Die server-first-message, fertig für <c>&lt;challenge/&gt;</c>.
+        /// The server-first-message, ready for <c>&lt;challenge/&gt;</c>.
         /// </summary>
         public String Challenge => Convert.ToBase64String(Encoding.UTF8.GetBytes(_serverFirst));
 
@@ -96,24 +96,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Begin(clientFirstBase64, mechanism, lookup)
 
         /// <summary>
-        /// Nimmt die client-first-message entgegen und bereitet die Antwort
-        /// vor. Null bedeutet: unlesbar.
+        /// Takes the client-first-message in and prepares the answer. Null
+        /// means: unreadable.
         /// </summary>
         /// <remarks>
-        /// Ein <b>unbekannter</b> Benutzername ist kein Grund abzubrechen. Der
-        /// Austausch läuft dann mit erfundenen Zugangsdaten weiter und
-        /// scheitert am Beweis - dort, wo er auch bei einem falschen Passwort
-        /// scheitert (RFC 6120, Abschnitt 13.11). Ein sofortiger Fehlschlag
-        /// wäre die Auskunft, dass es das Konto nicht gibt, und zwar unabhängig
-        /// davon, welches Fehlerwort dabei steht.
+        /// An <b>unknown</b> user name is no reason to break off. The exchange
+        /// then carries on with invented credentials and fails at the proof -
+        /// where it fails with a wrong password too (RFC 6120, section 13.11).
+        /// An immediate failure would be the information that the account does
+        /// not exist, and that regardless of which error word stands with it.
         /// </remarks>
-        /// <param name="clientFirstBase64">Nutzlast des <c>&lt;auth/&gt;</c>.</param>
-        /// <param name="mechanism">Der vom Client gewählte Mechanismus.</param>
-        /// <param name="lookup">Sucht ein Konto zum Benutzernamen.</param>
+        /// <param name="clientFirstBase64">Payload of the <c>&lt;auth/&gt;</c>.</param>
+        /// <param name="mechanism">The mechanism chosen by the client.</param>
+        /// <param name="lookup">Searches for an account by the user name.</param>
         /// <param name="decoy">
-        /// Liefert die erfundenen Zugangsdaten für einen Namen ohne Konto.
-        /// Ohne Vorgabewert: Wer diesen Austausch benutzt, soll sich für die
-        /// Gegenmassnahme entscheiden müssen und nicht daran vorbeirutschen.
+        /// Delivers the invented credentials for a name without an account. No
+        /// default value: whoever uses this exchange shall have to decide on
+        /// the countermeasure and not slip past it.
         /// </param>
         public static SCRAMExchange? Begin(String                          clientFirstBase64,
                                            SCRAMMechanism                  mechanism,
@@ -132,24 +131,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return null;
             }
 
-            // GS2-Header: "n,," ohne Channel Binding und ohne authzid, "y,,"
-            // wenn der Client Channel Binding kann und meint der Server könne
-            // es nicht. Beides endet nach dem zweiten Komma.
-            var kopfEnde = NthComma(clientFirst, 2);
+            // GS2 header: "n,," without channel binding and without an authzid,
+            // "y,," when the client can do channel binding and thinks the server
+            // cannot. Both end after the second comma.
+            var headerEnd = NthComma(clientFirst, 2);
 
-            if (kopfEnde < 0)
+            if (headerEnd < 0)
                 return null;
 
-            var gs2Header        = clientFirst[..(kopfEnde + 1)];
-            var clientFirstBare  = clientFirst[(kopfEnde + 1)..];
+            var gs2Header        = clientFirst[..(headerEnd + 1)];
+            var clientFirstBare  = clientFirst[(headerEnd + 1)..];
 
-            var benutzer  = Attribute(clientFirstBare, "n");
-            var nonce     = Attribute(clientFirstBare, "r");
+            var user   = Attribute(clientFirstBare, "n");
+            var nonce  = Attribute(clientFirstBare, "r");
 
-            if (benutzer is null || nonce is null || nonce.Length == 0)
+            if (user is null || nonce is null || nonce.Length == 0)
                 return null;
 
-            var name           = Unescape(benutzer);
+            var name           = Unescape(user);
             var account        = lookup(name);
             var credentials    = account?.Credentials ?? decoy(name);
             var combinedNonce  = nonce + Nonce();
@@ -173,15 +172,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Complete(clientFinalBase64)
 
         /// <summary>
-        /// Prüft die client-final-message. Zurück kommt die
-        /// server-final-message für das <c>&lt;success/&gt;</c>, oder null,
-        /// wenn der Beweis nicht stimmt.
+        /// Checks the client-final-message. Back comes the server-final-message
+        /// for the <c>&lt;success/&gt;</c>, or null when the proof is not
+        /// right.
         /// </summary>
         /// <remarks>
-        /// Der Server rechnet den <c>ClientKey</c> aus dem Beweis zurück und
-        /// prüft, ob dessen Hash der aufbewahrte <c>StoredKey</c> ist. Er
-        /// braucht dafür weder das Passwort noch den ClientKey selbst - genau
-        /// deshalb muss er beides nicht aufbewahren.
+        /// The server computes the <c>ClientKey</c> back out of the proof and
+        /// checks whether its hash is the <c>StoredKey</c> kept. For that it
+        /// needs neither the password nor the ClientKey itself - precisely for
+        /// that reason it does not have to keep either.
         /// </remarks>
         public String? Complete(String clientFinalBase64)
         {
@@ -197,35 +196,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return null;
             }
 
-            var proofBeginn = clientFinal.LastIndexOf(",p=", StringComparison.Ordinal);
+            var proofStart = clientFinal.LastIndexOf(",p=", StringComparison.Ordinal);
 
-            if (proofBeginn < 0)
+            if (proofStart < 0)
                 return null;
 
-            var clientFinalOhneBeweis  = clientFinal[..proofBeginn];
-            var binding                = Attribute(clientFinalOhneBeweis, "c");
-            var nonce                  = Attribute(clientFinalOhneBeweis, "r");
-            var beweisBase64           = clientFinal[(proofBeginn + 3)..];
+            var clientFinalWithoutProof  = clientFinal[..proofStart];
+            var binding                  = Attribute(clientFinalWithoutProof, "c");
+            var nonce                    = Attribute(clientFinalWithoutProof, "r");
+            var proofBase64              = clientFinal[(proofStart + 3)..];
 
             if (binding is null || nonce is null)
                 return null;
 
-            // Der Client muss die Nonce des Servers zurückspiegeln. Ohne diese
-            // Prüfung liesse sich ein früherer Austausch wiedereinspielen.
+            // The client has to mirror the nonce of the server back. Without
+            // this check an earlier exchange could be replayed.
             if (!String.Equals(nonce, _combinedNonce, StringComparison.Ordinal))
                 return null;
 
-            // Und er muss denselben GS2-Header melden, den er geschickt hat.
+            // And it has to report the same GS2 header it sent.
             if (!String.Equals(binding,
                                Convert.ToBase64String(Encoding.UTF8.GetBytes(_gs2Header)),
                                StringComparison.Ordinal))
                 return null;
 
-            Byte[] beweis;
+            Byte[] proof;
 
             try
             {
-                beweis = Convert.FromBase64String(beweisBase64);
+                proof = Convert.FromBase64String(proofBase64);
             }
             catch (FormatException)
             {
@@ -234,27 +233,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var keys = _credentials.KeysOf(_mechanism);
 
-            if (beweis.Length != keys.StoredKey.Length)
+            if (proof.Length != keys.StoredKey.Length)
                 return null;
 
-            var authMessage = $"{_clientFirstBare},{_serverFirst},{clientFinalOhneBeweis}";
+            var authMessage = $"{_clientFirstBare},{_serverFirst},{clientFinalWithoutProof}";
             var authBytes   = Encoding.UTF8.GetBytes(authMessage);
 
             // ClientSignature := HMAC(StoredKey, AuthMessage)
             // ClientKey       := ClientProof XOR ClientSignature
             var clientSignature = XMPPCredentials.Hmac(_mechanism, keys.StoredKey, authBytes);
-            var clientKey       = XOR(beweis, clientSignature);
+            var clientKey       = XOR(proof, clientSignature);
 
-            var stimmt = CryptographicOperations.FixedTimeEquals(
-                             XMPPCredentials.Hash(_mechanism, clientKey),
-                             keys.StoredKey);
+            var correct = CryptographicOperations.FixedTimeEquals(
+                              XMPPCredentials.Hash(_mechanism, clientKey),
+                              keys.StoredKey);
 
-            // Die zweite Bedingung ist eine Sicherung und kein Weg: Zu einem
-            // erfundenen Konto gehört ein StoredKey aus dem Serverschlüssel,
-            // und wer den nicht kennt, bringt keinen passenden Beweis zustande.
-            // Sie steht hier trotzdem, weil der Preis eines Irrtums an dieser
-            // Stelle eine Anmeldung ohne Konto wäre.
-            if (!stimmt || _account is null)
+            // The second condition is a safeguard and not a route: to an
+            // invented account belongs a StoredKey from the server key, and
+            // whoever does not know that key cannot produce a fitting proof. It
+            // stands here all the same, because the price of an error at this
+            // spot would be a login without an account.
+            if (!correct || _account is null)
                 return null;
 
             // ServerSignature := HMAC(ServerKey, AuthMessage)
@@ -268,38 +267,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #endregion
 
 
-        #region (private, static) Hilfsfunktionen
+        #region (private, static) Helpers
 
         /// <summary>
-        /// Liest den Wert eines Attributs aus einer SCRAM-Nachricht.
+        /// Reads the value of an attribute out of a SCRAM message.
         /// </summary>
         /// <remarks>
-        /// Verankert am Anfang oder hinter einem Komma. Eine ungebundene Suche
-        /// nach <c>i=</c> träfe sonst auch ein <c>i=</c> mitten in Nonce oder
-        /// Salt - RFC 5802 erlaubt dort jedes druckbare Zeichen ausser dem
-        /// Komma.
+        /// Anchored at the start or behind a comma. An unanchored search for
+        /// <c>i=</c> would otherwise also hit an <c>i=</c> in the middle of the
+        /// nonce or the salt - RFC 5802 allows every printable character except
+        /// the comma there.
         /// </remarks>
-        private static String? Attribute(String nachricht, String name)
+        private static String? Attribute(String message, String name)
         {
 
-            for (var i = 0; i <= nachricht.Length - name.Length - 1; i++)
+            for (var i = 0; i <= message.Length - name.Length - 1; i++)
             {
 
-                if (i > 0 && nachricht[i - 1] != ',')
+                if (i > 0 && message[i - 1] != ',')
                     continue;
 
-                if (String.CompareOrdinal(nachricht, i, name, 0, name.Length) != 0)
+                if (String.CompareOrdinal(message, i, name, 0, name.Length) != 0)
                     continue;
 
-                if (nachricht[i + name.Length] != '=')
+                if (message[i + name.Length] != '=')
                     continue;
 
-                var wertBeginn  = i + name.Length + 1;
-                var wertEnde    = nachricht.IndexOf(',', wertBeginn);
+                var valueStart  = i + name.Length + 1;
+                var valueEnd    = message.IndexOf(',', valueStart);
 
-                return wertEnde < 0
-                           ? nachricht[wertBeginn..]
-                           : nachricht[wertBeginn..wertEnde];
+                return valueEnd < 0
+                           ? message[valueStart..]
+                           : message[valueStart..valueEnd];
 
             }
 
@@ -307,7 +306,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Position des n-ten Kommas, oder -1.</summary>
+        /// <summary>The position of the n-th comma, or -1.</summary>
         private static Int32 NthComma(String text, Int32 n)
         {
 
@@ -328,16 +327,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// RFC 5802: im Benutzernamen steht <c>=2C</c> für ein Komma und
-        /// <c>=3D</c> für ein Gleichheitszeichen.
+        /// RFC 5802: in the user name <c>=2C</c> stands for a comma and
+        /// <c>=3D</c> for an equals sign.
         /// </summary>
         /// <remarks>
-        /// Die Reihenfolge ist nicht beliebig: erst das Komma, dann das
-        /// Gleichheitszeichen. Andersherum würde aus einem übertragenen
-        /// <c>=3D2C</c> - also dem Text "=2C" - fälschlich ein Komma.
+        /// The order is not arbitrary: first the comma, then the equals sign.
+        /// The other way round, a transmitted <c>=3D2C</c> - that is, the text
+        /// "=2C" - would wrongly become a comma.
         /// </remarks>
-        private static String Unescape(String benutzer)
-            => benutzer.Replace("=2C", ",").Replace("=3D", "=");
+        private static String Unescape(String user)
+            => user.Replace("=2C", ",").Replace("=3D", "=");
 
         private static String Nonce()
             => Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
@@ -345,12 +344,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private static Byte[] XOR(Byte[] a, Byte[] b)
         {
 
-            var ergebnis = new Byte[a.Length];
+            var result = new Byte[a.Length];
 
             for (var i = 0; i < a.Length; i++)
-                ergebnis[i] = (Byte) (a[i] ^ b[i]);
+                result[i] = (Byte) (a[i] ^ b[i]);
 
-            return ergebnis;
+            return result;
 
         }
 

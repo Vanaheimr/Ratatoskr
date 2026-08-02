@@ -26,24 +26,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein Kontenspeicher in einer JSON-Datei.
+    /// An account store in a JSON file.
     /// </summary>
     /// <remarks>
-    /// Eine Datei für alle Konten, bei jeder Änderung vollständig neu
-    /// geschrieben. Das ist O(n) je Speichervorgang und für ein paar tausend
-    /// Konten völlig ausreichend; wer mehr braucht, braucht ohnehin eine
-    /// Datenbank und damit eine andere Implementierung dieser Schnittstelle.
+    /// One file for all accounts, rewritten completely on every change. That is
+    /// O(n) per save and entirely sufficient for a few thousand accounts;
+    /// whoever needs more needs a database anyway, and with it another
+    /// implementation of this interface.
     ///
-    /// Geschrieben wird über eine Nebendatei, die anschliessend an ihren Platz
-    /// verschoben wird. Bricht der Vorgang ab, steht die alte Fassung noch
-    /// vollständig da - ein direkt beschriebenes Ziel wäre nach einem
-    /// Stromausfall mitten im Schreiben abgeschnitten und damit unlesbar.
+    /// Writing goes through a file beside it, which is afterwards moved into
+    /// its place. If the operation breaks off, the old version still stands
+    /// there complete - a target written directly would be truncated after a
+    /// power cut in the middle of writing, and thereby unreadable.
     ///
-    /// Was hier <b>nicht</b> passiert: die Datei wird nicht verschlüsselt und
-    /// ihre Zugriffsrechte werden nicht gesetzt. Die abgelegten Schlüssel sind
-    /// keine Passwörter, aber sie erlauben einem Angreifer, Anmeldungen zu
-    /// prüfen. Die Datei gehört an einen Ort, an den nur der Serverprozess
-    /// kommt.
+    /// What does <b>not</b> happen here: the file is not encrypted and its
+    /// access rights are not set. The keys stored are not passwords, but they
+    /// allow an attacker to check logins. The file belongs in a place only the
+    /// server process gets to.
     /// </remarks>
     public sealed class FileAccountStore : IXMPPAccountStore
     {
@@ -62,7 +61,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>Die Datei, in der die Konten liegen.</summary>
+        /// <summary>The file the accounts lie in.</summary>
         public String Path => _path;
 
         #endregion
@@ -70,8 +69,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Constructor(s)
 
         /// <summary>
-        /// Legt einen Speicher an der angegebenen Datei an. Die Datei muss
-        /// noch nicht existieren.
+        /// Creates a store at the given file. The file does not have to exist
+        /// yet.
         /// </summary>
         public FileAccountStore(String path)
         {
@@ -87,7 +86,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         {
 
             lock (_lock)
-                return LesenOhneSperre().Select(ZuKonto).ToList();
+                return ReadWithoutLock().Select(ToAccount).ToList();
 
         }
 
@@ -101,13 +100,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                var konten = LesenOhneSperre()
-                                 .Where(k => !String.Equals(k.BareJid, account.BareJid, StringComparison.OrdinalIgnoreCase))
-                                 .ToList();
+                var accounts = ReadWithoutLock()
+                                   .Where(k => !String.Equals(k.BareJid, account.BareJid, StringComparison.OrdinalIgnoreCase))
+                                   .ToList();
 
-                konten.Add(ZuDatensatz(account));
+                accounts.Add(ToRecord(account));
 
-                SchreibenOhneSperre(konten);
+                WriteWithoutLock(accounts);
 
             }
 
@@ -123,11 +122,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                var konten = LesenOhneSperre()
-                                 .Where(k => !String.Equals(k.BareJid, bareJid, StringComparison.OrdinalIgnoreCase))
-                                 .ToList();
+                var accounts = ReadWithoutLock()
+                                   .Where(k => !String.Equals(k.BareJid, bareJid, StringComparison.OrdinalIgnoreCase))
+                                   .ToList();
 
-                SchreibenOhneSperre(konten);
+                WriteWithoutLock(accounts);
 
             }
 
@@ -136,9 +135,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #endregion
 
 
-        #region (private) Datei lesen und schreiben
+        #region (private) Reading and writing the file
 
-        private List<GespeichertesKonto> LesenOhneSperre()
+        private List<StoredAccount> ReadWithoutLock()
         {
 
             if (!File.Exists(_path))
@@ -149,101 +148,99 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (json.Length == 0)
                 return [];
 
-            return JsonSerializer.Deserialize<GespeicherteKonten>(json, _options)?.Accounts ?? [];
+            return JsonSerializer.Deserialize<StoredAccounts>(json, _options)?.Accounts ?? [];
 
         }
 
-        private void SchreibenOhneSperre(List<GespeichertesKonto> konten)
+        private void WriteWithoutLock(List<StoredAccount> accounts)
         {
 
-            var verzeichnis = System.IO.Path.GetDirectoryName(_path);
+            var directory = System.IO.Path.GetDirectoryName(_path);
 
-            if (!String.IsNullOrEmpty(verzeichnis))
-                Directory.CreateDirectory(verzeichnis);
+            if (!String.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
 
-            var json      = JsonSerializer.Serialize(new GespeicherteKonten(1, konten), _options);
-            var nebenbei  = _path + ".neu";
+            var json    = JsonSerializer.Serialize(new StoredAccounts(1, accounts), _options);
+            var beside  = _path + ".new";
 
-            File.WriteAllText(nebenbei, json);
-            File.Move(nebenbei, _path, overwrite: true);
+            File.WriteAllText(beside, json);
+            File.Move(beside, _path, overwrite: true);
 
         }
 
         #endregion
 
-        #region (private) Umwandlung
+        #region (private) Conversion
 
-        private static GespeichertesKonto ZuDatensatz(XMPPAccount account)
+        private static StoredAccount ToRecord(XMPPAccount account)
         {
 
             var credentials = account.Credentials;
 
-            return new GespeichertesKonto(
+            return new StoredAccount(
 
                        account.BareJid,
 
-                       new GespeicherteZugangsdaten(
+                       new StoredCredentials(
                            Convert.ToBase64String(credentials.Salt),
                            credentials.IterationCount,
                            credentials.Mechanisms.ToDictionary(
                                m => m.ToString(),
-                               m => new GespeicherteSchluessel(
+                               m => new StoredKeyPair(
                                         Convert.ToBase64String(credentials.KeysOf(m).StoredKey),
                                         Convert.ToBase64String(credentials.KeysOf(m).ServerKey)))),
 
-                       [.. account.Roster.Select(e => new GespeicherterKontakt(e.Jid, e.Name, e.Subscription,
-                                                                              e.Ask, e.Approved,
-                                                                              e.Groups.Count > 0
-                                                                                  ? [.. e.Groups]
-                                                                                  : null))],
+                       [.. account.Roster.Select(e => new StoredContact(e.Jid, e.Name, e.Subscription,
+                                                                       e.Ask, e.Approved,
+                                                                       e.Groups.Count > 0
+                                                                           ? [.. e.Groups]
+                                                                           : null))],
 
                        account.PendingSubscriptionRequests.Count > 0
                            ? new Dictionary<String, String>(account.PendingSubscriptionRequests)
                            : null,
 
                        account.OfflineMessages.Count > 0
-                           ? [.. account.OfflineMessages.Select(m => new AbgelegteNachricht(m.Stanza, m.StoredAt))]
+                           ? [.. account.OfflineMessages.Select(m => new StoredMessage(m.Stanza, m.StoredAt))]
                            : null
 
                    );
 
         }
 
-        private static XMPPAccount ZuKonto(GespeichertesKonto datensatz)
+        private static XMPPAccount ToAccount(StoredAccount stored)
         {
 
             var credentials = XMPPCredentials.FromStored(
-                                  Convert.FromBase64String(datensatz.Credentials.Salt),
-                                  datensatz.Credentials.IterationCount,
-                                  datensatz.Credentials.Keys.ToDictionary(
+                                  Convert.FromBase64String(stored.Credentials.Salt),
+                                  stored.Credentials.IterationCount,
+                                  stored.Credentials.Keys.ToDictionary(
                                       k => Enum.Parse<SCRAMMechanism>(k.Key),
                                       k => new SCRAMKeys(Convert.FromBase64String(k.Value.StoredKey),
                                                          Convert.FromBase64String(k.Value.ServerKey))));
 
-            var account = new XMPPAccount(datensatz.BareJid, credentials);
+            var account = new XMPPAccount(stored.BareJid, credentials);
 
-            foreach (var kontakt in datensatz.Roster)
-                account.SetRosterEntry(new RosterEntry(kontakt.Jid,
-                                                       kontakt.Name,
-                                                       kontakt.Subscription,
-                                                       kontakt.Ask,
-                                                       kontakt.Approved,
-                                                       kontakt.Groups));
+            foreach (var contact in stored.Roster)
+                account.SetRosterEntry(new RosterEntry(contact.Jid,
+                                                       contact.Name,
+                                                       contact.Subscription,
+                                                       contact.Ask,
+                                                       contact.Approved,
+                                                       contact.Groups));
 
-            // RFC 6121, Abschnitt 3.1.3: eine aufbewahrte Anfrage soll
-            // zugestellt werden, sobald der Kontakt sich das nächste Mal
-            // anmeldet - und einen Serverneustart zu überstehen gehört dazu.
-            // Ohne das wäre "aufbewahrt" nur ein anderes Wort für "bis zum
-            // nächsten Neustart".
-            foreach (var anfrage in datensatz.PendingSubscriptions ?? [])
-                account.RememberSubscriptionRequest(anfrage.Key, anfrage.Value);
+            // RFC 6121, section 3.1.3: a request that was kept shall be
+            // delivered as soon as the contact logs in the next time - and
+            // surviving a server restart belongs to that. Without it "kept"
+            // would only be another word for "until the next restart".
+            foreach (var request in stored.PendingSubscriptions ?? [])
+                account.RememberSubscriptionRequest(request.Key, request.Value);
 
-            // Und dasselbe für die Offline-Ablage. Ein Absender, dessen
-            // Nachricht angenommen wurde, darf sich darauf verlassen, dass sie
-            // ankommt - ein Neustart des Servers ist kein Grund, sie zu
-            // verlieren, und der Absender erfährt davon nie etwas.
-            foreach (var nachricht in datensatz.OfflineMessages ?? [])
-                account.StoreOfflineMessage(nachricht.Stanza, nachricht.StoredAt);
+            // And the same for the offline storage. A sender whose message was
+            // accepted may rely on it arriving - a restart of the server is no
+            // reason to lose it, and the sender never learns anything about it.
+            foreach (var message in stored.OfflineMessages ?? [])
+                account.StoreOfflineMessage(message.Stanza, message.StoredAt);
 
             return account;
 
@@ -251,50 +248,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #endregion
 
-        #region (private) Dateiformat
+        #region (private) The file format
 
         /// <param name="Version">
-        /// Damit ein späteres Format erkennen kann, was es vor sich hat.
+        /// So that a later format can recognise what it has in front of it.
         /// </param>
-        private sealed record GespeicherteKonten(Int32                     Version,
-                                                 List<GespeichertesKonto>  Accounts);
+        private sealed record StoredAccounts(Int32                Version,
+                                             List<StoredAccount>  Accounts);
 
         /// <param name="PendingSubscriptions">
-        /// Aufbewahrte Subscription-Anfragen, nach Absender (RFC 6121,
-        /// Abschnitt 3.1.3). Fehlt in älteren Dateien und ist dann null.
+        /// Subscription requests kept, by sender (RFC 6121, section 3.1.3).
+        /// Missing in older files and then null.
         /// </param>
         /// <param name="OfflineMessages">
-        /// Die Offline-Ablage (RFC 6121, Abschnitt 8.5.2.2.1). Fehlt in älteren
-        /// Dateien und ist dann null.
+        /// The offline storage (RFC 6121, section 8.5.2.2.1). Missing in older
+        /// files and then null.
         /// </param>
-        private sealed record GespeichertesKonto(String                        BareJid,
-                                                 GespeicherteZugangsdaten      Credentials,
-                                                 List<GespeicherterKontakt>    Roster,
-                                                 Dictionary<String, String>?   PendingSubscriptions,
-                                                 List<AbgelegteNachricht>?     OfflineMessages);
+        private sealed record StoredAccount(String                        BareJid,
+                                            StoredCredentials             Credentials,
+                                            List<StoredContact>           Roster,
+                                            Dictionary<String, String>?   PendingSubscriptions,
+                                            List<StoredMessage>?          OfflineMessages);
 
-        private sealed record AbgelegteNachricht(String          Stanza,
-                                                 DateTimeOffset  StoredAt);
+        private sealed record StoredMessage(String          Stanza,
+                                            DateTimeOffset  StoredAt);
 
-        private sealed record GespeicherteZugangsdaten(String                                    Salt,
-                                                       Int32                                     IterationCount,
-                                                       Dictionary<String, GespeicherteSchluessel> Keys);
+        private sealed record StoredCredentials(String                             Salt,
+                                                Int32                              IterationCount,
+                                                Dictionary<String, StoredKeyPair>  Keys);
 
-        private sealed record GespeicherteSchluessel(String StoredKey,
-                                                     String ServerKey);
+        private sealed record StoredKeyPair(String StoredKey,
+                                            String ServerKey);
 
         /// <param name="Groups">
-        /// Die Gruppen, oder null in einer Datei von vor D91 - dann steht der
-        /// Kontakt in keiner. Ein fehlendes Feld als „unbekannt" zu behandeln
-        /// gäbe es hier nicht: Der Roster kennt keinen dritten Zustand
-        /// zwischen „in dieser Gruppe" und „nicht".
+        /// The groups, or null in a file from before D91 - then the contact is
+        /// in none. Treating a missing field as "unknown" would not exist here:
+        /// the roster knows no third state between "in this group" and "not".
         /// </param>
-        private sealed record GespeicherterKontakt(String     Jid,
-                                                   String?    Name,
-                                                   String     Subscription,
-                                                   String?    Ask,
-                                                   Boolean    Approved,
-                                                   String[]?  Groups = null);
+        private sealed record StoredContact(String     Jid,
+                                            String?    Name,
+                                            String     Subscription,
+                                            String?    Ask,
+                                            Boolean    Approved,
+                                            String[]?  Groups = null);
 
         #endregion
 

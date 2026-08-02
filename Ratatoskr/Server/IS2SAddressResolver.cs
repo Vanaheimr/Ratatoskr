@@ -19,33 +19,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Findet heraus, wo eine fremde Domain ihren S2S-Dienst anbietet
-    /// (RFC 6120, Abschnitt 3.2).
+    /// Works out where a foreign domain offers its S2S service (RFC 6120,
+    /// section 3.2).
     /// </summary>
     /// <remarks>
-    /// Eigene Schnittstelle und nicht der DNS-Client direkt, aus zwei
-    /// Gründen. Erstens ist die von Hand gepflegte Gegenstellenliste eine
-    /// ebenso gültige Antwort auf dieselbe Frage - im Testaufbau sogar die
-    /// einzige brauchbare. Zweitens hängt an dieser Antwort ein Netzzugriff,
-    /// und ein Test, der echtes DNS befragt, prüft die Welt statt den Code.
+    /// An interface of its own and not the DNS client directly, for two
+    /// reasons. First, the hand-maintained peer list is an equally valid answer
+    /// to the same question - in the test setup even the only usable one.
+    /// Second, on this answer hangs a network access, and a test that asks real
+    /// DNS checks the world instead of the code.
     ///
-    /// <b>Die Antwort sagt, wohin verbunden wird - nicht, mit wem.</b> Ohne
-    /// DNSSEC ist die Auskunft nicht authentifiziert. Wer sie fälschen kann,
-    /// lenkt die Verbindung um; deshalb bleibt die Identität an das gebunden,
-    /// was die Gegenstelle vorweist - Zertifikat oder Dialback -, und geprüft
-    /// wird stets gegen die <i>gesuchte</i> Domain, nie gegen den gelieferten
-    /// Rechnernamen.
+    /// <b>The answer says where the connection goes - not with whom.</b>
+    /// Without DNSSEC the information is not authenticated. Whoever can forge
+    /// it redirects the connection; that is why the identity stays bound to
+    /// what the peer presents - a certificate or dialback - and the check is
+    /// always against the <i>domain sought</i>, never against the host name
+    /// delivered.
     /// </remarks>
     public interface IS2SAddressResolver
     {
 
         /// <summary>
-        /// Die Ziele für eine Domain, in der Reihenfolge, in der sie versucht
-        /// werden sollen.
+        /// The targets for a domain, in the order in which they are to be
+        /// tried.
         /// </summary>
         /// <returns>
-        /// Leer, wenn die Domain nicht erreichbar ist oder den Dienst
-        /// ausdrücklich nicht anbietet.
+        /// Empty when the domain is not reachable or explicitly does not offer
+        /// the service.
         /// </returns>
         Task<IReadOnlyList<SrvTarget>> ResolveAsync(String             domain,
                                                     CancellationToken  cancellationToken = default);

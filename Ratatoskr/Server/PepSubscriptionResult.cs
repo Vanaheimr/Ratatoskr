@@ -19,50 +19,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ob sich zu einer Anfrage das gemeinte Abonnement finden liess.
+    /// Whether the subscription meant could be found for a request.
     /// </summary>
     /// <remarks>
-    /// Dieselbe Frage stellt sich beim Abbestellen (XEP-0060, Abschnitt 6.2)
-    /// und beim Einstellen (Abschnitt 6.3), und sie wird beide Male gleich
-    /// beantwortet. <b>Der Fehler dazu ist es nicht:</b> Fehlt bei mehreren
-    /// die Kennung, verlangt das XEP beim Abbestellen ein
-    /// <c>&lt;bad-request/&gt;</c> und beim Einstellen ein
-    /// <c>&lt;not-acceptable/&gt;</c>. Das ist keine Willkür - dort ist die
-    /// Anfrage unvollständig, hier ist sie in Ordnung und nur in dieser Lage
-    /// nicht zu beantworten.
+    /// The same question arises when unsubscribing (XEP-0060, section 6.2) and
+    /// when configuring (section 6.3), and it is answered the same way both
+    /// times. <b>The error belonging to it is not:</b> if the identifier is
+    /// missing where there are several, the XEP demands a
+    /// <c>&lt;bad-request/&gt;</c> when unsubscribing and a
+    /// <c>&lt;not-acceptable/&gt;</c> when configuring. That is not
+    /// arbitrariness - there the request is incomplete, here it is in order and
+    /// merely cannot be answered in this situation.
     ///
-    /// Deshalb steht hier der Befund und nicht die Antwort. Wer beide Stellen
-    /// dieselbe Fehlermeldung bauen liesse, hätte eine von beiden nicht
-    /// gelesen.
+    /// That is why the finding stands here and not the answer. Whoever let both
+    /// places build the same error message would not have read one of the two.
     /// </remarks>
     public enum PepSubscriptionResult
     {
 
         /// <summary>
-        /// Gefunden - und bei einer Änderung auch ausgeführt.
+        /// Found - and, with a change, carried out as well.
         /// </summary>
         Ok,
 
         /// <summary>
-        /// Dieser JID hat auf diesen Knoten kein Abonnement -
-        /// <c>&lt;unexpected-request/&gt;</c> mit
+        /// This JID has no subscription to this node -
+        /// <c>&lt;unexpected-request/&gt;</c> with
         /// <c>&lt;not-subscribed/&gt;</c>.
         /// </summary>
         NotSubscribed,
 
         /// <summary>
-        /// Die mitgeschickte <c>subid</c> gehört zu keinem seiner Abonnements -
-        /// <c>&lt;not-acceptable/&gt;</c> mit <c>&lt;invalid-subid/&gt;</c>.
+        /// The <c>subid</c> sent along belongs to none of its subscriptions -
+        /// <c>&lt;not-acceptable/&gt;</c> with <c>&lt;invalid-subid/&gt;</c>.
         /// </summary>
         WrongSubId,
 
         /// <summary>
-        /// Es gibt mehrere, und keine Kennung sagt, welches gemeint ist.
+        /// There are several, and no identifier says which one is meant.
         /// </summary>
         /// <remarks>
-        /// Sich eines auszusuchen wäre die bequeme Antwort und die falsche:
-        /// Der Dienst träfe vielleicht das andere und bestätigte dem Absender,
-        /// es sei seines gewesen.
+        /// Picking one would be the comfortable answer and the wrong one: the
+        /// service might hit the other one and confirm to the sender that it
+        /// had been theirs.
         /// </remarks>
         SubIdRequired
 

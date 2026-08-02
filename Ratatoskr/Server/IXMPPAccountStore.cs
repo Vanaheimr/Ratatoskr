@@ -19,34 +19,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Wo ein Server seine Konten und deren Roster aufbewahrt.
+    /// Where a server keeps its accounts and their rosters.
     /// </summary>
     /// <remarks>
-    /// Absichtlich klein: Laden beim Start, Speichern bei jeder Änderung,
-    /// Löschen. Kein Suchen, kein Blättern, keine Abfragesprache - der Server
-    /// hält seine Konten ohnehin im Speicher, und alles Weitere wäre erfunden,
-    /// bevor jemand es braucht.
+    /// Deliberately small: loading at the start, saving on every change,
+    /// deleting. No searching, no paging, no query language - the server holds
+    /// its accounts in memory anyway, and anything further would be invented
+    /// before anyone needs it.
     ///
-    /// Aufbewahrt wird nie ein Klartextpasswort, sondern nur
-    /// <see cref="XMPPCredentials"/>: Salt, Iterationszahl und die
-    /// abgeleiteten Schlüssel aus RFC 5802.
+    /// What is kept is never a plaintext password but only
+    /// <see cref="XMPPCredentials"/>: salt, iteration count and the derived
+    /// keys from RFC 5802.
     /// </remarks>
     public interface IXMPPAccountStore
     {
 
         /// <summary>
-        /// Liest alle vorhandenen Konten. Wird einmal beim Start gerufen.
+        /// Reads all existing accounts. Called once at the start.
         /// </summary>
         IEnumerable<XMPPAccount> Load();
 
         /// <summary>
-        /// Legt ein Konto an oder schreibt seine Änderungen fort - auch
-        /// Roster-Änderungen laufen hier durch.
+        /// Creates an account or writes its changes on - roster changes run
+        /// through here too.
         /// </summary>
         void Save(XMPPAccount account);
 
         /// <summary>
-        /// Entfernt ein Konto. Ein unbekannter JID ist kein Fehler.
+        /// Removes an account. An unknown JID is not an error.
         /// </summary>
         void Delete(String bareJid);
 

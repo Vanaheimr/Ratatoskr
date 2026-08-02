@@ -19,47 +19,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Wie ein S2S-Stream eingepackt ist - der einzige Unterschied zwischen
-    /// der WebSocket- und der TCP-Strecke, den die Protokollschicht kennen
-    /// muss.
+    /// How an S2S stream is wrapped - the only difference between the WebSocket
+    /// and the TCP link that the protocol layer has to know about.
     /// </summary>
     /// <remarks>
-    /// Diese Schnittstelle ist der Preis für eine Behauptung aus S4b-1:
-    /// <see cref="S2SStream"/> sollte für TCP unverändert bleiben. Sie blieb es
-    /// nicht. An fünf Stellen stand die Rahmung nach RFC 7395 fest verdrahtet
-    /// im Code - <c>&lt;open/&gt;</c>, <c>&lt;close/&gt;</c> und die beiden
-    /// Erkennungen dazu. Die Abstraktion hatte also die Form ihrer ersten
-    /// Implementierung angenommen, genau wie es im Arbeitsplan als Risiko
-    /// vermerkt war. Was <i>tatsächlich</i> gehalten hat, ist alles andere:
-    /// Handshake-Ablauf, Dialback, Absenderprüfung, Fehlerbehandlung,
-    /// Lebenszyklus.
+    /// This interface is the price for a claim from S4b-1:
+    /// <see cref="S2SStream"/> was supposed to stay unchanged for TCP. It did
+    /// not. In five places the framing per RFC 7395 stood hard-wired in the
+    /// code - <c>&lt;open/&gt;</c>, <c>&lt;close/&gt;</c> and the two
+    /// detections belonging to them. The abstraction had thus taken on the
+    /// shape of its first implementation, exactly as noted down as a risk in
+    /// the work plan. What <i>did</i> hold is everything else: the handshake
+    /// sequence, dialback, the sender check, the error handling, the life
+    /// cycle.
     ///
-    /// Bewusst klein gehalten. Alles, was hier nicht steht, ist beiden
-    /// Strecken gemeinsam - unter anderem, dass Stanzas ohne eigenen
-    /// Namensraum hinausgehen. Über TCP erben sie damit den
-    /// Vorgabe-Namensraum <c>jabber:server</c> des Stream-Wurzelelements, was
-    /// genau richtig ist; über WebSocket trägt jeder Rahmen ohnehin für sich.
+    /// Deliberately kept small. Everything that does not stand here is common
+    /// to both links - among other things that stanzas go out without a
+    /// namespace of their own. Over TCP they thereby inherit the default
+    /// namespace <c>jabber:server</c> of the stream root element, which is
+    /// exactly right; over WebSocket every frame carries for itself anyway.
     /// </remarks>
     public interface IS2SFraming
     {
 
         /// <summary>
-        /// Der Stream-Kopf.
+        /// The stream header.
         /// </summary>
-        /// <param name="from">Die eigene Domain.</param>
-        /// <param name="to">Die Domain der Gegenstelle.</param>
+        /// <param name="from">One's own domain.</param>
+        /// <param name="to">The domain of the peer.</param>
         /// <param name="id">
-        /// Die vergebene Stream-ID - nur der antwortende Server setzt sie.
+        /// The stream ID handed out - only the answering server sets it.
         /// </param>
         String StreamOpen(String from, String? to, String? id);
 
-        /// <summary>Das Ende des Streams.</summary>
+        /// <summary>The end of the stream.</summary>
         String StreamClose();
 
-        /// <summary>Ist dieser Rahmen ein Stream-Kopf?</summary>
+        /// <summary>Is this frame a stream header?</summary>
         Boolean IsStreamOpen(String frame);
 
-        /// <summary>Ist dieser Rahmen das Stream-Ende?</summary>
+        /// <summary>Is this frame the end of the stream?</summary>
         Boolean IsStreamClose(String frame);
 
     }

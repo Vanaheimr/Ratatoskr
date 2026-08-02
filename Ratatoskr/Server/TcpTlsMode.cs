@@ -19,33 +19,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Wie eine TCP-S2S-Strecke zu TLS kommt.
+    /// How a TCP S2S link comes to TLS.
     /// </summary>
     /// <remarks>
-    /// Der Unterschied zwischen <see cref="Direct"/> und <see cref="StartTls"/>
-    /// ist nicht die Sicherheit, sondern wer wen erreicht. Beide verschlüsseln
-    /// gleich gut; <see cref="StartTls"/> ist aber das, was RFC 6120,
-    /// Abschnitt 5.4 vorsieht und was ejabberd und Prosody auf Port 5269
-    /// erwarten. <see cref="Direct"/> spart eine Umlaufzeit und ist zwischen
-    /// zwei Instanzen dieses Servers das Einfachere.
+    /// The difference between <see cref="Direct"/> and <see cref="StartTls"/>
+    /// is not the security but who reaches whom. Both encrypt equally well;
+    /// <see cref="StartTls"/> is, however, what RFC 6120, section 5.4 provides
+    /// for and what ejabberd and Prosody expect on port 5269.
+    /// <see cref="Direct"/> saves a round trip and is the simpler one between
+    /// two instances of this server.
     /// </remarks>
     public enum TcpTlsMode
     {
 
         /// <summary>
-        /// Klartext. Nur für die Fehlersuche mit einem Mitschnitt - RFC 6120,
-        /// Abschnitt 13.7 verlangt für S2S Verschlüsselung.
+        /// Plaintext. Only for fault-finding with a recording - RFC 6120,
+        /// section 13.7 demands encryption for S2S.
         /// </summary>
         None,
 
         /// <summary>
-        /// TLS ab dem ersten Byte, ohne Aushandlung im Stream.
+        /// TLS from the first byte, without a negotiation in the stream.
         /// </summary>
         Direct,
 
         /// <summary>
-        /// STARTTLS nach RFC 6120, Abschnitt 5.4: der Stream beginnt im
-        /// Klartext, handelt TLS aus und fängt danach von vorn an.
+        /// STARTTLS per RFC 6120, section 5.4: the stream begins in plaintext,
+        /// negotiates TLS and starts over afterwards.
         /// </summary>
         StartTls
 

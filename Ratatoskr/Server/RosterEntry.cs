@@ -19,41 +19,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein Roster-Eintrag im Testserver.
+    /// A roster entry in the test server.
     /// </summary>
-    /// <param name="Jid">Bare-JID des Kontakts.</param>
-    /// <param name="Name">Anzeigename oder null.</param>
-    /// <param name="Subscription">none, to, from oder both.</param>
+    /// <param name="Jid">Bare JID of the contact.</param>
+    /// <param name="Name">Display name or null.</param>
+    /// <param name="Subscription">none, to, from or both.</param>
     /// <param name="Ask">
-    /// <c>subscribe</c>, solange eine gestellte Anfrage noch unbeantwortet ist,
-    /// sonst null (RFC 6121, Abschnitt 3.1.2). Der Zustand hängt nicht an
-    /// <paramref name="Subscription"/>: eine offene Anfrage lässt die
-    /// Subscription bei <c>none</c> stehen.
+    /// <c>subscribe</c> as long as a request posed is still unanswered,
+    /// otherwise null (RFC 6121, section 3.1.2). The state does not hang on
+    /// <paramref name="Subscription"/>: an open request leaves the subscription
+    /// standing at <c>none</c>.
     /// </param>
     /// <param name="Approved">
-    /// Der Kontakt ist im Voraus zugelassen (RFC 6121, Abschnitt 3.4): stellt
-    /// er künftig eine Anfrage, beantwortet der Server sie selbst.
+    /// The contact is admitted in advance (RFC 6121, section 3.4): if they pose
+    /// a request in future, the server answers it itself.
     /// </param>
     /// <remarks>
-    /// Die Gegenrichtung von <paramref name="Ask"/> - dass <i>gefragt
-    /// wurde</i> - steht hier bewusst nicht. RFC 6121 kennt den Zustand
-    /// ("None + Pending In"), aber Abschnitt 3.1.3 untersagt im selben Atemzug
-    /// einen Roster-Eintrag für einen Antragsteller, dem noch nicht zugestimmt
-    /// wurde. Die offene Anfrage liegt deshalb neben dem Roster, in
-    /// <see cref="XMPPAccount.PendingSubscriptionRequests"/> - und dort
-    /// vollständig, samt erweitertem Inhalt, statt als blosses Ja/Nein.
+    /// The opposite direction of <paramref name="Ask"/> - that one <i>was
+    /// asked</i> - deliberately does not stand here. RFC 6121 knows the state
+    /// ("None + Pending In"), but section 3.1.3 forbids in the same breath a
+    /// roster entry for an applicant who has not been agreed to yet. The open
+    /// request therefore lies beside the roster, in
+    /// <see cref="XMPPAccount.PendingSubscriptionRequests"/> - and there
+    /// completely, together with its extended content, instead of as a mere
+    /// yes/no.
     /// </remarks>
     /// <param name="Groups">
-    /// Die Gruppen, in die der Eigentümer diesen Kontakt gesteckt hat (RFC
-    /// 6121, Abschnitt 2.1.2.4).
+    /// The groups the owner has put this contact into (RFC 6121,
+    /// section 2.1.2.4).
     /// </param>
     /// <remarks>
-    /// <b>Die Gruppen fehlten hier bis D91</b>, und der Kommentar in der
-    /// Roster-Behandlung behauptete seit jeher, ein Set ändere „Name und
-    /// Gruppen". Gelesen wurden sie nie: Ein Client schickte eine Gruppe, bekam
-    /// ein <c>result</c> und im Push denselben Eintrag ohne sie zurück - womit
-    /// sie auch bei ihm verschwand, denn ein Push ersetzt die Gruppen eines
-    /// Eintrags vollständig.
+    /// <b>The groups were missing here until D91</b>, and the comment in the
+    /// roster handling claimed all along that a set changes "the name and the
+    /// groups". They were never read: a client sent a group, got a
+    /// <c>result</c> and the same entry back in the push without them - with
+    /// which they disappeared at its end too, because a push replaces the
+    /// groups of an entry completely.
     /// </remarks>
     public sealed record RosterEntry(String                 Jid,
                                      String?                Name          = null,
@@ -64,8 +65,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
     {
 
         /// <summary>
-        /// Die Gruppen, nie null - „keine Gruppe" ist eine leere Liste und
-        /// nichts Fehlendes.
+        /// The groups, never null - "no group" is an empty list and not
+        /// something missing.
         /// </summary>
         public IReadOnlyList<String> Groups { get; init; } = Groups ?? [];
 

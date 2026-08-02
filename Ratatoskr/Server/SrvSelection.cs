@@ -19,21 +19,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Die Reihenfolge, in der SRV-Ziele versucht werden (RFC 2782).
+    /// The order in which SRV targets are tried (RFC 2782).
     /// </summary>
     /// <remarks>
-    /// Der Teil, den man leicht falsch macht und nie bemerkt. Prioritäten der
-    /// Reihe nach abzuarbeiten ist offensichtlich; die Gewichtung innerhalb
-    /// einer Priorität ist es nicht. Sie ist <b>keine</b> Sortierung nach
-    /// Gewicht, sondern eine gewichtete Ziehung ohne Zurücklegen: aus den
-    /// verbleibenden Zielen wird eines mit einer Wahrscheinlichkeit
-    /// proportional zu seinem Gewicht gezogen, dann das nächste aus dem Rest.
-    /// Wer stattdessen absteigend sortiert, schickt allen Verkehr an den
-    /// stärksten Rechner - und die Lastverteilung, um derentwillen es die
-    /// Gewichte gibt, findet nie statt. Auffallen würde das erst im Betrieb,
-    /// und auch dort nur jemandem, der die Auslastung anschaut.
+    /// The part one easily gets wrong and never notices. Working through the
+    /// priorities in order is obvious; the weighting within a priority is not.
+    /// It is <b>not</b> a sorting by weight but a weighted draw without
+    /// replacement: from the remaining targets one is drawn with a probability
+    /// proportional to its weight, then the next one from the rest. Whoever
+    /// sorts descending instead sends all traffic to the strongest machine -
+    /// and the load distribution the weights exist for never takes place. That
+    /// would only show up in operation, and even there only to somebody who
+    /// looks at the utilisation.
     ///
-    /// Die Zufallsquelle ist einsetzbar, damit der Ablauf prüfbar bleibt.
+    /// The source of randomness can be substituted, so that the procedure stays
+    /// checkable.
     /// </remarks>
     public static class SrvSelection
     {
@@ -41,8 +41,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Data
 
         /// <summary>
-        /// Ein Ziel "." heisst nach RFC 2782 ausdrücklich: dieser Dienst wird
-        /// für diese Domain <b>nicht</b> angeboten.
+        /// A target "." explicitly means, per RFC 2782: this service is
+        /// <b>not</b> offered for this domain.
         /// </summary>
         public const String NoService = ".";
 
@@ -51,74 +51,73 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Order(targets, pick = null)
 
         /// <summary>
-        /// Bringt die Ziele in die Reihenfolge, in der sie versucht werden
-        /// sollen.
+        /// Brings the targets into the order in which they are to be tried.
         /// </summary>
-        /// <param name="targets">Die unsortierten SRV-Ziele.</param>
+        /// <param name="targets">The unsorted SRV targets.</param>
         /// <param name="pick">
-        /// Liefert eine Zufallszahl in <c>[0, max]</c> <b>einschliesslich</b>.
-        /// Null nimmt eine echte Zufallsquelle.
+        /// Delivers a random number in <c>[0, max]</c> <b>inclusive</b>. Null
+        /// takes a real source of randomness.
         /// </param>
         /// <returns>
-        /// Die Ziele in der Reihenfolge des Versuchs. Leer, wenn die Domain
-        /// den Dienst ausdrücklich nicht anbietet.
+        /// The targets in the order of the attempt. Empty when the domain
+        /// explicitly does not offer the service.
         /// </returns>
         public static IReadOnlyList<SrvTarget> Order(IEnumerable<SrvTarget>  targets,
                                                      Func<Int32, Int32>?     pick   = null)
         {
 
-            var alle = targets.ToList();
+            var all = targets.ToList();
 
-            // RFC 2782: ein einzelnes "." beendet die Suche. Andere Einträge
-            // daneben zu beachten wäre falsch - die Domain hat gesagt, dass es
-            // den Dienst nicht gibt.
-            if (alle.Any(t => t.Host == NoService))
+            // RFC 2782: a single "." ends the search. Heeding other entries
+            // beside it would be wrong - the domain has said that the service
+            // does not exist.
+            if (all.Any(t => t.Host == NoService))
                 return [];
 
             pick ??= max => Random.Shared.Next(max + 1);
 
-            var ergebnis = new List<SrvTarget>(alle.Count);
+            var result = new List<SrvTarget>(all.Count);
 
-            foreach (var gruppe in alle.GroupBy(t => t.Priority).OrderBy(g => g.Key))
+            foreach (var group in all.GroupBy(t => t.Priority).OrderBy(g => g.Key))
             {
 
                 // "all those with weight 0 are placed at the beginning of the
-                // list" - so steht es im RFC, und es ist der Grund, warum ein
-                // gewichtsloses Ziel überhaupt je gezogen wird.
-                var rest = gruppe.OrderBy(t => t.Weight == 0 ? 0 : 1).ToList();
+                // list" - that is how it stands in the RFC, and it is the reason
+                // why a weightless target is ever drawn at all.
+                var rest = group.OrderBy(t => t.Weight == 0 ? 0 : 1).ToList();
 
                 while (rest.Count > 0)
                 {
 
-                    var summe = rest.Sum(t => (Int32) t.Weight);
-                    var wurf  = pick(summe);
+                    var total = rest.Sum(t => (Int32) t.Weight);
+                    var roll  = pick(total);
 
-                    var laufend  = 0;
-                    var gewaehlt = rest.Count - 1;
+                    var running = 0;
+                    var chosen  = rest.Count - 1;
 
                     for (var i = 0; i < rest.Count; i++)
                     {
 
-                        laufend += rest[i].Weight;
+                        running += rest[i].Weight;
 
                         // "select the RR whose running sum value is the first
                         // value greater than or equal to the random number"
-                        if (laufend >= wurf)
+                        if (running >= roll)
                         {
-                            gewaehlt = i;
+                            chosen = i;
                             break;
                         }
 
                     }
 
-                    ergebnis.Add(rest[gewaehlt]);
-                    rest.RemoveAt(gewaehlt);
+                    result.Add(rest[chosen]);
+                    rest.RemoveAt(chosen);
 
                 }
 
             }
 
-            return ergebnis;
+            return result;
 
         }
 

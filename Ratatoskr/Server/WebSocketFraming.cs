@@ -19,23 +19,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Die Rahmung nach RFC 7395: ein WebSocket-Frame ist genau ein Element,
-    /// der Stream wird mit <c>&lt;open/&gt;</c> geöffnet und mit
-    /// <c>&lt;close/&gt;</c> geschlossen.
+    /// The framing per RFC 7395: a WebSocket frame is exactly one element, the
+    /// stream is opened with <c>&lt;open/&gt;</c> and closed with
+    /// <c>&lt;close/&gt;</c>.
     /// </summary>
     /// <remarks>
-    /// Jeder Rahmen steht für sich und trägt seine Namensräume selbst - es
-    /// gibt kein Wurzelelement, das etwas vererben könnte.
+    /// Every frame stands for itself and carries its namespaces itself - there
+    /// is no root element that could pass anything on.
     /// </remarks>
     public sealed class WebSocketFraming : IS2SFraming
     {
 
         #region Properties
 
-        /// <summary>Es gibt nichts zu unterscheiden - eine Instanz genügt.</summary>
+        /// <summary>There is nothing to tell apart - one instance suffices.</summary>
         public static readonly WebSocketFraming Instance = new();
 
-        /// <summary>Der Namensraum der Rahmung (RFC 7395, Abschnitt 3.1).</summary>
+        /// <summary>The namespace of the framing (RFC 7395, section 3.1).</summary>
         public const String Namespace = "urn:ietf:params:xml:ns:xmpp-framing";
 
         #endregion
@@ -57,8 +57,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         public String StreamClose()
             => $"<close xmlns='{Namespace}'/>";
 
-        // Am Elementnamen und nicht am Präfix: <opencast/> ist keine
-        // Stream-Eröffnung, <closet/> kein Abschied.
+        // By the element name and not by the prefix: <opencast/> is not a stream
+        // opening, <closet/> not a farewell.
         public Boolean IsStreamOpen(String frame)
             => StanzaElement.Is(frame, "open");
 

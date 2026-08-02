@@ -26,7 +26,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Der Dialback-Schlüssel aus XEP-0220, Abschnitt 2.1.1 (Verfahren aus
+    /// The dialback key from XEP-0220, section 2.1.1 (the procedure from
     /// XEP-0185).
     /// </summary>
     /// <remarks>
@@ -34,43 +34,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
     /// key = HMAC-SHA256(SHA256(Secret), { Target Domain, ' ', Sender Domain, ' ', Stream ID })
     /// </code>
     ///
-    /// Zwei Dinge daran sind leicht falsch zu machen, und beide hätte man
-    /// ohne den veröffentlichten Vektor nicht bemerkt:
+    /// Two things about it are easy to get wrong, and neither would have been
+    /// noticed without the published vector:
     ///
     /// <list type="number">
     ///   <item>
-    ///     <b><c>SHA256(Secret)</c> geht als Hex-Zeichenkette in den HMAC, nicht
-    ///     als Rohbytes.</b> Die naheliegende Lesart - der Digest als 32 Bytes -
-    ///     liefert ein anderes Ergebnis. Beide Fassungen sind in sich stimmig;
-    ///     zwei Server, die sich für verschiedene entscheiden, kämen nie
-    ///     zusammen, ohne dass einer von beiden einen Fehler machte.
+    ///     <b><c>SHA256(Secret)</c> goes into the HMAC as a hex string, not as
+    ///     raw bytes.</b> The obvious reading - the digest as 32 bytes -
+    ///     delivers a different result. Both versions are consistent in
+    ///     themselves; two servers that decide on different ones would never
+    ///     come together without either of them making a mistake.
     ///   </item>
     ///   <item>
-    ///     <b>Die Reihenfolge ist Ziel- vor Absenderdomain</b>, also die
-    ///     empfangende zuerst. Vertauscht ergäbe sie ebenfalls einen gültig
-    ///     aussehenden Schlüssel.
+    ///     <b>The order is target before sender domain</b>, that is, the
+    ///     receiving one first. Swapped, it would likewise yield a
+    ///     valid-looking key.
     ///   </item>
     /// </list>
     ///
-    /// Die Begriffe sind die des XEP und werden hier bewusst beibehalten:
-    /// <b>Sender Domain</b> ist die Domain, für die der aufbauende Server
-    /// sprechen will, <b>Target Domain</b> die des annehmenden. Aus Sicht des
-    /// annehmenden Servers ist Target also die eigene.
+    /// The terms are those of the XEP and are deliberately kept here:
+    /// <b>sender domain</b> is the domain the establishing server wants to
+    /// speak for, <b>target domain</b> that of the accepting one. From the
+    /// point of view of the accepting server, target is therefore its own.
     ///
-    /// Die Domains gehen <b>unverändert</b> ein, ohne Normalisierung der
-    /// Gross-/Kleinschreibung. Das ist Absicht: der prüfende Server reicht die
-    /// Werte weiter, die der aufbauende in seine Adressierung geschrieben hat,
-    /// und der autoritative rechnet aus genau denselben nach. Würde hier
-    /// normalisiert, hinge das Ergebnis davon ab, ob beide Seiten dieselbe
-    /// Normalisierung anwenden - eine zusätzliche Möglichkeit, sich zu
-    /// verfehlen, ohne dass jemand etwas gewönne.
+    /// The domains go in <b>unchanged</b>, without a normalisation of the
+    /// upper/lower case. That is intentional: the checking server passes on the
+    /// values the establishing one wrote into its addressing, and the
+    /// authoritative one recomputes from exactly the same ones. Were it
+    /// normalised here, the result would depend on whether both sides apply the
+    /// same normalisation - one more way to miss each other without anybody
+    /// gaining anything.
     /// </remarks>
     public static class DialbackKey
     {
 
         #region Properties
 
-        /// <summary>Der Namensraum von XEP-0220.</summary>
+        /// <summary>The namespace of XEP-0220.</summary>
         public const String Namespace = "jabber:server:dialback";
 
         #endregion
@@ -78,20 +78,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Generate(secret, targetDomain, senderDomain, streamId)
 
         /// <summary>
-        /// Erzeugt den Dialback-Schlüssel.
+        /// Produces the dialback key.
         /// </summary>
         /// <param name="secret">
-        /// Das Geheimnis des aufbauenden Servers. Nur er kennt es; genau
-        /// deshalb kann nur er einen Schlüssel erzeugen, den er später als
-        /// autoritativer Server wiedererkennt.
+        /// The secret of the establishing server. Only it knows the secret;
+        /// precisely for that reason only it can produce a key it later
+        /// recognises again as the authoritative server.
         /// </param>
-        /// <param name="targetDomain">Die Domain des annehmenden Servers.</param>
-        /// <param name="senderDomain">Die Domain, für die gesprochen werden soll.</param>
+        /// <param name="targetDomain">The domain of the accepting server.</param>
+        /// <param name="senderDomain">The domain that is to be spoken for.</param>
         /// <param name="streamId">
-        /// Die Stream-ID, die der annehmende Server in seinem Stream-Kopf
-        /// vergeben hat. Sie bindet den Schlüssel an diese eine Verbindung -
-        /// ohne sie liesse sich ein einmal mitgeschnittener Schlüssel
-        /// beliebig wiederverwenden.
+        /// The stream ID the accepting server handed out in its stream header.
+        /// It binds the key to this one connection - without it a key recorded
+        /// once could be reused at will.
         /// </param>
         public static String Generate(String  secret,
                                       String  targetDomain,
@@ -114,17 +113,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Verify(secret, targetDomain, senderDomain, streamId, presentedKey)
 
         /// <summary>
-        /// Prüft einen vorgelegten Dialback-Schlüssel.
+        /// Checks a dialback key that was presented.
         /// </summary>
         /// <remarks>
-        /// Verglichen wird über <see cref="CryptographicOperations.FixedTimeEquals"/>
-        /// auf den entschlüsselten Bytes. Der Umweg über
-        /// <see cref="Convert.FromHexString(String)"/> nimmt dabei die
-        /// Gross-/Kleinschreibung des Hex mit, ohne dass ein
-        /// zeichenweiser - und damit zeitlich verräterischer - Vergleich
-        /// nötig wäre.
+        /// Compared through <see cref="CryptographicOperations.FixedTimeEquals"/>
+        /// on the decoded bytes. The detour through
+        /// <see cref="Convert.FromHexString(String)"/> takes the upper/lower
+        /// case of the hex along in the process, without a character-by-character
+        /// - and thereby temporally telltale - comparison being needed.
         /// </remarks>
-        /// <returns>false auch dann, wenn der Schlüssel gar kein gültiges Hex ist.</returns>
+        /// <returns>false also when the key is not valid hex at all.</returns>
         public static Boolean Verify(String  secret,
                                      String  targetDomain,
                                      String  senderDomain,
@@ -155,16 +153,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region NewSecret()
 
         /// <summary>
-        /// Erzeugt ein Geheimnis für einen Server, dem keines vorgegeben
-        /// wurde.
+        /// Produces a secret for a server that was not given one.
         /// </summary>
         /// <remarks>
-        /// Ein zufälliges Geheimnis je Prozess reicht für Dialback aus: es
-        /// muss nur so lange gleich bleiben, wie ein Stream lebt, und darf
-        /// ausser diesem Server niemand kennen. Wer mehrere Instanzen
-        /// derselben Domain betreibt, muss es allerdings teilen - sonst
-        /// könnte die Instanz, die die Verifikation beantwortet, den
-        /// Schlüssel der Instanz, die ihn ausgestellt hat, nicht nachrechnen.
+        /// A random secret per process suffices for dialback: it only has to
+        /// stay the same as long as a stream lives, and must be known to nobody
+        /// except this server. Whoever runs several instances of the same
+        /// domain has to share it, though - otherwise the instance answering
+        /// the verification could not recompute the key of the instance that
+        /// issued it.
         /// </remarks>
         public static String NewSecret()
             => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));

@@ -25,20 +25,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Findet den S2S-Dienst einer Domain über DNS (RFC 6120, Abschnitt
-    /// 3.2.1).
+    /// Finds the S2S service of a domain through DNS (RFC 6120,
+    /// section 3.2.1).
     /// </summary>
     /// <remarks>
-    /// Gefragt wird nach <c>_xmpp-server._tcp.&lt;domain&gt;</c>. Bleibt die
-    /// Antwort aus, gilt der Rückfall aus Abschnitt 3.2.1: die Domain selbst
-    /// auf dem Regelport 5269. Ein ausdrückliches <c>.</c> als Ziel ist
-    /// dagegen kein Schweigen, sondern eine Absage - dann wird nichts
-    /// versucht.
+    /// Asked for is <c>_xmpp-server._tcp.&lt;domain&gt;</c>. If the answer
+    /// fails to come, the fallback from section 3.2.1 holds: the domain itself
+    /// on the standard port 5269. An explicit <c>.</c> as a target, by
+    /// contrast, is not silence but a rejection - then nothing is tried.
     ///
-    /// <b>Nicht gefragt wird nach <c>_xmpps-server._tcp</c></b> (XEP-0368,
-    /// direktes TLS ohne STARTTLS). Es liesse sich ergänzen, sobald jemand es
-    /// braucht; die Auswahl zwischen beiden Diensten wäre dann eine eigene
-    /// Entscheidung und keine Erweiterung dieser Abfrage.
+    /// <b>Not asked for is <c>_xmpps-server._tcp</c></b> (XEP-0368, direct TLS
+    /// without STARTTLS). It could be added as soon as somebody needs it; the
+    /// choice between the two services would then be a decision of its own and
+    /// not an extension of this query.
     /// </remarks>
     public sealed class DnsS2SAddressResolver : IS2SAddressResolver
     {
@@ -47,10 +46,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         private readonly IDNSClient _dns;
 
-        /// <summary>Der Dienstname aus RFC 6120, Abschnitt 3.2.1.</summary>
+        /// <summary>The service name from RFC 6120, section 3.2.1.</summary>
         public const String ServicePrefix = "_xmpp-server._tcp.";
 
-        /// <summary>Der Regelport, wenn es keinen SRV-Eintrag gibt.</summary>
+        /// <summary>The standard port when there is no SRV record.</summary>
         public const Int32 DefaultPort = TcpStreamFraming.DefaultPort;
 
         #endregion
@@ -58,18 +57,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Properties
 
         /// <summary>
-        /// Wie lange auf eine Antwort gewartet wird.
+        /// How long an answer is waited for.
         /// </summary>
         public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(5);
 
         /// <summary>
-        /// Soll bei fehlendem SRV-Eintrag auf die Domain selbst
-        /// zurückgefallen werden?
+        /// Shall a missing SRV record fall back to the domain itself?
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 3.2.1 sieht das vor. Abschaltbar, weil ein
-        /// Betreiber, der ausschliesslich über SRV veröffentlichte Ziele
-        /// erlauben will, sonst stillschweigend woandershin verbunden würde.
+        /// RFC 6120, section 3.2.1 provides for it. Switchable off, because an
+        /// operator who wants to permit exclusively targets published through
+        /// SRV would otherwise be connected somewhere else silently.
         /// </remarks>
         public Boolean FallBackToDomain { get; init; } = true;
 
@@ -78,7 +76,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Constructor(s)
 
         /// <summary>
-        /// Legt den Resolver über einen DNS-Client an.
+        /// Creates the resolver over a DNS client.
         /// </summary>
         public DnsS2SAddressResolver(IDNSClient dnsClient)
         {
@@ -94,37 +92,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                                                  CancellationToken  cancellationToken = default)
         {
 
-            var eintraege = new List<SrvTarget>();
+            var entries = new List<SrvTarget>();
 
             try
             {
 
                 var name = DNSServiceName.Parse($"{ServicePrefix}{domain}");
 
-                var antwort = await _dns.Query<SRV>(name,
-                                                    Timeout:            Timeout,
-                                                    CancellationToken:  cancellationToken);
+                var answer = await _dns.Query<SRV>(name,
+                                                   Timeout:            Timeout,
+                                                   CancellationToken:  cancellationToken);
 
-                foreach (var srv in antwort.FilteredAnswers)
-                    eintraege.Add(new SrvTarget(srv.Priority,
-                                                srv.Weight,
-                                                srv.Target.ToString().TrimEnd('.') is { Length: > 0 } t
-                                                    ? t
-                                                    : SrvSelection.NoService,
-                                                srv.Port.ToUInt16()));
+                foreach (var srv in answer.FilteredAnswers)
+                    entries.Add(new SrvTarget(srv.Priority,
+                                              srv.Weight,
+                                              srv.Target.ToString().TrimEnd('.') is { Length: > 0 } t
+                                                  ? t
+                                                  : SrvSelection.NoService,
+                                              srv.Port.ToUInt16()));
 
             }
             catch (Exception)
             {
-                // Kein DNS, keine Antwort, kaputte Antwort - für den Aufrufer
-                // ist das dasselbe wie "kein SRV-Eintrag".
-                eintraege.Clear();
+                // No DNS, no answer, a broken answer - for the caller that is
+                // the same thing as "no SRV record".
+                entries.Clear();
             }
 
-            if (eintraege.Count > 0)
-                return SrvSelection.Order(eintraege);
+            if (entries.Count > 0)
+                return SrvSelection.Order(entries);
 
-            // RFC 6120, Abschnitt 3.2.1: ohne SRV-Eintrag die Domain selbst.
+            // RFC 6120, section 3.2.1: without an SRV record the domain itself.
             return FallBackToDomain
                        ? [new SrvTarget(0, 0, domain, DefaultPort)]
                        : [];

@@ -19,21 +19,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Verbindet <see cref="XMPPServer"/>-Instanzen im selben Prozess direkt
-    /// miteinander, ohne Netz dazwischen.
+    /// Connects <see cref="XMPPServer"/> instances in the same process directly
+    /// with one another, without a network in between.
     /// </summary>
     /// <remarks>
-    /// <b>Kein Ersatz für eine echte S2S-Verbindung.</b> Es gibt keinen
-    /// Stream, kein TLS, keinen Dialback und keine Authentifizierung: die
-    /// Domain, für die eine Gegenstelle sprechen darf, wird hier schlicht
-    /// behauptet. Für den Betrieb ist das nichts.
+    /// <b>No substitute for a real S2S connection.</b> There is no stream, no
+    /// TLS, no dialback and no authentication: the domain a peer may speak for
+    /// is simply asserted here. For operation this is nothing.
     ///
-    /// Wofür es taugt: Routing, Adressierung und Zustellung über eine
-    /// Domain-Grenze hinweg zu prüfen, ohne sich vorher auf einen Transport
-    /// festgelegt zu haben. Die Absenderprüfung im Eingang von
-    /// <see cref="XMPPServer.ReceiveFromRemoteAsync"/> ist deshalb trotzdem
-    /// scharf - sie ist genau das, worauf ein echter Transport nach dem
-    /// Dialback baut.
+    /// What it is good for: checking routing, addressing and delivery across a
+    /// domain boundary without having committed to a transport beforehand. The
+    /// sender check at the entrance of
+    /// <see cref="XMPPServer.ReceiveFromRemoteAsync"/> is therefore armed all
+    /// the same - it is exactly what a real transport builds on after the
+    /// dialback.
     /// </remarks>
     public sealed class DirectServerLinks : IServerLinks
     {
@@ -49,7 +48,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Constructor(s)
 
         /// <summary>
-        /// Legt die Gegenstellenliste für einen Server an.
+        /// Creates the peer list for a server.
         /// </summary>
         public DirectServerLinks(XMPPServer localServer)
         {
@@ -62,7 +61,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region AddPeer(peer)
 
         /// <summary>
-        /// Macht einen weiteren Server erreichbar - in dieser Richtung.
+        /// Makes a further server reachable - in this direction.
         /// </summary>
         public void AddPeer(XMPPServer peer)
         {
@@ -75,20 +74,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (static) Connect(a, b)
 
         /// <summary>
-        /// Verbindet zwei Server in beide Richtungen und hängt die Links an
-        /// ihre <see cref="XMPPServer.ServerLinks"/>.
+        /// Connects two servers in both directions and hangs the links onto
+        /// their <see cref="XMPPServer.ServerLinks"/>.
         /// </summary>
         /// <remarks>
-        /// Beide Richtungen, weil eine einseitige Verbindung eine Falle wäre:
-        /// die Nachricht käme an, die Antwort nicht, und der Fehler sähe aus
-        /// wie ein Zustellproblem statt wie eine halbe Verkabelung.
+        /// Both directions, because a one-sided connection would be a trap: the
+        /// message would arrive, the answer would not, and the fault would look
+        /// like a delivery problem instead of like half a wiring job.
         /// </remarks>
         public static void Connect(XMPPServer a, XMPPServer b)
         {
 
             if (String.Equals(a.Domain, b.Domain, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException(
-                          $"Beide Server bedienen '{a.Domain}' - eine Föderation mit sich selbst ergibt nichts.",
+                          $"Both servers serve '{a.Domain}' - a federation with itself amounts to nothing.",
                           nameof(b));
 
             LinksOf(a).AddPeer(b);
@@ -97,13 +96,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Die Gegenstellenliste eines Servers, angelegt falls nötig.
+        /// The peer list of a server, created if necessary.
         /// </summary>
         private static DirectServerLinks LinksOf(XMPPServer server)
         {
 
-            if (server.ServerLinks is DirectServerLinks vorhanden)
-                return vorhanden;
+            if (server.ServerLinks is DirectServerLinks existing)
+                return existing;
 
             var links = new DirectServerLinks(server);
             server.ServerLinks = links;

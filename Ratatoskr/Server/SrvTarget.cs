@@ -19,29 +19,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein Ziel aus einem SRV-Eintrag (RFC 2782): wo ein Dienst einer Domain
-    /// zu erreichen ist.
+    /// A target from an SRV record (RFC 2782): where a service of a domain can
+    /// be reached.
     /// </summary>
     /// <param name="Priority">
-    /// Kleiner ist besser. Ziele höherer Priorität werden erst versucht, wenn
-    /// alle niedrigeren Nummern erschöpft sind.
+    /// Smaller is better. Targets of a higher priority are only tried once all
+    /// lower numbers are exhausted.
     /// </param>
     /// <param name="Weight">
-    /// Verteilt die Last innerhalb derselben Priorität. Null heisst nicht
-    /// "nie", sondern "nur wenn der Zufall es will" - RFC 2782 gibt auch
-    /// gewichtslosen Zielen eine Chance.
+    /// Distributes the load within the same priority. Zero does not mean
+    /// "never" but "only if chance wills it" - RFC 2782 gives weightless
+    /// targets a chance too.
     /// </param>
-    /// <param name="Host">Der Rechnername, zu dem verbunden wird.</param>
-    /// <param name="Port">Der Port.</param>
+    /// <param name="Host">The host name that is connected to.</param>
+    /// <param name="Port">The port.</param>
     /// <remarks>
-    /// <b>Ein SRV-Eintrag sagt, wo etwas liegt - nicht, wer dort antwortet.</b>
-    /// DNS ist ohne DNSSEC nicht authentifiziert; wer die Auflösung fälschen
-    /// kann, lenkt die Verbindung um. Deshalb bleibt die Identität der
-    /// Gegenstelle daran gebunden, was sie vorweist: das Zertifikat wird gegen
-    /// die <i>gesuchte Domain</i> geprüft und nicht gegen den hier genannten
-    /// Rechnernamen (RFC 6120, Abschnitt 13.7.2.1). Andernfalls genügte ein
-    /// gefälschter SRV-Eintrag, um jede Prüfung zu bestehen - man liesse den
-    /// Angreifer den Massstab mitbringen, an dem er gemessen wird.
+    /// <b>An SRV record says where something lies - not who answers there.</b>
+    /// DNS is not authenticated without DNSSEC; whoever can forge the
+    /// resolution redirects the connection. That is why the identity of the
+    /// peer stays bound to what it presents: the certificate is checked against
+    /// the <i>domain sought</i> and not against the host name named here
+    /// (RFC 6120, section 13.7.2.1). Otherwise a forged SRV record would
+    /// suffice to pass every check - one would let the attacker bring along the
+    /// yardstick they are measured by.
     /// </remarks>
     public sealed record SrvTarget(UInt16  Priority,
                                    UInt16  Weight,
@@ -50,7 +50,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
     {
 
         public override String ToString()
-            => $"{Host}:{Port} (Priorität {Priority}, Gewicht {Weight})";
+            => $"{Host}:{Port} (priority {Priority}, weight {Weight})";
 
     }
 

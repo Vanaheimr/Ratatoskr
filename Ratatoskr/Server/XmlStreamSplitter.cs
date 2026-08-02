@@ -19,30 +19,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Zerlegt den Zeichenstrom eines XMPP-Streams (RFC 6120) in einzelne
-    /// Rahmen: den Stream-Kopf, dann jede Stanza, zuletzt das Stream-Ende.
+    /// Takes the character stream of an XMPP stream (RFC 6120) apart into
+    /// individual frames: the stream header, then every stanza, lastly the end
+    /// of the stream.
     /// </summary>
     /// <remarks>
-    /// Über WebSocket ist das umsonst zu haben - ein Frame ist ein Element.
-    /// Über TCP kommt ein Strom an, in dem eine Stanza über beliebig viele
-    /// Lesevorgänge verteilt sein kann und mehrere Stanzas in einem stecken
-    /// dürfen. Ohne diese Zerlegung <b>funktioniert TCP scheinbar</b>, solange
-    /// die Pakete zufällig auf Elementgrenzen fallen - also im Test auf
-    /// localhost fast immer, und im Betrieb dann nicht mehr. Deshalb steht das
-    /// hier als eigener, für sich geprüfter Baustein und nicht als Handgriff
-    /// in der Empfangsschleife.
+    /// Over WebSocket this comes for free - a frame is an element. Over TCP a
+    /// stream arrives in which one stanza can be spread over any number of
+    /// reads and several stanzas may sit inside one. Without this splitting TCP
+    /// <b>seems to work</b> as long as the packets happen to fall on element
+    /// boundaries - that is, on localhost in a test almost always, and in
+    /// operation then no longer. That is why it stands here as a building block
+    /// of its own, checked for itself, and not as a manoeuvre inside the
+    /// receive loop.
     ///
-    /// Bewusst <b>kein</b> XML-Parser: der Stream-Kopf ist ein offenes Tag und
-    /// wäre für sich genommen nicht wohlgeformt, und ein Parser über den
-    /// gesamten Strom müsste den ganzen Stream als ein Dokument aufbauen. Was
-    /// hier gebraucht wird, ist nur die Kunst, Elementgrenzen zu finden -
-    /// samt der Fallen, die dabei zählen: Anführungszeichen, in denen ein
-    /// <c>&gt;</c> stehen darf, CDATA, Kommentare.
+    /// Deliberately <b>not</b> an XML parser: the stream header is an open tag
+    /// and would not be well-formed taken by itself, and a parser over the
+    /// whole stream would have to build the entire stream up as one document.
+    /// What is needed here is only the art of finding element boundaries -
+    /// together with the traps that count while doing so: quotation marks
+    /// inside which a <c>&gt;</c> may stand, CDATA, comments.
     ///
-    /// Diese Klasse hält keinen Zustand über die Wohlgeformtheit; sie prüft
-    /// nicht, ob Tags zueinander passen. Ein Strom mit falsch verschachtelten
-    /// Namen wird zerteilt, nicht abgelehnt - das zu beurteilen ist Sache der
-    /// Schicht darüber.
+    /// This class holds no state about well-formedness; it does not check
+    /// whether tags match one another. A stream with wrongly nested names is
+    /// split, not refused - judging that is the business of the layer above.
     /// </remarks>
     public sealed class XmlStreamSplitter
     {
@@ -57,13 +57,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Push(text)
 
         /// <summary>
-        /// Nimmt das nächste Stück des Stroms entgegen und liefert alle
-        /// Rahmen, die damit vollständig geworden sind.
+        /// Takes in the next piece of the stream and delivers all the frames
+        /// that have become complete with it.
         /// </summary>
         /// <remarks>
-        /// Der erste gelieferte Rahmen ist der Stream-Kopf - also das
-        /// <b>offene</b> <c>&lt;stream:stream ...&gt;</c>-Tag ohne seine
-        /// Kinder. Danach folgt je ein Rahmen pro Stanza, zuletzt
+        /// The first frame delivered is the stream header - that is, the
+        /// <b>open</b> <c>&lt;stream:stream ...&gt;</c> tag without its
+        /// children. After that follows one frame per stanza, lastly
         /// <c>&lt;/stream:stream&gt;</c>.
         /// </remarks>
         public IReadOnlyList<String> Push(String text)
@@ -88,7 +88,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 if (end < 0)
                 {
-                    // Noch unvollständig - das bereits Übersprungene darf weg.
+                    // Still incomplete - what was already skipped may go.
                     rest = rest[start..];
                     break;
                 }
@@ -108,21 +108,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Reset()
 
         /// <summary>
-        /// Fängt von vorn an - der nächste Rahmen ist wieder ein Stream-Kopf.
+        /// Starts over - the next frame is a stream header again.
         /// </summary>
         /// <remarks>
-        /// Nach erfolgreichem SASL beginnt der Stream neu (RFC 6120,
-        /// Abschnitt 6.4.6), und zwar als frisches XML-Dokument. Ohne diesen
-        /// Schnitt hielte der Zerleger den zweiten
-        /// <c>&lt;stream:stream&gt;</c> für ein Kindelement des ersten und
-        /// wartete bis in alle Ewigkeit auf dessen schliessendes Tag - der
-        /// Neustart käme oben nie an, und die Verbindung stünde still, ohne
-        /// dass etwas kaputt aussähe.
+        /// After a successful SASL the stream begins anew (RFC 6120,
+        /// section 6.4.6), and as a fresh XML document at that. Without this
+        /// cut the splitter would take the second <c>&lt;stream:stream&gt;</c>
+        /// for a child element of the first and wait until the end of time for
+        /// its closing tag - the restart would never arrive above, and the
+        /// connection would stand still without anything looking broken.
         ///
-        /// Angefangene Reste werden dabei verworfen. Das ist Absicht: nach
-        /// dem Neustart gilt der alte Zustand ohnehin nicht mehr, und eine
-        /// Gegenstelle, die noch etwas Halbes im Puffer hinterlassen hat,
-        /// hält sich nicht an die Reihenfolge.
+        /// Remains that were begun are discarded in the process. That is
+        /// intentional: after the restart the old state no longer holds anyway,
+        /// and a peer that has left something half-finished in the buffer is
+        /// not keeping to the order.
         /// </remarks>
         public void Reset()
         {
@@ -135,13 +134,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private static) SkipProlog(s)
 
         /// <summary>
-        /// Überspringt Leerraum, XML-Deklarationen und Kommentare zwischen
-        /// zwei Elementen.
+        /// Skips whitespace, XML declarations and comments between two
+        /// elements.
         /// </summary>
         /// <remarks>
-        /// Beide sind auf oberster Ebene erlaubt und für das Protokoll ohne
-        /// Bedeutung. Würden sie als Rahmen durchgereicht, hielte die Schicht
-        /// darüber die XML-Deklaration für den Stream-Kopf.
+        /// Both are permitted at the top level and are without meaning for the
+        /// protocol. Were they passed on as frames, the layer above would take
+        /// the XML declaration for the stream header.
         /// </remarks>
         private static Int32 SkipProlog(String s)
         {
@@ -193,15 +192,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private static) ScanOne(s, start, stopAfterOpenTag)
 
         /// <summary>
-        /// Sucht das Ende genau eines Elements ab <paramref name="start"/>.
+        /// Searches for the end of exactly one element from
+        /// <paramref name="start"/> on.
         /// </summary>
         /// <param name="stopAfterOpenTag">
-        /// Für den Stream-Kopf: nach dem öffnenden Tag aufhören, statt auf
-        /// sein schliessendes zu warten. Das Wurzelelement wird erst am Ende
-        /// des Streams geschlossen - darauf zu warten hiesse, nie einen Rahmen
-        /// zu liefern.
+        /// For the stream header: stop after the opening tag instead of waiting
+        /// for its closing one. The root element is only closed at the end of
+        /// the stream - waiting for that would mean never delivering a frame.
         /// </param>
-        /// <returns>Der Index hinter dem Element, oder -1 wenn noch unvollständig.</returns>
+        /// <returns>The index behind the element, or -1 when still incomplete.</returns>
         private static Int32 ScanOne(String s, Int32 start, Boolean stopAfterOpenTag)
         {
 
@@ -230,7 +229,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 }
 
-                // In CDATA darf alles stehen, auch '<' und '>'.
+                // Inside CDATA anything may stand, including '<' and '>'.
                 if (Match(s, i, "<![CDATA["))
                 {
 
@@ -257,10 +256,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 }
 
-                var schliessend = Match(s, i, "</");
-                var j           = i + 1;
-                var quote       = '\0';
-                var leer        = false;
+                var closing = Match(s, i, "</");
+                var j       = i + 1;
+                var quote   = '\0';
+                var empty   = false;
 
                 while (j < s.Length)
                 {
@@ -282,9 +281,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         continue;
                     }
 
-                    // Ein '>' innerhalb eines Attributwerts ist gültiges XML
-                    // und beendet das Tag nicht - deshalb erst hier, ausserhalb
-                    // der Anführungszeichen.
+                    // A '>' inside an attribute value is valid XML and does not
+                    // end the tag - hence only here, outside the quotation
+                    // marks.
                     if (c == '>')
                     {
 
@@ -293,7 +292,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         while (k > i && Char.IsWhiteSpace(s[k]))
                             k--;
 
-                        leer = s[k] == '/';
+                        empty = s[k] == '/';
                         break;
 
                     }
@@ -302,25 +301,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 }
 
-                // Das Tag ist noch nicht zu Ende gelesen.
+                // The tag has not been read to its end yet.
                 if (j >= s.Length)
                     return -1;
 
                 i = j + 1;
 
-                if (schliessend)
+                if (closing)
                 {
 
                     depth--;
 
-                    // Auch </stream:stream> als erstes Element landet hier:
-                    // die Tiefe wird negativ, und der Rahmen ist vollständig.
+                    // A </stream:stream> as the first element lands here too:
+                    // the depth becomes negative, and the frame is complete.
                     if (depth <= 0)
                         return i;
 
                 }
 
-                else if (leer)
+                else if (empty)
                 {
                     if (depth == 0)
                         return i;

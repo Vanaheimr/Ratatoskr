@@ -19,20 +19,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Die beiden Schlüssel, die ein Server je Konto und SCRAM-Mechanismus
-    /// aufbewahrt (RFC 5802, Abschnitt 3).
+    /// The two keys a server keeps per account and SCRAM mechanism (RFC 5802,
+    /// section 3).
     /// </summary>
     /// <remarks>
-    /// Bewusst nicht das Passwort und auch nicht der <c>ClientKey</c>: aus
-    /// <see cref="StoredKey"/> lässt sich der <c>ClientKey</c> nicht
-    /// zurückrechnen, wohl aber prüfen, ob der Client ihn kennt. Wer die
-    /// Datenbank eines Servers erbeutet, kann sich damit also nicht ohne
-    /// weiteres als der Nutzer anmelden - genau das ist der Sinn der
-    /// Konstruktion.
+    /// Deliberately not the password and not the <c>ClientKey</c> either: from
+    /// <see cref="StoredKey"/> the <c>ClientKey</c> cannot be computed back,
+    /// but it can be checked whether the client knows it. Whoever captures the
+    /// database of a server can therefore not readily log in as the user with
+    /// it - that is precisely the point of the construction.
     ///
-    /// Der <see cref="ServerKey"/> muss dagegen aufbewahrt werden, weil der
-    /// Server dem Client mit ihm beweist, dass er das Passwort ebenfalls
-    /// kennt (Abschnitt 5, <c>ServerSignature</c>).
+    /// The <see cref="ServerKey"/>, by contrast, has to be kept, because with
+    /// it the server proves to the client that it knows the password as well
+    /// (section 5, <c>ServerSignature</c>).
     /// </remarks>
     /// <param name="StoredKey">H(HMAC(SaltedPassword, "Client Key")).</param>
     /// <param name="ServerKey">HMAC(SaltedPassword, "Server Key").</param>

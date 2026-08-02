@@ -19,62 +19,61 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Was mit einer Stanza geschah, die von einem anderen Server kam.
+    /// What happened to a stanza that came from another server.
     /// </summary>
     /// <remarks>
-    /// Ein blosses "abgelehnt" reichte nicht mehr, sobald es einen Stream gibt:
-    /// die Ablehnungen sind unterschiedlich schwer. Ein falsches
-    /// <c>from</c> ist ein Angriff auf die Adressierung und beendet nach
-    /// RFC 6120, Abschnitt 8.1.1.1 den ganzen Stream; ein Empfänger auf einer
-    /// dritten Domain ist dagegen nur eine Stanza, die hier nichts zu suchen
-    /// hat.
+    /// A mere "refused" was no longer enough once there is a stream: the
+    /// refusals differ in weight. A wrong <c>from</c> is an attack on the
+    /// addressing and ends the whole stream per RFC 6120, section 8.1.1.1; a
+    /// recipient on a third domain, by contrast, is merely a stanza that has no
+    /// business being here.
     /// </remarks>
     public enum RemoteStanzaResult
     {
 
-        /// <summary>Angenommen und lokal zugestellt.</summary>
+        /// <summary>Accepted and delivered locally.</summary>
         Accepted,
 
-        /// <summary><c>from</c> oder <c>to</c> fehlt - ohne beides ist sie nicht zustellbar.</summary>
+        /// <summary><c>from</c> or <c>to</c> is missing - without both it cannot be delivered.</summary>
         MissingAddress,
 
         /// <summary>
-        /// Das <c>from</c> ist kein JID nach RFC 7622.
+        /// The <c>from</c> is not a JID per RFC 7622.
         /// </summary>
         /// <remarks>
-        /// Für den Stream derselbe Fall wie <see cref="ForeignSender"/>:
-        /// RFC 6120, Abschnitt 8.1.1.1 nennt beides ein ungültiges
-        /// <c>from</c> und lässt den Stream mit <c>&lt;invalid-from/&gt;</c>
-        /// enden. Ein eigener Wert ist es trotzdem, weil der Grund ein anderer
-        /// ist - hier spricht niemand für eine fremde Domain, hier steht dort
-        /// überhaupt keine Adresse.
+        /// For the stream the same case as <see cref="ForeignSender"/>:
+        /// RFC 6120, section 8.1.1.1 calls both an invalid <c>from</c> and lets
+        /// the stream end with <c>&lt;invalid-from/&gt;</c>. It is a value of
+        /// its own nonetheless, because the reason is a different one - here
+        /// nobody speaks for a foreign domain, here there is no address there
+        /// at all.
         /// </remarks>
         MalformedSender,
 
         /// <summary>
-        /// Das <c>to</c> ist kein JID nach RFC 7622.
+        /// The <c>to</c> is not a JID per RFC 7622.
         /// </summary>
         /// <remarks>
-        /// Anders als beim Absender kostet das nur die eine Stanza: Es ist ein
-        /// Tippfehler in einer Adresse und keine Aussage darüber, wer da
-        /// spricht. Der Absender bekommt <c>&lt;jid-malformed/&gt;</c> zurück.
+        /// Unlike with the sender this only costs the one stanza: it is a typo
+        /// in an address and not a statement about who is speaking there. The
+        /// sender gets <c>&lt;jid-malformed/&gt;</c> back.
         /// </remarks>
         MalformedRecipient,
 
         /// <summary>
-        /// Die Gegenstelle spricht für eine Domain, die ihr nicht gehört.
+        /// The peer speaks for a domain that does not belong to it.
         /// </summary>
         ForeignSender,
 
         /// <summary>
-        /// Der Empfänger liegt nicht auf dieser Domain - Weiterleiten für
-        /// Dritte wäre ein offenes Relais.
+        /// The recipient does not lie on this domain - forwarding for third
+        /// parties would be an open relay.
         /// </summary>
         ForeignRecipient,
 
         /// <summary>
-        /// Das Routing ist abgeschaltet (Testschalter), die Stanza wurde
-        /// deshalb nicht zugestellt.
+        /// The routing is switched off (a test switch), so the stanza was not
+        /// delivered.
         /// </summary>
         RoutingDisabled
 

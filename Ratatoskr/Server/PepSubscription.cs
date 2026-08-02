@@ -19,26 +19,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein Abonnement auf einem PEP-Knoten (XEP-0060, Abschnitt 6.1).
+    /// A subscription on a PEP node (XEP-0060, section 6.1).
     /// </summary>
-    /// <param name="Jid">Der Bare-JID des Abonnenten.</param>
+    /// <param name="Jid">The bare JID of the subscriber.</param>
     /// <param name="SubId">
-    /// Die Kennung, die dieser Server vergeben hat. Sie unterscheidet zwei
-    /// Abonnements desselben JIDs auf denselben Knoten - und benennt seit der
-    /// Konfiguration je Abonnement auch, welche Einstellung gemeint ist.
+    /// The identifier this server has handed out. It distinguishes two
+    /// subscriptions of the same JID to the same node - and, since the
+    /// configuration per subscription, also names which setting is meant.
     /// </param>
-    /// <param name="Options">Die Einstellungen dieses Abonnements.</param>
+    /// <param name="Options">The settings of this subscription.</param>
     /// <param name="State">
-    /// Zugesagt oder erst beantragt (XEP-0060, Abschnitt 12.19).
+    /// Promised or merely applied for (XEP-0060, section 12.19).
     /// </param>
     /// <remarks>
-    /// <b>Der Zustand stand bis D93 nur auf dem Papier.</b> Ohne
-    /// <c>authorize</c> war jedes eingetragene Abonnement ein zugesagtes, und
-    /// der Server schrieb <c>subscription='subscribed'</c> als feste
-    /// Zeichenkette hin - richtig, solange es nichts anderes gab. Mit dem
-    /// Genehmigungsvorgang gibt es etwas anderes, und ein Abonnement, das man
-    /// nicht von einem beantragten unterscheiden kann, ist genau die Zusage
-    /// ohne Deckung, gegen die diese Reihe schreibt.
+    /// <b>The state stood only on paper until D93.</b> Without
+    /// <c>authorize</c> every subscription entered was a promised one, and the
+    /// server wrote <c>subscription='subscribed'</c> down as a fixed string -
+    /// right, as long as there was nothing else. With the approval procedure
+    /// there is something else, and a subscription that cannot be told apart
+    /// from an applied-for one is exactly the promise without cover this series
+    /// writes against.
     /// </remarks>
     public sealed record PepSubscription(String                     Jid,
                                          String                     SubId,

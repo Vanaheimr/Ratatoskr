@@ -19,18 +19,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Eine aufbewahrte Nachricht für ein Konto, das gerade keine erreichbare
-    /// Resource hat (RFC 6121, Abschnitt 8.5.2.2.1).
+    /// A message kept for an account that currently has no reachable resource
+    /// (RFC 6121, section 8.5.2.2.1).
     /// </summary>
     /// <param name="Stanza">
-    /// Die vollständige Stanza, wie sie zugestellt worden wäre - mit gesetztem
-    /// <c>from</c>.
+    /// The complete stanza as it would have been delivered - with the
+    /// <c>from</c> set.
     /// </param>
     /// <param name="StoredAt">
-    /// Wann sie hereinkam. Der Zeitpunkt gehört zur Nachricht und nicht zur
-    /// Zustellung: er wird beim Nachreichen als XEP-0203
-    /// <c>&lt;delay/&gt;</c> mitgegeben, damit der Empfänger eine Nachricht von
-    /// gestern nicht für eine von jetzt hält.
+    /// When it came in. The moment belongs to the message and not to the
+    /// delivery: it is passed along when delivering late, as an XEP-0203
+    /// <c>&lt;delay/&gt;</c>, so that the recipient does not take a message
+    /// from yesterday for one from just now.
     /// </param>
     public sealed record OfflineMessage(String          Stanza,
                                         DateTimeOffset  StoredAt);

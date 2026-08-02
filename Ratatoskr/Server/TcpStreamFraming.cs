@@ -19,42 +19,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Die klassische Rahmung nach RFC 6120: ein einziges, nie geschlossenes
-    /// <c>&lt;stream:stream&gt;</c>-Element, dessen Kinder die Stanzas sind.
+    /// The classic framing per RFC 6120: a single, never closed
+    /// <c>&lt;stream:stream&gt;</c> element whose children are the stanzas.
     /// </summary>
     /// <remarks>
-    /// Der Unterschied zu RFC 7395 ist grösser, als er aussieht. Der
-    /// Stream-Kopf ist ein <b>offenes</b> Tag: für sich genommen ist er kein
-    /// wohlgeformtes XML, und alles, was danach kommt, hängt für seine
-    /// Namensräume an ihm. Deshalb werden hier gleich drei deklariert -
-    /// <c>jabber:server</c> als Vorgabe für die Stanzas,
-    /// <c>stream</c> für die Stream-Ebene und <c>db</c> für Dialback.
+    /// The difference to RFC 7395 is bigger than it looks. The stream header is
+    /// an <b>open</b> tag: taken by itself it is not well-formed XML, and
+    /// everything that comes after it hangs on it for its namespaces. That is
+    /// why three are declared here at once - <c>jabber:server</c> as the
+    /// default for the stanzas, <c>stream</c> for the stream layer and
+    /// <c>db</c> for dialback.
     ///
-    /// Genau daran zahlt sich eine Entscheidung aus S4b-3 aus: die
-    /// Dialback-Elemente werden über einen regulären Ausdruck gelesen und
-    /// nicht über einen XML-Parser. Ein <c>&lt;db:result/&gt;</c> über TCP
-    /// wäre allein betrachtet nicht wohlgeformt, weil sein Präfix am
-    /// Wurzelelement hängt - ein Parser, der jeden Rahmen für sich nimmt,
-    /// müsste daran scheitern.
+    /// It is exactly here that a decision from S4b-3 pays off: the dialback
+    /// elements are read through a regular expression and not through an XML
+    /// parser. A <c>&lt;db:result/&gt;</c> over TCP would not be well-formed
+    /// taken on its own, because its prefix hangs on the root element - a
+    /// parser that takes every frame by itself would have to fail on it.
     ///
-    /// Wo RFC 7395 vom Transport fertige Rahmen bekommt, muss hier erst
-    /// zerlegt werden; das erledigt <see cref="XmlStreamSplitter"/>.
+    /// Where RFC 7395 gets finished frames from the transport, here they first
+    /// have to be taken apart; that is done by
+    /// <see cref="XmlStreamSplitter"/>.
     /// </remarks>
     public sealed class TcpStreamFraming : IS2SFraming
     {
 
         #region Properties
 
-        /// <summary>Es gibt nichts zu unterscheiden - eine Instanz genügt.</summary>
+        /// <summary>There is nothing to tell apart - one instance suffices.</summary>
         public static readonly TcpStreamFraming Instance = new();
 
-        /// <summary>Der Vorgabe-Namensraum der Stanzas auf einer S2S-Strecke (RFC 6120, Abschnitt 4.8.2).</summary>
+        /// <summary>The default namespace of the stanzas on an S2S link (RFC 6120, section 4.8.2).</summary>
         public const String ContentNamespace = "jabber:server";
 
-        /// <summary>Der Namensraum der Stream-Ebene.</summary>
+        /// <summary>The namespace of the stream layer.</summary>
         public const String StreamNamespace = S2SStream.StreamNamespace;
 
-        /// <summary>Der voreingestellte Port für S2S (RFC 6120, Abschnitt 3.2.1).</summary>
+        /// <summary>The default port for S2S (RFC 6120, section 3.2.1).</summary>
         public const Int32 DefaultPort = 5269;
 
         #endregion

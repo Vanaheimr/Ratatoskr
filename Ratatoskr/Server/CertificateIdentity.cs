@@ -25,51 +25,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Für welche Domains ein Zertifikat sprechen darf - die Frage, auf der
-    /// SASL-EXTERNAL beruht (XEP-0178, Abschnitt 3).
+    /// Which domains a certificate may speak for - the question SASL-EXTERNAL
+    /// rests on (XEP-0178, section 3).
     /// </summary>
     /// <remarks>
-    /// Das ist der Unterschied zwischen SASL-EXTERNAL und Dialback. Dialback
-    /// belegt eine Domain, indem es bei der hinterlegten Adresse nachfragt;
-    /// SASL-EXTERNAL belegt sie, indem es das Zertifikat liest, das die
-    /// Gegenstelle im TLS-Handshake vorgelegt hat. Kein zweiter
-    /// Verbindungsaufbau, keine Nachfrage - dafür steht und fällt alles mit
-    /// dieser Prüfung.
+    /// That is the difference between SASL-EXTERNAL and dialback. Dialback
+    /// proves a domain by asking back at the address on record; SASL-EXTERNAL
+    /// proves it by reading the certificate the peer presented in the TLS
+    /// handshake. No second connection, no asking back - but then everything
+    /// stands and falls with this check.
     ///
-    /// <b>Was hier absichtlich streng ist:</b>
+    /// <b>What is deliberately strict here:</b>
     ///
     /// <list type="bullet">
     ///   <item>
-    ///     <b>Gibt es eine SAN-Erweiterung, zählt der Common Name nicht
-    ///     mehr.</b> So will es RFC 6125, Abschnitt 6.4.4, und der Grund ist
-    ///     handfest: sonst genügte ein Zertifikat mit passendem CN und
-    ///     harmlosen SANs, um jede Prüfung zu bestehen, die den CN noch
-    ///     hilfsweise heranzieht.
+    ///     <b>If a SAN extension exists, the common name no longer counts.</b>
+    ///     That is how RFC 6125, section 6.4.4 wants it, and the reason is
+    ///     tangible: otherwise a certificate with a fitting CN and harmless
+    ///     SANs would suffice to pass every check that still falls back on the
+    ///     CN.
     ///   </item>
     ///   <item>
-    ///     <b>Keine Platzhalter.</b> <c>*.example.com</c> gilt hier für keine
-    ///     einzige Domain. XEP-0178 stellt Platzhalter frei; sie richtig zu
-    ///     behandeln ist überraschend fehlerträchtig, und eine zu grosszügige
-    ///     Auslegung verschenkt genau die Genauigkeit, um derentwillen es
-    ///     diese Klasse gibt.
+    ///     <b>No wildcards.</b> <c>*.example.com</c> counts here for not a
+    ///     single domain. XEP-0178 leaves wildcards optional; handling them
+    ///     correctly is surprisingly error-prone, and too generous a reading
+    ///     gives away exactly the precision this class exists for.
     ///   </item>
     /// </list>
     ///
-    /// <b>Was fehlt:</b> <c>id-on-xmppAddr</c> (OID 1.3.6.1.5.5.7.8.5) wird
-    /// nicht gelesen, obwohl XEP-0178 es als die eigentlich vorgesehene Form
-    /// nennt. Es steckt als <c>otherName</c> in der SAN-Erweiterung, und die
-    /// Bibliothek zählt nur dNSName und IP-Adressen auf; es zu lesen hiesse,
-    /// ASN.1 von Hand zu zerlegen. Die Folge ist zu benennen: eine
-    /// Gegenstelle, deren Zertifikat sie <i>nur</i> über <c>xmppAddr</c>
-    /// ausweist, wird hier abgelehnt, obwohl sie im Recht ist. Für sie bleibt
-    /// Dialback.
+    /// <b>What is missing:</b> <c>id-on-xmppAddr</c> (OID 1.3.6.1.5.5.7.8.5) is
+    /// not read, although XEP-0178 names it as the form actually intended. It
+    /// sits as an <c>otherName</c> in the SAN extension, and the library only
+    /// enumerates dNSName and IP addresses; reading it would mean taking ASN.1
+    /// apart by hand. The consequence is to be named: a peer whose certificate
+    /// identifies it <i>only</i> through <c>xmppAddr</c> is refused here
+    /// although it is in the right. For it dialback remains.
     /// </remarks>
     public static class CertificateIdentity
     {
 
         #region Data
 
-        /// <summary>OID der Subject Alternative Name-Erweiterung.</summary>
+        /// <summary>OID of the subject alternative name extension.</summary>
         private const String SubjectAlternativeNameOid = "2.5.29.17";
 
         #endregion
@@ -77,11 +74,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region DomainsOf(certificate)
 
         /// <summary>
-        /// Die Domains, für die dieses Zertifikat ausgestellt ist.
+        /// The domains this certificate is issued for.
         /// </summary>
         /// <returns>
-        /// Die dNSName-Einträge der SAN-Erweiterung; hilfsweise der Common
-        /// Name, aber <b>nur</b> wenn es gar keine SAN-Erweiterung gibt.
+        /// The dNSName entries of the SAN extension; failing that the common
+        /// name, but <b>only</b> when there is no SAN extension at all.
         /// </returns>
         public static IReadOnlyList<String> DomainsOf(X509Certificate2 certificate)
         {
@@ -95,17 +92,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 try
                 {
 
-                    var namen = new X509SubjectAlternativeNameExtension(san.RawData, san.Critical);
+                    var names = new X509SubjectAlternativeNameExtension(san.RawData, san.Critical);
 
-                    // Auch eine leere Liste ist ein Ergebnis: die Erweiterung
-                    // gibt es, sie nennt nur keine Domain. Auf den Common Name
-                    // auszuweichen wäre genau das, was RFC 6125 untersagt.
-                    return [.. namen.EnumerateDnsNames()];
+                    // An empty list is a result too: the extension exists, it
+                    // just names no domain. Falling back on the common name
+                    // would be exactly what RFC 6125 forbids.
+                    return [.. names.EnumerateDnsNames()];
 
                 }
                 catch (Exception)
                 {
-                    // Unlesbare Erweiterung - dann gilt keine Domain als belegt.
+                    // An unreadable extension - then no domain counts as proven.
                     return [];
                 }
 
@@ -124,11 +121,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Authorises(certificate, domain)
 
         /// <summary>
-        /// Darf dieses Zertifikat für diese Domain sprechen?
+        /// May this certificate speak for this domain?
         /// </summary>
         /// <remarks>
-        /// Verglichen wird ohne Rücksicht auf Gross- und Kleinschreibung -
-        /// Domainnamen sind danach nicht zu unterscheiden - aber sonst genau.
+        /// Compared without regard to upper and lower case - domain names
+        /// cannot be told apart by that - but otherwise exactly.
         /// </remarks>
         public static Boolean Authorises(X509Certificate2 certificate, String domain)
 
