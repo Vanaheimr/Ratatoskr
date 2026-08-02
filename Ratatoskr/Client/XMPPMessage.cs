@@ -18,39 +18,37 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Eine empfangene Chat-Nachricht.
+/// A received chat message.
 /// </summary>
-/// <param name="From">Absender (Full-JID)</param>
-/// <param name="To">Empfänger (i. d. R. der eigene Full-JID)</param>
-/// <param name="Body">Nachrichtentext</param>
-/// <param name="MessageId">Stanza-ID, falls der Absender eine gesetzt hat</param>
+/// <param name="From">Sender (full JID)</param>
+/// <param name="To">Recipient (usually one's own full JID)</param>
+/// <param name="Body">Message text</param>
+/// <param name="MessageId">Stanza ID, if the sender set one</param>
 /// <param name="Timestamp">
-/// Wann die Nachricht <b>entstanden</b> ist, auf der lokalen Uhr: der Stempel
-/// aus XEP-0203, wenn sie einen trägt, sonst der Zeitpunkt des Empfangs.
+/// When the message <b>came into being</b>, on the local clock: the stamp from
+/// XEP-0203 if it carries one, otherwise the moment of reception.
 ///
-/// Hier stand bis D59 immer der Empfang. Für alles Laufende ist das dasselbe;
-/// für eine nachgereichte Nachricht war es falsch, und zwar auf die
-/// unangenehmste Art: Die Uhrzeit stand da und stimmte nicht.
+/// Until D59 this always held the reception. For everything live that is the
+/// same thing; for a delivered-late message it was wrong, and in the most
+/// unpleasant way: the time of day stood there and was not true.
 /// </param>
 /// <param name="Type">
-/// Die Art der Nachricht (RFC 6121, Abschnitt 5.2.2). Ohne sie liesse sich
-/// die Zeile aus einem Raum nicht von der eines Bekannten unterscheiden -
-/// und beim Raum ist der Absender nicht einmal ein Mensch, sondern der Raum
-/// selbst.
+/// The kind of the message (RFC 6121, section 5.2.2). Without it the line from
+/// a room could not be told apart from the line of an acquaintance - and with
+/// the room the sender is not even a human being but the room itself.
 /// </param>
 /// <param name="ReceivedAt">
-/// Wann sie hier angekommen ist. Weicht sie von <paramref name="Timestamp"/>
-/// ab, war sie unterwegs aufgehoben.
+/// When it arrived here. If this differs from <paramref name="Timestamp"/>, it
+/// was held somewhere on the way.
 /// </param>
 /// <param name="DelayedBy">
-/// Wer sie aufgehoben hat, wenn er es gesagt hat (XEP-0203, Abschnitt 4) -
-/// der Server, ein Raum. Freiwillig, deshalb oft null, auch bei einer
-/// nachgereichten Nachricht.
+/// Who held it, if they said so (XEP-0203, section 4) - the server, a room.
+/// Voluntary, therefore often null, even for a delivered-late message.
 /// </param>
 /// <param name="ReplacesId">
-/// XEP-0308: Die <c>id</c> der Nachricht, die diese hier ablöst - oder null
-/// für eine gewöhnliche. Der <c>Body</c> ist auch dann der vollständige neue
-/// Text und nicht die Änderung daran.
+/// XEP-0308: The <c>id</c> of the message this one replaces - or null for an
+/// ordinary one. The <c>Body</c> is then, too, the complete new text and not
+/// the change to it.
 /// </param>
 public sealed record XMPPMessage(string       From,
                                  string       To,
@@ -63,21 +61,21 @@ public sealed record XMPPMessage(string       From,
                                  string?      ReplacesId  = null)
 {
 
-    /// <summary>Berichtigt diese Nachricht eine frühere (XEP-0308)?</summary>
+    /// <summary>Does this message correct an earlier one (XEP-0308)?</summary>
     public bool IsCorrection => ReplacesId is not null;
 
     /// <summary>
-    /// Absender ohne Resource.
+    /// Sender without resource.
     /// </summary>
     public string FromBareJid => JidUtilities.Bare(From);
 
     /// <summary>
-    /// Wurde diese Nachricht aufgehoben und nachgereicht?
+    /// Was this message held and delivered late?
     /// </summary>
     /// <remarks>
-    /// Am Zeitunterschied und nicht an <see cref="DelayedBy"/>: Das
-    /// <c>from</c> des Stempels ist freiwillig, seine Abwesenheit sagt also
-    /// nichts. Der Vergleich ist der einzige Beleg, den es immer gibt.
+    /// By the time difference and not by <see cref="DelayedBy"/>: the
+    /// <c>from</c> of the stamp is voluntary, so its absence says nothing. The
+    /// comparison is the only evidence that always exists.
     /// </remarks>
     public bool IsDelayed
         => ReceivedAt.HasValue && ReceivedAt.Value != Timestamp;

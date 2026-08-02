@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Presence-Zustand eines Kontakts (RFC 6121, Abschnitt 4.7.2.1 &lt;show/&gt;).
+/// The presence state of a contact (RFC 6121, section 4.7.2.1 &lt;show/&gt;).
 /// </summary>
 public enum PresenceState
 {

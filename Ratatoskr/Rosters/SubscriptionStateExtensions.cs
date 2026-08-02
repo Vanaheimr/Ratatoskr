@@ -18,42 +18,42 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Zustandsübergänge des Subscription-Handshakes (RFC 6121, Abschnitt 3)
-/// aus Sicht des Roster-Eigentümers.
+/// The state transitions of the subscription handshake (RFC 6121, section 3)
+/// from the point of view of the roster owner.
 /// </summary>
 /// <remarks>
-/// <c>To</c> und <c>From</c> sind zwei getrennte Hälften und keine Stufen
-/// einer Skala: <c>To</c> heisst "ich sehe den Kontakt", <c>From</c> heisst
-/// "der Kontakt sieht mich". Jeder Übergang darf deshalb nur seine eigene
-/// Hälfte anfassen und muss die andere stehen lassen - wer das als Abfolge
-/// None → To → Both begreift, verliert beim Entzug genau die Gegenrichtung.
+/// <c>To</c> and <c>From</c> are two separate halves and not stages of a
+/// scale: <c>To</c> means "I see the contact", <c>From</c> means "the contact
+/// sees me". Every transition may therefore only touch its own half and has to
+/// leave the other one standing - whoever understands this as a sequence
+/// None → To → Both loses exactly the opposite direction on a revocation.
 ///
-/// Der Server rechnet dieselben Übergänge bewusst mit eigenem Code. Benutzten
-/// beide Seiten dieselbe Hilfsfunktion, bliebe ein gemeinsamer Denkfehler
-/// unsichtbar.
+/// The server computes the same transitions with its own code, deliberately.
+/// If both sides used the same helper, a shared mistake in thinking would stay
+/// invisible.
 /// </remarks>
 public static class SubscriptionStateExtensions
 {
 
-    /// <summary>Wir dürfen den Kontakt nun sehen: None→To, From→Both.</summary>
+    /// <summary>We may see the contact from now on: None→To, From→Both.</summary>
     public static SubscriptionState GrantTo(this SubscriptionState state)
         => state is SubscriptionState.From or SubscriptionState.Both
                ? SubscriptionState.Both
                : SubscriptionState.To;
 
-    /// <summary>Wir dürfen den Kontakt nicht mehr sehen: To→None, Both→From.</summary>
+    /// <summary>We may no longer see the contact: To→None, Both→From.</summary>
     public static SubscriptionState RevokeTo(this SubscriptionState state)
         => state is SubscriptionState.From or SubscriptionState.Both
                ? SubscriptionState.From
                : SubscriptionState.None;
 
-    /// <summary>Der Kontakt darf uns nun sehen: None→From, To→Both.</summary>
+    /// <summary>The contact may see us from now on: None→From, To→Both.</summary>
     public static SubscriptionState GrantFrom(this SubscriptionState state)
         => state is SubscriptionState.To or SubscriptionState.Both
                ? SubscriptionState.Both
                : SubscriptionState.From;
 
-    /// <summary>Der Kontakt darf uns nicht mehr sehen: From→None, Both→To.</summary>
+    /// <summary>The contact may no longer see us: From→None, Both→To.</summary>
     public static SubscriptionState RevokeFrom(this SubscriptionState state)
         => state is SubscriptionState.To or SubscriptionState.Both
                ? SubscriptionState.To

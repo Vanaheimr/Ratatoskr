@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Der <c>type</c> einer Nachricht, gelesen und geschrieben.
+/// The <c>type</c> of a message, read and written.
 /// </summary>
 public static class MessageTypeExtensions
 {
@@ -26,15 +26,15 @@ public static class MessageTypeExtensions
     #region Parse(Value)
 
     /// <summary>
-    /// Liest das <c>type</c>-Attribut einer Nachricht.
+    /// Reads the <c>type</c> attribute of a message.
     /// </summary>
     /// <remarks>
-    /// RFC 6121, Abschnitt 5.2.2 ist an dieser Stelle ungewöhnlich deutlich:
-    /// Fehlt das Attribut <b>oder versteht der Empfänger seinen Wert nicht</b>,
-    /// MUSS die Nachricht als <c>normal</c> gelten. Ein unbekannter Wert ist
-    /// also kein Fehler und darf die Nachricht nicht verschwinden lassen - eine
-    /// spätere Erweiterung soll bei alten Empfängern schlicht als gewöhnliche
-    /// Nachricht ankommen.
+    /// RFC 6121, section 5.2.2 is unusually clear at this point: if the
+    /// attribute is missing <b>or the recipient does not understand its
+    /// value</b>, the message MUST be treated as <c>normal</c>. An unknown
+    /// value is therefore not an error and must not make the message disappear
+    /// - a later extension shall simply arrive at old recipients as an
+    /// ordinary message.
     /// </remarks>
     public static MessageType Parse(String? Value)
 
@@ -51,9 +51,8 @@ public static class MessageTypeExtensions
     #region AsAttribute(Type)
 
     /// <summary>
-    /// Der Wert für das <c>type</c>-Attribut, oder null für
-    /// <see cref="MessageType.Normal"/> - der Vorgabewert wird nicht
-    /// geschrieben.
+    /// The value for the <c>type</c> attribute, or null for
+    /// <see cref="MessageType.Normal"/> - the default value is not written.
     /// </summary>
     public static String? AsAttribute(this MessageType Type)
 
@@ -70,20 +69,19 @@ public static class MessageTypeExtensions
     #region ExpectsAReply(Type)
 
     /// <summary>
-    /// Darf auf eine Nachricht dieser Art von selbst geantwortet werden -
-    /// Empfangsbestätigung (XEP-0184) oder Marker (XEP-0333)?
+    /// May a message of this kind be answered by itself - a delivery receipt
+    /// (XEP-0184) or a marker (XEP-0333)?
     /// </summary>
     /// <remarks>
-    /// Bei <see cref="MessageType.Headline"/> sagt es RFC 6121,
-    /// Abschnitt 5.2.2 selbst: „no reply is expected". Eine
-    /// Empfangsbestätigung an eine Nachrichtenquelle ist im besten Fall
-    /// nutzlos.
+    /// For <see cref="MessageType.Headline"/> RFC 6121, section 5.2.2 says it
+    /// itself: "no reply is expected". A delivery receipt to a news source is
+    /// useless at best.
     ///
-    /// Bei <see cref="MessageType.GroupChat"/> ist der Grund handfester: Der
-    /// Absender ist der Raum, nicht ein Mensch. Eine Bestätigung ginge an den
-    /// Raum, und der reicht sie an alle darin weiter - aus einer stillen
-    /// Quittung würde eine Wortmeldung vor Publikum, und zwar von jedem
-    /// Anwesenden für jede Nachricht.
+    /// For <see cref="MessageType.GroupChat"/> the reason is more tangible: the
+    /// sender is the room, not a human being. A receipt would go to the room,
+    /// and the room passes it on to everyone in it - a silent acknowledgement
+    /// would turn into a contribution in front of an audience, and that from
+    /// everyone present for every message.
     /// </remarks>
     public static Boolean ExpectsAReply(this MessageType Type)
 

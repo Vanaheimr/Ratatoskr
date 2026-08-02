@@ -18,33 +18,33 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Builder für Roster-IQ-Stanzas
+/// Builder for roster IQ stanzas
 /// </summary>
 public static class RosterStanzaBuilder
 {
 
-    /// <summary>Der Namespace des Rosters (RFC 6121, Abschnitt 2).</summary>
+    /// <summary>The namespace of the roster (RFC 6121, section 2).</summary>
     public const string Namespace = "jabber:iq:roster";
 
     /// <summary>
-    /// Die Roster-Anfrage (RFC 6121, Abschnitt 2.1).
+    /// The roster request (RFC 6121, section 2.1).
     /// </summary>
     /// <param name="version">
-    /// Die bekannte Fassung für die Versionierung (Abschnitt 2.6), oder
-    /// <c>null</c> ohne sie.
+    /// The known version for the versioning (section 2.6), or <c>null</c>
+    /// without it.
     /// </param>
     /// <remarks>
-    /// Ein <b>leeres</b> <c>ver=''</c> ist kein Platzhalter, sondern eine
-    /// Aussage: „Ich kann Versionierung, habe aber noch nichts" (Abschnitt
-    /// 2.6.1). Der Server schickt daraufhin den vollen Roster und diesmal eine
-    /// Fassung dazu. Deshalb entscheidet <c>null</c> gegen das Attribut und
-    /// nicht die leere Zeichenkette - die beiden Fälle bedeuten Verschiedenes,
-    /// und wer sie zusammenwirft, verliert genau die Ansage.
+    /// An <b>empty</b> <c>ver=''</c> is not a placeholder but a statement:
+    /// "I can do versioning, but I have nothing yet" (section 2.6.1). The
+    /// server thereupon sends the full roster and, this time, a version along
+    /// with it. That is why <c>null</c> decides against the attribute and not
+    /// the empty string - the two cases mean different things, and whoever
+    /// throws them together loses exactly that statement.
     ///
-    /// Diese Fassung stand bis D57 unbenutzt daneben, während
-    /// <c>XMPPConnection</c> dieselbe Stanza an Ort und Stelle zusammensetzte.
-    /// Zwei Schreibweisen derselben Anfrage sind eine zu viel; die
-    /// Feinheit oben stand nur in einer davon.
+    /// This version stood beside it unused until D57, while
+    /// <c>XMPPConnection</c> assembled the same stanza on the spot. Two
+    /// spellings of the same request are one too many; the subtlety above was
+    /// only in one of them.
     /// </remarks>
     public static string GetRoster(string? version = null)
     {

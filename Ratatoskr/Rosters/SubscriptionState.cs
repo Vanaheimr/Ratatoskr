@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Subscription-Zustand eines Roster-Eintrags (RFC 6121, Abschnitt 2.1.2.5).
+/// The subscription state of a roster entry (RFC 6121, section 2.1.2.5).
 /// </summary>
 public enum SubscriptionState
 {

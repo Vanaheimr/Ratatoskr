@@ -25,16 +25,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Anwendungsnaher XMPP-Client.
+/// Application-facing XMPP client.
 ///
-/// Kapselt eine <see cref="XMPPConnection"/> und die Sitzungslogik, die sonst
-/// in der Benutzeroberfläche landet: aktueller Chatpartner, offene
-/// Kontaktanfragen, zuletzt empfangene Nachrichten-ID sowie zusammengesetzte
-/// Operationen (etwa "Kontaktanfrage annehmen" = subscribed senden,
-/// Gegenanfrage stellen und aus der Warteliste entfernen).
+/// Encapsulates an <see cref="XMPPConnection"/> and the session logic that
+/// otherwise ends up in the user interface: current chat partner, open contact
+/// requests, the last received message ID as well as composite operations
+/// (such as "accept contact request" = send subscribed, pose a counter-request
+/// and remove it from the waiting list).
 ///
-/// Die Klasse gibt keinerlei Ausgaben aus; alles läuft über die Events und
-/// die übergebene <see cref="ILoggerFactory"/>.
+/// The class produces no output whatsoever; everything runs through the events
+/// and the <see cref="ILoggerFactory"/> handed in.
 /// </summary>
 public sealed class XMPPClient : IAsyncDisposable
 {
@@ -47,8 +47,8 @@ public sealed class XMPPClient : IAsyncDisposable
     private readonly object _pendingLock = new();
 
     /// <summary>
-    /// Gültige Werte für das &lt;show/&gt;-Element (RFC 6121, Abschnitt 4.7.2.1).
-    /// "available" ist die Abwesenheit von &lt;show/&gt; und daher mit erlaubt.
+    /// Valid values for the &lt;show/&gt; element (RFC 6121, section 4.7.2.1).
+    /// "available" is the absence of &lt;show/&gt; and therefore permitted as well.
     /// </summary>
     private static readonly string[] ValidShowValues = ["available", "away", "chat", "dnd", "xa"];
 
@@ -57,7 +57,7 @@ public sealed class XMPPClient : IAsyncDisposable
     #region Properties
 
     /// <summary>
-    /// Die zugrundeliegende Verbindung - für Statusabfragen und Sonderfälle.
+    /// The underlying connection - for status queries and special cases.
     /// </summary>
     public XMPPConnection Connection => _connection;
 
@@ -75,37 +75,37 @@ public sealed class XMPPClient : IAsyncDisposable
     public StreamManagementManager? StreamManagement => _connection.StreamManagement;
 
     /// <summary>
-    /// JID des aktuellen Chatpartners; null, wenn kein Chat aktiv ist.
+    /// JID of the current chat partner; null when no chat is active.
     /// </summary>
     public string? CurrentChatPartner { get; private set; }
 
     /// <summary>
-    /// ID der zuletzt empfangenen Nachricht - Bezugspunkt für Chat Markers
-    /// ohne explizite ID.
+    /// ID of the last received message - the point of reference for chat
+    /// markers without an explicit ID.
     /// </summary>
     public string? LastReceivedMessageId { get; private set; }
 
     /// <summary>
-    /// Die zuletzt an einen Empfänger geschickte Nachricht - Bezugspunkt für
-    /// eine Korrektur nach XEP-0308.
+    /// The message last sent to a recipient - the point of reference for a
+    /// correction per XEP-0308.
     /// </summary>
     /// <remarks>
-    /// Je Empfänger und nicht insgesamt: Abschnitt 5 lässt nur die jeweils
-    /// letzte Nachricht <b>an denselben Empfänger</b> berichtigen. Ein
-    /// einzelner Merkposten wäre nach jedem Themenwechsel falsch - und zwar
-    /// so, dass die Korrektur beim vorigen Gesprächspartner landet.
+    /// Per recipient and not overall: section 5 only allows the respectively
+    /// last message <b>to the same recipient</b> to be corrected. A single
+    /// note would be wrong after every change of subject - and wrong in such a
+    /// way that the correction ends up with the previous conversation partner.
     /// </remarks>
     private readonly Dictionary<string, string> _lastSentTo = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Noch nicht beantwortete Kontaktanfragen, in Eingangsreihenfolge.
+    /// Contact requests not answered yet, in order of arrival.
     /// </summary>
     public IReadOnlyList<string> PendingSubscriptions
     {
         get { lock (_pendingLock) return _pendingSubscriptions.ToList(); }
     }
 
-    // Konfiguration - wirkt bei Verbindungsaufbau bzw. Reconnect
+    // Configuration - takes effect when the connection is established resp. on reconnect
     public bool KeepaliveEnabled
     {
         get => _connection.KeepaliveEnabled;
@@ -128,78 +128,77 @@ public sealed class XMPPClient : IAsyncDisposable
 
     #region Events
 
-    /// <summary>Eine Chat-Nachricht wurde empfangen.</summary>
+    /// <summary>A chat message was received.</summary>
     public event Action<XMPPMessage>? OnMessage;
 
     /// <summary>
-    /// XEP-0384: eine verschlüsselt eingetroffene Nachricht, schon
-    /// entschlüsselt - samt der Einstufung des Absendergeräts.
+    /// XEP-0384: a message that arrived encrypted, already decrypted - together
+    /// with the rating of the sending device.
     /// </summary>
     public event Action<XMPPMessage, OmemoDecrypted>? OnEncryptedMessage;
 
-    /// <summary>XEP-0280: Eine Nachricht wurde von/an ein anderes eigenes Gerät gespiegelt.</summary>
+    /// <summary>XEP-0280: A message was mirrored from/to another device of our own.</summary>
     public event Action<CarbonMessage>? OnCarbonMessage;
 
-    /// <summary>XEP-0085: Ein Kontakt hat seinen Tippstatus geändert.</summary>
+    /// <summary>XEP-0085: A contact changed their typing state.</summary>
     public event Action<string, ChatState>? OnChatState;
 
-    /// <summary>XEP-0333: Ein Chat Marker wurde empfangen.</summary>
+    /// <summary>XEP-0333: A chat marker was received.</summary>
     public event Action<ChatMarker>? OnChatMarker;
 
-    /// <summary>XEP-0184: Eine gesendete Nachricht wurde zugestellt.</summary>
+    /// <summary>XEP-0184: A sent message was delivered.</summary>
     public event Action<string, string>? OnReceiptReceived; // from, messageId
 
-    /// <summary>Presence-Änderung eines Kontakts.</summary>
+    /// <summary>Presence change of a contact.</summary>
     public event Action<string, string>? OnPresenceChanged; // from, type
 
-    /// <summary>XEP-0060: PubSub-Event vom Service.</summary>
+    /// <summary>XEP-0060: PubSub event from the service.</summary>
     public event Action<PubSubEvent>? OnPubSubEvent;
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.6.1: Jemand beantragt ein Abonnement an einem
-    /// eigenen Knoten - beantwortet wird das mit
+    /// XEP-0060, section 8.6.1: Someone applies for a subscription to a node of
+    /// our own - answered with
     /// <see cref="PubSubAnswerSubscriptionRequestAsync"/>.
     /// </summary>
     public event Action<PubSubSubscribeAuthorization>? OnPubSubSubscriptionRequest;
 
-    /// <summary>Eine neue Kontaktanfrage; sie liegt danach in <see cref="PendingSubscriptions"/>.</summary>
+    /// <summary>A new contact request; afterwards it lies in <see cref="PendingSubscriptions"/>.</summary>
     public event Action<string, string>? OnSubscriptionRequest; // from, status
 
-    /// <summary>Ein Kontakt wurde dem Roster hinzugefügt.</summary>
+    /// <summary>A contact was added to the roster.</summary>
     public event Action<RosterItem>? OnRosterItemAdded;
 
-    /// <summary>Ein Kontakt wurde aus dem Roster entfernt.</summary>
+    /// <summary>A contact was removed from the roster.</summary>
     public event Action<string>? OnRosterItemRemoved;
 
-    /// <summary>XEP-0115: Capabilities einer Gegenstelle wurden ermittelt.</summary>
+    /// <summary>XEP-0115: The capabilities of a peer were determined.</summary>
     public event Action<string, DiscoInfo>? OnCapsDiscovered;
 
-    /// <summary>Der Verbindungszustand hat sich geändert.</summary>
+    /// <summary>The connection state has changed.</summary>
     public event Action<ConnectionState, ConnectionState>? OnStateChanged;
 
-    /// <summary>Ein Fehler ist aufgetreten (bereits geloggt).</summary>
+    /// <summary>An error occurred (already logged).</summary>
     public event Action<string>? OnError;
 
-    /// <summary>Ein Spoofing-Versuch wurde abgewehrt (bereits geloggt).</summary>
+    /// <summary>A spoofing attempt was fended off (already logged).</summary>
     public event Action<string>? OnSpoofingAttempt;
 
     /// <summary>
-    /// RFC 6120, Abschnitt 8.3: Eine Stanza wurde abgelehnt. Der erste
-    /// Parameter ist der Absender des Fehlers, null bei einem Fehler vom
-    /// eigenen Server.
+    /// RFC 6120, section 8.3: A stanza was refused. The first parameter is the
+    /// sender of the error, null on an error from one's own server.
     /// </summary>
     public event Action<string?, StanzaError>? OnStanzaError;
 
     /// <summary>
-    /// RFC 6120, Abschnitt 4.9: Der Server hat den Stream mit einem Fehler
-    /// beendet. Ist er nicht wiederholbar, unterbleibt der Reconnect.
+    /// RFC 6120, section 4.9: The server ended the stream with an error. If it
+    /// is not recoverable, the reconnect is omitted.
     /// </summary>
     public event Action<StreamError>? OnStreamError;
 
-    /// <summary>Rohes XML, ein- und ausgehend - für Debug-Anzeigen.</summary>
+    /// <summary>Raw XML, inbound and outbound - for debug displays.</summary>
     public event Action<string>? OnRawXml;
 
-    /// <summary>Der aktuelle Chatpartner wurde gewechselt oder zurückgesetzt.</summary>
+    /// <summary>The current chat partner was switched or reset.</summary>
     public event Action<string?>? OnChatPartnerChanged;
 
     #endregion
@@ -207,16 +206,16 @@ public sealed class XMPPClient : IAsyncDisposable
     #region Constructor(s)
 
     /// <summary>
-    /// Erstellt einen neuen XMPP-Client.
+    /// Creates a new XMPP client.
     /// </summary>
-    /// <param name="jid">Bare-JID im Format user@domain</param>
-    /// <param name="password">Passwort für die SASL-Authentifizierung</param>
+    /// <param name="jid">Bare JID in the format user@domain</param>
+    /// <param name="password">Password for the SASL authentication</param>
     /// <param name="wsUri">
-    /// WebSocket-Endpunkt. Ohne Angabe wird das <c>host-meta</c> der Domain
-    /// gefragt (XEP-0156); findet sich dort keiner, bleibt es bei
-    /// wss://{domain}:5443/ws (ejabberd-Vorgabe).
+    /// WebSocket endpoint. Without one the <c>host-meta</c> of the domain is
+    /// asked (XEP-0156); if none is found there, it stays at
+    /// wss://{domain}:5443/ws (the ejabberd default).
     /// </param>
-    /// <param name="LoggerFactory">Optionale Logger-Factory; ohne Angabe wird nicht geloggt</param>
+    /// <param name="LoggerFactory">Optional logger factory; without one nothing is logged</param>
     public XMPPClient(string          jid,
                       string          password,
                       string?         wsUri           = null,
@@ -234,7 +233,7 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Erstellt einen Client um eine bereits konfigurierte Verbindung herum.
+    /// Creates a client around an already configured connection.
     /// </summary>
     public XMPPClient(XMPPConnection  connection,
                       ILoggerFactory? LoggerFactory = null)
@@ -253,29 +252,29 @@ public sealed class XMPPClient : IAsyncDisposable
     private void WireUpConnection()
     {
 
-        _connection.OnMessage += nachricht =>
+        _connection.OnMessage += message =>
         {
-            if (!string.IsNullOrEmpty(nachricht.MessageId))
-                LastReceivedMessageId = nachricht.MessageId;
+            if (!string.IsNullOrEmpty(message.MessageId))
+                LastReceivedMessageId = message.MessageId;
 
-            OnMessage?.Invoke(nachricht);
+            OnMessage?.Invoke(message);
         };
 
-        // XEP-0384: Eine entschlüsselte Nachricht geht denselben Weg wie jede
-        // andere - und zusätzlich über ihr eigenes Ereignis, das die
-        // Einstufung des Absendergeräts mitbringt.
+        // XEP-0384: A decrypted message goes the same way as every other one -
+        // and additionally through its own event, which brings along the rating
+        // of the sending device.
         //
-        // Beides, weil beides gebraucht wird: Eine Oberfläche, die OMEMO nicht
-        // kennt, zeigt die Nachricht trotzdem an; eine, die es kennt, kann
-        // dazuschreiben, von welchem Gerät sie kam und ob es bestätigt ist.
-        _connection.OnEncryptedMessage += (nachricht, omemo) =>
+        // Both, because both are needed: a user interface that does not know
+        // OMEMO shows the message anyway; one that knows it can add which
+        // device it came from and whether that device is confirmed.
+        _connection.OnEncryptedMessage += (message, omemo) =>
         {
 
-            if (!string.IsNullOrEmpty(nachricht.MessageId))
-                LastReceivedMessageId = nachricht.MessageId;
+            if (!string.IsNullOrEmpty(message.MessageId))
+                LastReceivedMessageId = message.MessageId;
 
-            OnEncryptedMessage?.Invoke(nachricht, omemo);
-            OnMessage?.Invoke(nachricht);
+            OnEncryptedMessage?.Invoke(message, omemo);
+            OnMessage?.Invoke(message);
 
         };
 
@@ -298,19 +297,19 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnSpoofingAttempt += msg =>
         {
-            _logger.LogWarning("Spoofing-Versuch abgewehrt: {Details}", msg);
+            _logger.LogWarning("Spoofing attempt fended off: {Details}", msg);
             OnSpoofingAttempt?.Invoke(msg);
         };
 
         _connection.OnStanzaError += (from, error) =>
         {
-            _logger.LogInformation("Stanza abgelehnt von {From}: {Error}", from ?? "(Server)", error);
+            _logger.LogInformation("Stanza refused by {From}: {Error}", from ?? "(server)", error);
             OnStanzaError?.Invoke(from, error);
         };
 
         _connection.OnStreamError += error =>
         {
-            _logger.LogWarning("Stream-Fehler: {Error} (wiederholbar: {Recoverable})",
+            _logger.LogWarning("Stream error: {Error} (recoverable: {Recoverable})",
                                error, error.IsRecoverable);
             OnStreamError?.Invoke(error);
         };
@@ -328,7 +327,7 @@ public sealed class XMPPClient : IAsyncDisposable
                     _pendingSubscriptions.Add(bare);
             }
 
-            _logger.LogInformation("Kontaktanfrage von {From}", bare);
+            _logger.LogInformation("Contact request from {From}", bare);
             OnSubscriptionRequest?.Invoke(bare, status);
         };
 
@@ -336,14 +335,14 @@ public sealed class XMPPClient : IAsyncDisposable
 
     #endregion
 
-    #region Verbindung
+    #region Connection
 
     public Task ConnectAsync(CancellationToken ct = default)
         => _connection.ConnectAsync(ct);
 
     /// <summary>
-    /// Reisst die Verbindung ohne Close-Handshake ab - simuliert einen
-    /// Netzwerkausfall und löst den Reconnect aus.
+    /// Tears the connection down without a close handshake - simulates a
+    /// network outage and triggers the reconnect.
     /// </summary>
     public void KillConnection()
         => _connection.KillConnection();
@@ -352,7 +351,7 @@ public sealed class XMPPClient : IAsyncDisposable
         => _connection.DisconnectAsync();
 
     /// <summary>
-    /// Trennt eine bestehende Verbindung und baut sie neu auf.
+    /// Severs an existing connection and establishes it anew.
     /// </summary>
     public async Task ReconnectAsync(CancellationToken ct = default)
     {
@@ -363,24 +362,24 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0199: Misst die Round-Trip-Zeit zum Server oder zu einem JID.
+    /// XEP-0199: Measures the round-trip time to the server or to a JID.
     /// </summary>
     public Task<TimeSpan?> PingAsync(string? to = null, CancellationToken ct = default)
         => _connection.PingAsync(to, ct);
 
     /// <summary>
-    /// XEP-0198: Fordert eine Empfangsbestätigung vom Server an.
+    /// XEP-0198: Requests an acknowledgement from the server.
     /// </summary>
     public Task RequestAckAsync()
         => _connection.RequestAckAsync();
 
     #endregion
 
-    #region Chatpartner und Nachrichten
+    #region Chat partner and messages
 
     /// <summary>
-    /// Setzt den aktuellen Chatpartner. null beendet den Chat ohne
-    /// &lt;gone/&gt; zu senden - dafür <see cref="LeaveChatAsync"/> nutzen.
+    /// Sets the current chat partner. null ends the chat without sending
+    /// &lt;gone/&gt; - use <see cref="LeaveChatAsync"/> for that.
     /// </summary>
     public void SetChatPartner(string? jid)
     {
@@ -390,15 +389,15 @@ public sealed class XMPPClient : IAsyncDisposable
             return;
 
         CurrentChatPartner = normalized;
-        _logger.LogDebug("Chatpartner: {Partner}", normalized ?? "(keiner)");
+        _logger.LogDebug("Chat partner: {Partner}", normalized ?? "(none)");
         OnChatPartnerChanged?.Invoke(normalized);
     }
 
     /// <summary>
-    /// XEP-0085: Sendet &lt;gone/&gt; an den aktuellen Chatpartner und
-    /// beendet den Chat.
+    /// XEP-0085: Sends &lt;gone/&gt; to the current chat partner and ends the
+    /// chat.
     /// </summary>
-    /// <returns>Der verlassene Chatpartner, oder null wenn keiner aktiv war.</returns>
+    /// <returns>The chat partner left, or null when none was active.</returns>
     public async Task<string?> LeaveChatAsync()
     {
         var partner = CurrentChatPartner;
@@ -412,9 +411,9 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Sendet eine Nachricht an den aktuellen Chatpartner.
+    /// Sends a message to the current chat partner.
     /// </summary>
-    /// <returns>Die Nachrichten-ID, oder null wenn kein Chatpartner gesetzt ist.</returns>
+    /// <returns>The message ID, or null when no chat partner is set.</returns>
     public async Task<string?> SendMessageAsync(string body)
     {
         var partner = CurrentChatPartner;
@@ -425,8 +424,8 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Sendet eine Nachricht an einen beliebigen JID, ohne den aktuellen
-    /// Chatpartner zu ändern.
+    /// Sends a message to an arbitrary JID without changing the current chat
+    /// partner.
     /// </summary>
     public async Task<string> SendMessageAsync(string to, string body,
                                                MessageType type = MessageType.Chat)
@@ -434,8 +433,8 @@ public sealed class XMPPClient : IAsyncDisposable
 
         var id = await _connection.SendMessageAsync(to, body, type: type);
 
-        // Für eine spätere Korrektur (XEP-0308). Gemerkt wird auch das, was
-        // nie berichtigt wird - der Preis ist ein Eintrag je Gesprächspartner.
+        // For a later correction (XEP-0308). What is never corrected gets
+        // remembered too - the price is one entry per conversation partner.
         lock (_lastSentTo)
             _lastSentTo[JidUtilities.Bare(to)] = id;
 
@@ -444,40 +443,37 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0308: Berichtigt die zuletzt an diesen Empfänger geschickte
-    /// Nachricht.
+    /// XEP-0308: Corrects the message last sent to this recipient.
     /// </summary>
-    /// <param name="to">Der Empfänger; ohne Angabe der aktuelle Chatpartner.</param>
-    /// <param name="body">Der vollständige neue Text.</param>
+    /// <param name="to">The recipient; without one the current chat partner.</param>
+    /// <param name="body">The complete new text.</param>
     /// <returns>
-    /// Die ID der Korrektur, oder null - dann gibt es nichts zu berichtigen:
-    /// kein Empfänger, oder an diesen ist in dieser Sitzung noch nichts
-    /// hinausgegangen.
+    /// The ID of the correction, or null - then there is nothing to correct:
+    /// no recipient, or nothing has gone out to this one in this session yet.
     /// </returns>
     /// <remarks>
-    /// Berichtigt wird ausschliesslich die <b>letzte</b> Nachricht an diesen
-    /// Empfänger (Abschnitt 5) - und die Korrektur wird selbst zur letzten,
-    /// sodass sich eine Berichtigung wiederum berichtigen lässt. Das ist keine
-    /// Spitzfindigkeit, sondern der übliche Fall: Wer sich vertippt, vertippt
-    /// sich auch in der Berichtigung.
+    /// Corrected is exclusively the <b>last</b> message to this recipient
+    /// (section 5) - and the correction itself becomes the last one, so that a
+    /// correction can in turn be corrected. That is not hairsplitting but the
+    /// usual case: whoever mistypes also mistypes in the correction.
     /// </remarks>
     public async Task<string?> CorrectLastMessageAsync(string body, string? to = null)
     {
 
-        var empfaenger = to ?? CurrentChatPartner;
+        var recipient = to ?? CurrentChatPartner;
 
-        if (empfaenger is null)
+        if (recipient is null)
             return null;
 
-        var bare = JidUtilities.Bare(empfaenger);
+        var bare = JidUtilities.Bare(recipient);
 
-        string? vorherige;
+        string? previous;
 
         lock (_lastSentTo)
-            if (!_lastSentTo.TryGetValue(bare, out vorherige))
+            if (!_lastSentTo.TryGetValue(bare, out previous))
                 return null;
 
-        var id = await _connection.SendMessageAsync(empfaenger, body, corrects: vorherige);
+        var id = await _connection.SendMessageAsync(recipient, body, corrects: previous);
 
         lock (_lastSentTo)
             _lastSentTo[bare] = id;
@@ -487,9 +483,9 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0085: Sendet einen Tippstatus an den aktuellen Chatpartner.
+    /// XEP-0085: Sends a typing state to the current chat partner.
     /// </summary>
-    /// <returns>false, wenn kein Chatpartner gesetzt ist.</returns>
+    /// <returns>false when no chat partner is set.</returns>
     public async Task<bool> SendChatStateAsync(ChatState state)
     {
         var partner = CurrentChatPartner;
@@ -501,12 +497,12 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// XEP-0333: Sendet einen Chat Marker an den aktuellen Chatpartner.
-    /// Ohne <paramref name="messageId"/> wird
-    /// <see cref="LastReceivedMessageId"/> verwendet.
+    /// XEP-0333: Sends a chat marker to the current chat partner. Without
+    /// <paramref name="messageId"/>, <see cref="LastReceivedMessageId"/> is
+    /// used.
     /// </summary>
-    /// <returns>Die markierte Nachrichten-ID, oder null wenn kein
-    /// Chatpartner gesetzt ist oder keine ID bekannt ist.</returns>
+    /// <returns>The marked message ID, or null when no chat partner is set or
+    /// no ID is known.</returns>
     public async Task<string?> SendMarkerAsync(ChatMarkerType type, string? messageId = null)
     {
         var partner = CurrentChatPartner;
@@ -522,7 +518,7 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Sendet rohes XML - für Protokollexperimente.
+    /// Sends raw XML - for protocol experiments.
     /// </summary>
     public Task SendRawAsync(string xml)
         => _connection.SendRawAsync(xml);
@@ -532,24 +528,24 @@ public sealed class XMPPClient : IAsyncDisposable
     #region Presence
 
     /// <summary>
-    /// Prüft, ob ein &lt;show/&gt;-Wert nach RFC 6121 gültig ist.
+    /// Checks whether a &lt;show/&gt; value is valid per RFC 6121.
     /// </summary>
     public static bool IsValidShow(string? show)
         => string.IsNullOrEmpty(show) ||
            ValidShowValues.Contains(show, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Setzt die eigene Presence.
+    /// Sets one's own presence.
     /// </summary>
-    /// <exception cref="ArgumentException">Bei ungültigem show-Wert.</exception>
+    /// <exception cref="ArgumentException">On an invalid show value.</exception>
     public Task SetPresenceAsync(string? show = null, string? status = null)
     {
         if (!IsValidShow(show))
             throw new ArgumentException(
-                $"Ungültiger show-Wert '{show}'. Erlaubt: {string.Join(", ", ValidShowValues)}",
+                $"Invalid show value '{show}'. Permitted: {string.Join(", ", ValidShowValues)}",
                 nameof(show));
 
-        // "available" ist die Abwesenheit von <show/>
+        // "available" is the absence of <show/>
         var effectiveShow = string.Equals(show, "available", StringComparison.OrdinalIgnoreCase)
                                 ? null
                                 : show;
@@ -559,7 +555,7 @@ public sealed class XMPPClient : IAsyncDisposable
 
     #endregion
 
-    #region Roster und Kontaktanfragen
+    #region Roster and contact requests
 
     public Task AddContactAsync(string jid, string? name = null, IEnumerable<string>? groups = null)
         => _connection.AddContactAsync(jid.Trim(), name, groups);
@@ -568,75 +564,76 @@ public sealed class XMPPClient : IAsyncDisposable
         => _connection.RemoveContactAsync(jid.Trim());
 
     /// <summary>
-    /// Kündigt das eigene Abonnement auf die Presence eines Kontakts
-    /// (RFC 6121, Abschnitt 3.3).
+    /// Cancels one's own subscription to the presence of a contact (RFC 6121,
+    /// section 3.3).
     /// </summary>
     /// <remarks>
-    /// Ohne Warteliste und ohne Gegenanfrage, anders als
-    /// <see cref="AcceptSubscriptionAsync"/> und
-    /// <see cref="DenySubscriptionAsync"/>: Hier ist nichts offen, das
-    /// abzuarbeiten wäre. Der Kontakt bleibt im Roster stehen - wer ihn ganz
-    /// loswerden will, nimmt <see cref="RemoveContactAsync"/>.
+    /// Without a waiting list and without a counter-request, unlike
+    /// <see cref="AcceptSubscriptionAsync"/> and
+    /// <see cref="DenySubscriptionAsync"/>: nothing is open here that would
+    /// have to be worked off. The contact stays in the roster - whoever wants
+    /// to get rid of them entirely takes <see cref="RemoveContactAsync"/>.
     /// </remarks>
     public Task CancelSubscriptionAsync(string jid)
         => _connection.CancelSubscriptionAsync(jid.Trim());
 
-    /// <summary>XEP-0384: der OMEMO-Verwalter, sobald er eingeschaltet ist.</summary>
+    /// <summary>XEP-0384: the OMEMO manager, as soon as it is switched on.</summary>
     public OmemoManager? Omemo => _connection.Omemo;
 
-    /// <summary>XEP-0384: Ist OMEMO eingeschaltet?</summary>
+    /// <summary>XEP-0384: Is OMEMO switched on?</summary>
     public bool OmemoEnabled => _connection.Omemo is not null;
 
     /// <summary>
-    /// XEP-0384: Schaltet OMEMO ein.
+    /// XEP-0384: Switches OMEMO on.
     /// </summary>
     /// <param name="store">
-    /// Wohin Schlüssel und Sitzungen gehen. Ohne Angabe in den
-    /// Arbeitsspeicher - <b>dann hat dieses Gerät bei jedem Start einen neuen
-    /// Fingerabdruck</b>, und jeder Vergleich ist wertlos. Für einen Menschen
-    /// gehört hier ein <see cref="OmemoFileStore"/> hin.
+    /// Where keys and sessions go. Without one into memory - <b>then this
+    /// device has a new fingerprint at every start</b>, and every comparison is
+    /// worthless. For a human being an <see cref="OmemoFileStore"/> belongs
+    /// here.
     /// </param>
     public Task<bool> EnableOmemoAsync(IOmemoStore? store = null, CancellationToken ct = default)
         => _connection.EnableOmemoAsync(store ?? new OmemoMemoryStore(), ct);
 
     /// <summary>
-    /// XEP-0384: Schickt eine verschlüsselte Nachricht.
+    /// XEP-0384: Sends an encrypted message.
     /// </summary>
-    /// <returns>Die Geräte, die nicht mitlesen können - leer heisst: alle.</returns>
+    /// <returns>The devices that cannot read along - empty means: all can.</returns>
     public Task<IReadOnlyList<OmemoSkippedDevice>> SendEncryptedMessageAsync(string             to,
                                                                             string             body,
                                                                             CancellationToken  ct = default)
         => _connection.SendEncryptedMessageAsync(to, body, ct);
 
     /// <summary>
-    /// XEP-0352: Sieht gerade ein Mensch hin?
+    /// XEP-0352: Is a human being looking right now?
     /// </summary>
     public bool IsActive => _connection.ClientIsActive;
 
     /// <summary>
-    /// XEP-0352: Hat der Server Client State Indication angekündigt?
+    /// XEP-0352: Has the server announced client state indication?
     /// </summary>
     public bool SupportsClientStateIndication => _connection.SupportsClientStateIndication;
 
     /// <summary>
-    /// XEP-0352: Meldet dem Server, ob gerade ein Mensch hinsieht - inaktiv
-    /// heisst, dass er zurückhalten darf, was warten kann.
+    /// XEP-0352: Tells the server whether a human being is looking right now -
+    /// inactive means it may hold back what can wait.
     /// </summary>
-    /// <returns>false, wenn der Server die Erweiterung nicht angekündigt hat.</returns>
+    /// <returns>false when the server has not announced the extension.</returns>
     /// <remarks>
-    /// Was zurückgehalten wird, entscheidet der Server. Nachrichten mit Text
-    /// gehören ausdrücklich nicht dazu - dies ist eine Sparmassnahme für den
-    /// Akku und keine Ruhefunktion für den Menschen davor.
+    /// What is held back is the server's decision. Messages with text
+    /// explicitly do not belong to it - this is a saving measure for the
+    /// battery and not a do-not-disturb function for the human being in front
+    /// of it.
     /// </remarks>
     public Task<bool> SetActiveAsync(bool active)
         => _connection.SetClientStateAsync(active);
 
     /// <summary>
-    /// Nimmt eine Kontaktanfrage an: bestätigt die Subscription, stellt eine
-    /// Gegenanfrage für beidseitige Sichtbarkeit und räumt die Warteliste auf.
+    /// Accepts a contact request: confirms the subscription, poses a
+    /// counter-request for mutual visibility and tidies up the waiting list.
     /// </summary>
-    /// <param name="jid">Der Antragsteller; ohne Angabe die älteste offene Anfrage.</param>
-    /// <returns>Der bearbeitete JID, oder null wenn keine Anfrage offen war.</returns>
+    /// <param name="jid">The applicant; without one the oldest open request.</param>
+    /// <returns>The JID processed, or null when no request was open.</returns>
     public async Task<string?> AcceptSubscriptionAsync(string? jid = null)
     {
         var target = ResolvePendingSubscription(jid);
@@ -645,60 +642,60 @@ public sealed class XMPPClient : IAsyncDisposable
 
         await _connection.AcceptSubscriptionAsync(target);
 
-        // Gegenanfrage, damit die Subscription beidseitig wird
+        // Counter-request, so that the subscription becomes mutual
         await _connection.AddContactAsync(target);
 
         RemovePendingSubscription(target);
-        _logger.LogInformation("Kontaktanfrage von {Jid} angenommen", target);
+        _logger.LogInformation("Contact request from {Jid} accepted", target);
 
         return target;
     }
 
     /// <summary>
-    /// Lässt einen Kontakt im Voraus zu: stellt er künftig eine Anfrage,
-    /// beantwortet der Server sie selbst (RFC 6121, Abschnitt 3.4).
+    /// Admits a contact in advance: if they pose a request in future, the
+    /// server answers it itself (RFC 6121, section 3.4).
     /// </summary>
-    /// <param name="jid">Der Kontakt, der zugelassen werden soll.</param>
+    /// <param name="jid">The contact to be admitted.</param>
     /// <returns>
-    /// false, wenn der Server Pre-Approval nicht angekündigt hat - dann
-    /// <b>darf</b> es nach Abschnitt 3.4.1 gar nicht erst versucht werden.
+    /// false when the server has not announced pre-approval - then per section
+    /// 3.4.1 it <b>must</b> not even be attempted.
     /// </returns>
     /// <remarks>
-    /// Bewusst nicht über <see cref="AcceptSubscriptionAsync"/>: das nimmt
-    /// eine <i>offene</i> Anfrage an und stellt eine Gegenanfrage, damit die
-    /// Sichtbarkeit beidseitig wird. Eine Vormerkung tut beides nicht - es
-    /// gibt nichts anzunehmen, und wer im Voraus zulässt, hat damit noch nicht
-    /// gesagt, dass er den anderen auch selbst sehen will.
+    /// Deliberately not through <see cref="AcceptSubscriptionAsync"/>: that one
+    /// accepts an <i>open</i> request and poses a counter-request so that the
+    /// visibility becomes mutual. An advance admission does neither - there is
+    /// nothing to accept, and whoever admits in advance has not thereby said
+    /// that they want to see the other one themselves as well.
     /// </remarks>
     public async Task<bool> PreApproveContactAsync(string jid)
     {
 
         if (!ServerSupportsPreApproval)
         {
-            _logger.LogWarning("Der Server kündigt kein Pre-Approval an - {Jid} wird nicht vorgemerkt", jid);
+            _logger.LogWarning("The server announces no pre-approval - {Jid} is not admitted in advance", jid);
             return false;
         }
 
         await _connection.AcceptSubscriptionAsync(jid);
 
-        _logger.LogInformation("Kontakt {Jid} im Voraus zugelassen", jid);
+        _logger.LogInformation("Contact {Jid} admitted in advance", jid);
 
         return true;
 
     }
 
     /// <summary>
-    /// Hat der Server Subscription-Pre-Approval angekündigt (RFC 6121,
-    /// Abschnitt 3.4)?
+    /// Has the server announced subscription pre-approval (RFC 6121,
+    /// section 3.4)?
     /// </summary>
     public bool ServerSupportsPreApproval
         => _connection.ServerFeatures.Contains("urn:xmpp:features:pre-approval");
 
     /// <summary>
-    /// Lehnt eine Kontaktanfrage ab.
+    /// Refuses a contact request.
     /// </summary>
-    /// <param name="jid">Der Antragsteller; ohne Angabe die älteste offene Anfrage.</param>
-    /// <returns>Der bearbeitete JID, oder null wenn keine Anfrage offen war.</returns>
+    /// <param name="jid">The applicant; without one the oldest open request.</param>
+    /// <returns>The JID processed, or null when no request was open.</returns>
     public async Task<string?> DenySubscriptionAsync(string? jid = null)
     {
         var target = ResolvePendingSubscription(jid);
@@ -708,7 +705,7 @@ public sealed class XMPPClient : IAsyncDisposable
         await _connection.DenySubscriptionAsync(target);
 
         RemovePendingSubscription(target);
-        _logger.LogInformation("Kontaktanfrage von {Jid} abgelehnt", target);
+        _logger.LogInformation("Contact request from {Jid} refused", target);
 
         return target;
     }
@@ -729,7 +726,7 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Kontakte, optional gefiltert nach JID, Anzeigename oder Gruppe.
+    /// Contacts, optionally filtered by JID, display name or group.
     /// </summary>
     public IReadOnlyCollection<RosterItem> GetContacts(string? filter = null)
     {
@@ -755,19 +752,19 @@ public sealed class XMPPClient : IAsyncDisposable
     #region Service Discovery
 
     /// <summary>
-    /// XEP-0030: Fragt die Features einer Gegenstelle ab.
+    /// XEP-0030: Queries the features of a peer.
     /// </summary>
     public Task<DiscoInfo?> DiscoverInfoAsync(string jid, CancellationToken ct = default)
         => _connection.DiscoverInfoAsync(jid, ct);
 
     /// <summary>
-    /// XEP-0030: Fragt die Items/Services einer Gegenstelle ab.
+    /// XEP-0030: Queries the items/services of a peer.
     /// </summary>
     public Task<DiscoItems?> DiscoverItemsAsync(string jid, CancellationToken ct = default)
         => _connection.DiscoverItemsAsync(jid, ct);
 
     /// <summary>
-    /// XEP-0030: Fragt die Features des eigenen Servers ab.
+    /// XEP-0030: Queries the features of one's own server.
     /// </summary>
     public Task<DiscoInfo?> DiscoverServerInfoAsync(CancellationToken ct = default)
         => _connection.DiscoverInfoAsync(_connection.Domain, ct);
@@ -777,65 +774,64 @@ public sealed class XMPPClient : IAsyncDisposable
     #region PubSub (XEP-0060)
 
     /// <summary>
-    /// Abonniert einen Knoten. Das Ergebnis ist das, was der Dienst zugesagt
-    /// hat - oder null, wenn er es nicht getan hat.
+    /// Subscribes to a node. The result is what the service has promised - or
+    /// null when it has not done so.
     /// </summary>
     public Task<PubSubSubscription?> PubSubSubscribeAsync(String nodeId, String? service = null)
         => _connection.PubSubSubscribeAsync(nodeId, service);
 
     /// <summary>
-    /// Beendet ein Abonnement. <paramref name="subId"/> sagt, welches - ohne
-    /// Angabe geht es nur, solange es genau eines gibt.
+    /// Ends a subscription. <paramref name="subId"/> says which one - without
+    /// it, this only works as long as there is exactly one.
     /// </summary>
     public Task<Boolean> PubSubUnsubscribeAsync(String nodeId, String? service = null, String? subId = null)
         => _connection.PubSubUnsubscribeAsync(nodeId, service, subId);
 
-    /// <summary>Was bin ich wo? (XEP-0060, Abschnitt 5.7)</summary>
+    /// <summary>What am I where? (XEP-0060, section 5.7)</summary>
     public Task<IReadOnlyList<(String NodeId, PubSubAffiliation Affiliation)>?> PubSubGetAffiliationsAsync(String? service = null)
         => _connection.PubSubGetAffiliationsAsync(service);
 
-    /// <summary>Wer ist was an meinem Knoten? (XEP-0060, Abschnitt 8.9.1)</summary>
+    /// <summary>Who is what at my node? (XEP-0060, section 8.9.1)</summary>
     public Task<IReadOnlyList<(String Jid, PubSubAffiliation Affiliation)>?> PubSubGetNodeAffiliationsAsync(String nodeId, String? service = null)
         => _connection.PubSubGetNodeAffiliationsAsync(nodeId, service);
 
-    /// <summary>Vergibt oder nimmt eine Rolle (XEP-0060, Abschnitt 8.9.2).</summary>
+    /// <summary>Grants or takes a role (XEP-0060, section 8.9.2).</summary>
     public Task<Boolean> PubSubSetAffiliationAsync(String nodeId, String jid, PubSubAffiliation affiliation, String? service = null)
         => _connection.PubSubSetAffiliationAsync(nodeId, jid, affiliation, service);
 
     /// <summary>
-    /// Beantwortet einen Antrag auf ein Abonnement (XEP-0060,
-    /// Abschnitt 8.6.2).
+    /// Answers an application for a subscription (XEP-0060, section 8.6.2).
     /// </summary>
     public Task PubSubAnswerSubscriptionRequestAsync(PubSubSubscribeAuthorization request, Boolean allow, String? service = null)
         => _connection.PubSubAnswerSubscriptionRequestAsync(request, allow, service);
 
-    /// <summary>Wer hängt an meinem Knoten? (XEP-0060, Abschnitt 8.8.1)</summary>
+    /// <summary>Who hangs on my node? (XEP-0060, section 8.8.1)</summary>
     public Task<IReadOnlyList<(String Jid, String? SubId, PubSubSubscriptionState State)>?> PubSubGetNodeSubscribersAsync(String nodeId, String? service = null)
         => _connection.PubSubGetNodeSubscribersAsync(nodeId, service);
 
     /// <summary>
-    /// Beendet ein fremdes Abonnement am eigenen Knoten (XEP-0060, Abschnitt
-    /// 8.8.2) - ohne <paramref name="subId"/> alle dieses JIDs.
+    /// Ends someone else's subscription at one's own node (XEP-0060, section
+    /// 8.8.2) - without <paramref name="subId"/> all of this JID.
     /// </summary>
     public Task<Boolean> PubSubRemoveSubscriberAsync(String nodeId, String jid, String? subId = null, String? service = null)
         => _connection.PubSubRemoveSubscriberAsync(nodeId, jid, subId, service);
 
     /// <summary>
-    /// Holt die eigenen Abonnements beim Dienst und übernimmt sie - der Weg
-    /// zurück zu den Kennungen nach einem Verbindungsabriss.
+    /// Fetches one's own subscriptions from the service and takes them over -
+    /// the way back to the identifiers after a connection drop.
     /// </summary>
     public Task<IReadOnlyList<PubSubSubscription>?> PubSubGetSubscriptionsAsync(String? service = null, String? nodeId = null)
         => _connection.PubSubGetSubscriptionsAsync(service, nodeId);
 
     /// <summary>
-    /// Liest die Einstellungen eines Abonnements beim Dienst nach.
+    /// Reads the settings of a subscription from the service.
     /// </summary>
     public Task<PubSubSubscriptionOptions?> PubSubGetOptionsAsync(String nodeId, String? service = null, String? subId = null)
         => _connection.PubSubGetOptionsAsync(nodeId, service, subId);
 
     /// <summary>
-    /// Stellt ein Abonnement ein - vermerkt wird erst, was der Dienst
-    /// bestätigt hat.
+    /// Configures a subscription - noted down is only what the service has
+    /// confirmed.
     /// </summary>
     public Task<Boolean> PubSubSetOptionsAsync(String nodeId, PubSubSubscriptionOptions options, String? service = null, String? subId = null)
         => _connection.PubSubSetOptionsAsync(nodeId, options, service, subId);
@@ -844,36 +840,36 @@ public sealed class XMPPClient : IAsyncDisposable
         => _connection.PubSubPublishAsync(nodeId, itemId, payload, service);
 
     /// <summary>
-    /// Legt einen Knoten an, wahlweise gleich mit seinen Einstellungen.
+    /// Creates a node, optionally right away with its settings.
     /// </summary>
     public Task<Boolean> PubSubCreateNodeAsync(String nodeId, PubSubNodeConfiguration? configuration = null, String? service = null)
         => _connection.PubSubCreateNodeAsync(nodeId, configuration, service);
 
-    /// <summary>Liest die Einstellungen eines Knotens.</summary>
+    /// <summary>Reads the settings of a node.</summary>
     public Task<PubSubNodeConfiguration?> PubSubGetNodeConfigAsync(String nodeId, String? service = null)
         => _connection.PubSubGetNodeConfigAsync(nodeId, service);
 
-    /// <summary>Stellt einen Knoten ein - nur der Eigentümer darf das.</summary>
+    /// <summary>Configures a node - only the owner may do that.</summary>
     public Task<Boolean> PubSubConfigureNodeAsync(String nodeId, PubSubNodeConfiguration configuration, String? service = null)
         => _connection.PubSubConfigureNodeAsync(nodeId, configuration, service);
 
     /// <summary>
-    /// Nimmt einen einzelnen Eintrag zurück (XEP-0060, Abschnitt 7.2) - der
-    /// Knoten und seine Abonnenten bleiben.
+    /// Retracts a single item (XEP-0060, section 7.2) - the node and its
+    /// subscribers stay.
     /// </summary>
     public Task<Boolean> PubSubRetractAsync(String nodeId, String itemId, String? service = null)
         => _connection.PubSubRetractAsync(nodeId, itemId, service);
 
     /// <summary>
-    /// Löscht einen Knoten - samt dem eigenen Eintrag über ein Abonnement
-    /// darauf.
+    /// Deletes a node - together with one's own note about a subscription to
+    /// it.
     /// </summary>
     public Task<Boolean> PubSubDeleteNodeAsync(String nodeId, String? service = null)
         => _connection.PubSubDeleteNodeAsync(nodeId, service);
 
     /// <summary>
-    /// Leert einen Knoten (XEP-0060, Abschnitt 8.5) - der Knoten bleibt, sein
-    /// Inhalt geht.
+    /// Purges a node (XEP-0060, section 8.5) - the node stays, its content
+    /// goes.
     /// </summary>
     public Task<Boolean> PubSubPurgeNodeAsync(String nodeId, String? service = null)
         => _connection.PubSubPurgeNodeAsync(nodeId, service);

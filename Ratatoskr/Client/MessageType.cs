@@ -18,37 +18,38 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Art einer Nachricht (RFC 6121, Abschnitt 5.2.2).
+/// The kind of a message (RFC 6121, section 5.2.2).
 /// </summary>
 /// <remarks>
-/// Der Unterschied ist keine Verzierung: Er entscheidet, wohin eine Nachricht
-/// in der Oberfläche gehört und ob überhaupt eine Antwort erwartet wird. Bis
-/// hierher kam alles gleich an, und der Empfänger konnte den Zuruf einer
-/// Nachrichtenagentur nicht von der Zeile eines Bekannten unterscheiden.
+/// The difference is not decoration: it decides where a message belongs in the
+/// user interface and whether a reply is expected at all. Up to here everything
+/// arrived alike, and the recipient could not tell the shout of a news agency
+/// from the line of an acquaintance.
 /// </remarks>
 public enum MessageType
 {
 
     /// <summary>
-    /// Eine einzelne Nachricht ausserhalb eines Gesprächs - und die Vorgabe,
-    /// wenn das Attribut fehlt oder unbekannt ist.
+    /// A single message outside of a conversation - and the default when the
+    /// attribute is missing or unknown.
     /// </summary>
     Normal,
 
-    /// <summary>Teil eines Gesprächs unter vier Augen.</summary>
+    /// <summary>Part of a one-on-one conversation.</summary>
     Chat,
 
-    /// <summary>Aus einem Mehrpersonenraum (XEP-0045).</summary>
+    /// <summary>From a multi-user room (XEP-0045).</summary>
     GroupChat,
 
     /// <summary>
-    /// Ein Zuruf: Meldung, Benachrichtigung, Kurs - „no reply is expected".
+    /// A shout: a report, a notification, a stock price - "no reply is
+    /// expected".
     /// </summary>
     Headline,
 
     /// <summary>
-    /// Die Antwort auf eine Nachricht, die die Gegenstelle nicht verarbeiten
-    /// konnte. Sie trägt keine Nutzlast, sondern die Begründung.
+    /// The answer to a message the peer could not process. It carries no
+    /// payload but the reason.
     /// </summary>
     Error
 

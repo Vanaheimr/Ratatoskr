@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Repräsentiert einen Kontakt im Roster
+/// Represents a contact in the roster
 /// </summary>
 public sealed class RosterItem
 {

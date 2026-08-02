@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Roster-Manager mit Subscription-Handling
+/// Roster manager with subscription handling
 /// </summary>
 public sealed class Roster
 {
@@ -69,63 +69,63 @@ public sealed class Roster
     }
 
     /// <summary>
-    /// RFC 6121, Abschnitt 2.1.4: Übernimmt das Ergebnis einer Roster-Anfrage
-    /// als den vollständigen Roster.
+    /// RFC 6121, section 2.1.4: Takes the result of a roster request as the
+    /// complete roster.
     /// </summary>
     /// <remarks>
-    /// Der Unterschied zu <see cref="ProcessRosterItem"/> ist das Entfernen.
-    /// Ein Roster-Ergebnis ist keine Ergänzung, sondern der Stand: Was nicht
-    /// darin steht, gibt es nicht mehr.
+    /// The difference to <see cref="ProcessRosterItem"/> is the removal. A
+    /// roster result is not an addition but the state of things: whatever is
+    /// not in it does not exist any more.
     ///
-    /// Vorher wurde es hineingemischt, und die Folge war ein Kontakt, den man
-    /// nicht loswird. Wer ihn an einem anderen Gerät löscht, während dieses
-    /// hier abgemeldet ist, bekommt ihn beim nächsten Anmelden zurück - der
-    /// Server schickt ihn nicht mehr, aber niemand nimmt ihn heraus. Beim
-    /// Löschen im laufenden Betrieb fällt das nie auf, weil dann ein Push mit
-    /// <c>subscription='remove'</c> kommt.
+    /// Previously it was merged in, and the consequence was a contact one
+    /// cannot get rid of. Whoever deletes it on another device while this one
+    /// is logged off gets it back at the next login - the server no longer
+    /// sends it, but nobody takes it out. When deleting during operation this
+    /// never shows, because then a push with <c>subscription='remove'</c>
+    /// arrives.
     ///
-    /// Gerufen wird das ausschliesslich für das Ergebnis, nie für einen Push.
-    /// Ein Push trägt genau die geänderten Einträge; ihn so zu behandeln
-    /// löschte bei jeder Änderung den ganzen übrigen Roster.
+    /// This is called exclusively for the result, never for a push. A push
+    /// carries exactly the changed entries; treating it this way would delete
+    /// the whole rest of the roster on every change.
     /// </remarks>
     public void ReplaceAll(IEnumerable<RosterItem> items)
     {
 
-        var neu       = items.ToList();
-        var behalten  = new HashSet<string>(neu.Select(i => JidUtilities.Bare(i.Jid)),
-                                            StringComparer.OrdinalIgnoreCase);
+        var fresh    = items.ToList();
+        var kept     = new HashSet<string>(fresh.Select(i => JidUtilities.Bare(i.Jid)),
+                                           StringComparer.OrdinalIgnoreCase);
 
-        List<string> entfallen;
+        List<string> dropped;
 
         lock (_lock)
-            entfallen = _items.Keys.Where(k => !behalten.Contains(k)).ToList();
+            dropped = _items.Keys.Where(k => !kept.Contains(k)).ToList();
 
-        // Ausserhalb der Sperre: beide Aufrufe nehmen sie selbst, und die
-        // Ereignisse sollen nicht unter ihr laufen.
-        foreach (var item in neu)
+        // Outside the lock: both calls take it themselves, and the events are
+        // not meant to run under it.
+        foreach (var item in fresh)
             ProcessRosterItem(item);
 
-        foreach (var jid in entfallen)
+        foreach (var jid in dropped)
             RemoveItem(jid);
 
     }
 
     /// <summary>
-    /// RFC 6121, Abschnitt 3: Wendet eine Subscription-Änderung an, die als
-    /// Presence-Stanza hereinkommt.
+    /// RFC 6121, section 3: Applies a subscription change that arrives as a
+    /// presence stanza.
     /// </summary>
     /// <remarks>
-    /// Der maßgebliche Zustand kommt vom Server als Roster-Push; diese Stanzas
-    /// sind die Benachrichtigung dazu. Sie hier trotzdem auszuwerten hält den
-    /// Roster auch dann richtig, wenn der Push ausbleibt - vor allem aber
-    /// hält es sie von <see cref="UpdatePresence"/> fern, wo alles ohne
-    /// <c>type='unavailable'</c> als anwesend zählt.
+    /// The authoritative state comes from the server as a roster push; these
+    /// stanzas are the notification about it. Evaluating them here anyway keeps
+    /// the roster right even when the push fails to arrive - above all it keeps
+    /// them away from <see cref="UpdatePresence"/>, where everything without
+    /// <c>type='unavailable'</c> counts as present.
     ///
-    /// Ein unbekannter Kontakt wird bewusst nicht angelegt: Einträge entstehen
-    /// durch den Roster-Push, nicht durch eine Presence.
+    /// An unknown contact is deliberately not created: entries come into being
+    /// through the roster push, not through a presence.
     /// </remarks>
-    /// <param name="from">Absender der Stanza.</param>
-    /// <param name="type">subscribed, unsubscribed oder unsubscribe.</param>
+    /// <param name="from">Sender of the stanza.</param>
+    /// <param name="type">subscribed, unsubscribed or unsubscribe.</param>
     public void ProcessSubscriptionChange(string from, string type)
     {
         var bareJid = JidUtilities.Bare(from);
@@ -143,9 +143,10 @@ public sealed class Roster
                 _               => item.Subscription
             };
 
-            // Ohne 'to' kommt keine Presence mehr herein. Was zuletzt bekannt
-            // war, würde ab jetzt beliebig alt - der Kontakt gilt deshalb als
-            // offline, statt auf ewig im letzten gesehenen Zustand zu stehen.
+            // Without a 'to' no presence arrives any more. Whatever was last
+            // known would from now on grow arbitrarily old - the contact
+            // therefore counts as offline instead of standing forever in the
+            // last state seen.
             if (type == "unsubscribed")
             {
                 item.Presence        = PresenceState.Offline;
