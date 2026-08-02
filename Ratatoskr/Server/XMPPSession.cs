@@ -27,8 +27,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Eine einzelne Client-Verbindung auf dem Testserver - nach dem Resource
-    /// Binding entspricht sie genau einer Resource eines Kontos.
+    /// A single client connection on the test server - after the resource
+    /// binding it corresponds to exactly one resource of an account.
     /// </summary>
     public sealed class XMPPSession
     {
@@ -44,15 +44,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private readonly Lock _lock = new();
 
         /// <summary>
-        /// XEP-0352, Abschnitt 3: was zurückgehalten wird, solange der Client
-        /// sich für inaktiv erklärt hat - mit dem Schlüssel, unter dem eine
-        /// spätere Stanza es ablöst.
+        /// XEP-0352, section 3: what is held back as long as the client has
+        /// declared itself inactive - together with the key under which a later
+        /// stanza supersedes it.
         /// </summary>
-        private readonly List<(String? Key, String Xml)> _zurueckgehalten = [];
+        private readonly List<(String? Key, String Xml)> _held = [];
 
         /// <summary>
-        /// XEP-0198, Abschnitt 5: was an den Client ging und noch nicht
-        /// bestätigt ist. Nach einer Wiederaufnahme geht genau das nach.
+        /// XEP-0198, section 5: what went to the client and is not acknowledged
+        /// yet. After a resumption exactly that is sent afterwards.
         /// </summary>
         private readonly Queue<(UInt32 Seq, String Stanza)> _unackedToClient = new();
 
@@ -62,146 +62,146 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>Laufende Nummer der Verbindung, in Reihenfolge des Verbindungsaufbaus.</summary>
+        /// <summary>The running number of the connection, in the order in which connections were established.</summary>
         public Int32 ConnectionNumber { get; }
 
-        /// <summary>Konto, sobald die Authentifizierung erfolgreich war.</summary>
+        /// <summary>The account, as soon as the authentication succeeded.</summary>
         public XMPPAccount? Account { get; internal set; }
 
         /// <summary>
-        /// Der laufende SCRAM-Austausch zwischen <c>&lt;auth/&gt;</c> und
-        /// <c>&lt;response/&gt;</c>, sonst null.
+        /// The SCRAM exchange in progress between <c>&lt;auth/&gt;</c> and
+        /// <c>&lt;response/&gt;</c>, otherwise null.
         /// </summary>
         internal SCRAMExchange? Scram { get; set; }
 
-        /// <summary>Zugewiesene Resource, sobald das Binding erfolgt ist.</summary>
+        /// <summary>The resource assigned, as soon as the binding has taken place.</summary>
         public String? Resource { get; internal set; }
 
-        /// <summary>Bare-JID oder null vor der Authentifizierung.</summary>
+        /// <summary>The bare JID, or null before the authentication.</summary>
         public String? BareJid => Account?.BareJid;
 
-        /// <summary>Full-JID oder null vor dem Binding.</summary>
+        /// <summary>The full JID, or null before the binding.</summary>
         public String? FullJid => Account is not null && Resource is not null
                                       ? $"{Account.BareJid}/{Resource}"
                                       : null;
 
-        /// <summary>XEP-0280: Hat der Client Carbons für diese Resource aktiviert?</summary>
+        /// <summary>XEP-0280: Has the client enabled carbons for this resource?</summary>
         public Boolean CarbonsEnabled { get; internal set; }
 
         /// <summary>
-        /// XEP-0352: Sieht gerade ein Mensch hin?
+        /// XEP-0352: Is a human being looking right now?
         /// </summary>
         /// <remarks>
-        /// Abschnitt 5: „The server MUST assume all clients to be in the
-        /// 'active' state until the client indicates otherwise." Deshalb true
-        /// und nicht etwa „unbekannt": Ein Client, der XEP-0352 nicht kennt,
-        /// bekommt genau das, was er ohne diese Erweiterung bekäme.
+        /// Section 5: "The server MUST assume all clients to be in the 'active'
+        /// state until the client indicates otherwise." Hence true and not, say,
+        /// "unknown": a client that does not know XEP-0352 gets exactly what it
+        /// would get without this extension.
         /// </remarks>
         public Boolean ClientIsActive { get; private set; } = true;
 
         /// <summary>
-        /// XEP-0352: Wie viele Stanzas gerade zurückgehalten werden.
+        /// XEP-0352: How many stanzas are being held back right now.
         /// </summary>
         public Int32 HeldWhileInactive
         {
-            get { lock (_lock) return _zurueckgehalten.Count; }
+            get { lock (_lock) return _held.Count; }
         }
 
         /// <summary>
-        /// Die zurückgehaltenen Stanzas in Sendereihenfolge.
+        /// The stanzas held back, in the order in which they are to be sent.
         /// </summary>
         public IReadOnlyList<String> HeldStanzas
         {
-            get { lock (_lock) return [.. _zurueckgehalten.Select(e => e.Xml)]; }
+            get { lock (_lock) return [.. _held.Select(e => e.Xml)]; }
         }
 
         /// <summary>
-        /// XEP-0352, Abschnitt 3: Wie viele Stanzas fallengelassen wurden, weil
-        /// sie beim Nachliefern nicht mehr wahr gewesen wären.
+        /// XEP-0352, section 3: How many stanzas were dropped because they would
+        /// no longer have been true when delivered afterwards.
         /// </summary>
         public Int32 DiscardedWhileInactive { get; private set; }
 
         /// <summary>
-        /// XEP-0352: Wie viele Stanzas höchstens zurückgehalten werden, bevor
-        /// der Puffer von sich aus hinausgeht.
+        /// XEP-0352: How many stanzas are held back at most before the buffer
+        /// goes out of its own accord.
         /// </summary>
         /// <remarks>
-        /// Ein Client, der sich für inaktiv erklärt und dann nicht mehr
-        /// wiederkommt, hinterliesse sonst einen Puffer, der bis zum
-        /// Verbindungsende wächst - und ein Server, dem man mit einem einzigen
-        /// <c>&lt;inactive/&gt;</c> unbegrenzt Speicher abnötigen kann, hat
-        /// eine Sparmassnahme gegen sich selbst gerichtet.
+        /// A client that declares itself inactive and then never comes back
+        /// would otherwise leave behind a buffer that grows until the end of the
+        /// connection - and a server one can wring unbounded memory out of with
+        /// a single <c>&lt;inactive/&gt;</c> has turned a saving measure against
+        /// itself.
         ///
-        /// Beim Überlauf geht der ganze Puffer hinaus und nichts wird
-        /// weggeworfen: Der Client bekommt dann Verkehr, den er gerade nicht
-        /// wollte - das ist die freundlichere der beiden Möglichkeiten.
+        /// On overflow the whole buffer goes out and nothing is thrown away: the
+        /// client then gets traffic it did not want just now - that is the
+        /// friendlier of the two possibilities.
         /// </remarks>
         public Int32 MaxHeldWhileInactive { get; set; } = 100;
 
         /// <summary>
-        /// Die zuletzt gesendete ungerichtete Presence dieser Resource, bereits
-        /// mit dem Full-JID gestempelt - oder null, solange der Client noch
-        /// keine geschickt hat.
+        /// The last undirected presence sent by this resource, already stamped
+        /// with the full JID - or null as long as the client has not sent one
+        /// yet.
         /// </summary>
         /// <remarks>
-        /// Nach RFC 6121, Abschnitt 4.2.1 ist eine gebundene Resource ohne
-        /// gesendete Presence noch nicht "available". Deshalb null und nicht
-        /// etwa ein angenommenes <c>&lt;presence/&gt;</c>: auf eine Probe
-        /// dieser Resource gibt es dann schlicht nichts zu antworten.
+        /// Per RFC 6121, section 4.2.1 a bound resource without a sent presence
+        /// is not "available" yet. Hence null and not, say, an assumed
+        /// <c>&lt;presence/&gt;</c>: to a probe of this resource there is then
+        /// simply nothing to answer.
         /// </remarks>
         public String? LastPresence { get; private set; }
 
         /// <summary>
-        /// Hat diese Resource ihre erste ungerichtete Presence geschickt?
-        /// Genau daran hängt, wann der Server ihr den Zustand der Kontakte
-        /// nachliefert (RFC 6121, Abschnitt 4.3.1).
+        /// Has this resource sent its first undirected presence? On exactly that
+        /// hangs when the server delivers it the state of the contacts
+        /// afterwards (RFC 6121, section 4.3.1).
         /// </summary>
         public Boolean HasSentInitialPresence { get; private set; }
 
         /// <summary>
-        /// Gilt diese Resource den Kontakten gegenüber gerade als verfügbar?
+        /// Does this resource currently count as available towards the contacts?
         /// </summary>
         /// <remarks>
-        /// Getrennt von <see cref="HasSentInitialPresence"/>, weil beide etwas
-        /// anderes beantworten: ob je eine Presence kam, und ob die letzte eine
-        /// verfügbare war. Am zweiten hängt, ob der Verbindungsabbau die
-        /// Abmeldung noch nachholen muss - hat der Client sie selbst geschickt,
-        /// käme sie sonst ein zweites Mal.
+        /// Kept apart from <see cref="HasSentInitialPresence"/>, because the two
+        /// answer different things: whether a presence ever came, and whether
+        /// the last one was an available one. On the second hangs whether the
+        /// teardown still has to make up the sign-off - if the client sent it
+        /// itself, it would otherwise come a second time.
         /// </remarks>
         public Boolean IsAvailable { get; private set; }
 
         /// <summary>
-        /// Die Priorität aus der letzten ungerichteten Presence (RFC 6121,
-        /// Abschnitt 4.7.2.3) - Vorgabe 0.
+        /// The priority from the last undirected presence (RFC 6121,
+        /// section 4.7.2.3) - default 0.
         /// </summary>
         /// <remarks>
-        /// Sie ist keine Zierde: Nach Abschnitt 8.5.2.1.1 darf der Server an
-        /// eine Resource mit <b>negativer</b> Priorität überhaupt keine
-        /// Nachricht zustellen. Genau dafür setzt ein Client sie - das Gerät
-        /// bleibt erreichbar für gerichtete Nachrichten an seine Full-JID,
-        /// bekommt aber nichts mehr ab, was nur an den Bare-JID ging.
+        /// It is no ornament: per section 8.5.2.1.1 the server must not deliver
+        /// any message at all to a resource with a <b>negative</b> priority.
+        /// That is precisely what a client sets it for - the device stays
+        /// reachable for directed messages to its full JID but gets nothing more
+        /// of what went only to the bare JID.
         /// </remarks>
         public Int32 PresencePriority { get; private set; }
 
         /// <summary>
-        /// Die Entitäten, denen diese Resource gerichtete Presence geschickt hat
-        /// (RFC 6121, Abschnitt 4.6) - nach Bare-JID.
+        /// The entities this resource has sent directed presence to (RFC 6121,
+        /// section 4.6) - by bare JID.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 4.6.1 beschreibt genau diese Liste: „keeping a list of the
+        /// Section 4.6.1 describes exactly this list: "keeping a list of the
         /// entities (bare JIDs or full JIDs) to which a user has sent directed
         /// presence during the user's current session for a given resource (full
         /// JID), then clearing the list when the user goes offline".
         ///
-        /// Sie hängt deshalb an der Sitzung und nicht am Konto: Gerichtete
-        /// Presence ist eine Zusage dieser einen Resource und endet mit ihr.
+        /// It therefore hangs on the session and not on the account: directed
+        /// presence is a promise of this one resource and ends with it.
         ///
-        /// Aufgehoben wird der Bare-JID des Empfängers, auch wenn eine Full-JID
-        /// angeschrieben wurde. Wer einer Resource seine Anwesenheit zeigt, zeigt
-        /// sie einem Menschen, und dessen anderes Gerät weiss es im nächsten
-        /// Augenblick ohnehin. Feiner zu unterscheiden hiesse, dieselbe Person je
-        /// nach Gerät verschieden zu behandeln - und das Roster, an dem dieselbe
-        /// Frage sonst hängt, kennt ebenfalls nur Bare-JIDs.
+        /// What is kept is the bare JID of the recipient, even when a full JID
+        /// was written to. Whoever shows a resource their presence shows it to a
+        /// human being, and that person's other device knows it the next moment
+        /// anyway. Distinguishing more finely would mean treating the same
+        /// person differently depending on the device - and the roster, which
+        /// the same question otherwise hangs on, likewise knows only bare JIDs.
         /// </remarks>
         public IReadOnlyCollection<String> DirectedPresenceTargets
         {
@@ -209,8 +209,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Darf diese Entität die Presence dieser Resource sehen, weil ihr
-        /// gerichtete Presence geschickt wurde?
+        /// May this entity see the presence of this resource because directed
+        /// presence was sent to it?
         /// </summary>
         public Boolean HasDirectedPresenceTo(String bareJid)
         {
@@ -219,20 +219,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Vermerkt eine gerichtete Presence oder nimmt sie zurück
-        /// (RFC 6121, Abschnitt 4.6.1).
+        /// Notes a directed presence down or takes it back (RFC 6121,
+        /// section 4.6.1).
         /// </summary>
-        /// <param name="bareJid">Der Empfänger, ohne Resource.</param>
+        /// <param name="bareJid">The recipient, without a resource.</param>
         /// <param name="available">
-        /// true für eine verfügbare Presence, false für <c>unavailable</c>.
+        /// true for an available presence, false for <c>unavailable</c>.
         /// </param>
         /// <remarks>
-        /// Das Zurücknehmen ist ein MUSS des Abschnitts: „The server MUST remove
+        /// The taking back is a MUST of the section: "The server MUST remove
         /// from the directed presence list (or its functional equivalent) any
-        /// entity to which the user sends directed unavailable presence." Ohne
-        /// es bliebe die Zusage stehen, nachdem der Nutzer sie ausdrücklich
-        /// widerrufen hat - und daran hängt nach Abschnitt 8.5.3.1, wer ihn
-        /// überhaupt etwas fragen darf.
+        /// entity to which the user sends directed unavailable presence."
+        /// Without it the promise would stay standing after the user has
+        /// explicitly revoked it - and on that hangs, per section 8.5.3.1, who
+        /// may ask them anything at all.
         /// </remarks>
         internal void RecordDirectedPresence(String bareJid, Boolean available)
         {
@@ -251,22 +251,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Gibt die Empfänger gerichteter Presence heraus und leert die Liste -
-        /// aufzurufen, wenn diese Resource unverfügbar wird.
+        /// Hands out the recipients of directed presence and empties the list -
+        /// to be called when this resource becomes unavailable.
         /// </summary>
         /// <remarks>
-        /// Zwei Aufgaben in einem Schritt, und das ist Absicht. Abschnitt 4.6.1
-        /// verlangt das Leeren beim Abmelden, Abschnitt 4.6.3, Regel 2 verlangt,
-        /// die Abmeldung vorher an genau diese Empfänger zu schicken. Wären es
-        /// zwei Aufrufe, liesse sich der zweite vergessen - und dann bliebe
-        /// entweder die Liste über das Ende der Anwesenheit hinaus stehen oder
-        /// die Abmeldung unterwegs. So kommt niemand an die Empfänger, ohne die
-        /// Liste zu leeren, und niemand leert sie, ohne sie in der Hand zu
-        /// halten.
+        /// Two jobs in one step, and that is intentional. Section 4.6.1 demands
+        /// the emptying on signing off, section 4.6.3, rule 2 demands sending
+        /// the sign-off to exactly these recipients beforehand. Were they two
+        /// calls, the second could be forgotten - and then either the list would
+        /// stay standing beyond the end of the presence or the sign-off would
+        /// stay on the way. This way nobody gets at the recipients without
+        /// emptying the list, and nobody empties it without holding it in hand.
         ///
-        /// Herausgegeben werden Bare-JIDs; ob ein Empfänger noch eine Abmeldung
-        /// braucht, entscheidet der Server - wer im Roster mit <c>from</c> oder
-        /// <c>both</c> steht, bekommt sie schon über die gewöhnliche Verteilung.
+        /// What is handed out are bare JIDs; whether a recipient still needs a
+        /// sign-off is decided by the server - whoever stands in the roster with
+        /// <c>from</c> or <c>both</c> gets it through the ordinary distribution
+        /// already.
         /// </remarks>
         internal IReadOnlyCollection<String> TakeDirectedPresenceTargets()
         {
@@ -277,35 +277,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (_directedPresence.Count == 0)
                     return [];
 
-                var entnommen = _directedPresence.ToList();
+                var taken = _directedPresence.ToList();
                 _directedPresence.Clear();
 
-                return entnommen;
+                return taken;
 
             }
 
         }
 
         /// <summary>
-        /// Übernimmt eine ungerichtete Presence des Clients.
+        /// Takes over an undirected presence of the client.
         /// </summary>
-        /// <returns>War es die erste dieser Sitzung?</returns>
+        /// <returns>Was it the first of this session?</returns>
         /// <summary>
-        /// Liest die Priorität aus einer Presence-Stanza.
+        /// Reads the priority out of a presence stanza.
         /// </summary>
         /// <remarks>
-        /// RFC 6121, Abschnitt 4.7.2.3: eine ganze Zahl von -128 bis +127.
-        /// Fehlt sie oder ist sie unbrauchbar, gilt 0 - und nicht etwa ein
-        /// Fehler: Die Zahl ist ein Wunsch des Clients, kein Vertrag, und eine
-        /// unlesbare darf keine Zustellung verhindern.
+        /// RFC 6121, section 4.7.2.3: a whole number from -128 to +127. If it is
+        /// missing or unusable, 0 holds - and not, say, an error: the number is
+        /// a wish of the client, not a contract, and an unreadable one must not
+        /// prevent a delivery.
         /// </remarks>
         internal static Int32 ReadPriority(String stanza)
         {
 
             var m = Regex.Match(stanza, @"<priority[^>]*>\s*(-?\d+)\s*</priority>");
 
-            return m.Success && Int32.TryParse(m.Groups[1].Value, out var wert)
-                       ? Math.Clamp(wert, -128, 127)
+            return m.Success && Int32.TryParse(m.Groups[1].Value, out var value)
+                       ? Math.Clamp(value, -128, 127)
                        : 0;
 
         }
@@ -316,41 +316,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                var erste = !HasSentInitialPresence;
+                var first = !HasSentInitialPresence;
 
-                // Eine abgemeldete Resource hat keinen Zustand zu berichten
-                // (RFC 6121, Abschnitt 4.2.1). Stand hier die Abmeldung selbst,
-                // lieferte der Server sie jedem Kontakt nach, der sich danach
-                // anmeldete - und dem gerade abgemeldeten Kontakt gegenüber ein
-                // zweites Mal, wenn dessen erste Presence erst nach der
-                // Abmeldung verarbeitet wurde.
+                // A signed-off resource has no state to report (RFC 6121,
+                // section 4.2.1). If the sign-off itself stood here, the server
+                // would deliver it afterwards to every contact that signed on
+                // after it - and to the contact just signed off a second time,
+                // if their first presence was processed only after the sign-off.
                 LastPresence            = available ? stanza : null;
                 HasSentInitialPresence  = true;
                 IsAvailable             = available;
                 PresencePriority        = available ? ReadPriority(stanza) : 0;
 
-                // Das Leeren der Liste gerichteter Presence steht nicht hier,
-                // sondern in TakeDirectedPresenceTargets: Abschnitt 4.6.3,
-                // Regel 2 verlangt, die Abmeldung vorher an genau diese
-                // Empfänger zu schicken, und wer hier leerte, nähme dem
-                // Aufrufer die Liste weg, die er dafür braucht.
-                return erste;
+                // The emptying of the directed presence list does not stand here
+                // but in TakeDirectedPresenceTargets: section 4.6.3, rule 2
+                // demands sending the sign-off to exactly these recipients
+                // beforehand, and whoever emptied it here would take away from
+                // the caller the list they need for it.
+                return first;
 
             }
 
         }
 
         /// <summary>
-        /// Schaltet die Sitzung auf abgemeldet und meldet, ob <b>dieser</b>
-        /// Aufruf die Umschaltung vorgenommen hat.
+        /// Switches the session to signed off and reports whether <b>this</b>
+        /// call performed the switch.
         /// </summary>
         /// <remarks>
-        /// Die Abmeldung beim Verbindungsende darf genau einmal hinausgehen.
-        /// Zuvor stand hier ein Prüfen-dann-Handeln ohne Sperre: fiel die
-        /// Verbindung, während der Client seine eigene Abmeldung schickte,
-        /// kamen beide Wege am Wächter vorbei und die Kontakte bekamen
-        /// dieselbe Abmeldung zweimal. Im vollen Testlauf schlug das etwa in
-        /// jedem zweiten Durchgang zu.
+        /// The sign-off at the end of the connection may go out exactly once.
+        /// Previously a check-then-act without a lock stood here: if the
+        /// connection dropped while the client was sending its own sign-off,
+        /// both routes got past the guard and the contacts got the same sign-off
+        /// twice. In the full test run that struck in roughly every second pass.
         /// </remarks>
         internal Boolean TryMarkUnavailable()
         {
@@ -370,26 +368,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>XEP-0198: Ist Stream Management für diese Sitzung ausgehandelt?</summary>
+        /// <summary>XEP-0198: Has stream management been negotiated for this session?</summary>
         public Boolean StreamManagementEnabled { get; private set; }
 
         /// <summary>
-        /// XEP-0198: Anzahl zählbarer Stanzas, die der Server seit
-        /// <c>&lt;enabled/&gt;</c> an den Client geschickt hat. Genau diesen
-        /// Wert muss der Client in seinem <c>&lt;a h='...'/&gt;</c> melden.
+        /// XEP-0198: The number of countable stanzas the server has sent to the
+        /// client since <c>&lt;enabled/&gt;</c>. Exactly this value the client
+        /// has to report in its <c>&lt;a h='...'/&gt;</c>.
         /// </summary>
         public UInt32 StanzasSentToClient { get; private set; }
 
         /// <summary>
-        /// XEP-0198: Anzahl zählbarer Stanzas, die der Server seit
-        /// <c>&lt;enabled/&gt;</c> vom Client empfangen hat. Genau diesen Wert
-        /// muss der Client als eigenen Ausgangszähler führen.
+        /// XEP-0198: The number of countable stanzas the server has received
+        /// from the client since <c>&lt;enabled/&gt;</c>. Exactly this value the
+        /// client has to carry as its own outgoing counter.
         /// </summary>
         public UInt32 StanzasReceivedFromClient { get; private set; }
 
         /// <summary>
-        /// XEP-0198: das zuletzt vom Client gemeldete <c>h</c>, oder null,
-        /// solange der Client noch kein <c>&lt;a/&gt;</c> geschickt hat.
+        /// XEP-0198: the <c>h</c> last reported by the client, or null as long
+        /// as the client has not sent an <c>&lt;a/&gt;</c> yet.
         /// </summary>
         public UInt32? LastAckFromClient
         {
@@ -398,22 +396,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0198, Abschnitt 5: die Kennung, mit der dieser Stream wieder
-        /// aufgenommen werden kann - oder null, wenn der Client nicht danach
-        /// gefragt hat.
+        /// XEP-0198, section 5: the identifier this stream can be resumed with -
+        /// or null when the client has not asked for it.
         /// </summary>
         /// <remarks>
-        /// Sie ist das einzige Geheimnis, das einen Rückkehrer ausweist: wer
-        /// sie kennt, übernimmt den Stream samt Full-JID. Deshalb kommt sie
-        /// aus <see cref="System.Security.Cryptography.RandomNumberGenerator"/>
-        /// und nicht aus der Verbindungsnummer, wie es die frühere Fassung tat
-        /// - dort war sie folgenlos, hier wäre sie ein Einfallstor.
+        /// It is the only secret that identifies a returner: whoever knows it
+        /// takes over the stream together with its full JID. That is why it
+        /// comes from
+        /// <see cref="System.Security.Cryptography.RandomNumberGenerator"/> and
+        /// not from the connection number, as the earlier version did - there it
+        /// was without consequence, here it would be a way in.
         /// </remarks>
         public String? ResumptionId { get; private set; }
 
         /// <summary>
-        /// XEP-0198, Abschnitt 5: die noch nicht bestätigten Stanzas an den
-        /// Client, die nach einer Wiederaufnahme nachzusenden wären.
+        /// XEP-0198, section 5: the stanzas to the client not yet acknowledged,
+        /// which would have to be sent afterwards following a resumption.
         /// </summary>
         public Int32 UnacknowledgedToClient
         {
@@ -421,37 +419,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Die noch nicht bestätigten Stanzas mit ihrer Sequenznummer, in
-        /// Sendereihenfolge.
+        /// The stanzas not yet acknowledged, with their sequence number, in the
+        /// order in which they were sent.
         /// </summary>
         internal IReadOnlyList<(UInt32 Seq, String Stanza)> PendingToClient
         {
             get { lock (_lock) return [.. _unackedToClient]; }
         }
 
-        /// <summary>Die zugrundeliegende WebSocket-Verbindung.</summary>
+        /// <summary>The underlying WebSocket connection.</summary>
         public WebSocketServerConnection Connection => _connection;
 
-        /// <summary>Ist die Verbindung noch offen?</summary>
+        /// <summary>Is the connection still open?</summary>
         public Boolean IsOpen => !_connection.IsClosed;
 
         /// <summary>
-        /// Wie oft dieser Client bereits <c>&lt;open/&gt;</c> geschickt hat.
+        /// How often this client has already sent <c>&lt;open/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 6.4.6: nach erfolgreicher Authentifizierung
-        /// beginnt der Client den Stream neu. Am Zähler hängt, welche Features
-        /// der Server anbietet - vor der Anmeldung SASL, danach Binding.
+        /// RFC 6120, section 6.4.6: after a successful authentication the client
+        /// begins the stream anew. On the counter hangs which features the
+        /// server offers - SASL before the login, binding afterwards.
         /// </remarks>
         internal Int32 OpenCount { get; set; }
 
-        /// <summary>Alle vom Client empfangenen Frames, in Eingangsreihenfolge.</summary>
+        /// <summary>All frames received from the client, in the order they arrived.</summary>
         public IReadOnlyList<String> Received
         {
             get { lock (_lock) return _received.ToList(); }
         }
 
-        /// <summary>Alle an den Client gesendeten Frames, in Sendereihenfolge.</summary>
+        /// <summary>All frames sent to the client, in the order they were sent.</summary>
         public IReadOnlyList<String> Sent
         {
             get { lock (_lock) return _sent.ToList(); }
@@ -489,30 +487,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0198: Zählt nur message, presence und iq - Nonzas wie
-        /// <c>&lt;r/&gt;</c> oder <c>&lt;a/&gt;</c> nicht.
+        /// XEP-0198: Counts only message, presence and iq - not nonzas such as
+        /// <c>&lt;r/&gt;</c> or <c>&lt;a/&gt;</c>.
         ///
-        /// Bewusst unabhängig vom Client implementiert: würde der Testserver
-        /// dieselbe Hilfsfunktion benutzen, prüften die Tests beide Seiten mit
-        /// derselben Logik und ein gemeinsamer Denkfehler bliebe unentdeckt.
+        /// Deliberately implemented independently of the client: if the test
+        /// server used the same helper, the tests would check both sides with
+        /// the same logic and a shared mistake in thinking would stay
+        /// undetected.
         ///
-        /// Deshalb steht hier auch nach D26 nicht <see cref="StanzaElement"/>,
-        /// obwohl es dieselbe Frage beantwortet. Der Präfixvergleich war
-        /// trotzdem falsch — <c>&lt;iqbogus/&gt;</c> zählte hier mit und beim
-        /// Client nicht, und ausgerechnet die Zähler, die gleich laufen müssen,
-        /// wären auseinandergelaufen. Der Weg dorthin ist ein anderer als
-        /// drüben, die Antwort dieselbe.
+        /// That is why <see cref="StanzaElement"/> does not stand here even
+        /// after D26, although it answers the same question. The prefix
+        /// comparison was wrong all the same — <c>&lt;iqbogus/&gt;</c> counted
+        /// here and not at the client, and of all things the counters that have
+        /// to run alike would have drifted apart. The way there is a different
+        /// one than over there, the answer the same.
         /// </summary>
         internal static Boolean IsStanza(String xml)
             => Regex.IsMatch(xml, @"^\s*<(?:[A-Za-z][\w.-]*:)?(?:message|presence|iq)(?=[\s/>])");
 
         /// <summary>
-        /// XEP-0198: Handelt Stream Management aus und setzt beide Zähler auf
-        /// null, wie es Abschnitt 4 für <c>&lt;enabled/&gt;</c> verlangt.
+        /// XEP-0198: Negotiates stream management and sets both counters to
+        /// zero, as section 4 demands for <c>&lt;enabled/&gt;</c>.
         /// </summary>
         /// <param name="resumable">
-        /// Hat der Client <c>resume='true'</c> verlangt? Dann bekommt die
-        /// Sitzung eine Kennung, unter der sie wieder aufgenommen werden kann.
+        /// Has the client demanded <c>resume='true'</c>? Then the session gets
+        /// an identifier it can be resumed under.
         /// </param>
         internal void EnableStreamManagement(Boolean resumable = false)
         {
@@ -526,9 +525,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 _unackedToClient.Clear();
 
-                // 128 Bit aus dem Zufallsgenerator, Base64 ohne Polsterung -
-                // 22 Zeichen. Kürzer wäre ratbar, und was hier zu raten ist,
-                // ist eine fremde Sitzung.
+                // 128 bits from the random generator, base64 without padding -
+                // 22 characters. Shorter would be guessable, and what is to be
+                // guessed here is somebody else's session.
                 ResumptionId = resumable
                                    ? Convert.ToBase64String(
                                          System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
@@ -539,76 +538,75 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0198, Abschnitt 5: Übernimmt einen aufgehobenen Stream.
+        /// XEP-0198, section 5: Takes over a preserved stream.
         /// </summary>
         /// <remarks>
-        /// Übernommen wird alles, woran der Stream für seine Umgebung hängt:
-        /// die Resource - und damit die Full-JID, unter der Kontakte ihn
-        /// adressieren -, beide Zähler, die Kennung, der Presence-Zustand und
-        /// die Carbons-Einstellung. Was hier vergessen würde, fiele nicht dem
-        /// Rückkehrer auf, sondern seinen Gesprächspartnern.
+        /// Taken over is everything the stream hangs on for its surroundings:
+        /// the resource - and with it the full JID contacts address it under -,
+        /// both counters, the identifier, the presence state and the carbons
+        /// setting. What was forgotten here would show up not to the returner
+        /// but to their conversation partners.
         ///
-        /// Der alte Sitzungsobjekt bleibt zurück; seine Verbindung ist tot und
-        /// <see cref="IsOpen"/> filtert es aus allem heraus.
+        /// The old session object stays behind; its connection is dead and
+        /// <see cref="IsOpen"/> filters it out of everything.
         /// </remarks>
         /// <returns>
-        /// Die noch offenen Stanzas des alten Streams, damit der Aufrufer sie
-        /// nachsenden kann.
+        /// The stanzas of the old stream still open, so that the caller can send
+        /// them afterwards.
         /// </returns>
-        internal IReadOnlyList<(UInt32 Seq, String Stanza)> AdoptResumed(XMPPSession vorher)
+        internal IReadOnlyList<(UInt32 Seq, String Stanza)> AdoptResumed(XMPPSession previous)
         {
 
-            var offen = vorher.PendingToClient;
+            var pending = previous.PendingToClient;
 
             lock (_lock)
             {
 
-                Resource                   = vorher.Resource;
-                CarbonsEnabled             = vorher.CarbonsEnabled;
+                Resource                   = previous.Resource;
+                CarbonsEnabled             = previous.CarbonsEnabled;
 
                 StreamManagementEnabled    = true;
-                ResumptionId               = vorher.ResumptionId;
-                StanzasSentToClient        = vorher.StanzasSentToClient;
-                StanzasReceivedFromClient  = vorher.StanzasReceivedFromClient;
-                _lastAckFromClient         = vorher.LastAckFromClient;
+                ResumptionId               = previous.ResumptionId;
+                StanzasSentToClient        = previous.StanzasSentToClient;
+                StanzasReceivedFromClient  = previous.StanzasReceivedFromClient;
+                _lastAckFromClient         = previous.LastAckFromClient;
 
                 _unackedToClient.Clear();
-                foreach (var e in offen)
+                foreach (var e in pending)
                     _unackedToClient.Enqueue(e);
 
-                // Ohne diese beiden gälte die Resource als frisch gebunden und
-                // damit als nicht verfügbar (RFC 6121, 4.2.1) - der Server
-                // hätte sie den Kontakten gegenüber nie abgemeldet und würde
-                // sie ihnen jetzt trotzdem nicht mehr als anwesend melden.
-                HasSentInitialPresence     = vorher.HasSentInitialPresence;
-                IsAvailable                = vorher.IsAvailable;
-                LastPresence               = vorher.LastPresence;
+                // Without these two the resource would count as freshly bound
+                // and thereby as not available (RFC 6121, 4.2.1) - the server
+                // would never have signed it off towards the contacts and would
+                // nevertheless no longer report it to them as present.
+                HasSentInitialPresence     = previous.HasSentInitialPresence;
+                IsAvailable                = previous.IsAvailable;
+                LastPresence               = previous.LastPresence;
 
-                // Was hier bewusst *nicht* steht: ClientIsActive. XEP-0352,
-                // Abschnitt 5.2 sagt es ausdrücklich - „stream resumption does
-                // not affect the current CSI state, which always defaults to
-                // 'active' for new and resumed streams". Der Client erklärt
-                // sich nach der Wiederaufnahme erneut für inaktiv, wenn er es
-                // noch ist. Übernähme diese Zeile den alten Zustand, hielte
-                // der Server einen zurückgekehrten Client für schlafend, und
-                // der wartete auf Verkehr, den er nie angefordert hat.
+                // What deliberately does *not* stand here: ClientIsActive.
+                // XEP-0352, section 5.2 says it explicitly - "stream resumption
+                // does not affect the current CSI state, which always defaults
+                // to 'active' for new and resumed streams". The client declares
+                // itself inactive anew after the resumption if it still is. Were
+                // this line to take over the old state, the server would take a
+                // returned client for sleeping, and that client would wait for
+                // traffic it never requested.
 
             }
 
-            vorher.EndResumption();
+            previous.EndResumption();
 
-            return offen;
+            return pending;
 
         }
 
         /// <summary>
-        /// XEP-0198, Abschnitt 5: Nimmt die Zusage der Wiederaufnahme zurück.
+        /// XEP-0198, section 5: Takes back the promise of resumption.
         /// </summary>
         /// <remarks>
-        /// Nach Ablauf der Frist ist der Stream endgültig zu Ende. Ohne diesen
-        /// Schritt sähe die Abmeldung, die jetzt nachzuholen ist, wieder einen
-        /// wiederaufnehmbaren Stream vor sich und schöbe sich selbst erneut
-        /// auf.
+        /// After the deadline expires the stream is finally over. Without this
+        /// step the sign-off that now has to be made up would see a resumable
+        /// stream in front of it again and would put itself off once more.
         /// </remarks>
         internal void EndResumption()
         {
@@ -620,8 +618,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0198: Der Client hat gemeldet, wie viel er empfangen hat -
-        /// alles bis dahin darf aus dem Puffer.
+        /// XEP-0198: The client has reported how much it has received -
+        /// everything up to there may leave the buffer.
         /// </summary>
         internal void AcknowledgeToClient(UInt32? h)
         {
@@ -634,9 +632,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (h is null)
                     return;
 
-                // Modulo-Arithmetik wie auf der Client-Seite: der Zähler läuft
-                // nach 2^32-1 auf 0 über (Abschnitt 4), und ein schlichtes
-                // Seq <= h liesse die offenen Stanzas danach für immer liegen.
+                // Modulo arithmetic as on the client side: the counter wraps to
+                // 0 after 2^32-1 (section 4), and a plain Seq <= h would leave
+                // the open stanzas lying there forever afterwards.
                 while (_unackedToClient.Count > 0 &&
                        unchecked(h.Value - _unackedToClient.Peek().Seq) < 0x8000_0000u)
                     _unackedToClient.Dequeue();
@@ -646,26 +644,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0198, Abschnitt 4: Schaltet Stream Management ein und bestätigt
-        /// es in einem Zug.
+        /// XEP-0198, section 4: Switches stream management on and confirms it in
+        /// one go.
         /// </summary>
         /// <remarks>
-        /// Beides unter der Sperre, die auch das Senden hält. Sonst kann
-        /// zwischen dem Nullsetzen der Zähler und dem <c>&lt;enabled/&gt;</c>
-        /// eine Stanza hinausgehen: der Server zählt sie, der Client nicht -
-        /// denn der setzt seinen Zähler erst beim <c>&lt;enabled/&gt;</c>
-        /// zurück -, und die beiden Stände bleiben für den Rest der Sitzung um
-        /// genau diese eine auseinander. Danach bestätigt jedes
-        /// <c>&lt;a h='…'/&gt;</c> eine Stanza zu wenig, und der Puffer der
-        /// unbestätigten läuft nie mehr leer.
+        /// Both under the lock that also holds the sending. Otherwise a stanza
+        /// can go out between the zeroing of the counters and the
+        /// <c>&lt;enabled/&gt;</c>: the server counts it, the client does not -
+        /// because the client only resets its counter at the
+        /// <c>&lt;enabled/&gt;</c> - and the two states stay exactly this one
+        /// apart for the rest of the session. After that every
+        /// <c>&lt;a h='…'/&gt;</c> acknowledges one stanza too few, and the
+        /// buffer of the unacknowledged never runs empty again.
         ///
-        /// Das Fenster ist schmal und trifft nur, wer <c>&lt;enable/&gt;</c>
-        /// nicht in der Aufbauphase schickt - im vollen Testlauf reichte es.
+        /// The window is narrow and only hits whoever does not send
+        /// <c>&lt;enable/&gt;</c> during the setup phase - in the full test run
+        /// it was enough.
         /// </remarks>
-        /// <param name="resumable">Hat der Client <c>resume='true'</c> verlangt?</param>
-        /// <param name="antwort">Baut das <c>&lt;enabled/&gt;</c> aus der frisch gesetzten Kennung.</param>
+        /// <param name="resumable">Has the client demanded <c>resume='true'</c>?</param>
+        /// <param name="answer">Builds the <c>&lt;enabled/&gt;</c> from the freshly set identifier.</param>
         internal async Task EnableStreamManagementAsync(Boolean                    resumable,
-                                                        Func<XMPPSession, String>  antwort)
+                                                        Func<XMPPSession, String>  answer)
         {
 
             await _sendLock.WaitAsync();
@@ -678,7 +677,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (_connection.IsClosed)
                     return;
 
-                var xml = antwort(this);
+                var xml = answer(this);
 
                 if (await _server.SendTextMessage(_connection, xml) == SentStatus.Success)
                     lock (_lock)
@@ -687,7 +686,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Verbindung wurde zwischenzeitlich abgerissen
+                // The connection was dropped in the meantime
             }
             finally
             {
@@ -697,43 +696,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0198: Fordert den Client auf, seinen Empfangszähler zu melden.
-        /// Die Antwort landet in <see cref="LastAckFromClient"/>.
+        /// XEP-0198: Asks the client to report its receive counter. The answer
+        /// lands in <see cref="LastAckFromClient"/>.
         /// </summary>
         public Task RequestAckAsync()
             => SendAsync("<r xmlns='urn:xmpp:sm:3'/>");
 
         /// <summary>
-        /// RFC 6120, Abschnitt 4.9: Beendet den Stream mit einem Fehler - Fehler
-        /// schicken, Stream schliessen, Verbindung niederlegen.
+        /// RFC 6120, section 4.9: Ends the stream with an error - send the
+        /// error, close the stream, lay the connection down.
         /// </summary>
-        /// <param name="condition">Bedingung aus Abschnitt 4.9.3, etwa <c>conflict</c>.</param>
-        /// <param name="text">Optionaler erläuternder Text.</param>
+        /// <param name="condition">A condition from section 4.9.3, such as <c>conflict</c>.</param>
+        /// <param name="text">Optional explanatory text.</param>
         /// <remarks>
-        /// Beides in einem Aufruf, weil Abschnitt 4.9.1.1 keine Wahl lässt:
-        /// „Stream-level errors are unrecoverable. Therefore, if an error occurs
+        /// Both in one call, because section 4.9.1.1 leaves no choice:
+        /// "Stream-level errors are unrecoverable. Therefore, if an error occurs
         /// at the level of the stream, the entity that detects the error MUST
         /// send an &lt;error/&gt; element ... and then <b>immediately close the
-        /// stream</b>." Ein Stream, der nach einem Stream-Fehler weiterläuft, ist
-        /// keiner mehr: Beide Seiten haben verschiedene Vorstellungen davon, was
-        /// noch gilt.
+        /// stream</b>." A stream that carries on after a stream error is none
+        /// any more: both sides have different notions of what still holds.
         ///
-        /// Es waren bis D23 zwei Methoden - diese ohne Abschluss und ein
-        /// <c>FailStreamAsync</c> mit. Die Trennung hatte keinen Aufrufer, der sie
-        /// brauchte: Beide Nutzer waren Tests, und beide holten das Schliessen
-        /// unmittelbar danach von Hand nach. Eine Wahl, die es nicht gibt, sollte
-        /// die Schnittstelle auch nicht anbieten.
+        /// Until D23 it was two methods - this one without the closing and a
+        /// <c>FailStreamAsync</c> with it. The separation had no caller that
+        /// needed it: both users were tests, and both made up the closing by
+        /// hand immediately afterwards. A choice that does not exist should not
+        /// be offered by the interface either.
         ///
-        /// Drei Schritte, und der mittlere ist der, den man über WebSocket
-        /// leicht vergisst: Nach RFC 7395, Abschnitt 3.6 steht
-        /// <c>&lt;close/&gt;</c> für das <c>&lt;/stream:stream&gt;</c> - ohne es
-        /// sieht der Client einen Socket, der ohne Abschied zufällt, und das ist
-        /// ein Netzwerkausfall und kein Stream-Fehler.
+        /// Three steps, and the middle one is the one easily forgotten over
+        /// WebSocket: per RFC 7395, section 3.6 <c>&lt;close/&gt;</c> stands for
+        /// the <c>&lt;/stream:stream&gt;</c> - without it the client sees a
+        /// socket falling shut without a farewell, and that is a network outage
+        /// and not a stream error.
         ///
-        /// <see cref="S2SStream.SendStreamErrorAsync"/> tut dasselbe für einen
-        /// Server-zu-Server-Stream und hiess von Anfang an so; dass die
-        /// gleichnamige Methode hier etwas anderes tat, war die eigentliche
-        /// Falle.
+        /// <see cref="S2SStream.SendStreamErrorAsync"/> does the same for a
+        /// server-to-server stream and was called that from the beginning; that
+        /// the method of the same name here did something else was the real
+        /// trap.
         /// </remarks>
         public async Task SendStreamErrorAsync(String condition, String? text = null)
         {
@@ -752,28 +750,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Sendet eine Stanza an diesen Client.
+        /// Sends a stanza to this client.
         /// </summary>
         public async Task SendAsync(String xml)
         {
 
-            // RFC 6120, Abschnitt 4.8.1 und RFC 7395, Abschnitt 3.3.3: auf der
-            // Client-Verbindung steht jede Stanza in jabber:client, und über
-            // WebSocket muss sie ihn selbst tragen - es gibt kein
-            // umschliessendes <stream:stream>, von dem sie ihn erben könnte.
+            // RFC 6120, section 4.8.1 and RFC 7395, section 3.3.3: on the client
+            // connection every stanza stands in jabber:client, and over
+            // WebSocket it has to carry that itself - there is no enclosing
+            // <stream:stream> it could inherit it from.
             //
-            // Zwei Fälle laufen hier zusammen. Was der Server selbst erzeugt,
-            // trug bisher gar keinen Namensraum; was von einem fremden Server
-            // hereinkam, trug jabber:server und wurde damit unverändert
-            // weitergereicht. Beides ist auf diesem Stream falsch, und beides
-            // ist nie aufgefallen, weil unser eigener Client Stanzas am
-            // lokalen Namen erkennt und den Namensraum gar nicht ansieht -
-            // dieselbe Nachsicht, die den umgekehrten Fehler auf der
-            // Client-Seite jahrelang verdeckt hat.
+            // Two cases come together here. What the server produces itself
+            // carried no namespace at all until now; what came in from a foreign
+            // server carried jabber:server and was thereby passed on unchanged.
+            // Both are wrong on this stream, and both never showed up, because
+            // our own client recognises stanzas by the local name and does not
+            // look at the namespace at all - the same leniency that covered up
+            // the reverse mistake on the client side for years.
             //
-            // Hier und nicht an den Aufrufern, aus demselben Grund, aus dem
-            // hier auch gezählt wird: das ist die einzige Stelle, durch die
-            // jeder Rahmen an einen Client läuft.
+            // Here and not at the callers, for the same reason that counting
+            // happens here too: this is the only place every frame to a client
+            // runs through.
             xml = StanzaNamespace.Apply(xml, StanzaNamespace.Client);
 
             await _sendLock.WaitAsync();
@@ -781,11 +778,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             try
             {
 
-                // XEP-0352: Erst entscheiden, ob das hier überhaupt jetzt
-                // hinausgeht - unter derselben Sperre, die auch schreibt.
-                // Sonst könnte zwischen der Entscheidung und dem Schreiben ein
-                // <active/> den Puffer leeren, und diese Stanza fiele dahinter
-                // in einen Puffer, aus dem niemand mehr liest.
+                // XEP-0352: First decide whether this goes out now at all -
+                // under the same lock that also writes. Otherwise an
+                // <active/> could empty the buffer between the decision and the
+                // writing, and this stanza would fall behind it into a buffer
+                // nobody reads from any more.
                 if (!ClientIsActive && !_connection.IsClosed && IsStanza(xml))
                 {
 
@@ -799,7 +796,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                         case ClientStateHandling.Queued:
 
-                            Boolean voll;
+                            Boolean full;
 
                             lock (_lock)
                             {
@@ -807,15 +804,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                 var key = ClientStateIndication.SupersedeKey(xml);
 
                                 if (key is not null)
-                                    _zurueckgehalten.RemoveAll(e => e.Key == key);
+                                    _held.RemoveAll(e => e.Key == key);
 
-                                _zurueckgehalten.Add((key, xml));
+                                _held.Add((key, xml));
 
-                                voll = _zurueckgehalten.Count > MaxHeldWhileInactive;
+                                full = _held.Count > MaxHeldWhileInactive;
 
                             }
 
-                            if (voll)
+                            if (full)
                                 await FlushHeldLockedAsync();
 
                             return;
@@ -824,15 +821,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 }
 
-                // Zurückgehaltenes geht vor allem her, was jetzt hinausgeht -
-                // sonst überholte eine wichtige Nachricht die Presence
-                // desselben Absenders, und RFC 6120, Abschnitt 10.1 verlangt
-                // ausdrücklich die Reihenfolge („in-order delivery") zwischen
-                // zwei Entitäten.
+                // What was held back goes before anything that goes out now -
+                // otherwise an important message would overtake the presence of
+                // the same sender, and RFC 6120, section 10.1 explicitly demands
+                // the order ("in-order delivery") between two entities.
                 //
-                // Nur vor Stanzas: Eine Nonza trägt keine Reihenfolge, und ein
-                // <r/> des Servers dürfte den Puffer nicht leeren - das wäre
-                // ein Weckruf durch die Hintertür.
+                // Only before stanzas: a nonza carries no order, and an <r/> of
+                // the server must not empty the buffer - that would be a wake-up
+                // call through the back door.
                 if (IsStanza(xml))
                     await FlushHeldLockedAsync();
 
@@ -841,7 +837,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Verbindung wurde zwischenzeitlich abgerissen
+                // The connection was dropped in the meantime
             }
             finally
             {
@@ -851,14 +847,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0352: Übernimmt den vom Client gemeldeten Zustand und liefert
-        /// beim <c>&lt;active/&gt;</c> nach, was zurückgehalten wurde.
+        /// XEP-0352: Takes over the state reported by the client and, on the
+        /// <c>&lt;active/&gt;</c>, delivers afterwards what was held back.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 5.1 verlangt, dass alles, was ein CSI-Nonza auslöst, vor
-        /// der nächsten Anfrage desselben Clients geschieht. Deshalb hier und
-        /// nicht nebenher: Der Aufrufer wartet auf diesen Task, und der
-        /// nächste Rahmen des Clients wird erst danach behandelt.
+        /// Section 5.1 demands that everything a CSI nonza triggers happens
+        /// before the next request of the same client. Hence here and not on the
+        /// side: the caller waits for this task, and the next frame of the
+        /// client is only handled afterwards.
         /// </remarks>
         internal async Task SetClientStateAsync(Boolean active)
         {
@@ -877,7 +873,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Verbindung wurde zwischenzeitlich abgerissen
+                // The connection was dropped in the meantime
             }
             finally
             {
@@ -887,13 +883,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// XEP-0352: Gibt den Puffer heraus, ohne den Zustand zu ändern.
+        /// XEP-0352: Hands the buffer out without changing the state.
         /// </summary>
         /// <remarks>
-        /// Für das Ende der Verbindung: Was hier noch liegt, hat den Client nie
-        /// erreicht und ist auch nicht in den Puffer der unbestätigten Stanzas
-        /// gelangt - eine Wiederaufnahme fände es nicht. Ohne diesen Aufruf
-        /// wäre die Sparmassnahme bei jedem Abriss ein Verlust.
+        /// For the end of the connection: what still lies here never reached the
+        /// client and did not get into the buffer of unacknowledged stanzas
+        /// either - a resumption would not find it. Without this call the saving
+        /// measure would be a loss at every drop.
         /// </remarks>
         internal async Task FlushHeldAsync()
         {
@@ -906,7 +902,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Verbindung wurde zwischenzeitlich abgerissen
+                // The connection was dropped in the meantime
             }
             finally
             {
@@ -916,34 +912,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Schreibt den Puffer leer. Nur mit gehaltenem <c>_sendLock</c>
-        /// aufzurufen.
+        /// Writes the buffer empty. Only to be called with <c>_sendLock</c>
+        /// held.
         /// </summary>
         private async Task FlushHeldLockedAsync()
         {
 
-            List<String> offen;
+            List<String> pending;
 
             lock (_lock)
             {
 
-                if (_zurueckgehalten.Count == 0)
+                if (_held.Count == 0)
                     return;
 
-                offen = [.. _zurueckgehalten.Select(e => e.Xml)];
-                _zurueckgehalten.Clear();
+                pending = [.. _held.Select(e => e.Xml)];
+                _held.Clear();
 
             }
 
-            foreach (var stanza in offen)
+            foreach (var stanza in pending)
                 await WriteLockedAsync(stanza);
 
         }
 
         /// <summary>
-        /// Schreibt einen Rahmen auf die Leitung, zählt ihn und hebt ihn auf,
-        /// solange er unbestätigt ist. Nur mit gehaltenem <c>_sendLock</c>
-        /// aufzurufen.
+        /// Writes a frame onto the wire, counts it and keeps it as long as it is
+        /// unacknowledged. Only to be called with <c>_sendLock</c> held.
         /// </summary>
         private async Task WriteLockedAsync(String xml)
         {
@@ -951,16 +946,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (_connection.IsClosed)
             {
 
-                // XEP-0198, Abschnitt 5: einem aufgehobenen Stream geht
-                // trotzdem etwas zu - er wartet ja gerade auf seinen
-                // Rückkehrer, und dann bekommt er es nachgeliefert.
+                // XEP-0198, section 5: something reaches a preserved stream all
+                // the same - it is, after all, waiting for its returner just
+                // now, and then it gets it delivered afterwards.
                 //
-                // Ohne das wäre die Wiederaufnahme fast wertlos: gerettet
-                // würde nur, was in der letzten Zehntelsekunde vor dem
-                // Abriss unterwegs war. Alles, was während der Störung
-                // ankommt - und das ist der Fall, um den es geht -, wäre
-                // verworfen, ohne dass Absender oder Empfänger davon
-                // erführen.
+                // Without that the resumption would be almost worthless: saved
+                // would be only what was on the way in the last tenth of a
+                // second before the drop. Everything that arrives during the
+                // disturbance - and that is the case it is about - would be
+                // discarded without either sender or recipient learning of it.
                 if (ResumptionId is not null && IsStanza(xml))
                     lock (_lock)
                     {
@@ -974,8 +968,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var status = await _server.SendTextMessage(_connection, xml);
 
-            // Nur ein tatsächlich abgeschickter Frame zählt - sonst meldete
-            // der Server dem Client ein h, das dieser nie erreichen kann.
+            // Only a frame actually sent off counts - otherwise the server would
+            // report an h to the client that the client can never reach.
             if (status != SentStatus.Success)
                 return;
 
@@ -984,15 +978,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 _sent.Add(xml);
 
-                // XEP-0198: erst nach dem erfolgreichen Senden zählen.
+                // XEP-0198: only count after the successful send.
                 if (StreamManagementEnabled && IsStanza(xml))
                 {
 
                     StanzasSentToClient++;
 
-                    // Und aufheben, solange der Client sie nicht bestätigt
-                    // hat - nur mit zugesagter Wiederaufnahme, sonst wäre
-                    // es ein Puffer, aus dem nie jemand liest.
+                    // And keep it as long as the client has not acknowledged it
+                    // - only with a promised resumption, otherwise it would be a
+                    // buffer nobody ever reads from.
                     if (ResumptionId is not null)
                         _unackedToClient.Enqueue((StanzasSentToClient, xml));
 
@@ -1003,28 +997,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Reisst die Verbindung ohne Close-Handshake ab - simuliert einen
-        /// Netzwerkausfall und löst beim Client einen Reconnect aus.
+        /// Tears the connection down without a close handshake - simulates a
+        /// network outage and triggers a reconnect at the client.
         /// </summary>
         /// <remarks>
-        /// <c>Close</c> ohne Statuscode schickt bewusst kein Close-Frame,
-        /// sondern legt nur die TCP-Verbindung nieder - genau das unterscheidet
-        /// einen Netzwerkausfall von einer ordentlichen Abmeldung.
+        /// <c>Close</c> without a status code deliberately sends no close frame
+        /// but only lays the TCP connection down - that is exactly what
+        /// distinguishes a network outage from a proper sign-off.
         /// </remarks>
         public void Kill()
         {
             try { _connection.Close().GetAwaiter().GetResult(); }
-            catch { /* egal */ }
+            catch { /* never mind */ }
         }
 
         /// <summary>
-        /// Zählt empfangene Frames, die den angegebenen Text enthalten.
+        /// Counts received frames that contain the given text.
         /// </summary>
         public Int32 CountReceived(String contains)
             => Received.Count(f => f.Contains(contains, StringComparison.Ordinal));
 
         public override String ToString()
-            => FullJid ?? BareJid ?? $"(Verbindung {ConnectionNumber}, nicht angemeldet)";
+            => FullJid ?? BareJid ?? $"(connection {ConnectionNumber}, not logged in)";
 
     }
 

@@ -27,8 +27,8 @@ using org.GraphDefined.Vanaheimr.Illias;
 using org.GraphDefined.Vanaheimr.Hermod;
 using org.GraphDefined.Vanaheimr.Hermod.WebSocket;
 
-// Siehe XMPPServer.cs: Hermods IPAddress verdeckt den aus System.Net, der
-// Alias räumt das aus.
+// See XMPPServer.cs: Hermod's IPAddress hides the one from System.Net, the
+// alias clears that up.
 using IPAddress = System.Net.IPAddress;
 
 #endregion
@@ -37,35 +37,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Verbindet <see cref="XMPPServer"/>-Instanzen über echtes WebSocket-S2S
-    /// miteinander - Gegenstück zu <see cref="DirectServerLinks"/>, nur mit
-    /// einem Netz dazwischen.
+    /// Connects <see cref="XMPPServer"/> instances with one another over real
+    /// WebSocket S2S - the counterpart to <see cref="DirectServerLinks"/>, only
+    /// with a network in between.
     /// </summary>
     /// <remarks>
-    /// Der Namensraum der Rahmung ist derselbe wie für Clients (RFC 7395);
-    /// unterschieden wird über das WebSocket-Subprotokoll. RFC 7395 ist auf
-    /// browserbasierte Clients zugeschnitten und sagt zu S2S nichts - "xmpp-server"
-    /// ist deshalb keine Norm, sondern diese Implementierung. Das ist nach dem
-    /// Arbeitsplan bewusst so: WebSocket-S2S soll nur Instanzen dieses Servers
-    /// miteinander verbinden, nicht mit ejabberd oder Prosody sprechen. Wer das
-    /// braucht, nimmt die TCP-Rahmung.
+    /// The namespace of the framing is the same as for clients (RFC 7395); the
+    /// distinction is made through the WebSocket subprotocol. RFC 7395 is cut
+    /// for browser-based clients and says nothing about S2S - "xmpp-server" is
+    /// therefore not a standard but this implementation. That is deliberate per
+    /// the work plan: WebSocket S2S shall only connect instances of this server
+    /// with one another, not speak to ejabberd or Prosody. Whoever needs that
+    /// takes the TCP framing.
     ///
-    /// Was diese Klasse liefert: Verbindungsaufbau, TLS, das Aufteilen der
-    /// WebSocket-Rahmen in <see cref="S2SStream"/>-Frames, Verbindungs-Cache
-    /// je Domain. Was sie <b>nicht</b> liefert - noch nicht -: Dialback. Die
-    /// Domain der Gegenstelle wird über <see cref="AddPeer"/> von Hand
-    /// hinterlegt, wie bei <see cref="DirectServerLinks"/>; die Absenderprüfung
-    /// in <see cref="XMPPServer.AcceptFromRemoteAsync"/> ist trotzdem scharf.
+    /// What this class delivers: establishing the connection, TLS, splitting
+    /// the WebSocket frames into <see cref="S2SStream"/> frames, a connection
+    /// cache per domain. What it does <b>not</b> deliver - not yet -: dialback.
+    /// The domain of the peer is entered by hand through
+    /// <see cref="AddPeer"/>, as with <see cref="DirectServerLinks"/>; the
+    /// sender check in <see cref="XMPPServer.AcceptFromRemoteAsync"/> is armed
+    /// all the same.
     /// </remarks>
     public sealed class WebSocketServerLinks : IServerLinks, IAsyncDisposable
     {
 
         #region Data
 
-        /// <summary>RFC 7395, Abschnitt 3.1 - dieselbe Rahmung wie für Clients.</summary>
+        /// <summary>RFC 7395, section 3.1 - the same framing as for clients.</summary>
         private const String FramingNamespace = S2SStream.FramingNamespace;
 
-        /// <summary>Das WebSocket-Subprotokoll, über das S2S sich vom Client-Zugang unterscheidet.</summary>
+        /// <summary>The WebSocket subprotocol by which S2S differs from the client access.</summary>
         internal const String S2SSubprotocol = "xmpp-server";
 
         private readonly XMPPServer                          _localServer;
@@ -81,18 +82,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private sealed record OutboundLink(ClientWebSocket Socket, S2SStream Stream);
 
         /// <summary>
-        /// Ein Platz im Verbindungs-Cache. Nicht der <c>Task</c> selbst, weil
-        /// aufgeräumt werden muss, <b>während</b> der Aufbau noch läuft.
+        /// A slot in the connection cache. Not the <c>Task</c> itself, because
+        /// clearing up has to be possible <b>while</b> the setup is still
+        /// running.
         /// </summary>
         /// <remarks>
-        /// Zuvor stand hier der Task, und entfernt wurde nur, wenn er bereits
-        /// erfolgreich abgeschlossen war. Stirbt der Stream aber noch im
-        /// Aufbau - was mit Dialback der Normalfall wurde, weil der Aufbau nun
-        /// mehrere Umläufe dauert -, blieb der Eintrag für immer stehen und
-        /// jede weitere Zustellung an diese Domain bekam die tote Verbindung
-        /// zurück. Über die Identität des Platzes lässt sich sicher
-        /// aufräumen, ohne versehentlich einen inzwischen neu angelegten
-        /// Eintrag zu treffen.
+        /// Previously the task stood here, and it was only removed when it had
+        /// already completed successfully. If the stream dies while still being
+        /// set up, though - which became the normal case with dialback, because
+        /// the setup now takes several round trips - the entry stayed there
+        /// forever and every further delivery to this domain got the dead
+        /// connection back. Through the identity of the slot it can be cleared
+        /// up safely, without accidentally hitting an entry created anew in the
+        /// meantime.
         /// </remarks>
         private sealed class OutboundSlot
         {
@@ -103,63 +105,61 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>Der Port, auf dem eingehende S2S-Verbindungen erwartet werden.</summary>
+        /// <summary>The port on which incoming S2S connections are expected.</summary>
         public Int32 Port { get; }
 
         /// <summary>
-        /// Das Dialback-Geheimnis dieses Servers (XEP-0220). Es entsteht beim
-        /// Anlegen und verlässt den Prozess nie.
+        /// The dialback secret of this server (XEP-0220). It comes into being
+        /// when the object is created and never leaves the process.
         /// </summary>
         public String DialbackSecret { get; } = DialbackKey.NewSecret();
 
-        /// <summary>Das Zertifikat, mit dem der eingehende Zweig TLS spricht, oder null.</summary>
+        /// <summary>The certificate the incoming branch speaks TLS with, or null.</summary>
         public X509Certificate2? Certificate { get; }
 
-        /// <summary>Die eigene S2S-Adresse, für <see cref="AddPeer"/> auf der Gegenseite bestimmt.</summary>
+        /// <summary>Our own S2S address, meant for <see cref="AddPeer"/> on the other side.</summary>
         public String Uri => $"{(Certificate is not null ? "wss" : "ws")}://localhost:{Port}/s2s/";
 
         /// <summary>
-        /// Anzahl der jemals eingegangenen S2S-Verbindungen - unabhängig von
-        /// den Client-Verbindungen des Servers, die
-        /// <see cref="XMPPServer.ConnectionCount"/> zählt.
+        /// The number of S2S connections ever received - independently of the
+        /// client connections of the server, which
+        /// <see cref="XMPPServer.ConnectionCount"/> counts.
         /// </summary>
         public Int32 InboundConnectionCount => _listener.ConnectionCounter;
 
         /// <summary>
-        /// XEP-0288: die Rückrichtung auf <b>eingehenden</b> Verbindungen
-        /// anbieten.
+        /// XEP-0288: offer the return direction on <b>incoming</b> connections.
         /// </summary>
         /// <remarks>
-        /// Dieselbe Erweiterung wie bei <see cref="TcpServerLinks"/> und aus
-        /// demselben Grund - die Protokollschicht darunter ist ohnehin
-        /// dieselbe. Hier fällt sie im Betrieb weniger ins Gewicht, weil an
-        /// beiden Enden dieses WebSocket-Transports Instanzen dieses Servers
-        /// hängen, die einander eingetragen haben.
+        /// The same extension as with <see cref="TcpServerLinks"/> and for the
+        /// same reason - the protocol layer underneath is the same anyway. Here
+        /// it weighs less in operation, because at both ends of this WebSocket
+        /// transport hang instances of this server that have entered one
+        /// another.
         ///
-        /// Getrennt von <see cref="RequestBidirectionalStreams"/>, weil es
-        /// zwei verschiedene Dinge sind: hier sagen wir einer anwählenden
-        /// Gegenstelle, dass sie uns über ihre eigene Verbindung antworten
-        /// darf; dort erbitten wir dasselbe von einer Gegenstelle, die wir
-        /// anwählen. Zusammengeschaltet waren sie nicht bloss unscharf - es
-        /// war damit unmöglich, unsere Ankündigung überhaupt zu beobachten:
-        /// solange unsere ausgehende Verbindung die Rückrichtung nutzt, wählt
-        /// die Gegenstelle uns gar nicht erst an.
+        /// Kept apart from <see cref="RequestBidirectionalStreams"/>, because
+        /// they are two different things: here we tell a peer that dials us
+        /// that it may answer us over its own connection; there we ask the same
+        /// of a peer that we dial. Wired together they were not merely
+        /// imprecise - it was thereby impossible to observe our announcement at
+        /// all: as long as our outgoing connection uses the return direction,
+        /// the peer does not dial us in the first place.
         /// </remarks>
         public Boolean OfferBidirectionalStreams { get; init; }
 
         /// <summary>
-        /// XEP-0288: die Rückrichtung auf <b>ausgehenden</b> Verbindungen
-        /// erbitten.
+        /// XEP-0288: ask for the return direction on <b>outgoing</b>
+        /// connections.
         /// </summary>
         /// <remarks>
-        /// Sinnvoll, wenn die Gegenstelle uns nicht erreichen kann. Siehe
-        /// <see cref="OfferBidirectionalStreams"/> für die Gegenrichtung.
+        /// Sensible when the peer cannot reach us. See
+        /// <see cref="OfferBidirectionalStreams"/> for the opposite direction.
         /// </remarks>
         public Boolean RequestBidirectionalStreams { get; init; }
 
         /// <summary>
-        /// Wie viele Stanzas über die Rückrichtung eines eingehenden Streams
-        /// gingen, statt über eine eigene Verbindung.
+        /// How many stanzas went over the return direction of an incoming
+        /// stream instead of over a connection of our own.
         /// </summary>
         public Int32 BidirectionalDeliveryCount => Volatile.Read(ref _bidiDeliveries);
 
@@ -168,11 +168,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Constructor(s)
 
         /// <summary>
-        /// Legt den eingehenden Zweig an und startet ihn sofort - ohne
-        /// erreichbaren Eingang wäre die Föderation ohnehin nur halb.
+        /// Creates the incoming branch and starts it right away - without a
+        /// reachable entrance the federation would only be half of one anyway.
         /// </summary>
-        /// <param name="localServer">Der Server, dessen S2S-Gegenstelle dies ist.</param>
-        /// <param name="port">Fester Port oder 0 für einen freien.</param>
+        /// <param name="localServer">The server whose S2S counterpart this is.</param>
+        /// <param name="port">A fixed port or 0 for a free one.</param>
         public WebSocketServerLinks(XMPPServer localServer, Int32 port = 0)
         {
 
@@ -193,13 +193,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region AddPeer(domain, uri, validator)
 
         /// <summary>
-        /// Macht eine fremde Domain über ihre S2S-Adresse erreichbar.
+        /// Makes a foreign domain reachable through its S2S address.
         /// </summary>
-        /// <param name="domain">Die Domain der Gegenstelle.</param>
-        /// <param name="uri">Ihre S2S-WebSocket-Adresse.</param>
+        /// <param name="domain">The domain of the peer.</param>
+        /// <param name="uri">Its S2S WebSocket address.</param>
         /// <param name="validator">
-        /// Zertifikatsprüfung für die ausgehende Verbindung; null überlässt sie
-        /// dem Betriebssystem.
+        /// The certificate validation for the outgoing connection; null leaves
+        /// it to the operating system.
         /// </param>
         public void AddPeer(String                                domain,
                             String                                uri,
@@ -214,20 +214,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (static) Connect(a, b)
 
         /// <summary>
-        /// Verbindet zwei Server in beide Richtungen - jeder erhält die
-        /// S2S-Adresse und das gepinnte Zertifikat des anderen.
+        /// Connects two servers in both directions - each receives the S2S
+        /// address and the pinned certificate of the other.
         /// </summary>
         /// <remarks>
-        /// Legt für einen Server, der noch keine <see cref="WebSocketServerLinks"/>
-        /// hat, stillschweigend eine an - dieselbe Bequemlichkeit, die
-        /// <see cref="DirectServerLinks.Connect"/> schon bietet.
+        /// For a server that does not have a <see cref="WebSocketServerLinks"/>
+        /// yet, it silently creates one - the same convenience
+        /// <see cref="DirectServerLinks.Connect"/> already offers.
         /// </remarks>
         public static void Connect(XMPPServer a, XMPPServer b)
         {
 
             if (String.Equals(a.Domain, b.Domain, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException(
-                          $"Beide Server bedienen '{a.Domain}' - eine Föderation mit sich selbst ergibt nichts.",
+                          $"Both servers serve '{a.Domain}' - a federation with itself amounts to nothing.",
                           nameof(b));
 
             var linksA = LinksOf(a);
@@ -248,25 +248,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region DeliverAsync(remoteDomain, stanza, cancellationToken)
 
         /// <remarks>
-        /// Anders als bei <see cref="DirectServerLinks"/> ist true hier keine
-        /// Zusicherung, dass die Gegenstelle die Stanza angenommen hat -
-        /// S2S kennt kein Ack je Stanza. Es heisst nur: der Stream stand und
-        /// der Rahmen wurde geschrieben. Eine Absenderprüfung, die danach
-        /// fehlschlägt, beendet den Stream (siehe <see cref="S2SStream"/>),
-        /// meldet sich aber nicht mehr an diesen Aufruf zurück - er ist zu dem
-        /// Zeitpunkt längst abgeschlossen.
+        /// Unlike with <see cref="DirectServerLinks"/>, true is no assurance
+        /// here that the peer has accepted the stanza - S2S knows no ack per
+        /// stanza. It only means: the stream stood and the frame was written. A
+        /// sender check that fails afterwards ends the stream (see
+        /// <see cref="S2SStream"/>) but no longer reports back to this call -
+        /// by that time it has long since completed.
         /// </remarks>
         public async Task<Boolean> DeliverAsync(String             remoteDomain,
                                                 String             stanza,
                                                 CancellationToken  cancellationToken = default)
         {
 
-            // XEP-0288: trägt eine eingehende Verbindung dieser Domain die
-            // Rückrichtung, geht die Stanza dort hinaus - Vorrang vor dem
-            // Anwählen, weil die Gegenstelle sich die Rückrichtung genau
-            // deshalb erbeten hat.
-            // Kein Schalter davor - siehe TcpServerLinks: BidiEnabled setzt
-            // beides bereits voraus.
+            // XEP-0288: if an incoming connection of this domain carries the
+            // return direction, the stanza goes out there - taking precedence
+            // over dialling, because that is precisely why the peer asked for
+            // the return direction.
+            // No switch in front of it - see TcpServerLinks: BidiEnabled
+            // already presupposes both.
             if (await S2SStream.TryDeliverOverBidiAsync(_listener.InboundStreams(), remoteDomain,
                                                         stanza, cancellationToken))
             {
@@ -287,30 +286,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (internal) VerifyDialbackKeyAsync(senderDomain, streamId, key)
 
         /// <summary>
-        /// XEP-0220, Schritt 2 und 3: fragt den autoritativen Server der
-        /// Absenderdomain, ob er diesen Schlüssel ausgestellt hat.
+        /// XEP-0220, steps 2 and 3: asks the authoritative server of the sender
+        /// domain whether it issued this key.
         /// </summary>
         /// <remarks>
-        /// <b>Hier steckt der ganze Wert von Dialback.</b> Die Adresse, an die
-        /// gefragt wird, stammt aus der Gegenstellenliste dieses Servers -
-        /// also aus der Konfiguration des Betreibers - und <b>nicht</b> von
-        /// dem, der sich gerade ausweisen will. Wer sich fälschlich für eine
-        /// Domain ausgibt, wird deshalb nie selbst gefragt: die Frage geht an
-        /// den echten Server dieser Domain, der den Schlüssel nicht
-        /// wiedererkennt und ihn ablehnt.
+        /// <b>Here sits the whole value of dialback.</b> The address that is
+        /// asked comes from the peer list of this server - that is, from the
+        /// operator's configuration - and <b>not</b> from whoever is currently
+        /// trying to identify itself. Whoever falsely claims to be a domain is
+        /// therefore never asked themselves: the question goes to the real
+        /// server of that domain, which does not recognise the key and refuses
+        /// it.
         ///
-        /// Das ist zugleich der Unterschied zum Dialback des XEP: dort ersetzt
-        /// eine DNS-Auflösung (SRV auf die Absenderdomain) diese Liste. DNS
-        /// fehlt hier noch - die Liste ist der Ersatz, und für den Zweck ein
-        /// strengerer, weil sie signiert ist durch die Hand, die sie gepflegt
-        /// hat, statt durch ein unauthentifiziertes Protokoll. Was sie nicht
-        /// leistet: sich selbst zu füllen. Eine unbekannte Domain kann nicht
-        /// geprüft und deshalb nicht angenommen werden.
+        /// That is at the same time the difference to the dialback of the XEP:
+        /// there a DNS resolution (SRV on the sender domain) replaces this
+        /// list. DNS is still missing here - the list is the substitute, and
+        /// for the purpose a stricter one, because it is signed by the hand
+        /// that maintained it rather than by an unauthenticated protocol. What
+        /// it does not achieve: filling itself. An unknown domain cannot be
+        /// checked and therefore cannot be accepted.
         ///
-        /// Die Verbindung dafür ist eigen und kurzlebig. Sie darf nicht die
-        /// zwischengespeicherte Stanza-Verbindung sein - die will sich
-        /// ihrerseits gerade erst ausweisen, und beide aufeinander warten zu
-        /// lassen wäre eine Verklemmung.
+        /// The connection for it is its own and short-lived. It must not be the
+        /// cached stanza connection - that one is itself just trying to
+        /// identify itself, and letting both wait on each other would be a
+        /// deadlock.
         /// </remarks>
         internal async Task<Boolean> VerifyDialbackKeyAsync(String senderDomain,
                                                             String streamId,
@@ -322,8 +321,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
                 _peers.TryGetValue(senderDomain, out peer);
 
-            // Keine hinterlegte Adresse - dann gibt es niemanden, den man
-            // fragen könnte, und Glauben ist keine Prüfung.
+            // No address on record - then there is nobody one could ask, and
+            // believing is not checking.
             if (peer is null)
                 return false;
 
@@ -364,24 +363,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // XEP-0220, Abschnitt 2.4 kennt dafür <remote-server-timeout/>;
-                // für den Aufrufer ist das Ergebnis dasselbe: nicht belegt.
+                // XEP-0220, section 2.4 knows <remote-server-timeout/> for
+                // this; for the caller the result is the same: not proven.
                 return false;
             }
             finally
             {
                 try { socket?.Dispose(); }
-                catch { /* egal */ }
+                catch { /* never mind */ }
             }
 
         }
 
-        /// <summary>Wie lange die Nachfrage beim autoritativen Server dauern darf.</summary>
+        /// <summary>How long the query at the authoritative server may take.</summary>
         private static readonly TimeSpan VerificationTimeout = TimeSpan.FromSeconds(10);
 
         /// <summary>
-        /// Liest die Antwort des autoritativen Servers, bis der
-        /// Verifikationsstream endet.
+        /// Reads the answer of the authoritative server until the verification
+        /// stream ends.
         /// </summary>
         private static async Task PumpVerificationFramesAsync(ClientWebSocket socket, S2SStream stream)
         {
@@ -421,10 +420,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Verbindung weg - Abort unten weckt einen etwaigen Wartenden.
+                // Connection gone - the abort below wakes any waiting party.
             }
 
-            stream.Abort("Verifikationsverbindung beendet");
+            stream.Abort("The verification connection has ended");
 
         }
 
@@ -433,13 +432,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) GetOrCreateOutboundAsync(remoteDomain, cancellationToken)
 
         /// <summary>
-        /// Liefert die bestehende ausgehende Verbindung zu einer Domain oder
-        /// baut eine neue auf.
+        /// Delivers the existing outgoing connection to a domain or establishes
+        /// a new one.
         /// </summary>
         /// <remarks>
-        /// Der Aufbau steht als <c>Task</c> im Cache, nicht erst sein Ergebnis -
-        /// sonst könnten zwei gleichzeitige Zustellungen an dieselbe Domain
-        /// zwei Verbindungen aufbauen.
+        /// The setup stands in the cache as a <c>Task</c>, not only its result -
+        /// otherwise two simultaneous deliveries to the same domain could
+        /// establish two connections.
         /// </remarks>
         private Task<OutboundLink?> GetOrCreateOutboundAsync(String              remoteDomain,
                                                              CancellationToken   cancellationToken)
@@ -492,10 +491,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                  (frame, ct) => SendFrameAsync(socket, frame, ct),
                                  secret:         DialbackSecret,
 
-                                 // XEP-0288: was über die Rückrichtung
-                                 // hereinkommt, nimmt denselben Weg wie auf
-                                 // einer eingehenden Verbindung, samt
-                                 // Absenderprüfung.
+                                 // XEP-0288: what comes in over the return
+                                 // direction takes the same way as on an
+                                 // incoming connection, sender check included.
                                  deliverStanza:  (peerDomain, stanza)
                                                      => _localServer.AcceptFromRemoteAsync(peerDomain, stanza),
                                  useBidi:        RequestBidirectionalStreams);
@@ -512,12 +510,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     return null;
                 }
 
-                // XEP-0220: erst wenn die Gegenstelle unsere Domain bestätigt
-                // hat, ist der Stream brauchbar. Vorher zugestellte Stanzas
-                // würde sie ohnehin verwerfen.
+                // XEP-0220: only once the peer has confirmed our domain is the
+                // stream usable. Stanzas delivered before that it would discard
+                // anyway.
                 if (!await stream.WaitUntilAuthenticatedAsync(OutboundHandshakeTimeout, cancellationToken))
                 {
-                    stream.Abort("Dialback nicht abgeschlossen");
+                    stream.Abort("The dialback was not completed");
                     DropOutbound(remoteDomain, slot);
                     return null;
                 }
@@ -536,7 +534,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Wie lange auf das <c>&lt;open/&gt;</c> der Gegenstelle gewartet wird.</summary>
+        /// <summary>How long the <c>&lt;open/&gt;</c> of the peer is waited for.</summary>
         private static readonly TimeSpan OutboundHandshakeTimeout = TimeSpan.FromSeconds(10);
 
         #endregion
@@ -544,8 +542,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) PumpIncomingFramesAsync / SendFrameAsync / RemoveOutbound
 
         /// <summary>
-        /// Liest WebSocket-Rahmen vom ausgehenden Socket und reicht sie an den
-        /// Stream weiter, bis die Verbindung endet.
+        /// Reads WebSocket frames from the outgoing socket and passes them on
+        /// to the stream, until the connection ends.
         /// </summary>
         private async Task PumpIncomingFramesAsync(ClientWebSocket  socket,
                                                    S2SStream        stream,
@@ -585,11 +583,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     if (frame.Length > 0)
                         await stream.ProcessFrameAsync(frame);
 
-                    // Ein Stream-Fehler der Gegenstelle schliesst den Stream,
-                    // ohne die WebSocket-Verbindung zu beenden - RFC 6120,
-                    // Abschnitt 4.9 verlangt aber genau das. Ohne diesen
-                    // Ausstieg liefe die Schleife weiter auf ein ReceiveAsync,
-                    // das nie wieder etwas bekommt.
+                    // A stream error of the peer closes the stream without
+                    // ending the WebSocket connection - RFC 6120, section 4.9
+                    // demands exactly that, though. Without this way out the
+                    // loop would carry on into a ReceiveAsync that never gets
+                    // anything again.
                     if (stream.IsClosed)
                         break;
 
@@ -598,14 +596,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Socket weg - der Stream erfährt es unten über Abort.
+                // Socket gone - the stream learns of it below through the abort.
             }
 
-            stream.Abort("Ausgehende WebSocket-Verbindung beendet");
+            stream.Abort("The outgoing WebSocket connection has ended");
             DropOutbound(remoteDomain, slot);
 
             try { socket.Dispose(); }
-            catch { /* egal */ }
+            catch { /* never mind */ }
 
         }
 
@@ -622,8 +620,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Räumt einen Platz aus dem Verbindungs-Cache, wenn er noch derselbe
-        /// ist - unabhängig davon, ob der Aufbau schon fertig war.
+        /// Clears a slot out of the connection cache when it is still the same
+        /// one - regardless of whether the setup had already finished.
         /// </summary>
         private void DropOutbound(String remoteDomain, OutboundSlot slot)
         {
@@ -647,9 +645,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private class) S2SWebSocketListener
 
         /// <summary>
-        /// Der eingehende Zweig - nimmt WebSocket-Verbindungen mit dem
-        /// S2S-Subprotokoll an und hält je Verbindung einen empfangenden
-        /// <see cref="S2SStream"/>.
+        /// The incoming branch - accepts WebSocket connections with the S2S
+        /// subprotocol and holds one receiving <see cref="S2SStream"/> per
+        /// connection.
         /// </summary>
         private sealed class S2SWebSocketListener : AWebSocketServer
         {
@@ -660,22 +658,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             private readonly Lock                  _lock = new();
 
             /// <summary>
-            /// Die Streams je Verbindung - <b>ausdrücklich</b> nach
-            /// Referenzgleichheit.
+            /// The streams per connection - <b>explicitly</b> by reference
+            /// equality.
             /// </summary>
             /// <remarks>
-            /// Hermods <c>WebSocketServerConnection</c> vergleicht sich über
-            /// <c>LocalSocket</c>, und der ist bei einem Listener für jede
-            /// angenommene Verbindung derselbe: aus Sicht eines gewöhnlichen
-            /// Dictionary sind damit <b>alle</b> eingehenden Verbindungen ein
-            /// und dieselbe. Ohne diesen Vergleicher bekam die zweite
-            /// eingehende Verbindung den Stream der ersten zurück - samt deren
-            /// Sendefunktion, die auf einen längst geschlossenen Socket
-            /// schrieb. Die Antwort ging dann ins Leere und die Gegenstelle
-            /// wartete bis ins Zeitlimit.
+            /// Hermod's <c>WebSocketServerConnection</c> compares itself
+            /// through <c>LocalSocket</c>, and with a listener that one is the
+            /// same for every accepted connection: from the point of view of an
+            /// ordinary dictionary <b>all</b> incoming connections are thus one
+            /// and the same. Without this comparer the second incoming
+            /// connection got the stream of the first back - together with its
+            /// send function, which wrote to a long since closed socket. The
+            /// answer then went nowhere and the peer waited into its time
+            /// limit.
             ///
-            /// <see cref="XMPPServer"/> geht demselben Problem seit jeher mit
-            /// einem <c>ReferenceEquals</c> über eine Liste aus dem Weg.
+            /// <see cref="XMPPServer"/> has been avoiding the same problem all
+            /// along with a <c>ReferenceEquals</c> over a list.
             /// </remarks>
             private readonly Dictionary<WebSocketServerConnection, S2SStream> _streams = new(ByReference.Instance);
 
@@ -696,7 +694,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             #endregion
 
-            /// <summary>Anzahl der jemals angenommenen S2S-Verbindungen.</summary>
+            /// <summary>The number of S2S connections ever accepted.</summary>
             public Int32 ConnectionCounter => Volatile.Read(ref _connectionCounter);
 
             #region Constructor(s)
@@ -717,8 +715,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 _links = links;
 
-                // Ohne das bliebe je beendeter Verbindung ein Stream in der
-                // Tabelle stehen - unauffällig, aber unbegrenzt.
+                // Without this a stream would stay standing in the table per
+                // ended connection - inconspicuous, but unbounded.
                 OnTCPConnectionClosed += (timestamp, server, connection, eventTrackingId, reason, ct) =>
                 {
 
@@ -729,7 +727,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         _streams.Remove(connection, out stream);
                     }
 
-                    stream?.Abort("Eingehende WebSocket-Verbindung beendet");
+                    stream?.Abort("The incoming WebSocket connection has ended");
 
                     return Task.CompletedTask;
 
@@ -740,14 +738,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             #endregion
 
             /// <summary>
-            /// Eine Momentaufnahme der offenen eingehenden Streams - für
-            /// XEP-0288 die einzige Stelle, an der sich einer für die
-            /// Rückrichtung finden lässt.
+            /// A snapshot of the open incoming streams - for XEP-0288 the only
+            /// place where one can be found for the return direction.
             /// </summary>
             /// <remarks>
-            /// Eine Kopie, damit die Sperre nicht über das Senden gehalten
-            /// wird: eine langsame Gegenstelle hielte sonst jede weitere
-            /// Zustellung auf, auch die an ganz andere Domains.
+            /// A copy, so that the lock is not held across the sending: a slow
+            /// peer would otherwise hold up every further delivery, including
+            /// those to entirely different domains.
             /// </remarks>
             internal IReadOnlyList<S2SStream> InboundStreams()
             {
@@ -780,15 +777,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         lock (_lock)
                             _streams.Remove(connection);
 
-                        // RFC 6120, Abschnitt 4.9: ein beendeter Stream nimmt
-                        // die Verbindung mit. Ohne das bliebe die WebSocket-
-                        // Verbindung offen, obwohl auf ihr protokollseitig
-                        // nichts mehr passiert - ein Leck, kein Fehlerfall,
-                        // der irgendwann auffiele.
+                        // RFC 6120, section 4.9: an ended stream takes the
+                        // connection with it. Without this the WebSocket
+                        // connection would stay open although nothing happens
+                        // on it protocol-wise any more - a leak, not a fault
+                        // that would show up at some point.
                         _ = Task.Run(async () =>
                         {
                             try { await connection.Close(); }
-                            catch { /* egal */ }
+                            catch { /* never mind */ }
                         });
 
                     };
@@ -818,7 +815,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 }
                 catch (Exception)
                 {
-                    // Verbindung abgerissen - wie beim Client-Zugang der Normalfall.
+                    // Connection dropped - as with the client access the normal case.
                 }
 
             }
@@ -867,21 +864,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                     if (link is not null)
                     {
-                        link.Stream.Abort("Server wird beendet");
+                        link.Stream.Abort("The server is shutting down");
                         try { link.Socket.Dispose(); }
-                        catch { /* egal */ }
+                        catch { /* never mind */ }
                     }
 
                 }
                 catch (Exception)
                 {
-                    // Verbindungsaufbau war ohnehin schon gescheitert.
+                    // Establishing the connection had already failed anyway.
                 }
 
             }
 
             try { await _listener.Shutdown(Wait: true); }
-            catch { /* egal */ }
+            catch { /* never mind */ }
 
         }
 
