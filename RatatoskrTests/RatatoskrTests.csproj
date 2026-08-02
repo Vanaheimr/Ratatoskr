@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>org.GraphDefined.Vanaheimr.Ratatoskr.Tests</RootNamespace>
+    <AssemblyName>org.GraphDefined.Vanaheimr.Ratatoskr.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
+
+    <!--
+      Die Foederationstests loesen selbst auf und binden selbst: IPPort,
+      IPv4Address, IPSocket und der DNSClient kommen von Hermod, nicht von
+      Ratatoskr. Ausdruecklich aufgefuehrt aus demselben Grund wie die Pakete
+      drueben - wer eine transitive Abhaengigkeit direkt benutzt, verliert sie
+      in dem Augenblick, in dem der Vorbesitzer sie ablegt.
+    -->
+    <ProjectReference Include="..\..\Hermod\Hermod\Hermod.csproj" />
+  </ItemGroup>
+
+</Project>

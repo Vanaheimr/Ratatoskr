@@ -1,0 +1,9 @@
+*.pidb
+__pycache__/
+*.VisualState.xml
+*.suo
+bin/
+obj/
+.vs
+.vs/*
+TestResults/
