@@ -24,39 +24,38 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// SASLprep (RFC 4013), das StringPrep-Profil für Benutzernamen und Passwörter.
+/// SASLprep (RFC 4013), the StringPrep profile for user names and passwords.
 /// </summary>
 /// <remarks>
-/// Zwei Leute tippen dasselbe Passwort und meinen dasselbe - nur haben sie
-/// verschiedene Tastaturen, verschiedene Eingabemethoden, verschiedene
-/// Betriebssysteme. Das <c>ä</c> kommt einmal als ein Zeichen an und einmal als
-/// <c>a</c> mit angehängtem Trema; ein Leerzeichen ist mal U+0020 und mal ein
-/// geschütztes. SASLprep führt beides auf dieselbe Form zurück, damit aus
-/// derselben Eingabe derselbe Schlüssel wird.
+/// Two people type the same password and mean the same thing - only they have
+/// different keyboards, different input methods, different operating systems.
+/// The <c>ä</c> arrives once as a single character and once as an <c>a</c> with
+/// a trailing diaeresis; a space is sometimes U+0020 and sometimes a
+/// non-breaking one. SASLprep leads both back to the same form, so that the
+/// same input becomes the same key.
 ///
-/// Bis hierhin bestand diese Vorbereitung aus einer einzigen Zeile - NFKC. Das
-/// deckt den zweiten Fall ab und keinen der übrigen: Die Abbildungen fehlten
-/// (ein weiches Trennzeichen im Passwort blieb stehen, statt zu verschwinden),
-/// die Verbote fehlten (ein Steuerzeichen ging durch), und die
-/// Bidi-Prüfung fehlte ganz.
+/// Up to here this preparation consisted of a single line - NFKC. That covers
+/// the second case and none of the rest: the mappings were missing (a soft
+/// hyphen in the password stayed instead of disappearing), the prohibitions
+/// were missing (a control character went through), and the bidi check was
+/// missing entirely.
 ///
-/// Praktisch heisst das: Ein Passwort ausserhalb von ASCII wurde hier anders
-/// vorbereitet als bei Prosody oder ejabberd, und die Anmeldung schlug fehl,
-/// ohne dass jemand hätte sagen können warum. Genau dafür gibt es das Profil.
+/// In practice that means: a password outside of ASCII was prepared here
+/// differently than at Prosody or ejabberd, and the login failed without
+/// anyone being able to say why. That is exactly what the profile is for.
 ///
-/// Die vier Schritte nach RFC 3454, Abschnitt 7:
+/// The four steps per RFC 3454, section 7:
 ///
 /// <list type="number">
-///   <item>abbilden (RFC 4013, Abschnitt 2.1),</item>
-///   <item>nach NFKC normalisieren (2.2),</item>
-///   <item>verbotene Zeichen zurückweisen (2.3) - dazu die nicht zugewiesenen (2.5),</item>
-///   <item>die Bidi-Regeln prüfen (2.4).</item>
+///   <item>map (RFC 4013, section 2.1),</item>
+///   <item>normalise to NFKC (2.2),</item>
+///   <item>reject prohibited characters (2.3) - and with them the unassigned ones (2.5),</item>
+///   <item>check the bidi rules (2.4).</item>
 /// </list>
 ///
-/// Zurückgewiesen wird durch eine Ausnahme und nicht durch stilles Ersetzen.
-/// Ein Passwort, das sich nicht eindeutig vorbereiten lässt, ist keines: Wer es
-/// zurechtbiegt, lässt am Ende zwei verschiedene Eingaben auf denselben
-/// Schlüssel führen.
+/// Rejection happens through an exception and not through silent replacement.
+/// A password that cannot be prepared unambiguously is none: whoever bends it
+/// into shape ends up letting two different inputs lead to the same key.
 /// </remarks>
 public static class SaslPrep
 {
@@ -64,17 +63,17 @@ public static class SaslPrep
     #region Prepare(Input, AllowUnassigned = false)
 
     /// <summary>
-    /// Bereitet eine Zeichenkette nach SASLprep vor.
+    /// Prepares a string per SASLprep.
     /// </summary>
-    /// <param name="Input">Benutzername oder Passwort.</param>
+    /// <param name="Input">User name or password.</param>
     /// <param name="AllowUnassigned">
-    /// Nicht zugewiesene Codepoints durchlassen. Vorgabe ist <c>false</c>, also
-    /// die Behandlung als „stored string" nach RFC 4013, Abschnitt 2.5: Was in
-    /// Unicode 3.2 noch keine Bedeutung hatte, gehört nicht in ein Passwort,
-    /// weil zwei Gegenstellen es verschieden normalisieren könnten.
+    /// Let unassigned code points through. The default is <c>false</c>, that is
+    /// the treatment as a "stored string" per RFC 4013, section 2.5: whatever
+    /// had no meaning yet in Unicode 3.2 does not belong in a password, because
+    /// two peers could normalise it differently.
     /// </param>
     /// <exception cref="AuthenticationException">
-    /// Bei einem verbotenen Zeichen oder einem Verstoss gegen die Bidi-Regeln.
+    /// On a prohibited character or a violation of the bidi rules.
     /// </exception>
     public static String Prepare(String   Input,
                                  Boolean  AllowUnassigned   = false)
@@ -95,14 +94,14 @@ public static class SaslPrep
     #region (private) Map(Input)
 
     /// <summary>
-    /// RFC 4013, Abschnitt 2.1: Leerzeichen ausserhalb von ASCII werden zu
-    /// U+0020, und was in Tabelle B.1 steht, fällt weg.
+    /// RFC 4013, section 2.1: spaces outside of ASCII become U+0020, and
+    /// whatever is in table B.1 falls away.
     /// </summary>
     /// <remarks>
-    /// Das Wegfallen ist der Teil, der überrascht: Ein weiches Trennzeichen
-    /// oder ein Variantenwähler im Passwort ist unsichtbar, geht also beim
-    /// Tippen leicht verloren oder kommt versehentlich hinein. Beide Fassungen
-    /// sollen dasselbe Passwort sein.
+    /// The falling away is the part that surprises: a soft hyphen or a
+    /// variation selector in a password is invisible, so it is easily lost
+    /// while typing or ends up in there by accident. Both versions are meant to
+    /// be the same password.
     /// </remarks>
     private static String Map(String Input)
     {
@@ -134,7 +133,7 @@ public static class SaslPrep
     #region (private) Prohibit(Value, AllowUnassigned)
 
     /// <summary>
-    /// RFC 4013, Abschnitt 2.3 und 2.5: die verbotenen Zeichen.
+    /// RFC 4013, sections 2.3 and 2.5: the prohibited characters.
     /// </summary>
     private static void Prohibit(String Value, Boolean AllowUnassigned)
     {
@@ -142,36 +141,36 @@ public static class SaslPrep
         foreach (var codePoint in CodePoints(Value))
         {
 
-            var grund = Forbidden(codePoint);
+            var reason = Forbidden(codePoint);
 
-            if (grund is not null)
+            if (reason is not null)
                 throw new AuthenticationException(
-                          $"SASLprep: U+{codePoint:X4} ist nicht zulässig ({grund}, RFC 3454).");
+                          $"SASLprep: U+{codePoint:X4} is not permitted ({reason}, RFC 3454).");
 
             if (!AllowUnassigned &&
                 StringPrepTables.Contains(StringPrepTables.Unassigned, codePoint))
                 throw new AuthenticationException(
-                          $"SASLprep: U+{codePoint:X4} war in Unicode 3.2 nicht zugewiesen " +
-                          "(Tabelle A.1, RFC 3454).");
+                          $"SASLprep: U+{codePoint:X4} was unassigned in Unicode 3.2 " +
+                          "(table A.1, RFC 3454).");
 
         }
 
     }
 
-    /// <summary>Die Tabelle, die diesen Codepoint verbietet - oder null.</summary>
+    /// <summary>The table that prohibits this code point - or null.</summary>
     private static String? Forbidden(UInt32 CodePoint)
     {
 
-        if (StringPrepTables.Contains(StringPrepTables.NonAsciiSpace,               CodePoint)) return "Tabelle C.1.2";
-        if (StringPrepTables.Contains(StringPrepTables.AsciiControl,                CodePoint)) return "Tabelle C.2.1";
-        if (StringPrepTables.Contains(StringPrepTables.NonAsciiControl,             CodePoint)) return "Tabelle C.2.2";
-        if (StringPrepTables.Contains(StringPrepTables.PrivateUse,                  CodePoint)) return "Tabelle C.3";
-        if (StringPrepTables.Contains(StringPrepTables.NonCharacter,                CodePoint)) return "Tabelle C.4";
-        if (StringPrepTables.Contains(StringPrepTables.Surrogate,                   CodePoint)) return "Tabelle C.5";
-        if (StringPrepTables.Contains(StringPrepTables.InappropriateForPlainText,   CodePoint)) return "Tabelle C.6";
-        if (StringPrepTables.Contains(StringPrepTables.InappropriateForCanonical,   CodePoint)) return "Tabelle C.7";
-        if (StringPrepTables.Contains(StringPrepTables.DisplayOrDeprecated,         CodePoint)) return "Tabelle C.8";
-        if (StringPrepTables.Contains(StringPrepTables.Tagging,                     CodePoint)) return "Tabelle C.9";
+        if (StringPrepTables.Contains(StringPrepTables.NonAsciiSpace,               CodePoint)) return "table C.1.2";
+        if (StringPrepTables.Contains(StringPrepTables.AsciiControl,                CodePoint)) return "table C.2.1";
+        if (StringPrepTables.Contains(StringPrepTables.NonAsciiControl,             CodePoint)) return "table C.2.2";
+        if (StringPrepTables.Contains(StringPrepTables.PrivateUse,                  CodePoint)) return "table C.3";
+        if (StringPrepTables.Contains(StringPrepTables.NonCharacter,                CodePoint)) return "table C.4";
+        if (StringPrepTables.Contains(StringPrepTables.Surrogate,                   CodePoint)) return "table C.5";
+        if (StringPrepTables.Contains(StringPrepTables.InappropriateForPlainText,   CodePoint)) return "table C.6";
+        if (StringPrepTables.Contains(StringPrepTables.InappropriateForCanonical,   CodePoint)) return "table C.7";
+        if (StringPrepTables.Contains(StringPrepTables.DisplayOrDeprecated,         CodePoint)) return "table C.8";
+        if (StringPrepTables.Contains(StringPrepTables.Tagging,                     CodePoint)) return "table C.9";
 
         return null;
 
@@ -182,14 +181,14 @@ public static class SaslPrep
     #region (private) CheckBidi(Value)
 
     /// <summary>
-    /// RFC 3454, Abschnitt 6: die Regeln für gemischte Schreibrichtungen.
+    /// RFC 3454, section 6: the rules for mixed writing directions.
     /// </summary>
     /// <remarks>
-    /// Eine Zeichenkette aus rechtsläufiger und linksläufiger Schrift wird je
-    /// nach Umgebung verschieden angezeigt. Wer sie liest, sieht also nicht
-    /// unbedingt, was darin steht - und ein Angreifer kann einen Namen
-    /// zusammensetzen, der wie ein anderer aussieht. Die beiden Regeln
-    /// schliessen die Fälle aus, in denen die Anzeige mehrdeutig würde.
+    /// A string made of right-to-left and left-to-right script is displayed
+    /// differently depending on its surroundings. Whoever reads it therefore
+    /// does not necessarily see what is in it - and an attacker can put
+    /// together a name that looks like another one. The two rules rule out the
+    /// cases in which the display would become ambiguous.
     /// </remarks>
     private static void CheckBidi(String Value)
     {
@@ -199,24 +198,24 @@ public static class SaslPrep
         if (codePoints.Count == 0)
             return;
 
-        var hatRandAL = codePoints.Any(cp => StringPrepTables.Contains(StringPrepTables.RandALCat, cp));
+        var hasRandAL = codePoints.Any(cp => StringPrepTables.Contains(StringPrepTables.RandALCat, cp));
 
-        if (!hatRandAL)
+        if (!hasRandAL)
             return;
 
-        // Regel 2: Rechtsläufiges und linksläufiges Zeichen zusammen - verboten.
+        // Rule 2: a right-to-left and a left-to-right character together - prohibited.
         if (codePoints.Any(cp => StringPrepTables.Contains(StringPrepTables.LCat, cp)))
             throw new AuthenticationException(
-                      "SASLprep: rechtsläufige und linksläufige Zeichen zusammen " +
-                      "(RFC 3454, Abschnitt 6, Regel 2).");
+                      "SASLprep: right-to-left and left-to-right characters together " +
+                      "(RFC 3454, section 6, rule 2).");
 
-        // Regel 3: Steht rechtsläufiges darin, müssen erstes und letztes Zeichen
-        // rechtsläufig sein.
+        // Rule 3: if a right-to-left character is in there, the first and the
+        // last character have to be right-to-left.
         if (!StringPrepTables.Contains(StringPrepTables.RandALCat, codePoints[0]) ||
             !StringPrepTables.Contains(StringPrepTables.RandALCat, codePoints[^1]))
             throw new AuthenticationException(
-                      "SASLprep: eine rechtsläufige Zeichenkette muss rechtsläufig " +
-                      "beginnen und enden (RFC 3454, Abschnitt 6, Regel 3).");
+                      "SASLprep: a right-to-left string has to begin and end " +
+                      "right-to-left (RFC 3454, section 6, rule 3).");
 
     }
 
@@ -225,13 +224,13 @@ public static class SaslPrep
     #region (private) CodePoints(Value)
 
     /// <summary>
-    /// Die Codepoints der Zeichenkette.
+    /// The code points of the string.
     /// </summary>
     /// <remarks>
-    /// Von Hand und nicht über <c>EnumerateRunes</c>: Das ersetzt ein
-    /// alleinstehendes Surrogat stillschweigend durch U+FFFD, und stillschweigend
-    /// ist hier das Falsche - ein halbes Zeichen ist nach Tabelle C.5 verboten
-    /// und soll als solches gemeldet werden.
+    /// By hand and not through <c>EnumerateRunes</c>: that one silently
+    /// replaces a lone surrogate with U+FFFD, and silently is the wrong thing
+    /// here - half a character is prohibited by table C.5 and shall be reported
+    /// as such.
     /// </remarks>
     private static IEnumerable<UInt32> CodePoints(String Value)
     {
@@ -252,15 +251,15 @@ public static class SaslPrep
                 }
 
                 throw new AuthenticationException(
-                          $"SASLprep: U+{(UInt32) c:X4} steht als halbes Zeichen da " +
-                          "(Tabelle C.5, RFC 3454).");
+                          $"SASLprep: U+{(UInt32) c:X4} stands there as half a character " +
+                          "(table C.5, RFC 3454).");
 
             }
 
             if (Char.IsLowSurrogate(c))
                 throw new AuthenticationException(
-                          $"SASLprep: U+{(UInt32) c:X4} steht als halbes Zeichen da " +
-                          "(Tabelle C.5, RFC 3454).");
+                          $"SASLprep: U+{(UInt32) c:X4} stands there as half a character " +
+                          "(table C.5, RFC 3454).");
 
             yield return c;
 

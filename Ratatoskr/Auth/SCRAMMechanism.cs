@@ -18,13 +18,13 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Unterstützte SCRAM-Varianten (RFC 5802 / RFC 7677).
+/// The supported SCRAM variants (RFC 5802 / RFC 7677).
 /// </summary>
 /// <remarks>
-/// War zuvor als verschachteltes Enum <c>SCRAMAuthenticator.SCRAMMechanism</c>
-/// deklariert und wurde für "ein Typ pro Datei" auf Top-Level gehoben.
-/// Die Channel-Binding-Varianten (SCRAM-SHA-1-PLUS / SCRAM-SHA-256-PLUS)
-/// sind nicht implementiert.
+/// Previously declared as the nested enum <c>SCRAMAuthenticator.SCRAMMechanism</c>
+/// and lifted to top level for "one type per file".
+/// The channel binding variants (SCRAM-SHA-1-PLUS / SCRAM-SHA-256-PLUS)
+/// are not implemented.
 /// </remarks>
 public enum SCRAMMechanism
 {

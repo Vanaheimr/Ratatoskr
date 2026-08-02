@@ -18,11 +18,11 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// AuthenticationException für SASL-Fehler
+/// AuthenticationException for SASL failures
 /// </summary>
 /// <remarks>
-/// Namenskollision: Der Typ verdeckt <c>System.Security.Authentication.AuthenticationException</c>
-/// aus der BCL, sobald jemand beide Namespaces importiert.
+/// Name clash: This type hides <c>System.Security.Authentication.AuthenticationException</c>
+/// from the BCL as soon as someone imports both namespaces.
 /// </remarks>
 public class AuthenticationException : Exception
 {

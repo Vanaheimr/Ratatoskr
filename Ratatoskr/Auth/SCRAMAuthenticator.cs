@@ -26,9 +26,9 @@ using System.Text.RegularExpressions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// SCRAM-SHA-1 und SCRAM-SHA-256 Authentifizierung (RFC 5802)
+/// SCRAM-SHA-1 and SCRAM-SHA-256 authentication (RFC 5802)
 ///
-/// Ablauf:
+/// Sequence:
 /// 1. Client → Server: client-first-message (username, client nonce)
 /// 2. Server → Client: server-first-message (combined nonce, salt, iterations)
 /// 3. Client → Server: client-final-message (channel binding, proof)
@@ -53,10 +53,10 @@ public sealed class SCRAMAuthenticator
     }
 
     /// <summary>
-    /// Nur für Tests: erzwingt einen festen Client-Nonce, damit sich die
-    /// Testvektoren aus RFC 5802 Abschnitt 5 und RFC 7677 Abschnitt 3
-    /// nachrechnen lassen. Im Betrieb bleibt der Wert null und der Nonce
-    /// kommt aus <see cref="RandomNumberGenerator"/>.
+    /// For tests only: forces a fixed client nonce, so that the test vectors
+    /// from RFC 5802 section 5 and RFC 7677 section 3 can be recomputed. In
+    /// operation the value stays null and the nonce comes from
+    /// <see cref="RandomNumberGenerator"/>.
     /// </summary>
     internal string? FixedClientNonce { get; set; }
 
@@ -68,7 +68,7 @@ public sealed class SCRAMAuthenticator
     };
 
     /// <summary>
-    /// Schritt 1: Generiert die client-first-message
+    /// Step 1: Generates the client-first-message
     /// </summary>
     public string CreateClientFirstMessage()
     {
@@ -77,15 +77,15 @@ public sealed class SCRAMAuthenticator
         // n=username,r=nonce
         _clientFirstMessageBare = $"n={EscapeUsername(_username)},r={_clientNonce}";
 
-        // GS2 Header: n,, (no channel binding, no authzid)
-        // Vollständige Nachricht: n,,n=user,r=nonce
+        // GS2 header: n,, (no channel binding, no authzid)
+        // Complete message: n,,n=user,r=nonce
         var clientFirstMessage = $"n,,{_clientFirstMessageBare}";
 
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(clientFirstMessage));
     }
 
     /// <summary>
-    /// Schritt 2: Verarbeitet server-first-message und generiert client-final-message
+    /// Step 2: Processes the server-first-message and generates the client-final-message
     /// </summary>
     public string ProcessServerFirstMessage(string serverFirstMessageBase64)
     {
@@ -97,16 +97,16 @@ public sealed class SCRAMAuthenticator
         var iterationsStr = ExtractValue(_serverFirstMessage, "i");
 
         if (serverNonce == null || saltBase64 == null || iterationsStr == null)
-            throw new AuthenticationException($"Ungültige server-first-message: {_serverFirstMessage}");
+            throw new AuthenticationException($"Invalid server-first-message: {_serverFirstMessage}");
 
         // Verify nonce starts with client nonce
         if (!serverNonce.StartsWith(_clientNonce!))
-            throw new AuthenticationException("Server nonce enthält nicht den Client nonce - möglicher MITM-Angriff!");
+            throw new AuthenticationException("The server nonce does not contain the client nonce - possible MITM attack!");
 
         var salt = Convert.FromBase64String(saltBase64);
         var iterations = int.Parse(iterationsStr);
 
-        // Berechne SaltedPassword = Hi(password, salt, iterations)
+        // Compute SaltedPassword = Hi(password, salt, iterations)
         _saltedPassword = Hi(_password, salt, iterations);
 
         // ClientKey = HMAC(SaltedPassword, "Client Key")
@@ -137,7 +137,7 @@ public sealed class SCRAMAuthenticator
     }
 
     /// <summary>
-    /// Schritt 3: Verifiziert die server-final-message
+    /// Step 3: Verifies the server-final-message
     /// </summary>
     public bool VerifyServerFinalMessage(string serverFinalMessageBase64)
     {
@@ -147,21 +147,21 @@ public sealed class SCRAMAuthenticator
         if (serverFinalMessage.StartsWith("e="))
         {
             var error = ExtractValue(serverFinalMessage, "e");
-            throw new AuthenticationException($"SCRAM Fehler: {error}");
+            throw new AuthenticationException($"SCRAM error: {error}");
         }
 
         // Parse: v=serverSignature
         var serverSignatureBase64 = ExtractValue(serverFinalMessage, "v");
         if (serverSignatureBase64 == null)
-            throw new AuthenticationException($"Ungültige server-final-message: {serverFinalMessage}");
+            throw new AuthenticationException($"Invalid server-final-message: {serverFinalMessage}");
 
         var receivedSignature = Convert.FromBase64String(serverSignatureBase64);
 
-        // Berechne erwartete ServerSignature
+        // Compute the expected ServerSignature
         // ServerKey = HMAC(SaltedPassword, "Server Key")
         var serverKey = HmacCompute(_saltedPassword!, "Server Key");
 
-        // Rekonstruiere AuthMessage
+        // Reconstruct the AuthMessage
         var channelBinding = Convert.ToBase64String(Encoding.UTF8.GetBytes("n,,"));
         var serverNonce = ExtractValue(_serverFirstMessage!, "r");
         var clientFinalWithoutProof = $"c={channelBinding},r={serverNonce}";
@@ -178,7 +178,7 @@ public sealed class SCRAMAuthenticator
 
     private byte[] Hi(string password, byte[] salt, int iterations)
     {
-        // PBKDF2 mit SHA-1 oder SHA-256
+        // PBKDF2 with SHA-1 or SHA-256
         var hashName = _mechanism == SCRAMMechanism.ScramSha256
             ? HashAlgorithmName.SHA256
             : HashAlgorithmName.SHA1;
@@ -232,9 +232,9 @@ public sealed class SCRAMAuthenticator
 
     private static string? ExtractValue(string message, string key)
     {
-        // Verankert am Anfang oder hinter einem Komma: sonst trifft die Suche
-        // nach "i=" auch ein 'i=' innerhalb der Nonce oder des Salts (RFC 5802
-        // erlaubt dort jedes druckbare Zeichen ausser dem Komma).
+        // Anchored at the start or behind a comma: otherwise the search for
+        // "i=" also hits an 'i=' inside the nonce or the salt (RFC 5802 allows
+        // every printable character except the comma in there).
         var match = Regex.Match(message, $@"(?:^|,){key}=([^,]+)");
         return match.Success ? match.Groups[1].Value : null;
     }
@@ -248,8 +248,8 @@ public sealed class SCRAMAuthenticator
     }
 
     /// <summary>
-    /// RFC 5802, Abschnitt 5.1: Benutzername und Passwort gehen durch
-    /// SASLprep, bevor daraus ein Schlüssel wird.
+    /// RFC 5802, section 5.1: user name and password go through SASLprep
+    /// before a key is derived from them.
     /// </summary>
     private static string SaslPrep(string input)
         => Ratatoskr.SaslPrep.Prepare(input);
