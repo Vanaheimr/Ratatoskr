@@ -73,7 +73,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// eigenen Tests auch dann laufen lassen können, wenn niemand Jabber
         /// daneben ausgecheckt hat.
         /// </remarks>
-        private static readonly String SkriptPfad = Path.Combine("XEPs", "Orakel", "omemo_orakel.py");
+        private static readonly String SkriptPfad = Path.Combine("XEPs", "Oracle", "omemo_oracle.py");
 
         private static String? _grundFuerUeberspringen;
 
