@@ -24,33 +24,33 @@ using System.Text.RegularExpressions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// RFC 6120, Abschnitt 4.9: Ein Stream-Fehler ist immer endgültig für den
-/// Stream - der Server schliesst ihn unmittelbar danach.
+/// RFC 6120, section 4.9: a stream error is always final for the stream - the
+/// server closes it immediately afterwards.
 /// </summary>
 /// <param name="Condition">
-/// Die definierte Bedingung aus Abschnitt 4.9.3, etwa <c>conflict</c> oder
+/// The defined condition from section 4.9.3, such as <c>conflict</c> or
 /// <c>system-shutdown</c>.
 /// </param>
-/// <param name="Text">Optionaler, für Menschen gedachter Text.</param>
+/// <param name="Text">Optional text intended for humans.</param>
 public sealed record StreamError(string   Condition,
                                  string?  Text = null)
 {
 
-    /// <summary>Der Namespace der definierten Bedingungen.</summary>
+    /// <summary>The namespace of the defined conditions.</summary>
     public const string Namespace = "urn:ietf:params:xml:ns:xmpp-streams";
 
     /// <summary>
-    /// Lohnt ein erneuter Verbindungsversuch?
+    /// Is another connection attempt worth it?
     ///
-    /// Nur bei Bedingungen, die eine vorübergehende Lage beschreiben. Bei allem
-    /// anderen - falsche Zugangsdaten, verdrängte Resource, unbekannter Host,
-    /// Richtlinienverstoss - würde ein Reconnect denselben Fehler erneut
-    /// erzeugen und den Server sinnlos belasten.
+    /// Only for conditions that describe a temporary situation. For everything
+    /// else - wrong credentials, a displaced resource, an unknown host, a policy
+    /// violation - a reconnect would produce the same error again and burden the
+    /// server for nothing.
     ///
-    /// <c>see-other-host</c> gilt hier bewusst als nicht wiederholbar: der
-    /// Server nennt eine andere Adresse, und solange die nicht ausgewertet wird
-    /// (RFC 6120, Abschnitt 4.9.3.16), liefe ein Reconnect gegen dieselbe
-    /// Adresse in eine Schleife.
+    /// <c>see-other-host</c> deliberately counts as non-retryable here: the
+    /// server names a different address, and as long as that is not evaluated
+    /// (RFC 6120, section 4.9.3.16), a reconnect against the same address would
+    /// run into a loop.
     /// </summary>
     public bool IsRecoverable
         => Condition is "connection-timeout"
@@ -62,16 +62,16 @@ public sealed record StreamError(string   Condition,
                      or "undefined-condition";
 
     /// <summary>
-    /// Liest einen <c>&lt;stream:error/&gt;</c>-Rahmen.
+    /// Reads a <c>&lt;stream:error/&gt;</c> frame.
     /// </summary>
-    /// <returns>False, wenn die Stanza kein Stream-Fehler ist.</returns>
+    /// <returns>False if the stanza is not a stream error.</returns>
     public static bool TryParse(string stanza, out StreamError? error)
     {
 
         error = null;
 
-        // Das Präfix ist nicht vorgeschrieben - üblich ist stream:, möglich ist
-        // aber jedes an den Streams-Namespace gebundene Präfix.
+        // The prefix is not prescribed - stream: is customary, but any prefix
+        // bound to the streams namespace is possible.
         if (!Regex.IsMatch(stanza, @"^\s*<(?:[a-zA-Z][\w\-]*:)?error\b"))
             return false;
 

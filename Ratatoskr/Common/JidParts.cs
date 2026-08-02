@@ -18,34 +18,34 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die drei Teile eines JIDs nach RFC 7622, jeder für sich vorbereitet.
+/// The three parts of a JID per RFC 7622, each prepared on its own.
 /// </summary>
 /// <remarks>
-/// Nur der Domainpart ist Pflicht: <c>example.com</c> ist ein gültiger JID,
-/// <c>juliet@</c> und <c>/foobar</c> sind es nicht.
+/// Only the domainpart is mandatory: <c>example.com</c> is a valid JID,
+/// <c>juliet@</c> and <c>/foobar</c> are not.
 ///
-/// Die Teile werden verschieden behandelt, und genau das ist der Grund, warum
-/// sie hier einzeln stehen statt als eine Zeichenkette: Local- und Domainpart
-/// werden kleingeschrieben und sind damit unabhängig von der Schreibweise,
-/// der Resourcepart nicht. <c>alice@example.com/Handy</c> und
-/// <c>alice@example.com/handy</c> sind zwei verschiedene Geräte.
+/// The parts are treated differently, and that is precisely why they stand here
+/// separately instead of as one string: local and domain part are lowercased
+/// and are therefore independent of spelling, the resourcepart is not.
+/// <c>alice@example.com/Phone</c> and <c>alice@example.com/phone</c> are two
+/// different devices.
 /// </remarks>
-/// <param name="Localpart">Der Teil vor dem <c>@</c>, oder null.</param>
-/// <param name="Domainpart">Der Teil dahinter - das einzige Pflichtstück.</param>
-/// <param name="Resourcepart">Der Teil hinter dem ersten <c>/</c>, oder null.</param>
+/// <param name="Localpart">The part before the <c>@</c>, or null.</param>
+/// <param name="Domainpart">The part behind it - the only mandatory piece.</param>
+/// <param name="Resourcepart">The part behind the first <c>/</c>, or null.</param>
 public sealed record JidParts(String?  Localpart,
                               String   Domainpart,
                               String?  Resourcepart)
 {
 
-    /// <summary>Der Bare-JID: <c>localpart@domainpart</c> oder nur die Domain.</summary>
+    /// <summary>The bare JID: <c>localpart@domainpart</c>, or just the domain.</summary>
     public String Bare
 
         => Localpart is null
                ? Domainpart
                : $"{Localpart}@{Domainpart}";
 
-    /// <summary>Der vollständige JID in seiner vorbereiteten Form.</summary>
+    /// <summary>The complete JID in its prepared form.</summary>
     public override String ToString()
 
         => Resourcepart is null

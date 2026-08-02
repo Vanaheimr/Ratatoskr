@@ -18,12 +18,12 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Escaping von XML-Sonderzeichen für Attributwerte und Textinhalte.
+/// Escaping of XML special characters, for attribute values and text content.
 ///
-/// Ersetzt die zuvor in sechs Klassen duplizierten privaten XmlEscape-Helfer.
-/// Die alten Kopien in PingManager, DiscoManager und ChatMarkers haben das
-/// doppelte Anführungszeichen nicht escaped - das war für die intern erzeugten
-/// Stanzas (alle Attribute mit single quotes) unkritisch, aber inkonsistent.
+/// Replaces the private XmlEscape helpers that used to be duplicated across six
+/// classes. The old copies in PingManager, DiscoManager and ChatMarkers did not
+/// escape the double quote - harmless for the stanzas built in here (all
+/// attributes use single quotes), but inconsistent.
 /// </summary>
 public static class XmlEscaping
 {
@@ -35,15 +35,14 @@ public static class XmlEscaping
             .Replace("\"", "&quot;");
 
     /// <summary>
-    /// Der Rückweg - für die Stellen, die eine Stanza mit einem Muster lesen
-    /// statt sie zu zerlegen.
+    /// The way back - for the places that read a stanza with a pattern instead
+    /// of taking it apart.
     /// </summary>
     /// <remarks>
-    /// <b>Das kaufmännische Und zuletzt</b>, und das ist die ganze Sorgfalt
-    /// hier: Wer es zuerst ersetzt, macht aus <c>&amp;amp;lt;</c> ein
-    /// <c>&lt;</c> - aus einem Text, der von einem Zeichen handelt, wird ein
-    /// Zeichen. Ein XML-Leser hat dieses Problem nicht; ein Muster über den
-    /// rohen Rahmen schon.
+    /// <b>The ampersand last</b>, and that is the whole of the care needed
+    /// here: whoever replaces it first turns <c>&amp;amp;lt;</c> into a
+    /// <c>&lt;</c> - a text about a character becomes the character. An XML
+    /// reader does not have this problem; a pattern over the raw frame does.
     /// </remarks>
     public static string Unescape(string text) =>
         text.Replace("&lt;",   "<")

@@ -18,22 +18,22 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die vier Werte, die das <c>type</c>-Attribut einer IQ-Stanza annehmen darf
-/// (RFC 6120, Abschnitt 8.2.3, Regel 2).
+/// The four values the <c>type</c> attribute of an IQ stanza may take
+/// (RFC 6120, section 8.2.3, rule 2).
 /// </summary>
 /// <remarks>
-/// Hier und nicht bei Server oder Client, weil die Regel beide angeht: Sie
-/// verpflichtet „the recipient <b>or an intermediate router</b>", und dieses
-/// Projekt hat von jedem einen. Zwei Aufzählungen könnten auseinanderlaufen,
-/// und die Wirkung wäre still - ein Wert, den die eine Seite kennt und die
-/// andere nicht, käme je nach Weg durch oder nicht.
+/// Here and not with the server or the client, because the rule concerns both:
+/// it binds "the recipient <b>or an intermediate router</b>", and this project
+/// has one of each. Two enumerations could drift apart, and the effect would be
+/// silent - a value one side knows and the other does not would get through or
+/// not, depending on the route.
 /// </remarks>
 public static class IqTypes
 {
 
     /// <summary>
-    /// Ist das ein vorgesehener Wert? <c>null</c> ist keiner: Das Attribut ist
-    /// nach Regel 2 zwingend.
+    /// Is that one of the foreseen values? <c>null</c> is not: the attribute is
+    /// mandatory under rule 2.
     /// </summary>
     public static Boolean IsKnown(String? type)
 

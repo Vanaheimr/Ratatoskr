@@ -18,16 +18,16 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Zeichenkette ist kein JID nach RFC 7622.
+/// The string is not a JID per RFC 7622.
 /// </summary>
 /// <remarks>
-/// Auf dem Draht entspricht dem ein <c>&lt;jid-malformed/&gt;</c> (RFC 6120,
-/// Abschnitt 8.3.3.8).
+/// On the wire this corresponds to a <c>&lt;jid-malformed/&gt;</c> (RFC 6120,
+/// section 8.3.3.8).
 /// </remarks>
 public class JidFormatException : Exception
 {
 
-    /// <summary>Die beanstandete Zeichenkette.</summary>
+    /// <summary>The string that was objected to.</summary>
     public String Jid { get; }
 
     public JidFormatException(String jid, String message)

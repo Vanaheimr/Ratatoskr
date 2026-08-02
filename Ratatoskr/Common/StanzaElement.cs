@@ -18,33 +18,32 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Der Name des äussersten Elements eines Rahmens.
+/// The name of the outermost element of a frame.
 /// </summary>
 /// <remarks>
-/// Klingt nach einer Kleinigkeit und ist der Unterschied zwischen einer Weiche,
-/// die entscheidet, und einer, die rät. Ein Vergleich mit
-/// <c>StartsWith("&lt;iq")</c> trifft auch <c>&lt;iqbogus/&gt;</c>,
-/// <c>StartsWith("&lt;presence")</c> auch <c>&lt;presence-probe/&gt;</c> und
-/// <c>StartsWith("&lt;open")</c> auch <c>&lt;opencast/&gt;</c>. Der Name endet
-/// beim ersten Zeichen, das nicht mehr zu ihm gehört, und genau bis dorthin ist
-/// zu lesen.
+/// Sounds like a detail, and is the difference between a dispatch that decides
+/// and one that guesses. A comparison with <c>StartsWith("&lt;iq")</c> also
+/// matches <c>&lt;iqbogus/&gt;</c>, <c>StartsWith("&lt;presence")</c> also
+/// <c>&lt;presence-probe/&gt;</c>, and <c>StartsWith("&lt;open")</c> also
+/// <c>&lt;opencast/&gt;</c>. The name ends at the first character that no
+/// longer belongs to it, and exactly that far is what has to be read.
 ///
-/// Diese Lesung stand schon im Haus — in
-/// <c>StreamManagementManager.IsCountableStanza</c>, wo sie beantwortet, ob ein
-/// Rahmen für XEP-0198 mitzählt. Dass die Weiche daneben riet, lag nicht an
-/// fehlendem Wissen, sondern daran, dass es an der falschen Stelle lag.
+/// This reading already existed in the house — in
+/// <c>StreamManagementManager.IsCountableStanza</c>, where it answers whether a
+/// frame counts for XEP-0198. That the dispatch next to it was guessing was not
+/// for lack of knowledge, but because the knowledge sat in the wrong place.
 /// </remarks>
 public static class StanzaElement
 {
 
     /// <summary>
-    /// Der Name des äussersten Elements, ohne Namensraum-Präfix — oder
-    /// <c>null</c>, wenn der Rahmen mit keinem Element beginnt.
+    /// The name of the outermost element, without a namespace prefix — or
+    /// <c>null</c> if the frame does not begin with an element.
     /// </summary>
     /// <remarks>
-    /// Das Präfix fällt weg, weil es den Typ nicht ändert: RFC 6120, Abschnitt
-    /// 4.8.1 legt den Namensraum fest und nicht die Abkürzung, unter der er
-    /// angesprochen wird. <c>&lt;client:iq/&gt;</c> ist ein <c>iq</c>.
+    /// The prefix is dropped because it does not change the type: RFC 6120,
+    /// section 4.8.1 fixes the namespace and not the abbreviation it is
+    /// addressed by. <c>&lt;client:iq/&gt;</c> is an <c>iq</c>.
     /// </remarks>
     public static String? NameOf(String xml)
     {
@@ -73,25 +72,25 @@ public static class StanzaElement
         if (i == start)
             return null;
 
-        var name    = xml[start..i];
-        var doppel  = name.LastIndexOf(':');
+        var name   = xml[start..i];
+        var colon  = name.LastIndexOf(':');
 
-        return doppel >= 0
-                   ? name[(doppel + 1)..]
+        return colon >= 0
+                   ? name[(colon + 1)..]
                    : name;
 
     }
 
     /// <summary>
-    /// Heisst das äusserste Element so?
+    /// Is the outermost element called that?
     /// </summary>
     public static Boolean Is(String xml, String name)
 
         => String.Equals(NameOf(xml), name, StringComparison.Ordinal);
 
     /// <summary>
-    /// Ist das eine der drei Stanzas aus RFC 6120, Abschnitt 8.1 —
-    /// <c>message</c>, <c>presence</c> oder <c>iq</c>?
+    /// Is that one of the three stanzas from RFC 6120, section 8.1 —
+    /// <c>message</c>, <c>presence</c> or <c>iq</c>?
     /// </summary>
     public static Boolean IsStanza(String xml)
 

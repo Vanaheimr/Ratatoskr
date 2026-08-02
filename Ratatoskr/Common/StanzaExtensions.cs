@@ -24,19 +24,20 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Zugriff auf Stanza-Bestandteile über den XML-Parser statt über Textmuster.
+/// Access to the parts of a stanza through the XML parser instead of through
+/// text patterns.
 ///
-/// Gesucht wird bewusst nur über den lokalen Namen, ohne den Namespace zu
-/// prüfen: Server binden <c>jabber:client</c> mal als Default-Namespace, mal
-/// über ein Präfix, und manche lassen ihn in den Kindelementen ganz weg. Für
-/// die Bestandteile einer Stanza - <c>from</c>, <c>body</c>, <c>show</c> und
-/// so weiter - ist der lokale Name eindeutig genug.
+/// The search deliberately goes by local name only, without checking the
+/// namespace: servers bind <c>jabber:client</c> sometimes as the default
+/// namespace, sometimes through a prefix, and some leave it out of the child
+/// elements entirely. For the parts of a stanza - <c>from</c>, <c>body</c>,
+/// <c>show</c> and so on - the local name is unambiguous enough.
 /// </summary>
 public static class StanzaExtensions
 {
 
     /// <summary>
-    /// Der Wert eines Attributs, unabhängig von einem Präfix.
+    /// The value of an attribute, independent of any prefix.
     /// </summary>
     public static string? Attr(this XElement element, string name)
         => element.Attributes()
@@ -44,24 +45,23 @@ public static class StanzaExtensions
                   ?.Value;
 
     /// <summary>
-    /// Das erste <b>direkte</b> Kindelement mit diesem Namen.
+    /// The first <b>direct</b> child element with this name.
     ///
-    /// Dass nur direkte Kinder zählen, ist der eigentliche Punkt: eine nach
-    /// XEP-0297 weitergeleitete Nachricht bringt ihren eigenen
-    /// <c>&lt;body/&gt;</c> mit, und der darf den der äusseren Stanza nicht
-    /// verdrängen.
+    /// That only direct children count is the actual point: a message forwarded
+    /// per XEP-0297 brings its own <c>&lt;body/&gt;</c> along, and that one must
+    /// not displace the outer stanza's.
     /// </summary>
     public static XElement? Child(this XElement element, string name)
         => element.Elements()
                   .FirstOrDefault(child => child.Name.LocalName == name);
 
     /// <summary>
-    /// Das erste direkte Kindelement mit diesem Namen aus diesem Namespace.
+    /// The first direct child element with this name from this namespace.
     ///
-    /// Für Nutzlasten die richtige Wahl: welche Erweiterung gemeint ist, sagt
-    /// erst der Namespace. <c>&lt;query/&gt;</c> gibt es im Roster, in
-    /// disco#info und in disco#items, <c>&lt;received/&gt;</c> in XEP-0184 und
-    /// XEP-0333.
+    /// The right choice for payloads: which extension is meant is only said by
+    /// the namespace. There is a <c>&lt;query/&gt;</c> in the roster, in
+    /// disco#info and in disco#items, and a <c>&lt;received/&gt;</c> in XEP-0184
+    /// and XEP-0333.
     /// </summary>
     public static XElement? Child(this XElement element, string namespaceName, string name)
         => element.Elements()
@@ -69,7 +69,7 @@ public static class StanzaExtensions
                                            child.Name.LocalName     == name);
 
     /// <summary>
-    /// Alle direkten Kindelemente mit diesem Namen aus diesem Namespace.
+    /// All direct child elements with this name from this namespace.
     /// </summary>
     public static IEnumerable<XElement> Children(this XElement element, string namespaceName, string name)
         => element.Elements()
@@ -77,14 +77,14 @@ public static class StanzaExtensions
                                   child.Name.LocalName     == name);
 
     /// <summary>
-    /// Der Textinhalt des ersten direkten Kindelements mit diesem Namen, mit
-    /// aufgelösten Entities. Null, wenn es das Element nicht gibt.
+    /// The text content of the first direct child element with this name, with
+    /// entities resolved. Null if there is no such element.
     /// </summary>
     public static string? ChildValue(this XElement element, string name)
         => element.Child(name)?.Value;
 
     /// <summary>
-    /// Trägt die Stanza irgendwo ein Element aus diesem Namespace?
+    /// Does the stanza carry an element from this namespace anywhere?
     /// </summary>
     public static bool HasNamespace(this XElement element, string namespaceName)
         => element.DescendantsAndSelf()

@@ -18,68 +18,67 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Der Namensraum, in dem eine Stanza steht - und wie er beim Übergang von
-/// einem Stream auf einen anderen mitwandert.
+/// The namespace a stanza sits in - and how it travels along when moving from
+/// one stream to another.
 /// </summary>
 /// <remarks>
-/// RFC 6120, Abschnitt 4.8.1 gibt jedem Stream einen Content-Namensraum:
-/// <c>jabber:client</c> auf der Client-Verbindung, <c>jabber:server</c>
-/// zwischen Servern. Über TCP steht er einmal am
-/// <c>&lt;stream:stream&gt;</c> und gilt für alles darin; eine Stanza selbst
-/// trägt ihn dort nie.
+/// RFC 6120, section 4.8.1 gives every stream a content namespace:
+/// <c>jabber:client</c> on the client connection, <c>jabber:server</c> between
+/// servers. Over TCP it appears once on the <c>&lt;stream:stream&gt;</c> and
+/// applies to everything inside; a stanza itself never carries it there.
 ///
-/// Zwei Stellen brechen diese Bequemlichkeit auf:
+/// Two places break that convenience open:
 ///
 /// <list type="bullet">
 ///   <item>
-///     <b>WebSocket</b> (RFC 7395, Abschnitt 3.3.3) kennt kein umschliessendes
-///     Element. Jeder Rahmen muss für sich lesbar sein, „complete with all
-///     relevant namespace and language declarations" - eine Stanza ohne eigene
-///     Deklaration steht dort in <i>keinem</i> Namensraum.
+///     <b>WebSocket</b> (RFC 7395, section 3.3.3) has no enclosing element.
+///     Every frame has to be readable on its own, "complete with all relevant
+///     namespace and language declarations" - a stanza without a declaration of
+///     its own sits in <i>no</i> namespace there.
 ///   </item>
 ///   <item>
-///     <b>Die Domain-Grenze.</b> Was von einem Client hereinkommt, steht in
-///     <c>jabber:client</c>; hinaus geht es auf einem Stream, der
-///     <c>jabber:server</c> spricht. Trägt die Stanza ihren alten Namensraum
-///     mit, ist sie auf dem neuen Stream keine gültige Stanza mehr.
+///     <b>The domain boundary.</b> What comes in from a client sits in
+///     <c>jabber:client</c>; out it goes on a stream that speaks
+///     <c>jabber:server</c>. If the stanza carries its old namespace along, it
+///     is no longer a valid stanza on the new stream.
 ///   </item>
 /// </list>
 ///
-/// Beides fiel gegen den eigenen Server nie auf, weil er Stanzas am lokalen
-/// Namen erkennt und den Namensraum gar nicht ansieht. Prosody sieht ihn an:
-/// ein Bind-IQ ohne Namensraum beantwortete es mit
-/// <c>&lt;unsupported-stanza-type/&gt;</c>, ein <c>jabber:client</c>-IQ auf
-/// dem S2S-Stream mit einem Fehler.
+/// Neither ever showed up against our own server, because it recognises stanzas
+/// by their local name and never looks at the namespace at all. Prosody does
+/// look: a bind IQ without a namespace it answered with
+/// <c>&lt;unsupported-stanza-type/&gt;</c>, and a <c>jabber:client</c> IQ on the
+/// S2S stream with an error.
 /// </remarks>
 internal static class StanzaNamespace
 {
 
-    /// <summary>Der Content-Namensraum der Client-Verbindung.</summary>
+    /// <summary>The content namespace of the client connection.</summary>
     public const String Client = "jabber:client";
 
-    /// <summary>Der Content-Namensraum zwischen Servern.</summary>
+    /// <summary>The content namespace between servers.</summary>
     public const String Server = "jabber:server";
 
 
     #region Apply(xml, ns)
 
     /// <summary>
-    /// Setzt den Namensraum einer Stanza auf <paramref name="ns"/>.
+    /// Sets the namespace of a stanza to <paramref name="ns"/>.
     /// </summary>
     /// <remarks>
-    /// Angefasst werden nur <c>message</c>, <c>presence</c> und <c>iq</c>.
-    /// Nonzas bringen ihren Namensraum selbst mit und behalten ihn - ein
-    /// <c>&lt;enable/&gt;</c> nach <c>jabber:client</c> umzuhängen machte es
-    /// unlesbar.
+    /// Only <c>message</c>, <c>presence</c> and <c>iq</c> are touched. Nonzas
+    /// bring their namespace along themselves and keep it - re-hanging an
+    /// <c>&lt;enable/&gt;</c> onto <c>jabber:client</c> would make it
+    /// unreadable.
     ///
-    /// Angesehen wird ausschliesslich das Start-Tag des Wurzelelements. Ein
-    /// blosses „steht irgendwo ein xmlns" fiele auf das erste Kindelement
-    /// herein - beim Bind-IQ etwa auf
-    /// <c>&lt;bind xmlns='…xmpp-bind'/&gt;</c>, und genau die Stanza bliebe
-    /// dann unbehandelt.
+    /// What is inspected is exclusively the start tag of the root element. A
+    /// mere "there is an xmlns somewhere" would fall for the first child
+    /// element - with the bind IQ, for instance, for
+    /// <c>&lt;bind xmlns='…xmpp-bind'/&gt;</c>, and exactly that stanza would
+    /// then go untreated.
     ///
-    /// Steht der gewünschte Namensraum schon da, kommt die Zeichenkette
-    /// unverändert zurück - auch in ihrer Schreibweise der Anführungszeichen.
+    /// If the desired namespace is already there, the string comes back
+    /// unchanged - including its choice of quotation marks.
     /// </remarks>
     public static String Apply(String xml, String ns)
     {
@@ -95,24 +94,24 @@ internal static class StanzaNamespace
             return xml;
 
         i++;
-        var nameAnfang = i;
+        var nameStart = i;
 
         while (i < xml.Length &&
                (Char.IsLetterOrDigit(xml[i]) || xml[i] == '-' || xml[i] == '_' || xml[i] == ':'))
             i++;
 
-        var nameEnde = i;
+        var nameEnd = i;
 
-        if (xml[nameAnfang..nameEnde] is not ("message" or "presence" or "iq"))
+        if (xml[nameStart..nameEnd] is not ("message" or "presence" or "iq"))
             return xml;
 
-        // Das Start-Tag durchgehen und dabei Anführungszeichen beachten: ein
-        // Attributwert darf ein '>' enthalten.
+        // Walk the start tag, minding quotation marks: an attribute value may
+        // contain a '>'.
         var quote           = '\0';
-        var attributAnfang  = -1;
-        var attributEnde    = -1;
-        var wertAnfang      = -1;
-        var wertEnde        = -1;
+        var attributeStart  = -1;
+        var attributeEnd    = -1;
+        var valueStart      = -1;
+        var valueEnd        = -1;
 
         while (i < xml.Length)
         {
@@ -127,10 +126,10 @@ internal static class StanzaNamespace
 
                     quote = '\0';
 
-                    if (attributAnfang >= 0 && wertEnde < 0)
+                    if (attributeStart >= 0 && valueEnd < 0)
                     {
-                        wertEnde      = i;
-                        attributEnde  = i + 1;
+                        valueEnd        = i;
+                        attributeEnd    = i + 1;
                         break;
                     }
 
@@ -143,43 +142,43 @@ internal static class StanzaNamespace
 
                 quote = c;
 
-                if (attributAnfang >= 0 && wertAnfang < 0)
-                    wertAnfang = i + 1;
+                if (attributeStart >= 0 && valueStart < 0)
+                    valueStart = i + 1;
 
             }
 
             else if (c == '>')
                 break;
 
-            // Genau "xmlns", nicht "xmlns:irgendwas" - ein Präfix deklariert
-            // keinen Standard-Namensraum und geht diese Funktion nichts an.
+            // Exactly "xmlns", not "xmlns:something" - a prefix declares no
+            // default namespace and is none of this function's business.
             else if (c == 'x' &&
-                     attributAnfang < 0 &&
+                     attributeStart < 0 &&
                      Char.IsWhiteSpace(xml[i - 1]) &&
                      xml.AsSpan(i).StartsWith("xmlns", StringComparison.Ordinal) &&
                      i + 5 < xml.Length &&
                      (xml[i + 5] == '=' || Char.IsWhiteSpace(xml[i + 5])))
             {
-                attributAnfang = i;
+                attributeStart = i;
             }
 
             i++;
 
         }
 
-        // Kein Namensraum vorhanden: hinter dem Elementnamen einsetzen.
-        if (attributAnfang < 0 || wertAnfang < 0 || wertEnde < 0)
-            return String.Concat(xml.AsSpan(0, nameEnde),
+        // No namespace present: insert one behind the element name.
+        if (attributeStart < 0 || valueStart < 0 || valueEnd < 0)
+            return String.Concat(xml.AsSpan(0, nameEnd),
                                  $" xmlns='{ns}'",
-                                 xml.AsSpan(nameEnde));
+                                 xml.AsSpan(nameEnd));
 
-        // Schon der richtige: nichts anfassen, auch nicht die Anführungszeichen.
-        if (xml.AsSpan(wertAnfang, wertEnde - wertAnfang).SequenceEqual(ns))
+        // Already the right one: touch nothing, not even the quotation marks.
+        if (xml.AsSpan(valueStart, valueEnd - valueStart).SequenceEqual(ns))
             return xml;
 
-        return String.Concat(xml.AsSpan(0, attributAnfang),
+        return String.Concat(xml.AsSpan(0, attributeStart),
                              $"xmlns='{ns}'",
-                             xml.AsSpan(attributEnde));
+                             xml.AsSpan(attributeEnd));
 
     }
 

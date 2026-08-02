@@ -18,25 +18,24 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// RFC 6120, Abschnitt 8.3.2: Die Fehlerart sagt dem Absender, wie er
-/// reagieren soll.
+/// RFC 6120, section 8.3.2: the error type tells the sender how to react.
 /// </summary>
 public enum StanzaErrorType
 {
 
-    /// <summary>Erneut versuchen, nachdem eine Authentifizierung erfolgt ist.</summary>
+    /// <summary>Retry after authentication has taken place.</summary>
     Auth,
 
-    /// <summary>Endgültig - dieselbe Anfrage nicht wiederholen.</summary>
+    /// <summary>Final - do not repeat the same request.</summary>
     Cancel,
 
-    /// <summary>Nur eine Warnung; die Verarbeitung darf fortgesetzt werden.</summary>
+    /// <summary>A warning only; processing may continue.</summary>
     Continue,
 
-    /// <summary>Erneut versuchen, nachdem die Daten korrigiert wurden.</summary>
+    /// <summary>Retry after the data has been corrected.</summary>
     Modify,
 
-    /// <summary>Unverändert erneut versuchen, aber später.</summary>
+    /// <summary>Retry unchanged, but later.</summary>
     Wait
 
 }

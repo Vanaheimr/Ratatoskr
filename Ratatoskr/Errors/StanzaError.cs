@@ -24,19 +24,19 @@ using System.Text.RegularExpressions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// RFC 6120, Abschnitt 8.3: Der Inhalt eines <c>&lt;error/&gt;</c>-Elements
-/// aus einer Stanza vom Typ <c>error</c>.
+/// RFC 6120, section 8.3: the content of an <c>&lt;error/&gt;</c> element from a
+/// stanza of type <c>error</c>.
 /// </summary>
-/// <param name="Type">Die Fehlerart; bestimmt, ob und wie wiederholt werden darf.</param>
+/// <param name="Type">The error type; determines whether and how a retry is allowed.</param>
 /// <param name="Condition">
-/// Die definierte Bedingung aus Abschnitt 8.3.3, etwa <c>service-unavailable</c>
-/// oder <c>item-not-found</c>. Bleibt als Zeichenkette erhalten, damit auch
-/// anwendungsspezifische und künftige Bedingungen unverfälscht durchkommen.
+/// The defined condition from section 8.3.3, such as <c>service-unavailable</c>
+/// or <c>item-not-found</c>. Kept as a string, so that application-specific and
+/// future conditions come through unaltered as well.
 /// </param>
-/// <param name="Text">Optionaler, für Menschen gedachter Text.</param>
+/// <param name="Text">Optional text intended for humans.</param>
 /// <param name="By">
-/// Optional: wer den Fehler erzeugt hat. Bei einem Fehler von einem Server
-/// im Zustellweg ist das nicht zwingend der ursprüngliche Empfänger.
+/// Optional: who produced the error. For an error from a server along the
+/// delivery path that is not necessarily the original recipient.
 /// </param>
 public sealed record StanzaError(StanzaErrorType  Type,
                                  string           Condition,
@@ -44,13 +44,13 @@ public sealed record StanzaError(StanzaErrorType  Type,
                                  string?          By    = null)
 {
 
-    /// <summary>Der Namespace der definierten Bedingungen.</summary>
+    /// <summary>The namespace of the defined conditions.</summary>
     public const string Namespace = "urn:ietf:params:xml:ns:xmpp-stanzas";
 
     /// <summary>
-    /// Liest das <c>&lt;error/&gt;</c>-Element aus einer Stanza.
+    /// Reads the <c>&lt;error/&gt;</c> element out of a stanza.
     /// </summary>
-    /// <returns>False, wenn die Stanza kein error-Element enthält.</returns>
+    /// <returns>False if the stanza contains no error element.</returns>
     public static bool TryParse(string stanza, out StanzaError? error)
     {
 
@@ -65,9 +65,9 @@ public sealed record StanzaError(StanzaErrorType  Type,
 
         var xml = errorElement.Value;
 
-        // RFC 6120, 8.3.2: Das type-Attribut ist Pflicht. Fehlt es oder ist es
-        // unbekannt, wird 'cancel' angenommen - die vorsichtigste Annahme, denn
-        // sie führt nicht zu einem Wiederholungsversuch.
+        // RFC 6120, 8.3.2: the type attribute is mandatory. If it is missing or
+        // unknown, 'cancel' is assumed - the most cautious assumption, because
+        // it does not lead to a retry.
         var type = ParseType(Attribute(xml, "type"));
 
         error = new StanzaError(type,
@@ -89,13 +89,13 @@ public sealed record StanzaError(StanzaErrorType  Type,
            };
 
     /// <summary>
-    /// Die definierte Bedingung ist das erste Kindelement im Stanzas-Namespace,
-    /// das nicht <c>text</c> heisst.
+    /// The defined condition is the first child element in the stanzas namespace
+    /// that is not called <c>text</c>.
     /// </summary>
     private static string ParseCondition(string errorXml)
     {
 
-        // Regulärer Fall: die Bedingung trägt den Namespace selbst.
+        // The regular case: the condition carries the namespace itself.
         foreach (Match m in Regex.Matches(errorXml,
                                           @"<([a-zA-Z][\w\-]*)\s[^>]*xmlns\s*=\s*['""]" +
                                           Regex.Escape(Namespace) + @"['""]"))
@@ -104,8 +104,8 @@ public sealed record StanzaError(StanzaErrorType  Type,
                 return m.Groups[1].Value;
         }
 
-        // Rückfall für Server, die den Namespace am error-Element setzen:
-        // das erste Kindelement, das nicht 'text' ist.
+        // Fallback for servers that set the namespace on the error element:
+        // the first child element that is not 'text'.
         foreach (Match m in Regex.Matches(errorXml, @"<([a-zA-Z][\w\-]*)[\s/>]"))
         {
             var name = m.Groups[1].Value;
@@ -113,7 +113,7 @@ public sealed record StanzaError(StanzaErrorType  Type,
                 return name;
         }
 
-        // RFC 6120, 8.3.3: 'undefined-condition' ist der vorgesehene Rückfall.
+        // RFC 6120, 8.3.3: 'undefined-condition' is the prescribed fallback.
         return "undefined-condition";
 
     }

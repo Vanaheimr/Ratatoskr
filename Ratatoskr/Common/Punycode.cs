@@ -24,20 +24,20 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Punycode nach RFC 3492: die Kodierung, mit der ein Domain-Label aus Unicode
-/// in ASCII passt.
+/// Punycode per RFC 3492: the encoding that makes a Unicode domain label fit
+/// into ASCII.
 /// </summary>
 /// <remarks>
-/// <b>Selbst gerechnet und nicht von der Laufzeit geholt</b>, obwohl .NET mit
-/// <c>IdnMapping</c> etwas Ähnliches mitbringt. Der Grund ist nicht Stolz:
-/// <c>IdnMapping</c> bringt auf .NET seine eigene Auslegung mit (UTS 46 über
-/// ICU), die abbildet, wo IDNA2008 ablehnt - etwa Grossbuchstaben. Wer die
-/// Gültigkeit eines Labels prüfen will, darf die Prüfung nicht an etwas
-/// abgeben, das vorher zurechtbiegt.
+/// <b>Computed here and not taken from the runtime</b>, although .NET brings
+/// something similar along in <c>IdnMapping</c>. The reason is not pride:
+/// on .NET, <c>IdnMapping</c> brings its own interpretation (UTS 46 via ICU),
+/// which maps where IDNA2008 rejects - uppercase letters, for instance. Whoever
+/// wants to check the validity of a label must not hand that check to something
+/// that straightens things out beforehand.
 ///
-/// Die Rechnung selbst ist der Bootstring-Algorithmus aus Abschnitt 6, mit den
-/// Parametern aus Abschnitt 5. Geprüft wird sie gegen die elf Beispiele aus
-/// Abschnitt 7.1 - in beide Richtungen.
+/// The computation itself is the bootstring algorithm from section 6, with the
+/// parameters from section 5. It is checked against the eleven examples from
+/// section 7.1 - in both directions.
 /// </remarks>
 public static class Punycode
 {
@@ -53,7 +53,7 @@ public static class Punycode
     private const Int32  InitialN     = 0x80;
     private const Char   Delimiter    = '-';
 
-    /// <summary>Die grösste Codepoint-Zahl, die Unicode kennt.</summary>
+    /// <summary>The largest code point number Unicode knows.</summary>
     private const Int32  MaxCodePoint = 0x10FFFF;
 
     #endregion
@@ -61,8 +61,7 @@ public static class Punycode
     #region Decode(Punycode)
 
     /// <summary>
-    /// Dekodiert ein Punycode-Label - oder gibt <c>null</c> zurück, wenn es
-    /// keines ist.
+    /// Decodes a Punycode label - or returns <c>null</c> if it is not one.
     /// </summary>
     public static String? Decode(String Punycode)
     {
@@ -70,34 +69,34 @@ public static class Punycode
         if (Punycode.Length == 0)
             return null;
 
-        var ausgabe    = new List<Int32>();
+        var output     = new List<Int32>();
         var n          = InitialN;
         var i          = 0;
         var bias       = InitialBias;
 
-        // Der letzte Trenner trennt den ASCII-Teil vom Rest (Abschnitt 6.2).
-        var trenner    = Punycode.LastIndexOf(Delimiter);
+        // The last delimiter separates the ASCII part from the rest (section 6.2).
+        var delimiter  = Punycode.LastIndexOf(Delimiter);
 
-        if (trenner > 0)
+        if (delimiter > 0)
         {
 
-            foreach (var zeichen in Punycode[..trenner])
+            foreach (var character in Punycode[..delimiter])
             {
 
-                if (zeichen >= 0x80)
+                if (character >= 0x80)
                     return null;
 
-                ausgabe.Add(zeichen);
+                output.Add(character);
 
             }
 
         }
 
-        for (var index = trenner < 0 ? 0 : trenner + 1; index < Punycode.Length; )
+        for (var index = delimiter < 0 ? 0 : delimiter + 1; index < Punycode.Length; )
         {
 
-            var altesI  = i;
-            var gewicht = 1;
+            var previousI = i;
+            var weight    = 1;
 
             for (var k = Base; ; k += Base)
             {
@@ -105,50 +104,50 @@ public static class Punycode
                 if (index >= Punycode.Length)
                     return null;
 
-                var ziffer = Digit(Punycode[index++]);
+                var digit = Digit(Punycode[index++]);
 
-                if (ziffer < 0)
+                if (digit < 0)
                     return null;
 
-                // Überlauf: Ein Label, das sich nur mit mehr als 31 Bit
-                // schreiben liesse, ist keines.
-                if (ziffer > (Int32.MaxValue - i) / gewicht)
+                // Overflow: a label that could only be written with more than
+                // 31 bits is not one.
+                if (digit > (Int32.MaxValue - i) / weight)
                     return null;
 
-                i += ziffer * gewicht;
+                i += digit * weight;
 
                 var t = k <= bias            ? TMin
                             : k >= bias + TMax ? TMax
                             : k - bias;
 
-                if (ziffer < t)
+                if (digit < t)
                     break;
 
-                if (gewicht > Int32.MaxValue / (Base - t))
+                if (weight > Int32.MaxValue / (Base - t))
                     return null;
 
-                gewicht *= Base - t;
+                weight *= Base - t;
 
             }
 
-            bias = Adapt(i - altesI, ausgabe.Count + 1, altesI == 0);
+            bias = Adapt(i - previousI, output.Count + 1, previousI == 0);
 
-            if (i / (ausgabe.Count + 1) > Int32.MaxValue - n)
+            if (i / (output.Count + 1) > Int32.MaxValue - n)
                 return null;
 
-            n += i / (ausgabe.Count + 1);
-            i %= ausgabe.Count + 1;
+            n += i / (output.Count + 1);
+            i %= output.Count + 1;
 
             if (n > MaxCodePoint || (n >= 0xD800 && n <= 0xDFFF))
                 return null;
 
-            ausgabe.Insert(i++, n);
+            output.Insert(i++, n);
 
         }
 
-        var sb = new StringBuilder(ausgabe.Count);
+        var sb = new StringBuilder(output.Count);
 
-        foreach (var codePoint in ausgabe)
+        foreach (var codePoint in output)
             sb.Append(Char.ConvertFromUtf32(codePoint));
 
         return sb.ToString();
@@ -160,13 +159,13 @@ public static class Punycode
     #region Encode(Text)
 
     /// <summary>
-    /// Kodiert ein Label - oder gibt <c>null</c> zurück, wenn das nicht geht.
+    /// Encodes a label - or returns <c>null</c> if that is not possible.
     /// </summary>
     /// <remarks>
-    /// Der Trenner steht auch dann da, wenn nichts Nicht-ASCII folgt
-    /// (Abschnitt 6.3): <c>abc</c> wird zu <c>abc-</c>. Für ein A-Label ist das
-    /// ohne Belang - dort steht ohnehin das Präfix <c>xn--</c> davor, und die
-    /// Rückprobe vergleicht mit derselben Rechnung.
+    /// The delimiter is there even when nothing non-ASCII follows (section 6.3):
+    /// <c>abc</c> becomes <c>abc-</c>. For an A-label that is of no consequence -
+    /// the prefix <c>xn--</c> stands in front of it anyway, and the re-encoding
+    /// check compares against the same computation.
     /// </remarks>
     public static String? Encode(String Text)
     {
@@ -199,26 +198,26 @@ public static class Punycode
             if (codePoint < 0x80)
                 sb.Append((Char) codePoint);
 
-        var behandelt = sb.Length;
-        var einfache  = behandelt;
+        var handled  = sb.Length;
+        var basics   = handled;
 
-        if (einfache > 0)
+        if (basics > 0)
             sb.Append(Delimiter);
 
-        while (behandelt < codePoints.Count)
+        while (handled < codePoints.Count)
         {
 
-            // Der nächste noch nicht behandelte Codepoint.
+            // The next code point not yet handled.
             var m = Int32.MaxValue;
 
             foreach (var codePoint in codePoints)
                 if (codePoint >= n && codePoint < m)
                     m = codePoint;
 
-            if (m - n > (Int32.MaxValue - delta) / (behandelt + 1))
+            if (m - n > (Int32.MaxValue - delta) / (handled + 1))
                 return null;
 
-            delta += (m - n) * (behandelt + 1);
+            delta += (m - n) * (handled + 1);
             n      = m;
 
             foreach (var codePoint in codePoints)
@@ -254,9 +253,9 @@ public static class Punycode
 
                     sb.Append(Character(q));
 
-                    bias   = Adapt(delta, behandelt + 1, behandelt == einfache);
-                    delta  = 0;
-                    behandelt++;
+                    bias    = Adapt(delta, handled + 1, handled == basics);
+                    delta   = 0;
+                    handled++;
 
                 }
 
@@ -273,14 +272,14 @@ public static class Punycode
 
     #endregion
 
-    #region (private) Bootstring-Rechnung
+    #region (private) Bootstring computation
 
-    /// <summary>RFC 3492, Abschnitt 6.1: die Anpassung der Vorspannung.</summary>
-    private static Int32 Adapt(Int32 Delta, Int32 Anzahl, Boolean ErsteAnpassung)
+    /// <summary>RFC 3492, section 6.1: the bias adaptation.</summary>
+    private static Int32 Adapt(Int32 Delta, Int32 Count, Boolean FirstAdaptation)
     {
 
-        Delta = ErsteAnpassung ? Delta / Damp : Delta / 2;
-        Delta += Delta / Anzahl;
+        Delta = FirstAdaptation ? Delta / Damp : Delta / 2;
+        Delta += Delta / Count;
 
         var k = 0;
 
@@ -294,7 +293,7 @@ public static class Punycode
 
     }
 
-    /// <summary>Der Wert einer Ziffer des 36er-Alphabets, oder -1.</summary>
+    /// <summary>The value of a digit of the base-36 alphabet, or -1.</summary>
     private static Int32 Digit(Char Character)
 
         => Character switch {
@@ -304,7 +303,7 @@ public static class Punycode
                _                  => -1
            };
 
-    /// <summary>Die Ziffer zu einem Wert - Kleinbuchstaben, dann Ziffern.</summary>
+    /// <summary>The digit for a value - lowercase letters, then digits.</summary>
     private static Char Character(Int32 Digit)
 
         => (Char) (Digit < 26 ? Digit + 'a' : Digit - 26 + '0');
