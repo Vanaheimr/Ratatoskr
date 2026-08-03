@@ -25,22 +25,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Subscription-Pre-Approval nach RFC 6121, Abschnitt 3.4: eine Anfrage
-    /// zulassen, bevor sie gestellt wurde.
+    /// Subscription pre-approval under RFC 6121, section 3.4: allowing a
+    /// request before it has been made.
     /// </summary>
     /// <remarks>
-    /// Der Abschnitt unterscheidet vier Fälle, und alle vier hängen an
-    /// derselben Frage - liegt eine Anfrage vor oder nicht. Dasselbe
-    /// <c>&lt;presence type='subscribed'/&gt;</c> ist einmal eine Zustimmung
-    /// und einmal eine Vormerkung, und die Stanza selbst sieht in beiden
-    /// Fällen gleich aus. Der Unterschied steckt allein im Roster des
-    /// Absenders.
+    /// The section tells four cases apart, and all four hang on the same
+    /// question - is there a request or not. The same
+    /// <c>&lt;presence type='subscribed'/&gt;</c> is once a consent and once a
+    /// pre-approval, and the stanza itself looks the same in both cases. The
+    /// difference sits in the roster of the sender alone.
     /// </remarks>
     [TestFixture]
     public class PreApprovalTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private String Alice => $"alice@{Server.Domain}";
         private String Bob   => $"bob@{Server.Domain}";
@@ -48,7 +47,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private String? SubscriptionOf(String owner, String contact)
             => Server.GetAccount(owner)?.SubscriptionOf(contact);
 
-        private Boolean IstVorgemerkt(String owner, String contact)
+        private Boolean IsPreApproved(String owner, String contact)
             => Server.GetAccount(owner)?
                      .Roster.FirstOrDefault(e => e.Jid.Equals(contact, StringComparison.OrdinalIgnoreCase))?
                      .Approved == true;
@@ -59,8 +58,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerAdvertisesPreApproval()
 
         /// <summary>
-        /// Abschnitt 3.4: ein Server, der es beherrscht, muss es ankündigen -
-        /// und ohne Ankündigung darf ein Client es nicht benutzen.
+        /// Section 3.4: a server that can do it has to announce it - and
+        /// without the announcement a client must not use it.
         /// </summary>
         [Test]
         public async Task TheServerAdvertisesPreApproval()
@@ -82,15 +81,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAPendingRequest_SubscribedIsRememberedNotSent()
 
         /// <summary>
-        /// Fall 3 und 4: ohne offene Anfrage wird vorgemerkt - und die Stanza
-        /// geht ausdrücklich <b>nicht</b> hinaus.
+        /// Cases 3 and 4: without an open request it is pre-approved - and the
+        /// stanza expressly does <b>not</b> go out.
         /// </summary>
         /// <remarks>
-        /// Die zweite Hälfte ist die wichtigere und leicht zu übersehen. Ginge
-        /// das <c>subscribed</c> trotzdem hinaus, bekäme der Kontakt eine
-        /// Zustimmung zu einer Frage, die er nie gestellt hat - sein Server
-        /// würde daraus eine Subscription bauen, von der der Nutzer nichts
-        /// weiss.
+        /// The second half is the more important one and easy to overlook. If
+        /// the <c>subscribed</c> went out all the same, the contact would get a
+        /// consent to a question they never asked - their server would build a
+        /// subscription out of it that the user knows nothing about.
         /// </remarks>
         [Test]
         public async Task WithoutAPendingRequest_SubscribedIsRememberedNotSent()
@@ -99,25 +97,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var beiBob = new List<String>();
-            bob.OnPresenceChanged += (from, type) => beiBob.Add($"{from}/{type}");
+            var atBob = new List<String>();
+            bob.OnPresenceChanged += (from, type) => atBob.Add($"{from}/{type}");
 
             await alice.PreApproveContactAsync(Bob);
 
-            await WaitFor(() => IstVorgemerkt(Alice, Bob), "die Vormerkung bei Alice");
+            await WaitFor(() => IsPreApproved(Alice, Bob), "the pre-approval at Alice");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(IstVorgemerkt(Alice, Bob), Is.True);
+                Assert.That(IsPreApproved(Alice, Bob), Is.True);
 
-                // Vorgemerkt heisst noch nicht berechtigt.
+                // Pre-approved does not yet mean entitled.
                 Assert.That(SubscriptionOf(Alice, Bob), Is.EqualTo("none"));
 
-                Assert.That(beiBob.Any(e => e.Contains("subscribed", StringComparison.Ordinal)),
+                Assert.That(atBob.Any(e => e.Contains("subscribed", StringComparison.Ordinal)),
                             Is.False,
-                            "Ohne gestellte Anfrage darf keine Zustimmung hinausgehen.");
+                            "Without a request having been made no consent may go out.");
             });
 
         }
@@ -127,9 +125,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APreApprovedRequest_IsAnsweredWithoutAskingTheUser()
 
         /// <summary>
-        /// Abschnitt 3.4.2: ist der Kontakt vorgemerkt, darf seine Anfrage dem
-        /// Nutzer gar nicht erst zugestellt werden - der Server antwortet für
-        /// ihn.
+        /// Section 3.4.2: if the contact is pre-approved, their request must not
+        /// be delivered to the user at all - the server answers for them.
         /// </summary>
         [Test]
         public async Task APreApprovedRequest_IsAnsweredWithoutAskingTheUser()
@@ -138,25 +135,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var anfragenBeiAlice = new List<String>();
-            alice.OnSubscriptionRequest += (from, _) => anfragenBeiAlice.Add(from);
+            var requestsAtAlice = new List<String>();
+            alice.OnSubscriptionRequest += (from, _) => requestsAtAlice.Add(from);
 
             await alice.PreApproveContactAsync(Bob);
-            await WaitFor(() => IstVorgemerkt(Alice, Bob), "die Vormerkung");
+            await WaitFor(() => IsPreApproved(Alice, Bob), "the pre-approval");
 
-            // Jetzt fragt Bob tatsächlich.
+            // Now Bob actually asks.
             await bob.AddContactAsync(Alice, "Alice");
 
             await WaitFor(() => SubscriptionOf(Bob, Alice) == "to",
-                          "Bobs 'to'-Hälfte aus der selbsttätigen Zustimmung");
+                          "Bob's 'to' half from the automatic consent");
 
             Assert.Multiple(() =>
             {
                 Assert.That(SubscriptionOf(Alice, Bob), Is.EqualTo("from"));
                 Assert.That(SubscriptionOf(Bob,   Alice), Is.EqualTo("to"));
 
-                Assert.That(anfragenBeiAlice, Is.Empty,
-                            "Eine vorgemerkte Anfrage darf den Nutzer nicht erreichen.");
+                Assert.That(requestsAtAlice, Is.Empty,
+                            "A pre-approved request must not reach the user.");
             });
 
         }
@@ -166,13 +163,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithAPendingRequest_SubscribedIsANormalApproval()
 
         /// <summary>
-        /// Fall 2: liegt eine Anfrage vor, ist dasselbe <c>subscribed</c> eine
-        /// gewöhnliche Zustimmung - mit Weiterleitung.
+        /// Case 2: if a request is there, the same <c>subscribed</c> is an
+        /// ordinary consent - with forwarding.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zur Vormerkung. Ohne sie bestünde der Verdacht, dass
-        /// jedes <c>subscribed</c> nur noch vorgemerkt und nie mehr zugestellt
-        /// wird.
+        /// The counter-check to the pre-approval. Without it the suspicion
+        /// would stand that every <c>subscribed</c> is only pre-approved now
+        /// and never delivered again.
         /// </remarks>
         [Test]
         public async Task WithAPendingRequest_SubscribedIsANormalApproval()
@@ -181,24 +178,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
             await alice.AddContactAsync(Bob, "Bob");
-            await WaitFor(() => anfragen.Count > 0, "die Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the request at Bob");
 
             await bob.AcceptSubscriptionAsync(Alice);
 
             await WaitFor(() => SubscriptionOf(Alice, Bob) == "to",
-                          "Alices 'to'-Hälfte");
+                          "Alice's 'to' half");
 
             Assert.Multiple(() =>
             {
                 Assert.That(SubscriptionOf(Bob,   Alice), Is.EqualTo("from"));
                 Assert.That(SubscriptionOf(Alice, Bob),   Is.EqualTo("to"));
 
-                // Eine beantwortete Anfrage ist keine Vormerkung.
-                Assert.That(IstVorgemerkt(Bob, Alice), Is.False);
+                // A request that was answered is no pre-approval.
+                Assert.That(IsPreApproved(Bob, Alice), Is.False);
             });
 
         }
@@ -208,8 +205,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnEstablishedSubscription_IgnoresAFurtherSubscribed()
 
         /// <summary>
-        /// Fall 1: darf der Kontakt uns ohnehin schon sehen, wird ein weiteres
-        /// <c>subscribed</c> stillschweigend übergangen.
+        /// Case 1: if the contact may see us anyway, a further
+        /// <c>subscribed</c> is passed over in silence.
         /// </summary>
         [Test]
         public async Task AnEstablishedSubscription_IgnoresAFurtherSubscribed()
@@ -218,23 +215,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
             await alice.AddContactAsync(Bob, "Bob");
-            await WaitFor(() => anfragen.Count > 0, "die Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the request at Bob");
 
             await bob.AcceptSubscriptionAsync(Alice);
-            await WaitFor(() => SubscriptionOf(Bob, Alice) == "from", "die Zustimmung");
+            await WaitFor(() => SubscriptionOf(Bob, Alice) == "from", "the consent");
 
-            // Noch einmal - das darf nichts ändern, insbesondere keine
-            // Vormerkung erzeugen.
+            // Once more - that must change nothing, and in particular produce
+            // no pre-approval.
             //
-            // Über die Verbindung und nicht über den Client: dessen
-            // AcceptSubscriptionAsync verlangt eine offene Anfrage und täte
-            // hier schlicht nichts. Der Test hätte dann bestanden, ohne die
-            // Stanza je abgeschickt zu haben - und genau so ist er zuerst
-            // durchgelaufen.
+            // Over the connection and not over the client: its
+            // AcceptSubscriptionAsync demands an open request and would simply
+            // do nothing here. The test would then have passed without ever
+            // having sent the stanza off - and that is exactly how it ran
+            // through at first.
             await bob.Connection.AcceptSubscriptionAsync(Alice);
 
             await Task.Delay(TimeSpan.FromSeconds(1));
@@ -242,7 +239,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(SubscriptionOf(Bob, Alice), Is.EqualTo("from"));
-                Assert.That(IstVorgemerkt(Bob, Alice),  Is.False);
+                Assert.That(IsPreApproved(Bob, Alice),  Is.False);
             });
 
         }
@@ -252,8 +249,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnsubscribedCancelsThePreApproval()
 
         /// <summary>
-        /// Abschnitt 3.4.2, Anmerkung: eine Vormerkung lässt sich mit
-        /// <c>unsubscribed</c> zurücknehmen.
+        /// Section 3.4.2, note: a pre-approval can be taken back with an
+        /// <c>unsubscribed</c>.
         /// </summary>
         [Test]
         public async Task UnsubscribedCancelsThePreApproval()
@@ -263,19 +260,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             await alice.PreApproveContactAsync(Bob);
-            await WaitFor(() => IstVorgemerkt(Alice, Bob), "die Vormerkung");
+            await WaitFor(() => IsPreApproved(Alice, Bob), "the pre-approval");
 
             await alice.DenySubscriptionAsync(Bob);
-            await WaitFor(() => !IstVorgemerkt(Alice, Bob), "die Rücknahme");
+            await WaitFor(() => !IsPreApproved(Alice, Bob), "the taking back");
 
-            var anfragen = new List<String>();
-            alice.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            alice.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
-            // Ohne Vormerkung muss Bobs Anfrage wieder bei Alice landen.
+            // Without the pre-approval Bob's request has to land at Alice
+            // again.
             await bob.AddContactAsync(Alice, "Alice");
 
-            await WaitFor(() => anfragen.Count > 0,
-                          "die Anfrage bei Alice nach zurückgenommener Vormerkung");
+            await WaitFor(() => requests.Count > 0,
+                          "the request at Alice after the pre-approval was taken back");
 
             Assert.That(SubscriptionOf(Alice, Bob), Is.EqualTo("none"));
 
@@ -286,13 +284,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithPreApprovalTurnedOff_NothingIsRemembered()
 
         /// <summary>
-        /// Ohne Unterstützung wird weder angekündigt noch vorgemerkt.
+        /// Without support nothing is announced and nothing pre-approved.
         /// </summary>
         /// <remarks>
-        /// Der Abschnitt stellt Pre-Approval ausdrücklich frei. Ein Server, der
-        /// es abschaltet, darf ein <c>subscribed</c> ohne Anfrage folgenlos
-        /// lassen - er darf es nur nicht ankündigen und sich dann anders
-        /// verhalten.
+        /// The section expressly leaves pre-approval optional. A server that
+        /// switches it off may leave a <c>subscribed</c> without a request
+        /// without consequence - it may only not announce it and then behave
+        /// otherwise.
         /// </remarks>
         [Test]
         public async Task WithPreApprovalTurnedOff_NothingIsRemembered()
@@ -310,15 +308,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(alice.ServerSupportsPreApproval, Is.False);
             });
 
-            // Abschnitt 3.4.1: ohne Ankündigung darf der Client es nicht
-            // einmal versuchen - die Methode verweigert von sich aus.
+            // Section 3.4.1: without the announcement the client must not even
+            // try - the method refuses of its own accord.
             Assert.That(await alice.PreApproveContactAsync(Bob), Is.False);
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(IstVorgemerkt(Alice, Bob),   Is.False);
+                Assert.That(IsPreApproved(Alice, Bob),   Is.False);
                 Assert.That(SubscriptionOf(Alice, Bob),  Is.Not.EqualTo("from"));
             });
 

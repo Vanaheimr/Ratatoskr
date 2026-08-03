@@ -28,30 +28,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Das Ergebnis einer Roster-Anfrage ist der vollständige Roster und keine
-    /// Ergänzung (RFC 6121, Abschnitt 2.1.4).
+    /// The result of a roster request is the complete roster and not an
+    /// addition (RFC 6121, section 2.1.4).
     /// </summary>
     /// <remarks>
-    /// Der Unterschied wird an genau einer Stelle sichtbar, und die ist im
-    /// Alltag häufig: Ein Kontakt wird an einem anderen Gerät gelöscht,
-    /// während dieses hier abgemeldet ist. Beim nächsten Anmelden schickt der
-    /// Server ihn nicht mehr - aber wer das Ergebnis nur einarbeitet, nimmt ihn
-    /// auch nicht heraus. Der Kontakt kommt zurück und lässt sich von diesem
-    /// Gerät aus nicht mehr loswerden.
+    /// The difference becomes visible at exactly one place, and that one is
+    /// common in everyday use: a contact is deleted on another device while
+    /// this one is logged off. At the next login the server no longer sends
+    /// them - but whoever merely works the result in does not take them out
+    /// either. The contact comes back and cannot be got rid of from this device
+    /// any more.
     ///
-    /// Im laufenden Betrieb fällt das nie auf, weil dann ein Push mit
-    /// <c>subscription='remove'</c> kommt und der Eintrag ordentlich
-    /// verschwindet.
+    /// In running use that never shows, because then a push with
+    /// <c>subscription='remove'</c> comes and the entry disappears properly.
     /// </remarks>
     [TestFixture]
     public class RosterReplacementTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein Client ohne Stream Management - sonst nähme ein Reconnect den
-        /// alten Stream wieder auf und fragte den Roster gar nicht erst neu ab.
+        /// A client without stream management - otherwise a reconnect would
+        /// resume the old stream and would not fetch the roster afresh at all.
         /// </summary>
         private XMPPClient PlainClient(String localPart = "alice")
         {
@@ -68,9 +67,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var count = 0;
 
-            client.Connection.OnStateChanged += (alt, neu) =>
+            client.Connection.OnStateChanged += (oldState, newState) =>
             {
-                if (neu == ConnectionState.Connected)
+                if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref count);
             };
 
@@ -79,24 +78,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Reisst die Verbindung ab, wartet das Ende der Sitzung ab, führt die
-        /// Änderung aus und wartet auf die neue Anmeldung.
+        /// Tears the connection down, waits for the end of the session, carries
+        /// out the change and waits for the new login.
         /// </summary>
-        private async Task ReconnectAround(XMPPClient client, Action aenderung)
+        private async Task ReconnectAround(XMPPClient client, Action change)
         {
 
-            var anmeldungen = CountConnects(client);
+            var logins = CountConnects(client);
 
             client.KillConnection();
 
-            // Erst das Ende abwarten: Sonst kann der Reconnect der Änderung
-            // zuvorkommen, und der Test prüfte etwas anderes, als er soll.
+            // Wait for the end first: otherwise the reconnect can get ahead of
+            // the change, and the test would check something other than what it
+            // is meant to.
             await WaitFor(() => !Server.Sessions.Any(s => s.BareJid == client.BareJid),
-                          "das Ende der ersten Sitzung");
+                          "the end of the first session");
 
-            aenderung();
+            change();
 
-            await WaitFor(() => anmeldungen() >= 1, "die zweite Anmeldung");
+            await WaitFor(() => logins() >= 1, "the second login");
 
         }
 
@@ -106,8 +106,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AContactRemovedWhileOffline_IsGoneAfterReconnect()
 
         /// <summary>
-        /// Der Kern: Was der Server nicht mehr führt, verschwindet auch beim
-        /// Client.
+        /// The heart of it: what the server no longer keeps disappears at the
+        /// client too.
         /// </summary>
         [Test]
         public async Task AContactRemovedWhileOffline_IsGoneAfterReconnect()
@@ -120,29 +120,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.ConnectAsync();
 
             Assert.That(client.Connection.Roster.Items, Has.Count.EqualTo(2),
-                        "Vorbedingung: beide Kontakte sind da.");
+                        "Precondition: both contacts are there.");
 
-            var entfernt = new List<String>();
-            client.Connection.Roster.OnItemRemoved += jid => entfernt.Add(jid);
+            var removed = new List<String>();
+            client.Connection.Roster.OnItemRemoved += jid => removed.Add(jid);
 
             await ReconnectAround(client,
                                   () => Server.GetAccount(client.BareJid)!
                                               .RemoveRosterEntry($"bob@{Server.Domain}"));
 
             await WaitFor(() => client.Connection.Roster.Items.Count == 1,
-                          "das Verschwinden des gelöschten Kontakts");
+                          "the disappearance of the deleted contact");
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(client.Connection.Roster.GetItem($"bob@{Server.Domain}"), Is.Null,
-                            "Der gelöschte Kontakt darf nicht zurückkommen.");
+                            "The deleted contact must not come back.");
 
                 Assert.That(client.Connection.Roster.GetItem($"carol@{Server.Domain}"), Is.Not.Null,
-                            "Der verbliebene muss bleiben.");
+                            "The remaining one has to stay.");
 
-                Assert.That(entfernt, Does.Contain($"bob@{Server.Domain}"),
-                            "Wer eine Anzeige führt, muss vom Wegfall erfahren.");
+                Assert.That(removed, Does.Contain($"bob@{Server.Domain}"),
+                            "Whoever keeps a display has to learn of the removal.");
 
             });
 
@@ -153,11 +153,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnchangedContact_SurvivesTheReconnect()
 
         /// <summary>
-        /// Die Gegenprobe: Ohne Änderung bleibt alles stehen.
+        /// The counter-check: without a change everything stays put.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn beim Anmelden schlicht
-        /// alles gelöscht würde.
+        /// Without it the collection would pass even if everything were simply
+        /// deleted at the login.
         /// </remarks>
         [Test]
         public async Task AnUnchangedContact_SurvivesTheReconnect()
@@ -168,17 +168,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = PlainClient();
             await client.ConnectAsync();
 
-            // Eine Änderung, die den Roster berührt, damit das Ergebnis
-            // wirklich noch einmal kommt statt als „unverändert" abgetan zu
-            // werden - sonst prüfte der Test nur die Versionierung.
+            // A change that touches the roster, so that the result really comes
+            // a second time instead of being waved off as "unchanged" -
+            // otherwise the test would only check the versioning.
             await ReconnectAround(client,
                                   () => SetServerRoster("alice", "carol", "both"));
 
             await WaitFor(() => client.Connection.Roster.Items.Count == 2,
-                          "den zweiten Kontakt");
+                          "the second contact");
 
             Assert.That(client.Connection.Roster.GetItem($"bob@{Server.Domain}"), Is.Not.Null,
-                        "Der unveränderte Kontakt darf dabei nicht verlorengehen.");
+                        "The unchanged contact must not be lost in the process.");
 
         }
 
@@ -187,15 +187,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARosterPush_DoesNotReplaceTheWholeRoster()
 
         /// <summary>
-        /// Ein Push trägt nur die geänderten Einträge und darf den übrigen
-        /// Roster nicht anfassen.
+        /// A push carries only the changed entries and must not touch the rest
+        /// of the roster.
         /// </summary>
         /// <remarks>
-        /// Das ist die Gegenprobe zum Ersetzen, und sie ist die schärfere: Wer
-        /// den Push mit demselben Verfahren behandelt wie das Ergebnis, löscht
-        /// bei jeder einzelnen Änderung den gesamten übrigen Roster. Der
-        /// Fehler wäre eine naheliegende Vereinfachung - beides sieht auf dem
-        /// Draht gleich aus, ein <c>&lt;query/&gt;</c> mit <c>&lt;item/&gt;</c>.
+        /// That is the counter-check to the replacing, and it is the sharper
+        /// one: whoever treats the push with the same procedure as the result
+        /// deletes the whole rest of the roster at every single change. The
+        /// fault would be an obvious simplification - both look the same on the
+        /// wire, a <c>&lt;query/&gt;</c> with an <c>&lt;item/&gt;</c>.
         /// </remarks>
         [Test]
         public async Task ARosterPush_DoesNotReplaceTheWholeRoster()
@@ -208,22 +208,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.ConnectAsync();
 
             Assert.That(client.Connection.Roster.Items, Has.Count.EqualTo(2),
-                        "Vorbedingung: beide Kontakte sind da.");
+                        "Precondition: both contacts are there.");
 
-            // Ein einzelner Eintrag ändert sich - der Server antwortet mit
-            // einem Push, der genau dieses eine Element trägt.
+            // A single entry changes - the server answers with a push carrying
+            // exactly this one element.
             //
-            // Die Änderung muss vom Client kommen: Ein Eingriff am Konto
-            // vorbei löst keinen Push aus, und der Test prüfte dann nur seine
-            // eigene Geduld.
+            // The change has to come from the client: an intervention past the
+            // account triggers no push, and the test would then only check its
+            // own patience.
             await client.Connection.SendRawAsync(
                       RosterStanzaBuilder.SetItem($"bob@{Server.Domain}", "Robert"));
 
             await WaitFor(() => client.Connection.Roster.GetItem($"bob@{Server.Domain}")?.Name == "Robert",
-                          "den umbenannten Kontakt");
+                          "the renamed contact");
 
             Assert.That(client.Connection.Roster.GetItem($"carol@{Server.Domain}"), Is.Not.Null,
-                        "Ein Push über Bob darf Carol nicht löschen.");
+                        "A push about Bob must not delete Carol.");
 
         }
 
@@ -232,8 +232,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReplaceAll_UpdatesKeepsAndRemoves()
 
         /// <summary>
-        /// Die drei Fälle einzeln, ohne Server: übernehmen, behalten,
-        /// entfernen.
+        /// The three cases one by one, without a server: take over, keep,
+        /// remove.
         /// </summary>
         [Test]
         public void ReplaceAll_UpdatesKeepsAndRemoves()
@@ -244,15 +244,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             roster.ProcessRosterItem(new RosterItem("bob@example.com")   { Name = "Bob"   });
             roster.ProcessRosterItem(new RosterItem("carol@example.com") { Name = "Carol" });
 
-            var entfernt   = new List<String>();
-            var ergaenzt   = new List<String>();
-            var geaendert  = new List<String>();
+            var removed   = new List<String>();
+            var added   = new List<String>();
+            var changed  = new List<String>();
 
-            roster.OnItemRemoved += jid  => entfernt.Add(jid);
-            roster.OnItemAdded   += item => ergaenzt.Add(item.Jid);
-            roster.OnItemUpdated += item => geaendert.Add(item.Jid);
+            roster.OnItemRemoved += jid  => removed.Add(jid);
+            roster.OnItemAdded   += item => added.Add(item.Jid);
+            roster.OnItemUpdated += item => changed.Add(item.Jid);
 
-            // Bob bleibt (mit neuem Namen), Carol fällt weg, Dave kommt dazu.
+            // Bob stays (with a new name), Carol falls away, Dave comes along.
             roster.ReplaceAll([
                 new RosterItem("bob@example.com")  { Name = "Robert" },
                 new RosterItem("dave@example.com") { Name = "Dave"   }
@@ -267,9 +267,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(roster.Items, Has.Count.EqualTo(2));
 
-                Assert.That(entfernt,  Is.EqualTo(new[] { "carol@example.com" }));
-                Assert.That(ergaenzt,  Is.EqualTo(new[] { "dave@example.com"  }));
-                Assert.That(geaendert, Is.EqualTo(new[] { "bob@example.com"   }));
+                Assert.That(removed,  Is.EqualTo(new[] { "carol@example.com" }));
+                Assert.That(added,  Is.EqualTo(new[] { "dave@example.com"  }));
+                Assert.That(changed, Is.EqualTo(new[] { "bob@example.com"   }));
 
             });
 
@@ -280,13 +280,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReplaceAll_WithAnEmptyListClearsTheRoster()
 
         /// <summary>
-        /// Ein wirklich leerer Roster leert auch den Zwischenspeicher.
+        /// A roster that is really empty clears the cache as well.
         /// </summary>
         /// <remarks>
-        /// Nicht zu verwechseln mit dem leeren Ergebnis der Versionierung: Das
-        /// kommt ganz ohne <c>&lt;query/&gt;</c> und erreicht diese Stelle nie.
-        /// Ein <c>&lt;query/&gt;</c> <i>ohne Kinder</i> heisst dagegen
-        /// tatsächlich „du hast keine Kontakte mehr", und dann müssen sie weg.
+        /// Not to be confused with the empty result of the versioning: that one
+        /// comes with no <c>&lt;query/&gt;</c> at all and never reaches this
+        /// place. A <c>&lt;query/&gt;</c> <i>without children</i>, by contrast,
+        /// really does mean "you have no contacts any more", and then they have
+        /// to go.
         /// </remarks>
         [Test]
         public void ReplaceAll_WithAnEmptyListClearsTheRoster()

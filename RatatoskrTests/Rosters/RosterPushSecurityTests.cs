@@ -27,10 +27,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 2.1.6: Ein Roster-Push darf nur angewendet werden,
-    /// wenn er kein from-Attribut trägt oder das from dem eigenen Bare-JID
-    /// entspricht. Ohne diese Prüfung kann jeder Absender den lokalen Roster
-    /// manipulieren.
+    /// RFC 6121, section 2.1.6: a roster push may only be applied if it carries
+    /// no from attribute or if the from matches one's own bare JID. Without
+    /// this check any sender can manipulate the local roster.
     /// </summary>
     [TestFixture]
     public class RosterPushSecurityTests : AXMPPTests
@@ -39,7 +38,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SpoofedRosterPush_IsIgnored()
 
         /// <summary>
-        /// Ein Push von einem fremden Absender darf keinen Kontakt anlegen.
+        /// A push from a foreign sender must not create a contact.
         /// </summary>
         [Test]
         public async Task SpoofedRosterPush_IsIgnored()
@@ -53,7 +52,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await Server.PushAsync(client.FullJid,
                 "<iq type='set' id='spoof-1' from='evil@example.com'>" +
                 "<query xmlns='jabber:iq:roster'>" +
-                "<item jid='hacker@evil.com' name='Trojaner' subscription='both'/>" +
+                "<item jid='hacker@evil.com' name='Trojan' subscription='both'/>" +
                 "</query></iq>");
 
             await Task.Delay(300);
@@ -61,10 +60,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(client.Roster.GetItem("hacker@evil.com"), Is.Null,
-                            "Der gefälschte Kontakt wurde in den Roster übernommen.");
+                            "The forged contact was taken into the roster.");
 
                 Assert.That(alerts, Has.Count.EqualTo(1),
-                            "Es wurde kein Spoofing-Versuch gemeldet.");
+                            "No spoofing attempt was reported.");
             });
 
         }
@@ -74,7 +73,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SpoofedRosterPush_IsNotAcknowledged()
 
         /// <summary>
-        /// Ein verworfener Push darf nicht mit iq type='result' quittiert werden.
+        /// A push that was discarded must not be acknowledged with an iq
+        /// type='result'.
         /// </summary>
         [Test]
         public async Task SpoofedRosterPush_IsNotAcknowledged()
@@ -92,7 +92,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await Task.Delay(300);
 
             Assert.That(session.CountReceived("id='spoof-2'"), Is.Zero,
-                        "Der Client hat den gefälschten Push quittiert.");
+                        "The client acknowledged the forged push.");
 
         }
 
@@ -101,8 +101,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SpoofedRemove_DoesNotDeleteContact()
 
         /// <summary>
-        /// Ein gefälschtes subscription='remove' darf einen echten Kontakt
-        /// nicht aus dem Roster löschen.
+        /// A forged subscription='remove' must not delete a real contact from
+        /// the roster.
         /// </summary>
         [Test]
         public async Task SpoofedRemove_DoesNotDeleteContact()
@@ -110,27 +110,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            // Ein echter Kontakt, per legitimem Push angelegt
+            // A real contact, created by a legitimate push
             await Server.PushAsync(client.FullJid,
                 "<iq type='set' id='legit-1'>" +
                 "<query xmlns='jabber:iq:roster'>" +
-                "<item jid='freund@localhost' name='Freund' subscription='both'/>" +
+                "<item jid='friend@localhost' name='Friend' subscription='both'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.Roster.GetItem("freund@localhost") is not null,
-                          "Anlegen des echten Kontakts");
+            await WaitFor(() => client.Roster.GetItem("friend@localhost") is not null,
+                          "the creation of the real contact");
 
-            // Angriff: fremder Absender will ihn löschen
+            // The attack: a foreign sender wants to delete them
             await Server.PushAsync(client.FullJid,
                 "<iq type='set' id='spoof-3' from='evil@example.com'>" +
                 "<query xmlns='jabber:iq:roster'>" +
-                "<item jid='freund@localhost' subscription='remove'/>" +
+                "<item jid='friend@localhost' subscription='remove'/>" +
                 "</query></iq>");
 
             await Task.Delay(300);
 
-            Assert.That(client.Roster.GetItem("freund@localhost"), Is.Not.Null,
-                        "Der echte Kontakt wurde durch einen gefälschten Push gelöscht.");
+            Assert.That(client.Roster.GetItem("friend@localhost"), Is.Not.Null,
+                        "The real contact was deleted by a forged push.");
 
         }
 
@@ -139,7 +139,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterPushWithoutFrom_IsApplied()
 
         /// <summary>
-        /// Ein Push ohne from stammt implizit vom eigenen Konto und ist gültig.
+        /// A push without a from comes implicitly from one's own account and is
+        /// valid.
         /// </summary>
         [Test]
         public async Task RosterPushWithoutFrom_IsApplied()
@@ -150,13 +151,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await Server.PushAsync(client.FullJid,
                 "<iq type='set' id='legit-2'>" +
                 "<query xmlns='jabber:iq:roster'>" +
-                "<item jid='kollege@localhost' name='Kollege' subscription='to'/>" +
+                "<item jid='colleague@localhost' name='Colleague' subscription='to'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.Roster.GetItem("kollege@localhost") is not null,
-                          "Übernahme des Pushes ohne from");
+            await WaitFor(() => client.Roster.GetItem("colleague@localhost") is not null,
+                          "the taking over of the push without a from");
 
-            Assert.That(client.Roster.GetItem("kollege@localhost")!.Name, Is.EqualTo("Kollege"));
+            Assert.That(client.Roster.GetItem("colleague@localhost")!.Name, Is.EqualTo("Colleague"));
 
         }
 
@@ -165,7 +166,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterPushFromOwnBareJid_IsApplied()
 
         /// <summary>
-        /// Ein Push mit dem eigenen Bare-JID als from ist ebenfalls gültig.
+        /// A push with one's own bare JID as the from is valid as well.
         /// </summary>
         [Test]
         public async Task RosterPushFromOwnBareJid_IsApplied()
@@ -176,11 +177,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await Server.PushAsync(client.FullJid,
                 $"<iq type='set' id='legit-3' from='{client.BareJid}'>" +
                 "<query xmlns='jabber:iq:roster'>" +
-                "<item jid='chefin@localhost' name='Chefin' subscription='both'/>" +
+                "<item jid='boss@localhost' name='Boss' subscription='both'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.Roster.GetItem("chefin@localhost") is not null,
-                          "Übernahme des Pushes mit eigenem Bare-JID");
+            await WaitFor(() => client.Roster.GetItem("boss@localhost") is not null,
+                          "the taking over of the push with one's own bare JID");
 
             Assert.Pass();
 

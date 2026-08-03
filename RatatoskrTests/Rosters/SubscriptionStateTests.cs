@@ -28,19 +28,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 3 aus Sicht des Clients: <c>subscribed</c>,
-    /// <c>unsubscribed</c> und <c>unsubscribe</c> sind Zustandsänderungen,
-    /// keine Anwesenheitsmeldungen.
+    /// RFC 6121, section 3 from the client's side: <c>subscribed</c>,
+    /// <c>unsubscribed</c> and <c>unsubscribe</c> are changes of state, not
+    /// presence announcements.
     ///
-    /// Sie liefen bisher durch <c>UpdatePresence</c>. Weil dort alles ohne
-    /// <c>type='unavailable'</c> als anwesend gilt, machte ausgerechnet die
-    /// Nachricht "du darfst mich nicht mehr sehen" den Kontakt online.
+    /// They used to run through <c>UpdatePresence</c>. Because everything
+    /// without a <c>type='unavailable'</c> counts as present there, of all
+    /// things the message "you may not see me any more" made the contact
+    /// online.
     /// </summary>
     [TestFixture]
     public class SubscriptionStateTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private String Bob => $"bob@{Server.Domain}";
 
@@ -49,29 +50,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            await WaitFor(() => Server.SessionOf(client.FullJid) is not null, "Serversitzung zum Client");
+            await WaitFor(() => Server.SessionOf(client.FullJid) is not null, "the server session for the client");
 
             return (client, Server.SessionOf(client.FullJid)!);
 
         }
 
         /// <summary>
-        /// Legt Bob per Roster-Push mit einem bestimmten Subscription-Zustand
-        /// in den Client-Roster - ohne den Handshake zu durchlaufen, damit der
-        /// Test genau einen Schritt prüft.
+        /// Puts Bob into the client roster by roster push with a particular
+        /// subscription state - without going through the handshake, so that
+        /// the test checks exactly one step.
         /// </summary>
         private async Task SeedContactAsync(XMPPClient          client,
                                             XMPPSession         session,
                                             String              subscription,
-                                            SubscriptionState   erwartet)
+                                            SubscriptionState   expected)
         {
 
             await session.SendAsync(
                 $"<iq type='set' id='seed-{subscription}'><query xmlns='jabber:iq:roster'>" +
                 $"<item jid='{Bob}' name='Bob' subscription='{subscription}'/></query></iq>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Subscription == erwartet,
-                          $"Kontakt mit subscription='{subscription}'");
+            await WaitFor(() => client.GetContact(Bob)?.Subscription == expected,
+                          $"a contact with subscription='{subscription}'");
 
         }
 
@@ -81,10 +82,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Subscribed_DoesNotMarkTheContactOnline()
 
         /// <summary>
-        /// Der Kern: eine Zusage sagt nichts darüber, ob der Kontakt gerade da
-        /// ist. Ob er online ist, erfährt der Client aus seiner Presence - die
-        /// bei einer frisch erteilten Subscription auch prompt kommt, aber eben
-        /// als eigene Stanza.
+        /// The heart of it: a grant says nothing about whether the contact is
+        /// there right now. Whether they are online the client learns from
+        /// their presence - which does come promptly with a freshly granted
+        /// subscription, but as a stanza of its own.
         /// </summary>
         [Test]
         public async Task Subscribed_DoesNotMarkTheContactOnline()
@@ -96,10 +97,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='subscribed'/>");
 
             await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.To,
-                          "übernommene Zusage");
+                          "the grant taken over");
 
             Assert.That(client.GetContact(Bob)!.Presence, Is.EqualTo(PresenceState.Offline),
-                        "Eine Zusage ist keine Anwesenheitsmeldung.");
+                        "A grant is no presence announcement.");
 
         }
 
@@ -108,8 +109,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribed_DoesNotMarkTheContactOnline()
 
         /// <summary>
-        /// Noch deutlicher beim Entzug: "du darfst mich nicht mehr sehen"
-        /// setzte den Kontakt auf online.
+        /// Even plainer with the withdrawal: "you may not see me any more" set
+        /// the contact to online.
         /// </summary>
         [Test]
         public async Task Unsubscribed_DoesNotMarkTheContactOnline()
@@ -121,10 +122,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribed'/>");
 
             await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.None,
-                          "entzogene Subscription");
+                          "the subscription withdrawn");
 
             Assert.That(client.GetContact(Bob)!.Presence, Is.EqualTo(PresenceState.Offline),
-                        "Ein Entzug ist keine Anwesenheitsmeldung.");
+                        "A withdrawal is no presence announcement.");
 
         }
 
@@ -133,7 +134,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribe_DoesNotMarkTheContactOnline()
 
         /// <summary>
-        /// Und bei der Kündigung der Gegenrichtung ebenso.
+        /// And with the cancelling of the other direction just the same.
         /// </summary>
         [Test]
         public async Task Unsubscribe_DoesNotMarkTheContactOnline()
@@ -145,10 +146,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribe'/>");
 
             await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.None,
-                          "gekündigte Gegenrichtung");
+                          "the other direction cancelled");
 
             Assert.That(client.GetContact(Bob)!.Presence, Is.EqualTo(PresenceState.Offline),
-                        "Eine Kündigung ist keine Anwesenheitsmeldung.");
+                        "A cancellation is no presence announcement.");
 
         }
 
@@ -157,8 +158,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribed_KeepsTheOtherDirection()
 
         /// <summary>
-        /// Bei <c>Both</c> darf der Entzug nur die eigene Hälfte nehmen: Bob
-        /// sieht uns weiterhin, wir ihn nicht mehr.
+        /// With <c>Both</c> the withdrawal may take only its own half: Bob goes
+        /// on seeing us, we no longer see him.
         /// </summary>
         [Test]
         public async Task Unsubscribed_KeepsTheOtherDirection()
@@ -170,7 +171,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribed'/>");
 
             await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.From,
-                          "verbleibende Gegenrichtung");
+                          "the remaining other direction");
 
         }
 
@@ -178,7 +179,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Unsubscribe_KeepsTheOtherDirection()
 
-        /// <summary>Dasselbe spiegelbildlich.</summary>
+        /// <summary>The same the other way round.</summary>
         [Test]
         public async Task Unsubscribe_KeepsTheOtherDirection()
         {
@@ -189,7 +190,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribe'/>");
 
             await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.To,
-                          "verbleibende eigene Richtung");
+                          "the remaining own direction");
 
         }
 
@@ -198,13 +199,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribed_ClearsAStalePresence()
 
         /// <summary>
-        /// Ohne <c>To</c> kommen keine Presence-Meldungen mehr. Was der Client
-        /// zuletzt gesehen hat, wäre ab jetzt ein eingefrorener Zustand, der
-        /// beliebig alt werden kann - also gilt der Kontakt als offline.
+        /// Without <c>To</c> no presence announcements come any more. What the
+        /// client saw last would from now on be a frozen state that can grow
+        /// arbitrarily old - so the contact counts as offline.
         ///
-        /// Der Testserver schickt zum Entzug zwar auch ein <c>unavailable</c>
-        /// (RFC 6121, Abschnitt 3.2.2); hier kommt der Entzug bewusst ohne,
-        /// damit der Client für sich allein geprüft wird.
+        /// The test server does send an <c>unavailable</c> along with the
+        /// withdrawal (RFC 6121, section 3.2.2); here the withdrawal comes
+        /// deliberately without one, so that the client is checked on its own.
         /// </summary>
         [Test]
         public async Task Unsubscribed_ClearsAStalePresence()
@@ -214,12 +215,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await SeedContactAsync(client, session, "both", SubscriptionState.Both);
 
             await session.SendAsync($"<presence from='{Bob}/x' to='{client.FullJid}'><show>dnd</show></presence>");
-            await WaitFor(() => client.GetContact(Bob)?.Presence == PresenceState.Dnd, "sichtbarer Zustand");
+            await WaitFor(() => client.GetContact(Bob)?.Presence == PresenceState.Dnd, "a visible state");
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribed'/>");
 
             await WaitFor(() => client.GetContact(Bob)?.Presence == PresenceState.Offline,
-                          "verworfener Zustand nach dem Entzug");
+                          "the state discarded after the withdrawal");
 
         }
 
@@ -228,8 +229,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Subscribe_StillRaisesTheRequest()
 
         /// <summary>
-        /// Gegenprobe: <c>subscribe</c> ist weiterhin eine Kontaktanfrage und
-        /// keine Zustandsänderung.
+        /// Counter-check: <c>subscribe</c> is still a contact request and no
+        /// change of state.
         /// </summary>
         [Test]
         public async Task Subscribe_StillRaisesTheRequest()
@@ -237,14 +238,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var (client, session) = await ConnectedPairAsync();
 
-            String? angefragt = null;
-            client.OnSubscriptionRequest += (from, _) => angefragt = from;
+            String? requested = null;
+            client.OnSubscriptionRequest += (from, _) => requested = from;
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='subscribe'/>");
 
-            await WaitFor(() => angefragt is not null, "gemeldete Kontaktanfrage");
+            await WaitFor(() => requested is not null, "the contact request reported");
 
-            Assert.That(angefragt, Is.EqualTo(Bob));
+            Assert.That(requested, Is.EqualTo(Bob));
 
         }
 
@@ -253,27 +254,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region GrantAndRevoke_ChangeOnlyTheirOwnHalf()
 
         /// <summary>
-        /// Die vier Übergänge einzeln, ohne Server. <c>To</c> und <c>From</c>
-        /// sind getrennte Hälften: aus <c>Both</c> wird beim Entzug die jeweils
-        /// andere, nicht <c>None</c>.
+        /// The four transitions one by one, without a server. <c>To</c> and
+        /// <c>From</c> are separate halves: out of <c>Both</c> a withdrawal
+        /// makes the respective other one, not <c>None</c>.
         /// </summary>
         [TestCase(SubscriptionState.None, SubscriptionState.To,   SubscriptionState.None, SubscriptionState.From, SubscriptionState.None)]
         [TestCase(SubscriptionState.To,   SubscriptionState.To,   SubscriptionState.None, SubscriptionState.Both, SubscriptionState.To)]
         [TestCase(SubscriptionState.From, SubscriptionState.Both, SubscriptionState.From, SubscriptionState.From, SubscriptionState.None)]
         [TestCase(SubscriptionState.Both, SubscriptionState.Both, SubscriptionState.From, SubscriptionState.Both, SubscriptionState.To)]
         public void GrantAndRevoke_ChangeOnlyTheirOwnHalf(SubscriptionState  start,
-                                                          SubscriptionState  nachGrantTo,
-                                                          SubscriptionState  nachRevokeTo,
-                                                          SubscriptionState  nachGrantFrom,
-                                                          SubscriptionState  nachRevokeFrom)
+                                                          SubscriptionState  afterGrantTo,
+                                                          SubscriptionState  afterRevokeTo,
+                                                          SubscriptionState  afterGrantFrom,
+                                                          SubscriptionState  afterRevokeFrom)
         {
 
             Assert.Multiple(() =>
             {
-                Assert.That(start.GrantTo(),     Is.EqualTo(nachGrantTo),     "GrantTo");
-                Assert.That(start.RevokeTo(),    Is.EqualTo(nachRevokeTo),    "RevokeTo");
-                Assert.That(start.GrantFrom(),   Is.EqualTo(nachGrantFrom),   "GrantFrom");
-                Assert.That(start.RevokeFrom(),  Is.EqualTo(nachRevokeFrom),  "RevokeFrom");
+                Assert.That(start.GrantTo(),     Is.EqualTo(afterGrantTo),     "GrantTo");
+                Assert.That(start.RevokeTo(),    Is.EqualTo(afterRevokeTo),    "RevokeTo");
+                Assert.That(start.GrantFrom(),   Is.EqualTo(afterGrantFrom),   "GrantFrom");
+                Assert.That(start.RevokeFrom(),  Is.EqualTo(afterRevokeFrom),  "RevokeFrom");
             });
 
         }

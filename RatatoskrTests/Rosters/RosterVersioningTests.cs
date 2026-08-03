@@ -28,29 +28,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Roster-Versionierung nach RFC 6121, Abschnitt 2.6.
+    /// Roster versioning under RFC 6121, section 2.6.
     /// </summary>
     /// <remarks>
-    /// Der Roster ist das Grösste, was beim Anmelden über die Leitung geht, und
-    /// er ändert sich selten. Die Versionierung erspart ihn deshalb: Der Client
-    /// nennt die Fassung, die er zwischengespeichert hat, und bekommt ein
-    /// leeres Ergebnis, wenn sie noch stimmt.
+    /// The roster is the largest thing that goes over the wire at the login,
+    /// and it changes seldom. The versioning therefore spares it: the client
+    /// names the version it has cached and gets an empty result if it still
+    /// holds.
     ///
-    /// Der ganze Mechanismus hängt an einer Feinheit, die leicht falsch
-    /// herauskommt: „unverändert" ist ein Ergebnis <b>ganz ohne</b>
-    /// <c>&lt;query/&gt;</c>. Ein <c>&lt;query/&gt;</c> ohne Kinder heisst
-    /// dagegen „dein Roster ist leer" - wer beides verwechselt, löscht dem
-    /// Nutzer die Kontaktliste oder zeigt ihm eine veraltete.
+    /// The whole mechanism hangs on a fine point that easily comes out wrong:
+    /// "unchanged" is a result with <b>no</b> <c>&lt;query/&gt;</c> at all. A
+    /// <c>&lt;query/&gt;</c> without children, by contrast, means "your roster
+    /// is empty" - whoever confuses the two deletes the user's contact list or
+    /// shows them an outdated one.
     /// </remarks>
     [TestFixture]
     public class RosterVersioningTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein Client ohne Stream Management - sonst nähme ein Reconnect den
-        /// alten Stream wieder auf und fragte den Roster gar nicht erst neu ab.
+        /// A client without stream management - otherwise a reconnect would
+        /// resume the old stream and would not fetch the roster afresh at all.
         /// </summary>
         private XMPPClient PlainClient(String localPart = "alice")
         {
@@ -62,15 +62,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Zählt die Anmeldungen dieses Clients.</summary>
+        /// <summary>Counts the logins of this client.</summary>
         private static Func<Int32> CountConnects(XMPPClient client)
         {
 
             var count = 0;
 
-            client.Connection.OnStateChanged += (alt, neu) =>
+            client.Connection.OnStateChanged += (oldState, newState) =>
             {
-                if (neu == ConnectionState.Connected)
+                if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref count);
             };
 
@@ -78,12 +78,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Alle Roster-Anfragen, die der Server je gesehen hat.</summary>
+        /// <summary>All roster requests the server has ever seen.</summary>
         private IEnumerable<String> RosterRequests
             => Server.AllReceived.Where(f => f.Contains("jabber:iq:roster", StringComparison.Ordinal) &&
                                              f.Contains("type='get'",       StringComparison.Ordinal));
 
-        /// <summary>Die Roster-Ergebnisse der zuletzt geöffneten Sitzung.</summary>
+        /// <summary>The roster results of the session opened last.</summary>
         private IEnumerable<String> RosterResults
             => Server.Sessions.Last().Sent
                      .Where(f => f.Contains("id='roster1'", StringComparison.Ordinal));
@@ -94,14 +94,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFirstRequestBringsAVersion()
 
         /// <summary>
-        /// Die erste Anfrage nennt eine leere Fassung, das Ergebnis bringt eine
-        /// mit.
+        /// The first request names an empty version, the result brings one
+        /// along.
         /// </summary>
         /// <remarks>
-        /// Das leere <c>ver=''</c> ist kein Platzhalter, sondern die Ansage
-        /// „ich kann Versionierung, habe aber noch nichts" (RFC 6121,
-        /// Abschnitt 2.6.1). Ohne es wüsste der Server nicht, dass er eine
-        /// Fassung mitschicken soll.
+        /// The empty <c>ver=''</c> is no placeholder but the announcement "I
+        /// can do versioning but have nothing yet" (RFC 6121, section 2.6.1).
+        /// Without it the server would not know that it should send a version
+        /// along.
         /// </remarks>
         [Test]
         public async Task TheFirstRequestBringsAVersion()
@@ -117,10 +117,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(RosterRequests.Any(f => f.Contains("ver=''", StringComparison.Ordinal)),
                             Is.True,
-                            "Die erste Anfrage muss ein leeres ver tragen.");
+                            "The first request has to carry an empty ver.");
 
                 Assert.That(client.Connection.Roster.Version, Is.Not.Null.And.Not.Empty,
-                            "Der Client muss die Fassung aus dem Ergebnis übernehmen.");
+                            "The client has to take the version over from the result.");
 
                 Assert.That(client.Connection.Roster.Version,
                             Is.EqualTo(Server.GetAccount(client.BareJid)!.RosterVersion));
@@ -136,13 +136,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnchangedRoster_IsNotSentAgain()
 
         /// <summary>
-        /// Der Kern: Kennt der Client die Fassung schon, kommt der Roster nicht
-        /// noch einmal - und sein Zwischenspeicher bleibt trotzdem gefüllt.
+        /// The heart of it: if the client knows the version already, the roster
+        /// does not come a second time - and its cache stays filled all the
+        /// same.
         /// </summary>
         /// <remarks>
-        /// Die zweite Zusicherung ist die wichtigere. Ein leeres Ergebnis
-        /// falsch zu lesen hiesse, dem Nutzer bei jeder zweiten Anmeldung eine
-        /// leere Kontaktliste zu zeigen.
+        /// The second promise is the more important one. To read an empty
+        /// result wrongly would mean showing the user an empty contact list at
+        /// every second login.
         /// </remarks>
         [Test]
         public async Task AnUnchangedRoster_IsNotSentAgain()
@@ -153,28 +154,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = PlainClient();
             await client.ConnectAsync();
 
-            var fassung     = client.Connection.Roster.Version;
-            var anmeldungen = CountConnects(client);
+            var version     = client.Connection.Roster.Version;
+            var logins = CountConnects(client);
 
             client.KillConnection();
 
-            await WaitFor(() => anmeldungen() >= 1, "die zweite Anmeldung");
+            await WaitFor(() => logins() >= 1, "the second login");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(RosterRequests.Any(f => f.Contains($"ver='{fassung}'", StringComparison.Ordinal)),
+                Assert.That(RosterRequests.Any(f => f.Contains($"ver='{version}'", StringComparison.Ordinal)),
                             Is.True,
-                            "Die zweite Anfrage muss die bekannte Fassung nennen.");
+                            "The second request has to name the version it knows.");
 
                 Assert.That(RosterResults.Any(f => f.Contains("jabber:iq:roster", StringComparison.Ordinal)),
                             Is.False,
-                            "Auf eine bekannte Fassung darf kein <query/> mehr folgen.");
+                            "On a known version no <query/> may follow any more.");
 
                 Assert.That(client.Connection.Roster.Items, Has.Count.EqualTo(1),
-                            "Der Zwischenspeicher muss den leeren Bescheid überleben.");
+                            "The cache has to survive the empty notice.");
 
-                Assert.That(client.Connection.Roster.Version, Is.EqualTo(fassung));
+                Assert.That(client.Connection.Roster.Version, Is.EqualTo(version));
 
             });
 
@@ -185,13 +186,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChangedRoster_ComesAgainWithANewVersion()
 
         /// <summary>
-        /// Die Gegenprobe: Hat sich etwas geändert, kommt der volle Roster und
-        /// eine neue Fassung.
+        /// The counter-check: if something has changed, the full roster comes
+        /// and a new version.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn der Server jede
-        /// zweite Anfrage leer beantwortete - und der Client bekäme Änderungen
-        /// nie zu sehen.
+        /// Without it the collection would pass even if the server answered
+        /// every second request empty - and the client would never get to see
+        /// changes.
         /// </remarks>
         [Test]
         public async Task AChangedRoster_ComesAgainWithANewVersion()
@@ -202,31 +203,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = PlainClient();
             await client.ConnectAsync();
 
-            var vorher      = client.Connection.Roster.Version;
-            var anmeldungen = CountConnects(client);
+            var before      = client.Connection.Roster.Version;
+            var logins = CountConnects(client);
 
-            // Während der Client weg ist, kommt ein Kontakt dazu.
+            // While the client is away, a contact comes along.
             //
-            // Erst den Abriss abwarten: Sonst kann der Reconnect dem
-            // SetServerRoster zuvorkommen, und dann fragt der Client mit der
-            // alten Fassung nach einem Roster, der noch der alte ist - der Test
-            // prüfte etwas anderes, als er soll, und schlüge gelegentlich fehl.
+            // Wait for the tear first: otherwise the reconnect can get ahead of
+            // the SetServerRoster, and then the client asks with the old
+            // version after a roster that is still the old one - the test would
+            // check something other than what it is meant to, and would fail
+            // occasionally.
             client.KillConnection();
 
             await WaitFor(() => !Server.Sessions.Any(s => s.BareJid == client.BareJid),
-                          "das Ende der ersten Sitzung");
+                          "the end of the first session");
 
             SetServerRoster("alice", "carol", "both");
 
-            await WaitFor(() => anmeldungen() >= 1, "die zweite Anmeldung");
+            await WaitFor(() => logins() >= 1, "the second login");
             await WaitFor(() => client.Connection.Roster.Items.Count == 2,
-                          "den zweiten Kontakt im Roster");
+                          "the second contact in the roster");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(client.Connection.Roster.Version, Is.Not.EqualTo(vorher),
-                            "Eine Änderung muss eine neue Fassung ergeben.");
+                Assert.That(client.Connection.Roster.Version, Is.Not.EqualTo(before),
+                            "A change has to give a new version.");
 
                 Assert.That(client.Connection.Roster.Version,
                             Is.EqualTo(Server.GetAccount(client.BareJid)!.RosterVersion));
@@ -240,20 +242,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARosterPush_CarriesTheNewVersion()
 
         /// <summary>
-        /// Auch der Push trägt die Fassung (RFC 6121, Abschnitt 2.6.3).
+        /// The push carries the version too (RFC 6121, section 2.6.3).
         /// </summary>
         /// <remarks>
-        /// Ohne sie stünde der Client nach jeder Änderung wieder auf einer
-        /// veralteten Fassung und holte beim nächsten Anmelden alles neu - die
-        /// Ersparnis wäre genau bei denen weg, die ihren Roster pflegen.
+        /// Without it the client would stand on an outdated version again after
+        /// every change and would fetch everything anew at the next login - the
+        /// saving would be gone for exactly those who tend their roster.
         ///
-        /// Gewartet wird auf die <i>Übereinstimmung</i> und nicht auf die erste
-        /// Änderung. <c>AddContactAsync</c> ist zweierlei - ein Roster-Set und
-        /// ein <c>subscribe</c> -, und beides ändert den Roster, also kommen
-        /// zwei Pushes. Wer beim ersten stehenbleibt und dann gegen den
-        /// Serverstand vergleicht, prüft gegen ein bewegliches Ziel und
-        /// scheitert gelegentlich. Die Zusicherung, um die es geht, ist
-        /// ohnehin die: Wenn es sich beruhigt hat, sind beide Seiten einig.
+        /// What is waited for is the <i>agreement</i> and not the first change.
+        /// <c>AddContactAsync</c> is two things - a roster set and a
+        /// <c>subscribe</c> - and both change the roster, so two pushes come.
+        /// Whoever stops at the first and then compares against the server's
+        /// state checks against a moving target and fails occasionally. The
+        /// promise at issue is this one anyway: once it has settled, both sides
+        /// agree.
         /// </remarks>
         [Test]
         public async Task ARosterPush_CarriesTheNewVersion()
@@ -262,24 +264,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = PlainClient();
             await client.ConnectAsync();
 
-            var vorher = client.Connection.Roster.Version;
+            var before = client.Connection.Roster.Version;
 
             await client.Connection.AddContactAsync($"carol@{Server.Domain}", "Carol");
 
-            // Beide Bedingungen zusammen, und das ist kein Zierrat: Am Anfang
-            // stehen Client und Server beide beim leeren Roster, sind also
-            // bereits einig. Eine Wartebedingung, die nur auf Übereinstimmung
-            // sieht, wäre erfüllt, bevor irgendetwas geschehen ist.
-            await WaitFor(() => client.Connection.Roster.Version != vorher &&
+            // Both conditions together, and that is no ornament: at the start
+            // client and server both stand at the empty roster, so they already
+            // agree. A waiting condition that looks only at agreement would be
+            // met before anything has happened.
+            await WaitFor(() => client.Connection.Roster.Version != before &&
                                 client.Connection.Roster.Version ==
                                     Server.GetAccount(client.BareJid)!.RosterVersion,
-                          "die Fassung aus den Pushes");
+                          "the version from the pushes");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(client.Connection.Roster.Version, Is.Not.EqualTo(vorher),
-                            "Der neue Kontakt muss eine neue Fassung ergeben.");
+                Assert.That(client.Connection.Roster.Version, Is.Not.EqualTo(before),
+                            "The new contact has to give a new version.");
 
                 Assert.That(client.Connection.Roster.GetItem($"carol@{Server.Domain}"),
                             Is.Not.Null);
@@ -293,15 +295,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheFeature_NothingIsVersioned()
 
         /// <summary>
-        /// Kündigt der Server keine Versionierung an, fragt der Client auch
-        /// nicht danach.
+        /// If the server announces no versioning, the client does not ask after
+        /// it either.
         /// </summary>
         /// <remarks>
-        /// RFC 6121, Abschnitt 2.6.1 verlangt genau das. Der Grund liegt in der
-        /// Gegenrichtung: Ein Client, der ungefragt ein <c>ver</c> schickt und
-        /// dann ein leeres Ergebnis als „unverändert" liest, hielte bei einem
-        /// Server ohne Versionierung irgendwann einen leeren Roster für den
-        /// aktuellen Stand.
+        /// RFC 6121, section 2.6.1 demands exactly that. The reason lies in the
+        /// other direction: a client that sends a <c>ver</c> unasked and then
+        /// reads an empty result as "unchanged" would at some point take an
+        /// empty roster for the current state with a server without versioning.
         /// </remarks>
         [Test]
         public async Task WithoutTheFeature_NothingIsVersioned()
@@ -319,12 +320,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(RosterRequests.Any(f => f.Contains("ver=", StringComparison.Ordinal)),
                             Is.False,
-                            "Ohne Ankündigung darf keine Fassung angefragt werden.");
+                            "Without the announcement no version may be asked for.");
 
                 Assert.That(client.Connection.Roster.Version, Is.Null);
 
                 Assert.That(client.Connection.Roster.Items, Has.Count.EqualTo(1),
-                            "Der Roster kommt trotzdem vollständig.");
+                            "The roster comes in full all the same.");
 
             });
 
@@ -335,43 +336,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheVersionFollowsTheContent()
 
         /// <summary>
-        /// Die Fassung ändert sich mit jeder Änderung - und nur mit ihr.
+        /// The version changes with every change - and only with one.
         /// </summary>
         /// <remarks>
-        /// Sie ist ein Streuwert über den Inhalt und kein Zähler. Daher die
-        /// letzte Zusicherung: Geht der Roster nach A zurück, ist die Fassung
-        /// wieder die alte. Das ist richtig so - der Zwischenstand eines
-        /// Clients, der A gespeichert hat, stimmt ja wieder.
+        /// It is a hash over the content and no counter. Hence the last
+        /// promise: if the roster goes back to A, the version is the old one
+        /// again. That is as it should be - the cached state of a client that
+        /// stored A does hold again.
         /// </remarks>
         [Test]
         public void TheVersionFollowsTheContent()
         {
 
-            var konto = Server.AddAccount("alice");
+            var account = Server.AddAccount("alice");
 
-            var leer = konto.RosterVersion;
+            var empty = account.RosterVersion;
 
-            konto.SetRosterEntry(new RosterEntry($"bob@{Server.Domain}", null, "both"));
-            var mitBob = konto.RosterVersion;
+            account.SetRosterEntry(new RosterEntry($"bob@{Server.Domain}", null, "both"));
+            var withBob = account.RosterVersion;
 
-            konto.SetRosterEntry(new RosterEntry($"bob@{Server.Domain}", "Robert", "both"));
-            var umbenannt = konto.RosterVersion;
+            account.SetRosterEntry(new RosterEntry($"bob@{Server.Domain}", "Robert", "both"));
+            var renamed = account.RosterVersion;
 
-            konto.SetRosterEntry(new RosterEntry($"bob@{Server.Domain}", "Robert", "to"));
-            var andereBerechtigung = konto.RosterVersion;
+            account.SetRosterEntry(new RosterEntry($"bob@{Server.Domain}", "Robert", "to"));
+            var otherPermission = account.RosterVersion;
 
-            konto.RemoveRosterEntry($"bob@{Server.Domain}");
-            var wiederLeer = konto.RosterVersion;
+            account.RemoveRosterEntry($"bob@{Server.Domain}");
+            var emptyAgain = account.RosterVersion;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(mitBob,             Is.Not.EqualTo(leer),      "Ein neuer Kontakt.");
-                Assert.That(umbenannt,          Is.Not.EqualTo(mitBob),    "Ein geänderter Name.");
-                Assert.That(andereBerechtigung, Is.Not.EqualTo(umbenannt), "Eine geänderte Berechtigung.");
+                Assert.That(withBob,             Is.Not.EqualTo(empty),      "A new contact.");
+                Assert.That(renamed,          Is.Not.EqualTo(withBob),    "A changed name.");
+                Assert.That(otherPermission, Is.Not.EqualTo(renamed), "A changed permission.");
 
-                Assert.That(wiederLeer, Is.EqualTo(leer),
-                            "Derselbe Inhalt ergibt dieselbe Fassung.");
+                Assert.That(emptyAgain, Is.EqualTo(empty),
+                            "The same content gives the same version.");
 
             });
 

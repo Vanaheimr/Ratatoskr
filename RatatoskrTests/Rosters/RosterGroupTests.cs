@@ -28,39 +28,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Roster-Gruppen nach RFC 6121, Abschnitt 2.1.2.4.
+    /// Roster groups under RFC 6121, section 2.1.2.4.
     /// </summary>
     /// <remarks>
-    /// <b>Der Client konnte sie von jeher, der Server nahm sie nie an.</b>
-    /// <c>RosterStanzaBuilder.SetItem</c> schickt <c>&lt;group/&gt;</c> mit,
-    /// <c>RosterItem.Groups</c> führt sie, die Konsole zeigt danach sortiert an
-    /// - und der Server las das <c>&lt;item/&gt;</c> nur bis zu seinen
-    /// Attributen. Die Gruppe kam an, wurde still verworfen, und der Push
-    /// brachte denselben Eintrag ohne sie zurück. Da ein Push die Gruppen eines
-    /// Eintrags <i>ersetzt</i>, verschwand sie damit auch beim Client: Was der
-    /// Mensch eingestellt hatte, war einen Wimpernschlag später weg, ohne dass
-    /// irgendetwas nach einem Fehler aussah.
+    /// <b>The client could always do them, the server never took them.</b>
+    /// <c>RosterStanzaBuilder.SetItem</c> sends <c>&lt;group/&gt;</c> along,
+    /// <c>RosterItem.Groups</c> keeps them, the console sorts by them when it
+    /// displays - and the server read the <c>&lt;item/&gt;</c> only as far as
+    /// its attributes. The group arrived, was discarded in silence, and the
+    /// push brought the same entry back without it. Since a push
+    /// <i>replaces</i> the groups of an entry, it thereby disappeared at the
+    /// client too: what the person had set was gone the blink of an eye later,
+    /// without anything looking like a fault.
     ///
-    /// Der Kommentar in der Roster-Behandlung behauptete die ganze Zeit, ein
-    /// Set ändere „Name und Gruppen".
+    /// The comment in the roster handling claimed all along that a set changed
+    /// "name and groups".
     /// </remarks>
     [TestFixture]
     public class RosterGroupTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        // Beide dürfen fragen, bevor es den Eintrag gibt: Sie stehen in
-        // WaitFor-Bedingungen, und eine Bedingung, die wirft statt falsch zu
-        // sein, wartet nicht - sie scheitert sofort.
+        // Both may ask before the entry exists: they stand in WaitFor
+        // conditions, and a condition that throws instead of being false does
+        // not wait - it fails at once.
 
-        /// <summary>Die Gruppen, die der Server zu einem Kontakt führt.</summary>
+        /// <summary>The groups the server keeps for a contact.</summary>
         private IReadOnlyList<String> ServerGroupsOf(XMPPClient client, String contact)
             => Server.GetAccount(client.BareJid)
                     ?.Roster.FirstOrDefault(e => e.Jid == $"{contact}@{Server.Domain}")
                     ?.Groups ?? [];
 
-        /// <summary>Die Gruppen, die der Client zu einem Kontakt führt.</summary>
+        /// <summary>The groups the client keeps for a contact.</summary>
         private static IReadOnlyList<String> ClientGroupsOf(XMPPClient client, String jid)
             => client.Connection.Roster.Items.FirstOrDefault(i => i.Jid == jid)?.Groups ?? [];
 
@@ -70,8 +70,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGroupSurvivesTheRoundTrip()
 
         /// <summary>
-        /// Eine Gruppe, die der Client setzt, steht danach beim Server - und
-        /// kommt im Push zurück.
+        /// A group the client sets stands at the server afterwards - and comes
+        /// back in the push.
         /// </summary>
         [Test]
         public async Task AGroupSurvivesTheRoundTrip()
@@ -79,18 +79,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Freunde"]);
+            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends"]);
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0,
-                          "die Gruppe beim Server");
+                          "the group at the server");
 
             await WaitFor(() => ClientGroupsOf(alice, $"bob@{Server.Domain}").Count > 0,
-                          "die Gruppe im Push");
+                          "the group in the push");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ServerGroupsOf(alice, "bob"),                       Is.EqualTo(new[] { "Freunde" }));
-                Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"),      Is.EqualTo(new[] { "Freunde" }));
+                Assert.That(ServerGroupsOf(alice, "bob"),                       Is.EqualTo(new[] { "Friends" }));
+                Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"),      Is.EqualTo(new[] { "Friends" }));
             });
 
         }
@@ -100,7 +100,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoGroups_BothSurvive()
 
         /// <summary>
-        /// Ein Kontakt darf in mehreren Gruppen stehen.
+        /// A contact may stand in several groups.
         /// </summary>
         [Test]
         public async Task TwoGroups_BothSurvive()
@@ -108,11 +108,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Freunde", "Arbeit"]);
+            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends", "Work"]);
 
-            await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 1, "beide Gruppen");
+            await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 1, "both groups");
 
-            Assert.That(ServerGroupsOf(alice, "bob"), Is.EquivalentTo(new[] { "Freunde", "Arbeit" }));
+            Assert.That(ServerGroupsOf(alice, "bob"), Is.EquivalentTo(new[] { "Friends", "Work" }));
 
         }
 
@@ -121,14 +121,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASetWithoutGroups_TakesThemAway()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 2.3.2: Die Gruppen eines Sets ersetzen die
-        /// bisherigen vollständig.
+        /// RFC 6121, section 2.3.2: the groups of a set replace the previous
+        /// ones in full.
         /// </summary>
         /// <remarks>
-        /// Ein Set ohne <c>&lt;group/&gt;</c> ist deshalb keine Auslassung,
-        /// sondern die Anweisung, dass der Kontakt in keiner Gruppe mehr steht.
-        /// Wer das als „nichts angegeben, also nichts geändert" läse, könnte
-        /// eine Gruppe nie wieder loswerden.
+        /// A set without a <c>&lt;group/&gt;</c> is therefore no omission but
+        /// the instruction that the contact stands in no group any more.
+        /// Whoever read that as "nothing given, so nothing changed" could never
+        /// be rid of a group again.
         /// </remarks>
         [Test]
         public async Task ASetWithoutGroups_TakesThemAway()
@@ -136,18 +136,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Freunde"]);
+            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends"]);
 
-            await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0, "die Gruppe");
+            await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0, "the group");
 
             await alice.AddContactAsync($"bob@{Server.Domain}", "Bob");
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count == 0 &&
                                 ClientGroupsOf(alice, $"bob@{Server.Domain}").Count == 0,
-                          "die geleerte Gruppenliste auf beiden Seiten");
+                          "the emptied group list on both sides");
 
             Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"), Is.Empty,
-                        "Und der Client hört dasselbe.");
+                        "And the client hears the same.");
 
         }
 
@@ -156,34 +156,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGroupChange_ChangesTheRosterVersion()
 
         /// <summary>
-        /// Ein Umgruppieren ändert die Fassung des Rosters.
+        /// Regrouping changes the version of the roster.
         /// </summary>
         /// <remarks>
-        /// <b>Das ist der Teil, an dem sonst nichts auffiele.</b> Bliebe die
-        /// Fassung dieselbe, bekäme ein Client, der sie zwischengespeichert
-        /// hat, beim nächsten Anmelden ein leeres Ergebnis - und behielte die
-        /// alte Einteilung für immer. Der Fehler zeigte sich erst Tage später
-        /// und an einem anderen Gerät.
+        /// <b>That is the part nothing else would show.</b> If the version
+        /// stayed the same, a client that had cached it would get an empty
+        /// result at the next login - and would keep the old arrangement for
+        /// ever. The fault would show up only days later and on another device.
         /// </remarks>
         [Test]
         public async Task AGroupChange_ChangesTheRosterVersion()
         {
 
             var alice = await ConnectClientAsync("alice");
-            var konto = Server.GetAccount(alice.BareJid)!;
+            var account = Server.GetAccount(alice.BareJid)!;
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Freunde"]);
+            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends"]);
 
-            await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0, "die erste Gruppe");
+            await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0, "the first group");
 
-            var vorher = konto.RosterVersion;
+            var before = account.RosterVersion;
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Arbeit"]);
+            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Work"]);
 
-            await WaitFor(() => ServerGroupsOf(alice, "bob").Contains("Arbeit"), "die zweite Gruppe");
+            await WaitFor(() => ServerGroupsOf(alice, "bob").Contains("Work"), "the second group");
 
-            Assert.That(konto.RosterVersion, Is.Not.EqualTo(vorher),
-                        "Eine Änderung, die die Fassung nicht ändert, erreicht den Client nie wieder.");
+            Assert.That(account.RosterVersion, Is.Not.EqualTo(before),
+                        "A change that does not change the version never reaches the client again.");
 
         }
 
@@ -192,26 +191,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRosterRequest_BringsTheGroups()
 
         /// <summary>
-        /// Auch der Abruf trägt die Gruppen und nicht nur der Push.
+        /// The fetch carries the groups too and not only the push.
         /// </summary>
         /// <remarks>
-        /// Beides baut jetzt dieselbe Stelle. Zwei Auskünfte über denselben
-        /// Eintrag laufen sonst auseinander, und die Versionierung macht daraus
-        /// eine dauerhafte: Der Client hält den Stand aus dem Push für den
-        /// ganzen und fragt nicht nach.
+        /// Both build the same place now. Two accounts of the same entry
+        /// otherwise drift apart, and the versioning makes that a lasting
+        /// matter: the client takes the state from the push for the whole and
+        /// does not ask again.
         /// </remarks>
         [Test]
         public async Task TheRosterRequest_BringsTheGroups()
         {
 
             Server.AddAccount("alice").SetRosterEntry(
-                new RosterEntry($"bob@{Server.Domain}", "Bob", "both", null, false, ["Freunde"]));
+                new RosterEntry($"bob@{Server.Domain}", "Bob", "both", null, false, ["Friends"]));
 
             var alice = await ConnectClientAsync("alice", createAccount: false);
 
-            await WaitFor(() => alice.Connection.Roster.Items.Count > 0, "den Roster");
+            await WaitFor(() => alice.Connection.Roster.Items.Count > 0, "the roster");
 
-            Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"), Is.EqualTo(new[] { "Freunde" }));
+            Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"), Is.EqualTo(new[] { "Friends" }));
 
         }
 
@@ -220,14 +219,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGroupWithSpecialCharacters_ArrivesAsItWasWritten()
 
         /// <summary>
-        /// Ein Gruppenname mit XML-Sonderzeichen übersteht beide Richtungen.
+        /// A group name with XML special characters survives both directions.
         /// </summary>
         /// <remarks>
-        /// Der Server liest den Rahmen hier mit einem Muster und nicht mit
-        /// einem XML-Leser - dann muss er das Entschärfen selbst rückgängig
-        /// machen. <b>Das kaufmännische Und zuletzt:</b> Wer es zuerst ersetzt,
-        /// macht aus einem Text, der von einem Zeichen handelt, das Zeichen
-        /// selbst.
+        /// The server reads the frame here with a pattern and not with an XML
+        /// reader - then it has to undo the escaping itself. <b>The ampersand
+        /// last:</b> whoever replaces it first turns a text that is about a
+        /// character into the character itself.
         /// </remarks>
         [Test]
         public async Task AGroupWithSpecialCharacters_ArrivesAsItWasWritten()
@@ -235,29 +233,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            // Der zweite Name ist der eigentliche Prüfstein: Er enthält den
-            // Text „&lt;" und meint ihn wörtlich. Wer beim Entschärfen das
-            // kaufmännische Und zuerst ersetzt, macht daraus ein „<" - aus
-            // einem Text, der von einem Zeichen handelt, wird das Zeichen.
+            // The second name is the real touchstone: it contains the text
+            // "&lt;" and means it literally. Whoever replaces the ampersand
+            // first while unescaping turns it into a "<" - a text that is about
+            // a character becomes the character.
             await alice.AddContactAsync($"bob@{Server.Domain}", "Bob",
-                                        ["Tom & Jerry <alt>", "A&lt;B"]);
+                                        ["Tom & Jerry <old>", "A&lt;B"]);
 
-            // Auf beides warten und nicht nur auf das erste: Der Push kommt
-            // nach dem Speichern, und ein Test, der ihn nicht abwartet, misst
-            // die Geschwindigkeit der Maschine.
+            // Wait for both and not only for the first: the push comes after
+            // the storing, and a test that does not wait for it measures the
+            // speed of the machine.
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 1 &&
                                 ClientGroupsOf(alice, $"bob@{Server.Domain}").Count > 1,
-                          "beide Gruppen auf beiden Seiten");
+                          "both groups on both sides");
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(ServerGroupsOf(alice, "bob"),
-                            Is.EqualTo(new[] { "Tom & Jerry <alt>", "A&lt;B" }));
+                            Is.EqualTo(new[] { "Tom & Jerry <old>", "A&lt;B" }));
 
                 Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"),
-                            Is.EqualTo(new[] { "Tom & Jerry <alt>", "A&lt;B" }),
-                            "Und der Weg zurück entschärft sie ebenso.");
+                            Is.EqualTo(new[] { "Tom & Jerry <old>", "A&lt;B" }),
+                            "And the way back unescapes them just the same.");
 
             });
 
