@@ -28,24 +28,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0198, Abschnitt 5: der Server hält einen abgerissenen Stream bereit,
-    /// statt ihn sofort zu beerdigen.
+    /// XEP-0198, section 5: the server holds a torn stream ready instead of
+    /// burying it at once.
     /// </summary>
     /// <remarks>
-    /// Was hier geprüft wird, ist die Hälfte, die ohne Rückkehrer auskommt:
-    /// dass ein <c>&lt;enable resume='true'/&gt;</c> beantwortet wird, dass ein
-    /// Verbindungsabriss die Sitzung <b>nicht</b> beendet, und dass sie nach
-    /// Ablauf der Frist doch endet. Das <c>&lt;resume/&gt;</c> selbst sitzt in
-    /// der Aufbauphase des Clients - vor dem Resource Binding, nach der
-    /// Anmeldung - und ist erst prüfbar, wenn der Client es schickt.
+    /// What is checked here is the half that gets by without a returner: that
+    /// an <c>&lt;enable resume='true'/&gt;</c> is answered, that a torn
+    /// connection does <b>not</b> end the session, and that it does end after
+    /// the deadline has run out. The <c>&lt;resume/&gt;</c> itself sits in the
+    /// setup phase of the client - before the resource binding, after the login
+    /// - and is only checkable once the client sends it.
     ///
-    /// Der Unterschied ist für die Kontakte sichtbar und deshalb heikel: bis
-    /// jetzt erzeugte der Server beim Abriss sofort eine Abmeldung im Namen des
-    /// Clients (RFC 6121, Abschnitt 4.5.2). Wer wiederkommen darf, darf nicht
-    /// abgemeldet werden - sonst sähen die Kontakte ein Aus und Ein, wo in
-    /// Wahrheit nichts geschehen ist. Bleibt der Rückkehrer aber aus, muss die
-    /// Abmeldung nachkommen, sonst führen die Kontakte die Resource für immer
-    /// als online.
+    /// The difference is visible to the contacts and therefore delicate: until
+    /// now the server produced a sign-off in the client's name at once upon the
+    /// tear (RFC 6121, section 4.5.2). Whoever may come back must not be signed
+    /// off - otherwise the contacts would see an out and an in where in truth
+    /// nothing happened. But if the returner fails to come, the sign-off has to
+    /// follow, otherwise the contacts keep the resource as online for ever.
     /// </remarks>
     [TestFixture]
     public class StreamResumptionTests : AXMPPTests
@@ -54,24 +53,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Data
 
         /// <summary>
-        /// Kurz genug, dass der Verfall im Test abzuwarten ist, lang genug,
-        /// dass er nicht mitten in den Aufbau fällt.
+        /// Short enough for the expiry to be waited out in the test, long
+        /// enough that it does not fall in the middle of the setup.
         /// </summary>
-        private static readonly TimeSpan Frist = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(2);
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Verbindet einen Client ohne eigenes Stream Management und handelt es
-        /// danach von Hand aus - mit oder ohne Wiederaufnahme.
+        /// Connects a client without stream management of its own and
+        /// negotiates it by hand afterwards - with or without resumption.
         /// </summary>
         /// <remarks>
-        /// Von Hand, weil der Client die Wiederaufnahme noch nicht selbst
-        /// anfordert. Sobald er es tut, kann das hier verschwinden.
+        /// By hand, because the client does not yet ask for the resumption
+        /// itself. As soon as it does, this can disappear.
         /// </remarks>
-        private async Task<(XMPPClient Client, XMPPSession Session)> MitStreamManagementAsync(
+        private async Task<(XMPPClient Client, XMPPSession Session)> WithStreamManagementAsync(
                                                                         Boolean resume,
                                                                         String  localPart = "alice")
         {
@@ -86,47 +85,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session = Server.SessionOf(client.FullJid)!;
 
             await WaitFor(() => session.StreamManagementEnabled,
-                          "ausgehandeltes Stream Management");
+                          "the negotiated stream management");
 
             return (client, session);
 
         }
 
-        /// <summary>Die Antwort des Servers auf <c>&lt;enable/&gt;</c>.</summary>
+        /// <summary>The answer of the server to an <c>&lt;enable/&gt;</c>.</summary>
         private static String? EnabledFrame(XMPPSession session)
             => session.Sent.LastOrDefault(f => f.StartsWith("<enabled", StringComparison.Ordinal));
 
         /// <summary>
-        /// Die letzte Abweisung, die der Server über eine seiner offenen
-        /// Sitzungen geschickt hat.
+        /// The last refusal the server has sent over one of its open sessions.
         /// </summary>
         /// <remarks>
-        /// Über alle Sitzungen und nicht über eine bestimmte, weil die
-        /// Abweisung auf dem <b>neuen</b> Stream ankommt - der alte ist gerade
-        /// der Grund für die Anfrage. Die abgerissene Sitzung ist nicht mehr
-        /// offen und steht deshalb nicht mehr in <c>Sessions</c>.
+        /// Over all sessions and not over a particular one, because the refusal
+        /// arrives on the <b>new</b> stream - the old one is precisely the
+        /// reason for the request. The torn session is no longer open and
+        /// therefore no longer stands in <c>Sessions</c>.
         /// </remarks>
-        private String? Abweisung()
+        private String? Refusal()
             => Server.Sessions
                      .SelectMany(s => s.Sent)
                      .LastOrDefault(f => f.StartsWith("<failed", StringComparison.Ordinal));
 
         /// <summary>
-        /// Reisst die Sitzung ab und wartet, bis der Server sie als
-        /// wiederaufnehmbar abgelegt hat.
+        /// Tears the session down and waits until the server has laid it aside
+        /// as resumable.
         /// </summary>
         /// <remarks>
-        /// Ohne dieses Warten steht in jedem Test, der eine gelungene
-        /// Wiederaufnahme erwartet, ein Wettlauf: Der Client kommt nach seiner
-        /// Reconnect-Frist wieder, der Server legt die Sitzung in seinem
-        /// eigenen Takt ab. Kommt der Client zuerst, findet sein
-        /// <c>&lt;resume/&gt;</c> nichts vor und bindet neu — was richtig ist,
-        /// nur prüft der Test dann etwas anderes, als er soll.
+        /// Without this waiting there is a race in every test that expects a
+        /// successful resumption: the client comes back after its reconnect
+        /// delay, the server lays the session aside at its own pace. If the
+        /// client comes first, its <c>&lt;resume/&gt;</c> finds nothing there
+        /// and binds anew — which is right, only the test then checks something
+        /// other than what it is meant to.
         ///
-        /// Aufgefallen als seltener Fehlschlag im vollen Durchlauf, nie allein.
-        /// Die Meldung lautete dann „der Stream wurde neu ausgehandelt" — was
-        /// zutraf und über den geprüften Code nichts aussagte. Mit dieser
-        /// Vorbedingung schlägt stattdessen sie fehl, und zwar mit dem Grund.
+        /// Noticed as a rare failure in the full run, never on its own. The
+        /// message then read "the stream was negotiated afresh" — which was
+        /// true and said nothing about the code being checked. With this
+        /// precondition it fails instead, and with the reason.
         /// </remarks>
         private async Task KillAndAwaitParked(XMPPSession session)
         {
@@ -134,7 +132,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             session.Kill();
 
             await WaitFor(() => Server.ResumableStreamCount > 0,
-                          "die vom Server abgelegte Sitzung");
+                          "the session laid aside by the server");
 
         }
 
@@ -144,49 +142,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EnableWithResume_IsAnsweredWithAnUnguessableId()
 
         /// <summary>
-        /// Fragt der Client nach Wiederaufnahme, bekommt er eine Kennung.
+        /// If the client asks after resumption, it gets an id.
         /// </summary>
         /// <remarks>
-        /// XEP-0198, Abschnitt 5.1: die Kennung ist das einzige Geheimnis, das
-        /// den Rückkehrer ausweist. Wer sie kennt, kann den Stream übernehmen -
-        /// deshalb darf sie nicht aus etwas Öffentlichem abzuleiten sein.
+        /// XEP-0198, section 5.1: the id is the only secret that identifies the
+        /// returner. Whoever knows it can take the stream over - which is why
+        /// it must not be derivable from anything public.
         ///
-        /// Die frühere Fassung schickte <c>id='sm-{Verbindungsnummer}'</c>.
-        /// Das ist eine kleine Zahl, die jeder Mitlesende mitzählen kann, und
-        /// wäre mit der Wiederaufnahme zu einem Einfallstor geworden. Ohne
-        /// Wiederaufnahme war die Kennung folgenlos - genau deshalb ist sie
-        /// nie aufgefallen.
+        /// The earlier version sent <c>id='sm-{connection number}'</c>. That is
+        /// a small number anyone reading along can count out, and with the
+        /// resumption it would have become a way in. Without the resumption the
+        /// id was without consequence - which is exactly why it never showed
+        /// up.
         /// </remarks>
         [Test]
         public async Task EnableWithResume_IsAnsweredWithAnUnguessableId()
         {
 
-            var (_, erste)  = await MitStreamManagementAsync(resume: true, localPart: "alice");
-            var (_, zweite) = await MitStreamManagementAsync(resume: true, localPart: "bob");
+            var (_, first)  = await WithStreamManagementAsync(resume: true, localPart: "alice");
+            var (_, second) = await WithStreamManagementAsync(resume: true, localPart: "bob");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(EnabledFrame(erste), Does.Contain("resume='true'"),
-                            "Der Server hat die Wiederaufnahme nicht zugesagt.");
+                Assert.That(EnabledFrame(first), Does.Contain("resume='true'"),
+                            "The server has not promised the resumption.");
 
-                Assert.That(erste.ResumptionId, Is.Not.Null.And.Length.GreaterThanOrEqualTo(22),
-                            "Zu kurz, um nicht erraten zu werden.");
+                Assert.That(first.ResumptionId, Is.Not.Null.And.Length.GreaterThanOrEqualTo(22),
+                            "Too short not to be guessed.");
 
-                Assert.That(EnabledFrame(erste), Does.Contain($"id='{erste.ResumptionId}'"));
+                Assert.That(EnabledFrame(first), Does.Contain($"id='{first.ResumptionId}'"));
 
-                // Genau die frühere Form.
-                Assert.That(erste.ResumptionId, Is.Not.EqualTo($"sm-{erste.ConnectionNumber}"));
+                // Exactly the earlier form.
+                Assert.That(first.ResumptionId, Is.Not.EqualTo($"sm-{first.ConnectionNumber}"));
 
-                // Und zwei Sitzungen bekommen verschiedene Kennungen.
+                // And two sessions get different ids.
                 //
-                // Hier stand zuerst eine Prüfung, die Kennung dürfe die
-                // Verbindungsnummer nicht als Teilzeichenkette enthalten. Das
-                // sagt nichts: eine zufällige Kennung aus 22 Zeichen enthält
-                // fast jede einzelne Ziffer irgendwo. Allein ausgeführt bestand
-                // der Test, im vollen Lauf - mit anderer Verbindungsnummer -
-                // fiel er durch.
-                Assert.That(erste.ResumptionId, Is.Not.EqualTo(zweite.ResumptionId));
+                // A check stood here at first that the id must not contain the
+                // connection number as a substring. That says nothing: a random
+                // id of 22 characters contains almost every single digit
+                // somewhere. Run on its own the test passed, in the full run -
+                // with a different connection number - it failed.
+                Assert.That(first.ResumptionId, Is.Not.EqualTo(second.ResumptionId));
 
             });
 
@@ -197,14 +194,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EnableWithoutResume_PromisesNothing()
 
         /// <summary>
-        /// Ohne Nachfrage keine Zusage - und damit auch nichts, was der Server
-        /// aufheben müsste.
+        /// Without asking no promise - and thereby nothing the server would
+        /// have to keep.
         /// </summary>
         [Test]
         public async Task EnableWithoutResume_PromisesNothing()
         {
 
-            var (_, session) = await MitStreamManagementAsync(resume: false);
+            var (_, session) = await WithStreamManagementAsync(resume: false);
 
             Assert.Multiple(() =>
             {
@@ -219,14 +216,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADroppedResumableStream_DoesNotLogTheUserOut()
 
         /// <summary>
-        /// Reisst die Verbindung eines wiederaufnehmbaren Streams ab, bleibt
-        /// die Resource für ihre Kontakte verfügbar.
+        /// If the connection of a resumable stream tears, the resource stays
+        /// available to its contacts.
         /// </summary>
         /// <remarks>
-        /// Das ist der Sinn der ganzen Übung. Ohne sie erzeugt der Server beim
-        /// Abriss sofort eine Abmeldung, und ein Client, der zwei Sekunden
-        /// später wiederkommt, hat seinen Kontakten in der Zwischenzeit ein
-        /// Verschwinden vorgeführt, das nie stattgefunden hat.
+        /// That is the point of the whole exercise. Without it the server
+        /// produces a sign-off at once upon the tear, and a client that comes
+        /// back two seconds later has shown its contacts a disappearance in the
+        /// meantime that never took place.
         /// </remarks>
         [Test]
         public async Task ADroppedResumableStream_DoesNotLogTheUserOut()
@@ -234,28 +231,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            var (_, aliceSession) = await MitStreamManagementAsync(resume: true);
+            var (_, aliceSession) = await WithStreamManagementAsync(resume: true);
             var bob                   = await ConnectClientAsync("bob", createAccount: false);
 
-            var abmeldungen = 0;
+            var signOffs = 0;
             bob.OnPresenceChanged += (from, type) =>
             {
                 if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
-                    Interlocked.Increment(ref abmeldungen);
+                    Interlocked.Increment(ref signOffs);
             };
 
-            // Die erste Presence schickt der Client schon beim Aufbau; ohne
-            // sie gilt die Resource nicht als verfügbar (RFC 6121, 4.2.1) und
-            // es gäbe auch nichts abzumelden.
-            await WaitFor(() => aliceSession.IsAvailable, "Alice ist verfügbar");
+            // The client sends the first presence during the setup already;
+            // without it the resource does not count as available (RFC 6121,
+            // 4.2.1) and there would be nothing to sign off either.
+            await WaitFor(() => aliceSession.IsAvailable, "Alice to be available");
 
             aliceSession.Kill();
 
-            await WaitAgainst(() => abmeldungen > 0,
-                              "eine Abmeldung von Alice, obwohl ihr Stream aufgehoben wird");
+            await WaitAgainst(() => signOffs > 0,
+                              "a sign-off from Alice, although her stream is being kept");
 
             Assert.That(Server.ResumableStreamCount, Is.EqualTo(1),
-                        "Der Stream wurde nicht aufgehoben.");
+                        "The stream was not kept.");
 
         }
 
@@ -264,52 +261,52 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AKeptStreamExpires_AndThenTheContactsSeeIt()
 
         /// <summary>
-        /// Kommt niemand zurück, endet die Sitzung doch - und die Abmeldung
-        /// wird nachgeholt.
+        /// If nobody comes back, the session ends after all - and the sign-off
+        /// is made up for.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum vorigen Test, und ohne sie wäre der Zugewinn
-        /// keiner: eine aufgeschobene Abmeldung, die nie kommt, ist schlimmer
-        /// als eine zu frühe. Die Kontakte führten die Resource dann für immer
-        /// als online, und kein Fehler wäre je sichtbar.
+        /// The counter-check to the previous test, and without it the gain
+        /// would be none: a deferred sign-off that never comes is worse than
+        /// one that is too early. The contacts would then keep the resource as
+        /// online for ever, and no fault would ever be visible.
         /// </remarks>
         [Test]
         public async Task AKeptStreamExpires_AndThenTheContactsSeeIt()
         {
 
-            Server.ResumptionTimeout = Frist;
+            Server.ResumptionTimeout = Deadline;
 
             MakeContacts("alice", "bob");
 
-            var (_, aliceSession) = await MitStreamManagementAsync(resume: true);
+            var (_, aliceSession) = await WithStreamManagementAsync(resume: true);
             var bob                   = await ConnectClientAsync("bob", createAccount: false);
 
-            var abmeldungen = 0;
+            var signOffs = 0;
             bob.OnPresenceChanged += (from, type) =>
             {
                 if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
-                    Interlocked.Increment(ref abmeldungen);
+                    Interlocked.Increment(ref signOffs);
             };
 
-            // Die erste Presence schickt der Client schon beim Aufbau; ohne
-            // sie gilt die Resource nicht als verfügbar (RFC 6121, 4.2.1) und
-            // es gäbe auch nichts abzumelden.
-            await WaitFor(() => aliceSession.IsAvailable, "Alice ist verfügbar");
+            // The client sends the first presence during the setup already;
+            // without it the resource does not count as available (RFC 6121,
+            // 4.2.1) and there would be nothing to sign off either.
+            await WaitFor(() => aliceSession.IsAvailable, "Alice to be available");
 
             aliceSession.Kill();
 
-            await WaitFor(() => abmeldungen > 0,
-                          "die nachgeholte Abmeldung nach Ablauf der Frist",
-                          Frist + TimeSpan.FromSeconds(10));
+            await WaitFor(() => signOffs > 0,
+                          "the sign-off made up for after the deadline ran out",
+                          Deadline + TimeSpan.FromSeconds(10));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abmeldungen, Is.EqualTo(1),
-                            "Die Abmeldung kam mehr als einmal.");
+                Assert.That(signOffs, Is.EqualTo(1),
+                            "The sign-off came more than once.");
 
                 Assert.That(Server.ResumableStreamCount, Is.Zero,
-                            "Der verfallene Stream liegt noch herum.");
+                            "The expired stream is still lying about.");
 
             });
 
@@ -320,48 +317,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnInvisibleClient_KeepsItsResumableStream()
 
         /// <summary>
-        /// Die Wiederaufnahme hängt am Stream, nicht an der Presence: Auch ein
-        /// Client, der sich unsichtbar gemacht hat, behält seinen aufgehobenen
-        /// Stream.
+        /// The resumption hangs on the stream, not on the presence: a client
+        /// that has made itself invisible keeps its kept stream too.
         /// </summary>
         /// <remarks>
-        /// Hier wurden zwei Dinge verwechselt. Zugesagt wird die Wiederaufnahme
-        /// mit <c>&lt;enabled resume='true'/&gt;</c> und gehört damit dem
-        /// Stream; die Presence sagt den Kontakten etwas über den Menschen
-        /// davor. Das Ablegen verlangte trotzdem eine <i>verfügbare</i>
-        /// Sitzung — und wer sich abmeldete, ohne die Verbindung zu beenden,
-        /// verlor die Zusage stillschweigend: Sein <c>&lt;resume/&gt;</c>
-        /// bekam ein <c>&lt;failed/&gt;</c>, und alles Unbestätigte war fort.
+        /// Two things were confused here. The resumption is promised with an
+        /// <c>&lt;enabled resume='true'/&gt;</c> and thereby belongs to the
+        /// stream; the presence tells the contacts something about the person
+        /// in front of it. The laying aside demanded an <i>available</i>
+        /// session all the same — and whoever signed off without ending the
+        /// connection lost the promise in silence: their
+        /// <c>&lt;resume/&gt;</c> got a <c>&lt;failed/&gt;</c>, and everything
+        /// unacknowledged was gone.
         ///
-        /// Aufgefallen ist das nicht an diesem Fall, sondern an einem Test, der
-        /// gelegentlich in die Zeitüberschreitung lief: Er riss die Verbindung
-        /// ab, sobald die Wiederaufnahme zugesagt war — und das ist im Aufbau
-        /// des Clients <i>vor</i> seiner ersten Presence. Auf einer ruhigen
-        /// Maschine kam die Presence rechtzeitig, unter Last nicht immer.
+        /// That did not show up at this case but at a test that occasionally
+        /// ran into the timeout: it tore the connection down as soon as the
+        /// resumption was promised — and in the setup of the client that is
+        /// <i>before</i> its first presence. On a quiet machine the presence
+        /// came in time, under load not always.
         /// </remarks>
         [Test]
         public async Task AnInvisibleClient_KeepsItsResumableStream()
         {
 
             var alice   = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            // Unsichtbar, aber verbunden - der Stream läuft weiter.
+            // Invisible but connected - the stream carries on.
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => !sitzung.IsAvailable,
-                          "die abgemeldete, aber offene Sitzung");
+            await WaitFor(() => !session.IsAvailable,
+                          "the signed-off but open session");
 
-            sitzung.Kill();
+            session.Kill();
 
             await WaitFor(() => Server.ResumableStreamCount == 1,
-                          "den aufgehobenen Stream");
+                          "the kept stream");
 
-            Assert.That(sitzung.ResumptionId, Is.Not.Null,
-                        "Die Kennung gehört dem Stream und überlebt die Abmeldung.");
+            Assert.That(session.ResumptionId, Is.Not.Null,
+                        "The id belongs to the stream and outlives the sign-off.");
 
         }
 
@@ -370,13 +367,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStreamWithoutResume_IsAnnouncedAtOnce()
 
         /// <summary>
-        /// Ohne zugesagte Wiederaufnahme bleibt es beim bisherigen Verhalten.
+        /// Without a promised resumption the behaviour stays as it was.
         /// </summary>
         /// <remarks>
-        /// Der Test hält fest, dass die Aufschiebung an der Zusage hängt und
-        /// nicht am Stream Management überhaupt. Ohne ihn liesse sich die
-        /// Abmeldung versehentlich für alle aufschieben, und die
-        /// Verzögerung fiele erst im Betrieb auf.
+        /// The test records that the deferral hangs on the promise and not on
+        /// stream management as such. Without it the sign-off could be deferred
+        /// for everyone by mistake, and the delay would show up only in
+        /// service.
         /// </remarks>
         [Test]
         public async Task AStreamWithoutResume_IsAnnouncedAtOnce()
@@ -384,24 +381,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            var (_, aliceSession) = await MitStreamManagementAsync(resume: false);
+            var (_, aliceSession) = await WithStreamManagementAsync(resume: false);
             var bob                   = await ConnectClientAsync("bob", createAccount: false);
 
-            var abmeldungen = 0;
+            var signOffs = 0;
             bob.OnPresenceChanged += (from, type) =>
             {
                 if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
-                    Interlocked.Increment(ref abmeldungen);
+                    Interlocked.Increment(ref signOffs);
             };
 
-            // Die erste Presence schickt der Client schon beim Aufbau; ohne
-            // sie gilt die Resource nicht als verfügbar (RFC 6121, 4.2.1) und
-            // es gäbe auch nichts abzumelden.
-            await WaitFor(() => aliceSession.IsAvailable, "Alice ist verfügbar");
+            // The client sends the first presence during the setup already;
+            // without it the resource does not count as available (RFC 6121,
+            // 4.2.1) and there would be nothing to sign off either.
+            await WaitFor(() => aliceSession.IsAvailable, "Alice to be available");
 
             aliceSession.Kill();
 
-            await WaitFor(() => abmeldungen > 0, "die sofortige Abmeldung");
+            await WaitFor(() => signOffs > 0, "the immediate sign-off");
 
             Assert.That(Server.ResumableStreamCount, Is.Zero);
 
@@ -412,13 +409,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AcknowledgedStanzas_LeaveTheBuffer()
 
         /// <summary>
-        /// Was der Client bestätigt hat, hebt der Server nicht länger auf.
+        /// What the client has acknowledged the server does not keep any
+        /// longer.
         /// </summary>
         /// <remarks>
-        /// Der Puffer trägt die Stanzas, die nach einer Wiederaufnahme
-        /// nachzusenden wären (XEP-0198, Abschnitt 5). Er darf nur das
-        /// enthalten, was noch nicht angekommen ist - sonst wüchse er ohne
-        /// Ende, und der Rückkehrer bekäme alles doppelt, was er längst hat.
+        /// The buffer carries the stanzas that would have to be sent on after a
+        /// resumption (XEP-0198, section 5). It may hold only what has not
+        /// arrived yet - otherwise it would grow without end, and the returner
+        /// would get everything twice that it has long had.
         /// </remarks>
         [Test]
         public async Task AcknowledgedStanzas_LeaveTheBuffer()
@@ -426,36 +424,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            var (_, aliceSession) = await MitStreamManagementAsync(resume: true);
+            var (_, aliceSession) = await WithStreamManagementAsync(resume: true);
             var bob               = await ConnectClientAsync("bob", createAccount: false);
 
             for (var i = 0; i < 3; i++)
-                await bob.SendMessageAsync($"alice@{Server.Domain}", $"Nachricht {i}");
+                await bob.SendMessageAsync($"alice@{Server.Domain}", $"Message {i}");
 
             await WaitFor(() => aliceSession.StanzasSentToClient >= 3,
-                          "drei zugestellte Nachrichten");
+                          "three delivered messages");
 
             Assert.That(aliceSession.UnacknowledgedToClient, Is.GreaterThanOrEqualTo(3),
-                        "Nichts gepuffert - dann gäbe es nach einer Wiederaufnahme nichts nachzusenden.");
+                        "Nothing buffered - then there would be nothing to send on after a resumption.");
 
-            // Auf den Stand *zum Zeitpunkt der Nachfrage* beziehen, nicht auf
-            // einen leeren Puffer: es läuft weiter Verkehr. Bobs Client
-            // quittiert die drei Nachrichten mit XEP-0184-Empfangsbestätigungen,
-            // und die sind ihrerseits Stanzas an Alice - trifft eine davon
-            // zwischen dem <r/> und dem <a/> ein, ist der Puffer nie leer.
+            // Refer to the state *at the moment of the enquiry*, not to an
+            // empty buffer: traffic carries on. Bob's client acknowledges the
+            // three messages with XEP-0184 delivery receipts, and those are
+            // stanzas to Alice in their turn - if one of them arrives between
+            // the <r/> and the <a/>, the buffer is never empty.
             //
-            // "Der Puffer ist leer" war in etwa jedem dritten vollen Lauf
-            // falsch, allein ausgeführt nie. Was der Test meint, ist: was
-            // bestätigt wurde, liegt nicht mehr drin.
-            var standBeiderNachfrage = aliceSession.StanzasSentToClient;
+            // "The buffer is empty" was wrong in about every third full run,
+            // never when run on its own. What the test means is: what was
+            // acknowledged is no longer in there.
+            var stateAtTheEnquiry = aliceSession.StanzasSentToClient;
 
             await aliceSession.RequestAckAsync();
 
-            await WaitFor(() => aliceSession.LastAckFromClient >= standBeiderNachfrage,
-                          "das <a/> des Clients über den Stand zum Zeitpunkt der Nachfrage");
+            await WaitFor(() => aliceSession.LastAckFromClient >= stateAtTheEnquiry,
+                          "the <a/> of the client about the state at the moment of the enquiry");
 
-            Assert.That(aliceSession.PendingToClient.Any(e => e.Seq <= standBeiderNachfrage), Is.False,
-                        "Bestätigte Stanzas liegen noch im Puffer.");
+            Assert.That(aliceSession.PendingToClient.Any(e => e.Seq <= stateAtTheEnquiry), Is.False,
+                        "Acknowledged stanzas are still lying in the buffer.");
 
         }
 
@@ -464,62 +462,61 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheClientResumesInsteadOfBindingAnew()
 
         /// <summary>
-        /// Nach einem Abriss nimmt der Client den Stream wieder auf, statt
-        /// eine neue Resource zu binden.
+        /// After a tear the client resumes the stream instead of binding a new
+        /// resource.
         /// </summary>
         /// <remarks>
-        /// Die Full-JID ist der sichtbare Beleg. Bei einem gewöhnlichen
-        /// Neuaufbau vergibt der Server eine neue Resource, und für die
-        /// Kontakte ist der Rückkehrer ein anderer als der Verschwundene -
-        /// laufende Gespräche, die auf die volle Adresse zeigen, laufen ins
-        /// Leere. Nach einer Wiederaufnahme ist es dieselbe Adresse, weil es
-        /// derselbe Stream ist.
+        /// The full JID is the visible proof. With an ordinary fresh setup the
+        /// server hands out a new resource, and to the contacts the returner is
+        /// someone other than the one who disappeared - running conversations
+        /// pointing at the full address run into nothing. After a resumption it
+        /// is the same address, because it is the same stream.
         /// </remarks>
         [Test]
         public async Task TheClientResumesInsteadOfBindingAnew()
         {
 
             var alice    = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
-            var vorher   = alice.FullJid;
-            var sitzung  = Server.SessionOf(vorher!)!;
+            var before   = alice.FullJid;
+            var session  = Server.SessionOf(before!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var kennung = alice.StreamManagement!.ResumeId;
+            var resumeId = alice.StreamManagement!.ResumeId;
 
-            // Auf den *abgeschlossenen* Aufbau warten, nicht auf das
-            // Abholen des Streams: der Server raeumt ihn mitten in der
-            // Aufbauphase des Clients aus seiner Liste, und wer nur darauf
-            // wartet, prueft den Client in einem Zustand, den er gleich
-            // wieder verlaesst. Genau daran ist die Mutation, die den
-            // Manager bei jedem Aufbau neu erzeugt, zunaechst vorbeigekommen.
-            var wiederVerbunden = 0;
-            alice.OnStateChanged += (_, neu) =>
+            // Wait for the *finished* setup, not for the picking up of the
+            // stream: the server clears it out of its list in the middle of the
+            // client's setup phase, and whoever waits only for that checks the
+            // client in a state it is about to leave again. That is exactly
+            // what the mutation creating the manager afresh at every setup got
+            // past at first.
+            var reconnected = 0;
+            alice.OnStateChanged += (_, newState) =>
             {
-                if (neu == ConnectionState.Connected)
-                    Interlocked.Increment(ref wiederVerbunden);
+                if (newState == ConnectionState.Connected)
+                    Interlocked.Increment(ref reconnected);
             };
 
-            await KillAndAwaitParked(sitzung);
+            await KillAndAwaitParked(session);
 
-            await WaitFor(() => wiederVerbunden > 0,
-                          "die wiederaufgenommene Sitzung",
+            await WaitFor(() => reconnected > 0,
+                          "the resumed session",
                           TimeSpan.FromSeconds(20));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(alice.FullJid, Is.EqualTo(vorher),
-                            "Der Client hat eine neue Resource gebunden statt wiederaufzunehmen.");
+                Assert.That(alice.FullJid, Is.EqualTo(before),
+                            "The client bound a new resource instead of resuming.");
 
-                // Die Full-JID allein reicht als Beleg nicht: die Resource ist
-                // prozessfest, ein neuer Bind ergäbe dieselbe Adresse. Eine
-                // unveränderte Kennung gibt es nur ohne neues <enabled/>.
-                Assert.That(alice.StreamManagement.ResumeId, Is.EqualTo(kennung),
-                            "Der Stream wurde neu ausgehandelt statt wieder aufgenommen.");
+                // The full JID alone does not suffice as proof: the resource is
+                // fixed per process, a new bind would give the same address. An
+                // unchanged id exists only without a new <enabled/>.
+                Assert.That(alice.StreamManagement.ResumeId, Is.EqualTo(resumeId),
+                            "The stream was negotiated afresh instead of resumed.");
 
-                Assert.That(Server.SessionOf(vorher!), Is.Not.Null);
+                Assert.That(Server.SessionOf(before!), Is.Not.Null);
 
             });
 
@@ -530,15 +527,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhatArrivedDuringTheOutage_IsDeliveredAfterwards()
 
         /// <summary>
-        /// Was während des Abrisses zugestellt wurde, kommt nach der
-        /// Wiederaufnahme nach.
+        /// What was delivered during the tear comes on after the resumption.
         /// </summary>
         /// <remarks>
-        /// Der eigentliche Gewinn der ganzen Erweiterung, und der Grund für
-        /// den Puffer aus R1. Ohne ihn wäre die Wiederaufnahme nur Kosmetik an
-        /// der Full-JID: die Nachrichten, die der Server in eine tote
-        /// Verbindung geschrieben hat, wären weg, und niemand erführe davon -
-        /// weder der Absender noch der Empfänger.
+        /// The real gain of the whole extension, and the reason for the buffer
+        /// from R1. Without it the resumption would be mere cosmetics on the
+        /// full JID: the messages the server wrote into a dead connection would
+        /// be gone, and nobody would learn of it - neither the sender nor the
+        /// recipient.
         /// </remarks>
         [Test]
         public async Task WhatArrivedDuringTheOutage_IsDeliveredAfterwards()
@@ -548,22 +544,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(500));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var angekommen = new List<String>();
-            alice.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            alice.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
-            // Die Verbindung ist tot, der Server weiss es noch nicht: was er
-            // jetzt schickt, geht in den Puffer.
-            sitzung.Kill();
+            // The connection is dead, the server does not know it yet: what it
+            // sends now goes into the buffer.
+            session.Kill();
 
-            await bob.SendMessageAsync($"alice@{Server.Domain}", "Im Dunkeln geschickt");
+            await bob.SendMessageAsync($"alice@{Server.Domain}", "Sent in the dark");
 
-            await WaitFor(() => { lock (angekommen) return angekommen.Contains("Im Dunkeln geschickt"); },
-                          "die nachgesendete Nachricht",
+            await WaitFor(() => { lock (arrived) return arrived.Contains("Sent in the dark"); },
+                          "the message sent on afterwards",
                           TimeSpan.FromSeconds(20));
 
         }
@@ -573,55 +569,55 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStolenId_DoesNotHandOverTheStream()
 
         /// <summary>
-        /// Die Kennung allein reicht nicht - der Rückkehrer muss auf demselben
-        /// Konto angemeldet sein.
+        /// The id alone does not suffice - the returner has to be logged in on
+        /// the same account.
         /// </summary>
         /// <remarks>
-        /// Die schwerwiegendste Stelle der ganzen Erweiterung. Die Kennung
-        /// wandert über die Leitung; wer sie in die Finger bekommt, hätte
-        /// ohne diese Prüfung eine fremde Sitzung samt Full-JID, Roster und
-        /// laufenden Gesprächen - ohne je das Passwort gesehen zu haben.
+        /// The gravest spot of the whole extension. The id travels over the
+        /// wire; whoever gets hold of it would have, without this check, a
+        /// foreign session along with full JID, roster and running
+        /// conversations - without ever having seen the password.
         ///
-        /// Sie ist damit kein Ausweis, sondern nur eine Auswahl: <i>welcher</i>
-        /// der aufgehobenen Streams dieses Kontos gemeint ist. Ausgewiesen hat
-        /// sich der Client vorher, über SASL.
+        /// It is thereby no proof of identity but only a selection:
+        /// <i>which</i> of the kept streams of this account is meant. The
+        /// client identified itself beforehand, over SASL.
         /// </remarks>
         [Test]
         public async Task AStolenId_DoesNotHandOverTheStream()
         {
 
             var alice   = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var aliceKennung = alice.StreamManagement!.ResumeId;
+            var aliceResumeId = alice.StreamManagement!.ResumeId;
             var aliceJid     = alice.FullJid;
 
-            sitzung.Kill();
-            await WaitFor(() => Server.ResumableStreamCount == 1, "den aufgehobenen Stream");
+            session.Kill();
+            await WaitFor(() => Server.ResumableStreamCount == 1, "the kept stream");
 
-            // Mallory ist ordentlich angemeldet - nur eben als Mallory - und
-            // legt Alices Kennung vor.
+            // Mallory is properly logged in - only as Mallory - and presents
+            // Alice's id.
             var mallory = await ConnectClientAsync("mallory", maxReconnectAttempts: 0);
 
             await mallory.SendRawAsync(
-                      $"<resume xmlns='urn:xmpp:sm:3' h='0' previd='{aliceKennung}'/>");
+                      $"<resume xmlns='urn:xmpp:sm:3' h='0' previd='{aliceResumeId}'/>");
 
-            var mallorySitzung = Server.SessionOf(mallory.FullJid!)!;
+            var mallorySession = Server.SessionOf(mallory.FullJid!)!;
 
-            await WaitFor(() => mallorySitzung.Sent.Any(f => f.StartsWith("<failed", StringComparison.Ordinal)),
-                          "die Abweisung");
+            await WaitFor(() => mallorySession.Sent.Any(f => f.StartsWith("<failed", StringComparison.Ordinal)),
+                          "the refusal");
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(mallory.FullJid, Is.Not.EqualTo(aliceJid),
-                            "Mallory hat Alices Adresse übernommen.");
+                            "Mallory has taken over Alice's address.");
 
                 Assert.That(Server.ResumableStreamCount, Is.EqualTo(1),
-                            "Alices Stream wurde herausgegeben.");
+                            "Alice's stream was handed out.");
 
             });
 
@@ -632,26 +628,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheResumedCountPreventsADoubleDelivery()
 
         /// <summary>
-        /// Was der Server schon hatte, schickt der Client nach der
-        /// Wiederaufnahme nicht noch einmal.
+        /// What the server already had the client does not send again after the
+        /// resumption.
         /// </summary>
         /// <remarks>
-        /// Der Client hält jede gesendete Stanza fest, bis ein <c>h</c> sie
-        /// bestätigt. Nach einem Abriss hat er deshalb eine Warteschlange voll
-        /// Stanzas, die der Server längst verarbeitet hat - er hatte nur nie
-        /// Anlass, sie zu bestätigen. Sendete er sie stumpf alle nach, bekäme
-        /// jeder Empfänger sie doppelt.
+        /// The client holds on to every stanza it sends until an <c>h</c>
+        /// acknowledges it. After a tear it therefore has a queue full of
+        /// stanzas the server has long since processed - it just never had
+        /// occasion to acknowledge them. Were it to send them all on bluntly,
+        /// every recipient would get them twice.
         ///
-        /// Genau dagegen trägt das <c>h</c> im <c>&lt;resumed/&gt;</c>: es
-        /// meldet, wie weit der Server gekommen ist, und räumt die
-        /// Warteschlange bis dorthin ab. Erst was danach kommt, geht erneut
-        /// hinaus.
+        /// That is exactly what the <c>h</c> in the <c>&lt;resumed/&gt;</c>
+        /// carries against: it reports how far the server got, and clears the
+        /// queue up to there. Only what comes after that goes out again.
         ///
-        /// <b>Nicht abgedeckt</b> bleibt der umgekehrte Fall - eine Stanza,
-        /// die der Client erfolgreich abschickt und die den Server nie
-        /// erreicht. Im selben Prozess gibt es ihn nicht: ein abgerissener
-        /// Socket lässt das Senden sofort und lautstark scheitern, und eine
-        /// nicht gesendete Stanza wird gar nicht erst mitgezählt.
+        /// <b>Not covered</b> is the reverse case - a stanza the client sends
+        /// successfully and that never reaches the server. Within the same
+        /// process it does not exist: a torn socket makes the sending fail at
+        /// once and loudly, and a stanza that was not sent is not counted in in
+        /// the first place.
         /// </remarks>
         [Test]
         public async Task TheResumedCountPreventsADoubleDelivery()
@@ -661,46 +656,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var angekommen = new List<String>();
-            bob.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Nur einmal");
+            await alice.SendMessageAsync($"bob@{Server.Domain}", "Only once");
 
-            await WaitFor(() => { lock (angekommen) return angekommen.Count == 1; },
-                          "die Nachricht bei Bob");
+            await WaitFor(() => { lock (arrived) return arrived.Count == 1; },
+                          "the message at Bob");
 
             Assert.That(alice.StreamManagement!.UnackedCount, Is.GreaterThan(0),
-                        "Nichts offen - dann gäbe es beim Wiederaufnehmen auch nichts falsch zu machen.");
+                        "Nothing outstanding - then there would be nothing to get wrong when resuming.");
 
-            var wiederVerbunden = 0;
-            alice.OnStateChanged += (_, neu) =>
+            var reconnected = 0;
+            alice.OnStateChanged += (_, newState) =>
             {
-                if (neu == ConnectionState.Connected)
-                    Interlocked.Increment(ref wiederVerbunden);
+                if (newState == ConnectionState.Connected)
+                    Interlocked.Increment(ref reconnected);
             };
 
-            await KillAndAwaitParked(sitzung);
+            await KillAndAwaitParked(session);
 
-            await WaitFor(() => wiederVerbunden > 0,
-                          "die wiederaufgenommene Sitzung",
+            await WaitFor(() => reconnected > 0,
+                          "the resumed session",
                           TimeSpan.FromSeconds(20));
 
-            // Hier stand in D7 eine verlängerte Frist, weil dieser Test unter
-            // Last gelegentlich rot wurde. Das war die falsche Erklärung: Es
-            // ging nie um Wartezeit, sondern um eine Warteschlange, die von
-            // selbst nicht leer wurde, solange das Nachsenden keine
-            // Bestätigung anforderte (siehe D9). Die Frist steht wieder auf
-            // dem Vorgabewert.
+            // In D7 a lengthened deadline stood here, because this test
+            // occasionally turned red under load. That was the wrong
+            // explanation: it was never about waiting time, but about a queue
+            // that did not empty of its own accord as long as the sending on
+            // asked for no acknowledgement (see D9). The deadline stands at the
+            // default again.
             await WaitFor(() => alice.StreamManagement.UnackedCount == 0,
-                          "das Leeren der Warteschlange nach der Wiederaufnahme");
+                          "the emptying of the queue after the resumption");
 
-            await WaitAgainst(() => { lock (angekommen) return angekommen.Count > 1; },
-                              "eine zweite Zustellung derselben Nachricht");
+            await WaitAgainst(() => { lock (arrived) return arrived.Count > 1; },
+                              "a second delivery of the same message");
 
         }
 
@@ -709,14 +704,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnExpiredStream_FallsBackToAFreshBind()
 
         /// <summary>
-        /// Ist die Frist abgelaufen, baut der Client normal auf.
+        /// If the deadline has run out, the client sets up normally.
         /// </summary>
         /// <remarks>
-        /// Der Fehlerpfad, und ohne ihn wäre die Erweiterung gefährlicher als
-        /// ihr Nutzen: ein Client, der auf ein <c>&lt;failed/&gt;</c> nicht
-        /// zurückfallen kann, käme nach einer längeren Störung überhaupt nicht
-        /// mehr online. Die neue Resource ist hier das Richtige - der alte
-        /// Stream ist endgültig fort.
+        /// The error path, and without it the extension would be more dangerous
+        /// than its use: a client that cannot fall back on a
+        /// <c>&lt;failed/&gt;</c> would not come online at all any more after a
+        /// longer disturbance. The new resource is the right thing here - the
+        /// old stream is gone for good.
         /// </remarks>
         [Test]
         public async Task AnExpiredStream_FallsBackToAFreshBind()
@@ -725,28 +720,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.ResumptionTimeout = TimeSpan.FromMilliseconds(1);
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromSeconds(3));
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            // Die Kennung unterscheidet die beiden Fälle, nicht die Full-JID:
-            // die Resource ist prozessfest (console-{ProcessId}), ein neuer
-            // Bind ergibt also dieselbe Adresse. Eine Wiederaufnahme behält
-            // ihre Kennung, ein neues <enabled/> bringt eine neue.
-            var alteKennung = alice.StreamManagement!.ResumeId;
+            // The id tells the two cases apart, not the full JID: the resource
+            // is fixed per process (console-{ProcessId}), so a new bind gives
+            // the same address. A resumption keeps its id, a new <enabled/>
+            // brings a new one.
+            var oldResumeId = alice.StreamManagement!.ResumeId;
 
-            sitzung.Kill();
+            session.Kill();
 
-            // Der Abräumer läuft im Sekundentakt, der Reconnect erst danach.
+            // The sweeper runs once a second, the reconnect only after that.
             await WaitFor(() => alice.IsConnected &&
                                 alice.StreamManagement.ResumeId is not null &&
-                                alice.StreamManagement.ResumeId != alteKennung,
-                          "einen neuen Aufbau nach abgelaufener Frist",
+                                alice.StreamManagement.ResumeId != oldResumeId,
+                          "a fresh setup after the deadline ran out",
                           TimeSpan.FromSeconds(30));
 
             Assert.That(Server.SessionOf(alice.FullJid!), Is.Not.Null,
-                        "Der Client hält sich für verbunden, der Server kennt ihn nicht.");
+                        "The client holds itself to be connected, the server does not know it.");
 
         }
 
@@ -755,27 +750,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region StanzasLostInFlight_GoOutAgainAfterResumption()
 
         /// <summary>
-        /// Was der Client erfolgreich abgeschickt hat und der Server nie
-        /// verarbeitet hat, geht nach der Wiederaufnahme erneut hinaus.
+        /// What the client sent successfully and the server never processed
+        /// goes out again after the resumption.
         /// </summary>
         /// <remarks>
-        /// Der Fall, für den der Puffer auf der Client-Seite überhaupt
-        /// existiert - und der bis hierher ungeprüft blieb, weil er sich im
-        /// selben Prozess nicht herstellen liess: ein abgerissener Socket
-        /// lässt das Senden sofort und lautstark scheitern, und eine nicht
-        /// gesendete Stanza wird gar nicht erst mitgezählt. Was fehlte, war
-        /// eine Stanza, die die Leitung verlässt und trotzdem nicht ankommt.
+        /// The case the buffer on the client side exists for at all - and the
+        /// one that stayed unchecked up to here, because it could not be
+        /// brought about within the same process: a torn socket makes the
+        /// sending fail at once and loudly, and a stanza that was not sent is
+        /// not counted in in the first place. What was missing was a stanza
+        /// that leaves the wire and still does not arrive.
         ///
-        /// <c>SwallowClientStanzas</c> stellt genau das her: der Server nimmt
-        /// den Rahmen entgegen und wirft ihn weg, bevor er ihn zählt oder
-        /// weiterreicht. Für den Client sieht es aus wie ein geglücktes
-        /// Senden, für den Server, als sei nie etwas gekommen - dasselbe Bild
-        /// wie bei einer Verbindung, die zwischen Absenden und Verarbeiten
-        /// zerfällt.
+        /// <c>SwallowClientStanzas</c> brings about exactly that: the server
+        /// takes the frame and throws it away before it counts it or passes it
+        /// on. To the client it looks like a successful send, to the server as
+        /// though nothing ever came - the same picture as with a connection
+        /// that falls apart between the sending and the processing.
         ///
-        /// Dass die Nachricht am Ende ankommt, hängt allein am Nachsenden:
-        /// ohne es ist sie fort, und weder Absender noch Empfänger erführen
-        /// davon.
+        /// That the message arrives in the end hangs on the sending on alone:
+        /// without it it is gone, and neither sender nor recipient would learn
+        /// of it.
         /// </remarks>
         [Test]
         public async Task StanzasLostInFlight_GoOutAgainAfterResumption()
@@ -785,60 +779,61 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var angekommen = new List<String>();
-            bob.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
-            var offenVorher = alice.StreamManagement!.UnackedCount;
+            var openBefore = alice.StreamManagement!.UnackedCount;
 
-            // Ab hier verschluckt der Server, was Alice schickt.
+            // From here on the server swallows what Alice sends.
             Server.SwallowClientStanzas = true;
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Unterwegs verloren");
+            await alice.SendMessageAsync($"bob@{Server.Domain}", "Lost in flight");
 
-            await WaitFor(() => alice.StreamManagement.UnackedCount > offenVorher,
-                          "die abgeschickte, aber unbestätigte Nachricht");
+            await WaitFor(() => alice.StreamManagement.UnackedCount > openBefore,
+                          "the message sent off but unacknowledged");
 
-            await WaitAgainst(() => { lock (angekommen) return angekommen.Count > 0; },
-                              "eine Zustellung, obwohl der Server verschluckt");
+            await WaitAgainst(() => { lock (arrived) return arrived.Count > 0; },
+                              "a delivery, although the server is swallowing");
 
             Server.SwallowClientStanzas = false;
 
-            var wiederVerbunden = 0;
-            alice.OnStateChanged += (_, neu) =>
+            var reconnected = 0;
+            alice.OnStateChanged += (_, newState) =>
             {
-                if (neu == ConnectionState.Connected)
-                    Interlocked.Increment(ref wiederVerbunden);
+                if (newState == ConnectionState.Connected)
+                    Interlocked.Increment(ref reconnected);
             };
 
-            await KillAndAwaitParked(sitzung);
+            await KillAndAwaitParked(session);
 
-            await WaitFor(() => wiederVerbunden > 0,
-                          "die wiederaufgenommene Sitzung",
+            await WaitFor(() => reconnected > 0,
+                          "the resumed session",
                           TimeSpan.FromSeconds(20));
 
-            await WaitFor(() => { lock (angekommen) return angekommen.Contains("Unterwegs verloren"); },
-                          "die nachgesendete Nachricht",
+            await WaitFor(() => { lock (arrived) return arrived.Contains("Lost in flight"); },
+                          "the message sent on afterwards",
                           TimeSpan.FromSeconds(20));
 
-            // Nachgesendet wird ohne erneutes Mitzählen: die Stanza trägt ihre
-            // Sequenznummer bereits. Zählte der Client sie ein zweites Mal,
-            // liefe sein Ausgangszähler dem Empfangszähler des Servers davon,
-            // und ab da bestätigte jedes <a h='…'/> die falschen Stanzas.
+            // The sending on happens without counting again: the stanza already
+            // carries its sequence number. Were the client to count it a second
+            // time, its outgoing counter would run away from the server's
+            // receiving counter, and from then on every <a h='…'/> would
+            // acknowledge the wrong stanzas.
             //
-            // Hier stand einmal ein RequestAckAsync von Hand. Es war nötig,
-            // weil das Nachsenden selbst nicht nachfragte - und es verdeckte
-            // damit genau den Fehler, den es hätte zeigen können (siehe D9).
+            // A RequestAckAsync by hand stood here once. It was necessary
+            // because the sending on did not enquire itself - and it thereby
+            // covered up exactly the fault it could have shown (see D9).
             await WaitFor(() => alice.StreamManagement.LastAcknowledged ==
                                 alice.StreamManagement.OutboundCount,
-                          "einen Ack über genau den eigenen Stand");
+                          "an ack about exactly our own state");
 
-            Assert.That(angekommen.Count(b => b == "Unterwegs verloren"), Is.EqualTo(1),
-                        "Die nachgesendete Nachricht kam mehrfach an.");
+            Assert.That(arrived.Count(b => b == "Lost in flight"), Is.EqualTo(1),
+                        "The message sent on afterwards arrived several times.");
 
         }
 
@@ -847,21 +842,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownId_IsRefusedWithoutACount()
 
         /// <summary>
-        /// Kennt der Server die Kennung nicht, nennt seine Abweisung auch
-        /// keinen Stand.
+        /// If the server does not know the id, its refusal names no state
+        /// either.
         /// </summary>
         /// <remarks>
-        /// Das <c>h</c> im <c>&lt;failed/&gt;</c> ist nach XEP-0198,
-        /// Abschnitt 5, freiwillig („MAY also include") und meint eine
-        /// Messung: wie viel der Server vom alten Stream verarbeitet hatte.
-        /// Hier stand bisher fest <c>h='0'</c> - eine Zahl, die niemand
-        /// gemessen hat, und die Behauptung „von allem, was du geschickt
-        /// hast, ist nichts angekommen". Wer sie glaubt und daraufhin
-        /// nachsendet, stellt alles ein zweites Mal zu.
+        /// The <c>h</c> in the <c>&lt;failed/&gt;</c> is optional under
+        /// XEP-0198, section 5 ("MAY also include") and means a measurement:
+        /// how much of the old stream the server had processed. A fixed
+        /// <c>h='0'</c> stood here until now - a number nobody measured, and
+        /// the claim "of everything you sent, nothing arrived". Whoever
+        /// believes it and sends on accordingly delivers everything a second
+        /// time.
         ///
-        /// Nichts zu wissen ist hier der Normalfall: Der Server wurde neu
-        /// gestartet, oder die Frist ist längst abgelaufen und der Abräumer
-        /// war da. Dann gehört das Attribut weggelassen und nicht geraten.
+        /// Knowing nothing is the normal case here: the server was restarted,
+        /// or the deadline ran out long ago and the sweeper has been. Then the
+        /// attribute belongs left out and not guessed.
         /// </remarks>
         [Test]
         public async Task AnUnknownId_IsRefusedWithoutACount()
@@ -870,23 +865,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
             await alice.SendRawAsync(
-                      "<resume xmlns='urn:xmpp:sm:3' h='0' previd='diese-kennung-gab-es-nie'/>");
+                      "<resume xmlns='urn:xmpp:sm:3' h='0' previd='this-id-never-existed'/>");
 
-            await WaitFor(() => Abweisung() is not null, "die Abweisung des Servers");
+            await WaitFor(() => Refusal() is not null, "the refusal of the server");
 
-            var failed = Abweisung()!;
+            var failed = Refusal()!;
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(failed, Does.Contain("item-not-found"),
-                            "XEP-0198, Abschnitt 5: eine unbekannte Kennung ist ein item-not-found.");
+                            "XEP-0198, section 5: an unknown id is an item-not-found.");
 
                 Assert.That(failed, Does.Not.Contain(" h='"),
-                            $"Der Server nennt einen Stand, den er nicht kennt: {failed}");
+                            $"The server names a state it does not know: {failed}");
 
             });
 
@@ -897,48 +892,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStolenId_IsNotEvenConfirmed()
 
         /// <summary>
-        /// Wer eine fremde Kennung vorlegt, erfährt aus der Abweisung nichts
-        /// über den fremden Stream.
+        /// Whoever presents a foreign id learns nothing about the foreign
+        /// stream from the refusal.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zu <see cref="AnExpiredStream_IsRefusedWithTheCountItReached"/>:
-        /// Dort ist der Stand eine Auskunft an den Eigentümer, hier wäre er
-        /// eine an einen Fremden. Ein <c>h</c> verriete zweierlei - dass es
-        /// diesen Stream überhaupt gibt, und wie viel über ihn gelaufen ist.
-        /// Aus einem geratenen Versuch würde damit eine Sonde.
+        /// The counter-check to <see cref="AnExpiredStream_IsRefusedWithTheCountItReached"/>:
+        /// there the state is information to the owner, here it would be
+        /// information to a stranger. An <c>h</c> would give away two things -
+        /// that this stream exists at all, and how much has run over it. A
+        /// guessed attempt would thereby become a probe.
         ///
-        /// Der Unterschied liegt nicht am Fundort der Kennung, sondern am
-        /// Konto: Auskunft bekommt nur, wer ohnehin Zugriff auf den Stream
-        /// hätte.
+        /// The difference lies not in where the id was found but in the
+        /// account: information goes only to whoever would have access to the
+        /// stream anyway.
         /// </remarks>
         [Test]
         public async Task AStolenId_IsNotEvenConfirmed()
         {
 
             var alice   = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var aliceKennung = alice.StreamManagement!.ResumeId;
+            var aliceResumeId = alice.StreamManagement!.ResumeId;
 
-            sitzung.Kill();
-            await WaitFor(() => Server.ResumableStreamCount == 1, "den aufgehobenen Stream");
+            session.Kill();
+            await WaitFor(() => Server.ResumableStreamCount == 1, "the kept stream");
 
-            Assert.That(sitzung.StanzasReceivedFromClient, Is.GreaterThan(0u),
-                        "Ohne verarbeitete Stanzas gäbe es auch nichts zu verraten.");
+            Assert.That(session.StanzasReceivedFromClient, Is.GreaterThan(0u),
+                        "Without processed stanzas there would be nothing to give away either.");
 
-            // Mallory ist ordentlich angemeldet - nur eben als Mallory.
+            // Mallory is properly logged in - only as Mallory.
             var mallory = await ConnectClientAsync("mallory", maxReconnectAttempts: 0);
 
             await mallory.SendRawAsync(
-                      $"<resume xmlns='urn:xmpp:sm:3' h='0' previd='{aliceKennung}'/>");
+                      $"<resume xmlns='urn:xmpp:sm:3' h='0' previd='{aliceResumeId}'/>");
 
-            await WaitFor(() => Abweisung() is not null, "die Abweisung des Servers");
+            await WaitFor(() => Refusal() is not null, "the refusal of the server");
 
-            Assert.That(Abweisung(), Does.Not.Contain(" h='"),
-                        $"Die Abweisung verrät den Stand eines fremden Streams: {Abweisung()}");
+            Assert.That(Refusal(), Does.Not.Contain(" h='"),
+                        $"The refusal gives away the state of a foreign stream: {Refusal()}");
 
         }
 
@@ -947,19 +942,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnExpiredStream_IsRefusedWithTheCountItReached()
 
         /// <summary>
-        /// Liegt der abgelaufene Stream noch da, nennt die Abweisung, wie weit
-        /// der Server gekommen war.
+        /// If the expired stream is still lying there, the refusal names how
+        /// far the server had got.
         /// </summary>
         /// <remarks>
-        /// Der Fall aus XEP-0198, Abschnitt 5: „If the server recognizes the
+        /// The case from XEP-0198, section 5: "If the server recognizes the
         /// 'previd' as an earlier session that has timed out the server MAY
         /// also include a 'h' attribute indicating the number of stanzas
         /// received before the timeout."
         ///
-        /// Für den Client ist das die Grenze zwischen zwei Dingen, die er
-        /// sonst nicht auseinanderhalten kann: Was der Server verarbeitet hat,
-        /// ist zugestellt und darf nicht noch einmal hinausgehen; erst was
-        /// darüber hinaus offen ist, ist wirklich verloren.
+        /// To the client that is the line between two things it otherwise
+        /// cannot tell apart: what the server has processed is delivered and
+        /// must not go out a second time; only what is outstanding beyond that
+        /// is really lost.
         /// </remarks>
         [Test]
         public async Task AnExpiredStream_IsRefusedWithTheCountItReached()
@@ -967,47 +962,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            // Sonst ist dieser Fall nur im Wettlauf zu treffen: Der Abräumer
-            // geht im Sekundentakt durch, und was er abgeräumt hat, weiss der
-            // Server nicht mehr.
+            // Otherwise this case can only be hit in a race: the sweeper goes
+            // through once a second, and what it has swept the server no longer
+            // knows.
             Server.SweepResumableStreams = false;
 
-            // Drei Sekunden, damit der Wettlauf auch nicht zufällig ausgeht:
-            // Der Abräumer wäre in dieser Zeit zweimal vorbeigekommen. Mit
-            // den 200 ms der anderen Tests bestünde dieser hier auch dann,
-            // wenn der Schalter darüber wirkungslos wäre - der Rückkehrer
-            // käme dem Abräumer schlicht zuvor.
+            // Three seconds, so that the race does not come out well by chance
+            // either: the sweeper would have come past twice in that time. With
+            // the 200 ms of the other tests this one would pass even if the
+            // switch above had no effect - the returner would simply beat the
+            // sweeper to it.
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromSeconds(3));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var angekommen = new List<String>();
-            bob.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Verarbeitet");
+            await alice.SendMessageAsync($"bob@{Server.Domain}", "Handled");
 
-            await WaitFor(() => { lock (angekommen) return angekommen.Count == 1; },
-                          "die zugestellte Nachricht");
+            await WaitFor(() => { lock (arrived) return arrived.Count == 1; },
+                          "the delivered message");
 
-            // Die Frist ist abgelaufen, bevor sie zu laufen beginnt.
+            // The deadline has run out before it begins to run.
             Server.ResumptionTimeout = TimeSpan.Zero;
 
-            await KillAndAwaitParked(sitzung);
+            await KillAndAwaitParked(session);
 
-            var stand = sitzung.StanzasReceivedFromClient;
+            var reached = session.StanzasReceivedFromClient;
 
-            Assert.That(stand, Is.GreaterThan(0u),
-                        "Ohne verarbeitete Stanzas wäre auch die Unwahrheit h='0'.");
+            Assert.That(reached, Is.GreaterThan(0u),
+                        "Without processed stanzas h='0' would be the truth as well.");
 
-            await WaitFor(() => Abweisung() is not null,
-                          "die Abweisung des Servers",
+            await WaitFor(() => Refusal() is not null,
+                          "the refusal of the server",
                           TimeSpan.FromSeconds(20));
 
-            Assert.That(Abweisung(), Does.Contain($" h='{stand}'"),
-                        $"Der Server nennt nicht, was er verarbeitet hat: {Abweisung()}");
+            Assert.That(Refusal(), Does.Contain($" h='{reached}'"),
+                        $"The server does not name what it processed: {Refusal()}");
 
         }
 
@@ -1016,22 +1011,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhatTheServerHandled_IsNotReportedAsLost()
 
         /// <summary>
-        /// Was der Server nach seiner eigenen Auskunft verarbeitet hat, gilt
-        /// dem Client nach einer gescheiterten Wiederaufnahme nicht als
-        /// verloren.
+        /// What the server has processed by its own account does not count as
+        /// lost to the client after a failed resumption.
         /// </summary>
         /// <remarks>
-        /// Die Verdrahtung, ohne die der Stand aus dem <c>&lt;failed/&gt;</c>
-        /// blosse Zierde wäre: Der Client las ihn nicht und erklärte jede
-        /// unbestätigte Stanza für verloren - auch die, die längst beim
-        /// Empfänger lag. Bestätigt wird auf dem Weg über
-        /// <c>ProcessAck</c> und damit in derselben Modulo-Arithmetik wie ein
-        /// <c>&lt;a h='…'/&gt;</c>; ein eigener Vergleich hier wäre eine
-        /// zweite Auffassung derselben Rechnung.
+        /// The wiring without which the state from the <c>&lt;failed/&gt;</c>
+        /// would be mere decoration: the client did not read it and declared
+        /// every unacknowledged stanza lost - including the ones that had long
+        /// been at the recipient. The acknowledging happens by way of
+        /// <c>ProcessAck</c> and thereby in the same modulo arithmetic as an
+        /// <c>&lt;a h='…'/&gt;</c>; a comparison of its own here would be a
+        /// second understanding of the same computation.
         ///
-        /// Was den Fehler gefährlich macht, ist die naheliegende Reaktion
-        /// darauf: Ein Client, der Verlorenes erneut schickt (Abschnitt 4
-        /// empfiehlt es ausdrücklich), stellt damit alles ein zweites Mal zu.
+        /// What makes the fault dangerous is the obvious reaction to it: a
+        /// client that sends what was lost again (section 4 expressly
+        /// recommends it) thereby delivers everything a second time.
         /// </remarks>
         [Test]
         public async Task WhatTheServerHandled_IsNotReportedAsLost()
@@ -1039,49 +1033,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            // Beides wie im vorigen Test, und aus denselben Gründen: der
-            // stillstehende Abräumer und eine Wartezeit, die ihm zweimal
-            // Gelegenheit gäbe.
+            // Both as in the previous test, and for the same reasons: the
+            // sweeper standing still and a waiting time that would give it two
+            // opportunities.
             Server.SweepResumableStreams = false;
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromSeconds(3));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
-                          "eine zugesagte Wiederaufnahme");
+                          "a promised resumption");
 
-            var alteKennung = alice.StreamManagement!.ResumeId;
+            var oldResumeId = alice.StreamManagement!.ResumeId;
 
-            List<String>? verloren = null;
-            alice.StreamManagement.OnStanzasLost += liste => verloren = liste;
+            List<String>? lost = null;
+            alice.StreamManagement.OnStanzasLost += list => lost = list;
 
-            var angekommen = new List<String>();
-            bob.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Verarbeitet");
+            await alice.SendMessageAsync($"bob@{Server.Domain}", "Handled");
 
-            await WaitFor(() => { lock (angekommen) return angekommen.Count == 1; },
-                          "die zugestellte Nachricht");
+            await WaitFor(() => { lock (arrived) return arrived.Count == 1; },
+                          "the delivered message");
 
             Assert.That(alice.StreamManagement.UnackedCount, Is.GreaterThan(0),
-                        "Nichts offen - dann gäbe es auch nichts fälschlich für verloren zu erklären.");
+                        "Nothing outstanding - then there would be nothing to declare lost wrongly either.");
 
             Server.ResumptionTimeout = TimeSpan.Zero;
 
-            await KillAndAwaitParked(sitzung);
+            await KillAndAwaitParked(session);
 
-            // Auf den abgeschlossenen Neuaufbau warten, nicht auf die blosse
-            // Verbindung: Zwischen der Abfuhr und dem neuen <enabled/> ist die
-            // Kennung null, und ein „ungleich der alten" träfe schon dort zu.
+            // Wait for the finished fresh setup, not for the mere connection:
+            // between the rebuff and the new <enabled/> the id is null, and an
+            // "unequal to the old one" would hold there already.
             await WaitFor(() => alice.IsConnected &&
                                 alice.StreamManagement.ResumeId is not null &&
-                                alice.StreamManagement.ResumeId != alteKennung,
-                          "den neuen Aufbau nach der Abfuhr",
+                                alice.StreamManagement.ResumeId != oldResumeId,
+                          "the fresh setup after the rebuff",
                           TimeSpan.FromSeconds(20));
 
-            Assert.That((verloren ?? []).Any(s => s.Contains("Verarbeitet")), Is.False,
-                        "Der Client hält eine Nachricht für verloren, die der Server zugestellt hat.");
+            Assert.That((lost ?? []).Any(s => s.Contains("Handled")), Is.False,
+                        "The client holds a message to be lost that the server delivered.");
 
         }
 
