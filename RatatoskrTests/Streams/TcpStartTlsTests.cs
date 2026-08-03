@@ -30,22 +30,22 @@ using org.GraphDefined.Vanaheimr.Ratatoskr.Server;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
-    // Wie in XMPPServer.cs: Hermod bringt einen eigenen Typ IPAddress mit.
-    // Der Alias muss innerhalb der Namespace-Deklaration stehen.
+    // As in XMPPServer.cs: Hermod brings a type IPAddress of its own along.
+    // The alias has to stand inside the namespace declaration.
     using IPAddress = System.Net.IPAddress;
 
     /// <summary>
-    /// Die Aushandlung selbst (RFC 6120, Abschnitt 5.4) - nicht, dass eine
-    /// Nachricht ankommt, sondern dass sie unter den falschen Umständen
-    /// <b>nicht</b> ankommt.
+    /// The negotiation itself (RFC 6120, section 5.4) - not that a message
+    /// arrives, but that under the wrong circumstances it does <b>not</b>
+    /// arrive.
     /// </summary>
     /// <remarks>
-    /// Diese Datei ist die Antwort auf eine Mutationsprobe, bei der vier von
-    /// fünf Eingriffen in die Aushandlung grün blieben. Der Grund war jedesmal
-    /// derselbe: die Föderationstests spielen beide Seiten korrekt, und
-    /// solange sich beide an die Regeln halten, macht es keinen Unterschied,
-    /// ob eine Seite sie auch <i>prüft</i>. Geprüft wird eine Regel erst durch
-    /// eine Gegenstelle, die sie bricht - und die muss man eigens bauen.
+    /// This file is the answer to a mutation run in which four out of five
+    /// interventions in the negotiation stayed green. The reason was the same
+    /// every time: the federation tests play both sides correctly, and as long
+    /// as both keep to the rules it makes no difference whether one side also
+    /// <i>checks</i> them. A rule is only checked by a counterpart that breaks
+    /// it - and that one has to be built on purpose.
     /// </remarks>
     [TestFixture]
     public class TcpStartTlsTests
@@ -54,7 +54,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Data
 
         private XMPPServer _server = null!;
-        private readonly List<IAsyncDisposable> _aufraeumen = [];
+        private readonly List<IAsyncDisposable> _toDispose = [];
         private readonly InternalErrorGuard _guard = new();
 
         #endregion
@@ -62,7 +62,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void EinServer()
+        public void OneServer()
         {
             _guard.Reset();
 
@@ -71,16 +71,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
-            foreach (var d in _aufraeumen)
+            foreach (var d in _toDispose)
             {
                 try { await d.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* never mind in the teardown */ }
             }
 
-            _aufraeumen.Clear();
+            _toDispose.Clear();
 
             await _server.DisposeAsync();
 
@@ -90,13 +90,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein Server, der nach Drehbuch antwortet - für Gegenstellen, die
-        /// sich nicht an RFC 6120 halten.
+        /// A server that answers from a script - for counterparts that do not
+        /// keep to RFC 6120.
         /// </summary>
-        private sealed class GespielterServer : IAsyncDisposable
+        private sealed class ScriptedServer : IAsyncDisposable
         {
 
             private readonly TcpListener             _listener;
@@ -104,7 +104,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             public Int32 Port { get; }
 
-            public GespielterServer(Func<NetworkStream, CancellationToken, Task> drehbuch)
+            public ScriptedServer(Func<NetworkStream, CancellationToken, Task> script)
             {
 
                 _listener = new TcpListener(IPAddress.Loopback, 0);
@@ -121,13 +121,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             var client = await _listener.AcceptTcpClientAsync(_cts.Token);
                             _ = Task.Run(async () =>
                             {
-                                try { await drehbuch(client.GetStream(), _cts.Token); }
-                                catch (Exception) { /* egal */ }
+                                try { await script(client.GetStream(), _cts.Token); }
+                                catch (Exception) { /* never mind */ }
                                 finally { try { client.Dispose(); } catch { } }
                             });
                         }
                     }
-                    catch (Exception) { /* beendet */ }
+                    catch (Exception) { /* ended */ }
                 });
 
             }
@@ -141,43 +141,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task Schreibe(NetworkStream netz, String text)
-            => await netz.WriteAsync(Encoding.UTF8.GetBytes(text));
+        private static async Task Write(NetworkStream net, String text)
+            => await net.WriteAsync(Encoding.UTF8.GetBytes(text));
 
-        private static async Task<String> LiesBis(NetworkStream      netz,
-                                                  Func<String, Boolean>  fertig,
+        private static async Task<String> ReadUntil(NetworkStream      net,
+                                                  Func<String, Boolean>  finished,
                                                   CancellationToken  ct)
         {
 
-            var puffer  = new Byte[8192];
-            var alles   = "";
+            var buffer  = new Byte[8192];
+            var all   = "";
 
-            while (!fertig(alles))
+            while (!finished(all))
             {
 
-                var n = await netz.ReadAsync(puffer, ct);
+                var n = await net.ReadAsync(buffer, ct);
 
                 if (n <= 0)
                     break;
 
-                alles += Encoding.UTF8.GetString(puffer, 0, n);
+                all += Encoding.UTF8.GetString(buffer, 0, n);
 
             }
 
-            return alles;
+            return all;
 
         }
 
-        /// <summary>Verkabelt den Server mit einer gespielten Gegenstelle.</summary>
-        private TcpServerLinks LinksZu(GespielterServer gegenstelle)
+        /// <summary>Wires the server to a scripted counterpart.</summary>
+        private TcpServerLinks LinksTo(ScriptedServer peer)
         {
 
             var links = new TcpServerLinks(_server, mode: TcpTlsMode.StartTls);
-            _aufraeumen.Add(links);
+            _toDispose.Add(links);
 
-            links.AddPeer("fremd.example",
+            links.AddPeer("foreign.example",
                           IPAddress.Loopback.ToString(),
-                          gegenstelle.Port,
+                          peer.Port,
                           TcpTlsMode.StartTls,
                           validator: (_, _, _, _) => true);
 
@@ -186,39 +186,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Schreibt alles mit, was von jetzt an ankommt - bis die Verbindung
-        /// endet.
+        /// Records everything that arrives from now on - until the connection
+        /// ends.
         /// </summary>
         /// <remarks>
-        /// Das ist der Unterschied zwischen "die Zustellung ist gescheitert"
-        /// und "der Client hat aufgehört zu reden". Nur das Zweite belegt, dass
-        /// er die Regel geprüft hat: scheitern würde die Zustellung auch dann,
-        /// wenn er einfach ins Zeitlimit liefe.
+        /// That is the difference between "the delivery failed" and "the client
+        /// stopped talking". Only the second vouches for its having checked the
+        /// rule: the delivery would fail just as well if it simply ran into the
+        /// time limit.
         /// </remarks>
-        private static async Task Mitschreiben(NetworkStream      netz,
-                                               List<Byte>         ziel,
+        private static async Task RecordEverything(NetworkStream      net,
+                                               List<Byte>         target,
                                                CancellationToken  ct)
         {
 
-            var puffer = new Byte[4096];
+            var buffer = new Byte[4096];
 
             while (true)
             {
 
-                var n = await netz.ReadAsync(puffer, ct);
+                var n = await net.ReadAsync(buffer, ct);
 
                 if (n <= 0)
                     break;
 
-                lock (ziel)
-                    ziel.AddRange(puffer[..n]);
+                lock (target)
+                    target.AddRange(buffer[..n]);
 
             }
 
         }
 
         private const String Stanza =
-            "<message from='alice@left.example' to='bob@fremd.example'><body>hallo</body></message>";
+            "<message from='alice@left.example' to='bob@foreign.example'><body>hello</body></message>";
 
         #endregion
 
@@ -226,49 +226,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APeerThatDoesNotOfferStartTls_IsNotUsed()
 
         /// <summary>
-        /// Eine Gegenstelle ohne STARTTLS im Angebot bekommt nichts - schon
-        /// gar nicht im Klartext.
+        /// A counterpart without STARTTLS in its offer gets nothing - least of
+        /// all in the clear.
         /// </summary>
         /// <remarks>
-        /// Ohne diese Prüfung wäre die Aushandlung eine Bitte statt einer
-        /// Bedingung: ein Zwischenmann müsste nur das Angebot aus den Features
-        /// streichen, und der Stream liefe unverschlüsselt weiter. Genau das
-        /// ist der klassische Downgrade-Angriff auf STARTTLS.
+        /// Without this check the negotiation would be a request instead of a
+        /// condition: a man in the middle would only have to strike the offer
+        /// out of the features, and the stream would carry on unencrypted. That
+        /// is exactly the classic downgrade attack on STARTTLS.
         /// </remarks>
         [Test]
         public async Task APeerThatDoesNotOfferStartTls_IsNotUsed()
         {
 
-            var nachDemAngebot = new List<Byte>();
+            var afterTheOffer = new List<Byte>();
 
-            await using var gegenstelle = new GespielterServer(async (netz, ct) =>
+            await using var peer = new ScriptedServer(async (net, ct) =>
             {
-                await LiesBis(netz, t => t.Contains("<stream:stream", StringComparison.Ordinal), ct);
-                await Schreibe(netz,
+                await ReadUntil(net, t => t.Contains("<stream:stream", StringComparison.Ordinal), ct);
+                await Write(net,
                     "<stream:stream xmlns='jabber:server' " +
                     "xmlns:stream='http://etherx.jabber.org/streams' " +
-                    "from='fremd.example' to='left.example' id='x' version='1.0'>");
-                await Schreibe(netz,
+                    "from='foreign.example' to='left.example' id='x' version='1.0'>");
+                await Write(net,
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'/>");
 
-                await Mitschreiben(netz, nachDemAngebot, ct);
+                await RecordEverything(net, afterTheOffer, ct);
             });
 
-            var links = LinksZu(gegenstelle);
+            var links = LinksTo(peer);
 
-            var zugestellt = await links.DeliverAsync("fremd.example", Stanza)
+            var delivered = await links.DeliverAsync("foreign.example", Stanza)
                                         .WaitAsync(TimeSpan.FromSeconds(20));
 
             Assert.Multiple(() =>
             {
-                Assert.That(zugestellt, Is.False,
-                            "Ohne STARTTLS-Angebot darf keine Stanza hinausgehen.");
+                Assert.That(delivered, Is.False,
+                            "Without an offer of STARTTLS no stanza may go out.");
 
-                // Der eigentliche Nachweis: der Client hört auf zu reden,
-                // statt bloss in ein Zeitlimit zu laufen.
-                lock (nachDemAngebot)
-                    Assert.That(nachDemAngebot, Is.Empty,
-                                "Nach ausbleibendem STARTTLS-Angebot darf nichts mehr gesendet werden.");
+                // The real proof: the client stops talking instead of merely
+                // running into a time limit.
+                lock (afterTheOffer)
+                    Assert.That(afterTheOffer, Is.Empty,
+                                "After an offer of STARTTLS fails to come, nothing more may be sent.");
             });
 
         }
@@ -278,39 +278,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFailureInsteadOfProceed_AbortsTheHandshake()
 
         /// <summary>
-        /// Antwortet die Gegenstelle auf <c>&lt;starttls/&gt;</c> mit
-        /// <c>&lt;failure/&gt;</c>, endet der Aufbau (RFC 6120, Abschnitt
-        /// 5.4.2.2).
+        /// If the counterpart answers <c>&lt;starttls/&gt;</c> with
+        /// <c>&lt;failure/&gt;</c>, the setup ends (RFC 6120, section 5.4.2.2).
         /// </summary>
         [Test]
         public async Task AFailureInsteadOfProceed_AbortsTheHandshake()
         {
 
-            await using var gegenstelle = new GespielterServer(async (netz, ct) =>
+            await using var peer = new ScriptedServer(async (net, ct) =>
             {
-                await LiesBis(netz, t => t.Contains("<stream:stream", StringComparison.Ordinal), ct);
-                await Schreibe(netz,
+                await ReadUntil(net, t => t.Contains("<stream:stream", StringComparison.Ordinal), ct);
+                await Write(net,
                     "<stream:stream xmlns='jabber:server' " +
                     "xmlns:stream='http://etherx.jabber.org/streams' " +
-                    "from='fremd.example' to='left.example' id='x' version='1.0'>");
-                await Schreibe(netz,
+                    "from='foreign.example' to='left.example' id='x' version='1.0'>");
+                await Write(net,
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                     "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'><required/></starttls>" +
                     "</stream:features>");
 
-                await LiesBis(netz, t => t.Contains("<starttls", StringComparison.Ordinal), ct);
-                await Schreibe(netz, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+                await ReadUntil(net, t => t.Contains("<starttls", StringComparison.Ordinal), ct);
+                await Write(net, "<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
 
                 await Task.Delay(TimeSpan.FromSeconds(30), ct);
             });
 
-            var links = LinksZu(gegenstelle);
+            var links = LinksTo(peer);
 
-            var zugestellt = await links.DeliverAsync("fremd.example", Stanza)
+            var delivered = await links.DeliverAsync("foreign.example", Stanza)
                                         .WaitAsync(TimeSpan.FromSeconds(20));
 
-            Assert.That(zugestellt, Is.False,
-                        "Nach <failure/> darf nichts hinausgehen.");
+            Assert.That(delivered, Is.False,
+                        "After a <failure/> nothing may go out.");
 
         }
 
@@ -319,53 +318,53 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SomethingOtherThanProceed_IsNotTakenAsProceed()
 
         /// <summary>
-        /// Und die schärfere Fassung: irgendeine Antwort ist keine Zustimmung.
+        /// And the sharper version: just any answer is no consent.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test bestünde der vorige auch dann, wenn der Client nur
-        /// prüfte, <i>dass</i> eine Antwort kam. Hier kommt eine, sie heisst
-        /// nur nicht <c>&lt;proceed/&gt;</c>.
+        /// Without this test the previous one would pass even if the client
+        /// only checked <i>that</i> an answer came. Here one comes, it just is
+        /// not called <c>&lt;proceed/&gt;</c>.
         /// </remarks>
         [Test]
         public async Task SomethingOtherThanProceed_IsNotTakenAsProceed()
         {
 
-            var nachDerAntwort = new List<Byte>();
+            var afterTheAnswer = new List<Byte>();
 
-            await using var gegenstelle = new GespielterServer(async (netz, ct) =>
+            await using var peer = new ScriptedServer(async (net, ct) =>
             {
-                await LiesBis(netz, t => t.Contains("<stream:stream", StringComparison.Ordinal), ct);
-                await Schreibe(netz,
+                await ReadUntil(net, t => t.Contains("<stream:stream", StringComparison.Ordinal), ct);
+                await Write(net,
                     "<stream:stream xmlns='jabber:server' " +
                     "xmlns:stream='http://etherx.jabber.org/streams' " +
-                    "from='fremd.example' to='left.example' id='x' version='1.0'>");
-                await Schreibe(netz,
+                    "from='foreign.example' to='left.example' id='x' version='1.0'>");
+                await Write(net,
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                     "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'><required/></starttls>" +
                     "</stream:features>");
 
-                await LiesBis(netz, t => t.Contains("<starttls", StringComparison.Ordinal), ct);
+                await ReadUntil(net, t => t.Contains("<starttls", StringComparison.Ordinal), ct);
 
-                // Eine Antwort, aber nicht die verlangte.
-                await Schreibe(netz, "<irgendwas xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+                // An answer, but not the one demanded.
+                await Write(net, "<anything xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
 
-                await Mitschreiben(netz, nachDerAntwort, ct);
+                await RecordEverything(net, afterTheAnswer, ct);
             });
 
-            var links = LinksZu(gegenstelle);
+            var links = LinksTo(peer);
 
-            var zugestellt = await links.DeliverAsync("fremd.example", Stanza)
+            var delivered = await links.DeliverAsync("foreign.example", Stanza)
                                         .WaitAsync(TimeSpan.FromSeconds(20));
 
             Assert.Multiple(() =>
             {
-                Assert.That(zugestellt, Is.False);
+                Assert.That(delivered, Is.False);
 
-                // Hielte der Client die Antwort für eine Zustimmung, käme
-                // jetzt ein TLS-ClientHello.
-                lock (nachDerAntwort)
-                    Assert.That(nachDerAntwort, Is.Empty,
-                                "Ohne <proceed/> darf der Client nicht mit TLS anfangen.");
+                // If the client took the answer for consent, a TLS ClientHello
+                // would come now.
+                lock (afterTheAnswer)
+                    Assert.That(afterTheAnswer, Is.Empty,
+                                "Without a <proceed/> the client must not start with TLS.");
             });
 
         }
@@ -375,15 +374,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PipelinedPlaintextAfterStartTls_GetsNoProceed()
 
         /// <summary>
-        /// Wer hinter das <c>&lt;starttls/&gt;</c> noch Klartext schiebt,
-        /// bekommt keine Zustimmung.
+        /// Whoever pushes plaintext in behind the <c>&lt;starttls/&gt;</c> gets
+        /// no consent.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 5.4.3.3: nach dem <c>&lt;starttls/&gt;</c> darf
-        /// im Klartext nichts mehr folgen. Steht doch etwas im Puffer, ist es
-        /// entweder eine kaputte Gegenstelle oder der Versuch, Klartext in den
-        /// gleich verschlüsselten Stream zu schmuggeln - beides ein Grund
-        /// aufzuhören.
+        /// RFC 6120, section 5.4.3.3: after the <c>&lt;starttls/&gt;</c>
+        /// nothing more may follow in the clear. If something does stand in the
+        /// buffer, it is either a broken counterpart or an attempt to smuggle
+        /// plaintext into the stream that is about to be encrypted - either way
+        /// a reason to stop.
         /// </remarks>
         [Test]
         public async Task PipelinedPlaintextAfterStartTls_GetsNoProceed()
@@ -394,28 +393,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             using var client = new TcpClient();
             await client.ConnectAsync(IPAddress.Loopback, links.Port);
 
-            var netz = client.GetStream();
+            var net = client.GetStream();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-            await Schreibe(netz,
+            await Write(net,
                 "<stream:stream xmlns='jabber:server' " +
                 "xmlns:stream='http://etherx.jabber.org/streams' " +
-                "from='fremd.example' to='left.example' version='1.0'>");
+                "from='foreign.example' to='left.example' version='1.0'>");
 
-            await LiesBis(netz,
+            await ReadUntil(net,
                           t => t.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal),
                           cts.Token);
 
-            // <starttls/> und eine Stanza in einem einzigen Schreibvorgang.
-            await Schreibe(netz,
+            // <starttls/> and a stanza in one single write.
+            await Write(net,
                 "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" +
-                "<message from='alice@fremd.example' to='bob@left.example'><body>x</body></message>");
+                "<message from='alice@foreign.example' to='bob@left.example'><body>x</body></message>");
 
-            var antwort = await LiesBis(netz, t => t.Length > 0, cts.Token)
+            var reply = await ReadUntil(net, t => t.Length > 0, cts.Token)
                               .WaitAsync(TimeSpan.FromSeconds(10));
 
-            Assert.That(antwort, Does.Not.Contain("proceed"),
-                        "Vorausgeschickter Klartext muss den Aufbau beenden.");
+            Assert.That(reply, Does.Not.Contain("proceed"),
+                        "Plaintext sent ahead has to end the setup.");
 
         }
 
@@ -424,13 +423,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SomethingOtherThanStartTls_GetsFailureAndNoStream()
 
         /// <summary>
-        /// Statt <c>&lt;starttls/&gt;</c> gleich eine Stanza: das gibt
-        /// <c>&lt;failure/&gt;</c> und keinen Stream.
+        /// A stanza straight away instead of <c>&lt;starttls/&gt;</c>: that
+        /// gives a <c>&lt;failure/&gt;</c> and no stream.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe dazu, dass die Aushandlung eine Bedingung ist. Ein
-        /// Server, der hier weitermachte, hätte die Verschlüsselung zu einer
-        /// Höflichkeit gemacht.
+        /// The counter-check to the negotiation being a condition. A server that
+        /// carried on here would have made the encryption a courtesy.
         /// </remarks>
         [Test]
         public async Task SomethingOtherThanStartTls_GetsFailureAndNoStream()
@@ -441,34 +439,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             using var client = new TcpClient();
             await client.ConnectAsync(IPAddress.Loopback, links.Port);
 
-            var netz = client.GetStream();
+            var net = client.GetStream();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-            await Schreibe(netz,
+            await Write(net,
                 "<stream:stream xmlns='jabber:server' " +
                 "xmlns:stream='http://etherx.jabber.org/streams' " +
-                "from='fremd.example' to='left.example' version='1.0'>");
+                "from='foreign.example' to='left.example' version='1.0'>");
 
-            var begruessung = await LiesBis(netz,
+            var greeting = await ReadUntil(net,
                                             t => t.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal),
                                             cts.Token);
 
-            Assert.That(begruessung, Does.Contain("<required/>"),
-                        "STARTTLS muss als zwingend angekündigt werden.");
+            Assert.That(greeting, Does.Contain("<required/>"),
+                        "STARTTLS has to be announced as required.");
 
-            await Schreibe(netz,
-                "<message from='alice@fremd.example' to='bob@left.example'><body>x</body></message>");
+            await Write(net,
+                "<message from='alice@foreign.example' to='bob@left.example'><body>x</body></message>");
 
-            var antwort = await LiesBis(netz,
+            var reply = await ReadUntil(net,
                                         t => t.Contains("failure", StringComparison.Ordinal),
                                         cts.Token)
                               .WaitAsync(TimeSpan.FromSeconds(10));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("failure"),
-                            "Auf etwas anderes als <starttls/> gehört <failure/>.");
-                Assert.That(antwort, Does.Not.Contain("proceed"));
+                Assert.That(reply, Does.Contain("failure"),
+                            "Anything other than a <starttls/> deserves a <failure/>.");
+                Assert.That(reply, Does.Not.Contain("proceed"));
             });
 
         }

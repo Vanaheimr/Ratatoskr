@@ -29,51 +29,52 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Weiche für eingehende Rahmen entscheidet am <b>Elementnamen</b> und
-    /// nicht an einem Präfix — und was sie nicht kennt, beendet den Stream mit
-    /// <c>&lt;unsupported-stanza-type/&gt;</c> (RFC 6120, Abschnitt 4.9.3.24).
+    /// The switch for incoming frames decides on the <b>element name</b> and
+    /// not on a prefix — and what it does not know ends the stream with
+    /// <c>&lt;unsupported-stanza-type/&gt;</c> (RFC 6120, section 4.9.3.24).
     /// </summary>
     /// <remarks>
-    /// Ein Vergleich mit <c>StartsWith("&lt;iq")</c> trifft auch
-    /// <c>&lt;iqbogus/&gt;</c>, <c>StartsWith("&lt;presence")</c> auch
-    /// <c>&lt;presence-probe/&gt;</c>, <c>StartsWith("&lt;open")</c> auch
-    /// <c>&lt;opencast/&gt;</c>. Der Elementname ist bis zum ersten Zeichen zu
-    /// lesen, das nicht mehr zum Namen gehört; alles andere ist geraten.
+    /// A comparison with <c>StartsWith("&lt;iq")</c> also matches
+    /// <c>&lt;iqbogus/&gt;</c>, <c>StartsWith("&lt;presence")</c> also
+    /// <c>&lt;presence-probe/&gt;</c>, <c>StartsWith("&lt;open")</c> also
+    /// <c>&lt;opencast/&gt;</c>. The element name is to be read up to the first
+    /// character that no longer belongs to the name; everything else is
+    /// guesswork.
     ///
-    /// Der Schaden ist nicht theoretisch und beim <c>iq</c> noch der harmloseste.
-    /// Ein <c>&lt;presence-probe/&gt;</c> lief in die Presence-Behandlung und
-    /// galt dort als <b>Anwesenheit</b> — der Absender wurde seinen Kontakten
-    /// als online gemeldet, weil sein Element zufällig mit denselben acht
-    /// Zeichen beginnt. Und ein <c>&lt;opencast/&gt;</c> zählte als
-    /// Stream-Eröffnung.
+    /// The damage is not theoretical, and with the <c>iq</c> it is still the
+    /// most harmless. A <c>&lt;presence-probe/&gt;</c> ran into the presence
+    /// handling and counted there as <b>presence</b> — the sender was reported
+    /// to their contacts as online, because their element happens to begin with
+    /// the same eight characters. And an <c>&lt;opencast/&gt;</c> counted as a
+    /// stream opening.
     ///
-    /// Dass die richtige Prüfung im Haus schon existierte, macht es nicht
-    /// besser: <c>StreamManagementManager.IsCountableStanza</c> liest den Namen
-    /// seit jeher vollständig — nur beantwortet sie eine andere Frage und stand
-    /// an einer anderen Stelle. Sie ist jetzt der gemeinsame Nenner.
+    /// That the right check already existed in the house does not make it
+    /// better: <c>StreamManagementManager.IsCountableStanza</c> has read the
+    /// name in full all along — only it answers a different question and stood
+    /// in a different place. It is now the common denominator.
     /// </remarks>
     [TestFixture]
     public class FrameDispatchTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Sammelt die Stream-Fehler eines Clients.</summary>
-        private static ConcurrentQueue<StreamError> Fehlerkorb(XMPPClient client)
+        /// <summary>Collects the stream errors of a client.</summary>
+        private static ConcurrentQueue<StreamError> ErrorBasket(XMPPClient client)
         {
 
-            var korb = new ConcurrentQueue<StreamError>();
-            client.OnStreamError += e => korb.Enqueue(e);
+            var basket = new ConcurrentQueue<StreamError>();
+            client.OnStreamError += e => basket.Enqueue(e);
 
-            return korb;
+            return basket;
 
         }
 
         /// <summary>
-        /// Ein verbundener Client, der nach einem Abriss nicht von selbst
-        /// wiederkommt — sonst liefe er dem Test in die Messung.
+        /// A connected client that does not come back of its own accord after a
+        /// tear — otherwise it would run into the test's measurement.
         /// </summary>
-        private async Task<XMPPClient> EinzelnAsync(String localPart = "alice")
+        private async Task<XMPPClient> AloneAsync(String localPart = "alice")
         {
 
             Server.AddAccount(localPart);
@@ -92,50 +93,50 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnElementThatOnlyBeginsLikeAStanza_IsNotOne()
 
         /// <summary>
-        /// Der Kern: Drei Elemente, die mit dem Namen einer Stanza
-        /// <b>beginnen</b> und keine sind.
+        /// The heart of it: three elements that <b>begin</b> with the name of a
+        /// stanza and are none.
         /// </summary>
         /// <remarks>
-        /// Alle drei nahmen bisher den Weg des Elements, mit dem sie anfangen.
-        /// Geprüft wird über den Stream-Fehler, weil er beide Aussagen in einer
-        /// trägt: Er kommt nur, wenn die Weiche das Element <b>nicht</b>
-        /// zugeordnet hat, und er nennt den Grund.
+        /// All three used to take the way of the element they begin with. The
+        /// check runs over the stream error, because it carries both statements
+        /// in one: it comes only if the switch did <b>not</b> assign the
+        /// element, and it names the reason.
         /// </remarks>
         [Test]
         [TestCase("<iqbogus id='x'/>",       TestName = "AnIqbogus_IsNotAnIq")]
         [TestCase("<messages id='x'/>",      TestName = "AMessages_IsNotAMessage")]
         [TestCase("<presence-probe/>",       TestName = "APresenceProbe_IsNotAPresence")]
         [TestCase("<closet/>",               TestName = "ACloset_IsNotAStreamClose")]
-        [TestCase("<quatsch xmlns='urn:example:nein'/>",
+        [TestCase("<nonsense xmlns='urn:example:no'/>",
                                              TestName = "AnUnknownElement_IsRefusedToo")]
-        public async Task AnElementThatOnlyBeginsLikeAStanza_IsNotOne(String rahmen)
+        public async Task AnElementThatOnlyBeginsLikeAStanza_IsNotOne(String frame)
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
-            var fehler  = Fehlerkorb(alice);
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
+            var errors  = ErrorBasket(alice);
 
-            await alice.SendRawAsync(rahmen);
+            await alice.SendRawAsync(frame);
 
-            await WaitFor(() => !fehler.IsEmpty, "den Stream-Fehler");
+            await WaitFor(() => !errors.IsEmpty, "the stream error");
 
-            fehler.TryDequeue(out var gemeldet);
+            errors.TryDequeue(out var reported);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gemeldet!.Condition, Is.EqualTo("unsupported-stanza-type"));
+                Assert.That(reported!.Condition, Is.EqualTo("unsupported-stanza-type"));
 
-                // RFC 6120, Abschnitt 4.9.1.1: Stream-Fehler sind
-                // unwiederbringlich. Ein Stream, der danach weiterliefe, wäre
-                // ein Widerspruch in sich.
-                Assert.That(gemeldet.IsRecoverable, Is.False,
-                            "Wer dasselbe noch einmal schickt, bekommt dasselbe " +
-                            "zurück - ein Reconnect hilft nicht.");
+                // RFC 6120, section 4.9.1.1: stream errors are beyond recall. A
+                // stream that carried on afterwards would be a contradiction in
+                // itself.
+                Assert.That(reported.IsRecoverable, Is.False,
+                            "Whoever sends the same thing again gets the same " +
+                            "back - a reconnect does not help.");
 
             });
 
-            await WaitFor(() => !sitzung.IsOpen, "das Ende des Streams");
+            await WaitFor(() => !session.IsOpen, "the end of the stream");
 
         }
 
@@ -144,40 +145,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRefusalIsNotAStanzaError()
 
         /// <summary>
-        /// Und ausdrücklich <b>kein</b> <c>&lt;bad-request/&gt;</c>: Das wäre
-        /// eine Auskunft über ein IQ, das es nicht gibt.
+        /// And expressly <b>no</b> <c>&lt;bad-request/&gt;</c>: that would be
+        /// information about an IQ that does not exist.
         /// </summary>
         /// <remarks>
-        /// Genau das tat der Server seit D25. Die Typ-Prüfung aus Abschnitt
-        /// 8.2.3 Regel 2 griff auf einem Element, das gar keine IQ-Stanza ist,
-        /// und antwortete ihm mit der Stanza-Art <c>iq</c> — eine Antwort auf
-        /// eine Frage, die niemand gestellt hat. Der Fehler lag nicht in der
-        /// Prüfung, sondern in der Weiche davor; sichtbar wurde er erst, als die
-        /// Prüfung anfing zu antworten.
+        /// That is exactly what the server did from D25 on. The type check from
+        /// section 8.2.3 rule 2 took hold on an element that is no IQ stanza at
+        /// all, and answered it with the stanza kind <c>iq</c> — an answer to a
+        /// question nobody asked. The fault lay not in the check but in the
+        /// switch ahead of it; it became visible only when the check started
+        /// answering.
         /// </remarks>
         [Test]
         public async Task TheRefusalIsNotAStanzaError()
         {
 
-            var alice = await EinzelnAsync();
+            var alice = await AloneAsync();
 
-            var rohe = new ConcurrentQueue<String>();
+            var rawFrames = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal))
-                    rohe.Enqueue(x);
+                    rawFrames.Enqueue(x);
             };
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync("<iqbogus id='keine-frage'/>");
+            await alice.SendRawAsync("<iqbogus id='no-question'/>");
 
-            await WaitFor(() => !fehler.IsEmpty, "den Stream-Fehler");
+            await WaitFor(() => !errors.IsEmpty, "the stream error");
 
-            Assert.That(rohe.Any(x => x.Contains("bad-request", StringComparison.Ordinal)),
+            Assert.That(rawFrames.Any(x => x.Contains("bad-request", StringComparison.Ordinal)),
                         Is.False,
-                        "Ein Element, das kein IQ ist, bekommt keine IQ-Antwort.");
+                        "An element that is no IQ gets no IQ answer.");
 
         }
 
@@ -186,44 +187,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APresenceLookalike_DoesNotMakeAnyoneAvailable()
 
         /// <summary>
-        /// Der greifbarste Schaden: <c>&lt;presence-probe/&gt;</c> galt als
-        /// Anwesenheit.
+        /// The most tangible damage: <c>&lt;presence-probe/&gt;</c> counted as
+        /// presence.
         /// </summary>
         /// <remarks>
-        /// Die Presence-Behandlung liest ein fehlendes <c>type</c> als „ist
-        /// da". Ein Element, das nur zufällig mit denselben acht Zeichen
-        /// beginnt, meldete den Absender damit seinen Kontakten als online —
-        /// eine Aussage über einen Menschen, hergeleitet aus einem
-        /// Zeichenkettenvergleich.
+        /// The presence handling reads a missing <c>type</c> as "is there". An
+        /// element that merely happens to begin with the same eight characters
+        /// thereby reported the sender to their contacts as online — a statement
+        /// about a person, derived from a string comparison.
         ///
-        /// Geprüft wird an der Sitzung und nicht an Bobs Client: Der Zustand
-        /// steht dort, wo die Behandlung ihn hinschreibt, und ein Client, der
-        /// nichts bekommt, bewiese auch nichts über den Zeitpunkt.
+        /// The check runs at the session and not at Bob's client: the state
+        /// stands where the handling writes it, and a client that receives
+        /// nothing would prove nothing about the moment either.
         ///
-        /// Der Umweg über die Abmeldung ist nötig, weil der Client sich beim
-        /// Verbinden von selbst anmeldet: Ohne ihn stünde die Verfügbarkeit
-        /// schon, bevor der Test etwas geschickt hat, und der Nachweis wäre
-        /// keiner.
+        /// The detour over the sign-off is necessary because the client signs on
+        /// of its own accord when connecting: without it the availability would
+        /// already stand before the test sent anything, and the proof would be
+        /// none.
         /// </remarks>
         [Test]
         public async Task APresenceLookalike_DoesNotMakeAnyoneAvailable()
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => !sitzung.IsAvailable, "die Abmeldung");
+            await WaitFor(() => !session.IsAvailable, "the sign-off");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
             await alice.SendRawAsync("<presence-probe/>");
 
-            await WaitFor(() => !fehler.IsEmpty, "den Stream-Fehler");
+            await WaitFor(() => !errors.IsEmpty, "the stream error");
 
-            Assert.That(sitzung.IsAvailable, Is.False,
-                        "Ein Element, das kein <presence/> ist, macht niemanden verfügbar.");
+            Assert.That(session.IsAvailable, Is.False,
+                        "An element that is no <presence/> makes nobody available.");
 
         }
 
@@ -232,29 +232,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ALookalikeOfTheStreamOpen_DoesNotCount()
 
         /// <summary>
-        /// <c>&lt;opencast/&gt;</c> ist keine Stream-Eröffnung.
+        /// <c>&lt;opencast/&gt;</c> is no stream opening.
         /// </summary>
         /// <remarks>
-        /// Die Zählung der Eröffnungen entscheidet, ob der Server die
-        /// Aushandlung von vorn beginnt. Ein falsch mitgezähltes Element
-        /// verschöbe sie mitten in einer laufenden Sitzung.
+        /// The count of the openings decides whether the server begins the
+        /// negotiation afresh. An element counted in by mistake would shift it
+        /// into the middle of a running session.
         /// </remarks>
         [Test]
         public async Task ALookalikeOfTheStreamOpen_DoesNotCount()
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
 
-            var vorher = sitzung.OpenCount;
-            var fehler = Fehlerkorb(alice);
+            var before = session.OpenCount;
+            var errors = ErrorBasket(alice);
 
             await alice.SendRawAsync("<opencast/>");
 
-            await WaitFor(() => !fehler.IsEmpty, "den Stream-Fehler");
+            await WaitFor(() => !errors.IsEmpty, "the stream error");
 
-            Assert.That(sitzung.OpenCount, Is.EqualTo(vorher),
-                        "Nur ein <open/> eröffnet einen Stream.");
+            Assert.That(session.OpenCount, Is.EqualTo(before),
+                        "Only an <open/> opens a stream.");
 
         }
 
@@ -263,43 +263,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownElementInAKnownNamespace_IsRefusedToo()
 
         /// <summary>
-        /// Ein bekannter Namensraum macht das Element nicht bekannt.
+        /// A known namespace does not make the element known.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 4.9.3.24 nennt ausdrücklich beides: „because the receiving
-        /// entity does not understand the namespace <b>or</b> because the
-        /// receiving entity does not understand the element name for the
-        /// applicable namespace". Der Zweig für XEP-0198 prüfte bisher nur den
-        /// Namensraum und liess alles darin fallen, was er nicht kannte — die
-        /// letzte Stelle im Haus, an der ein Rahmen noch stillschweigend hinten
-        /// herausfiel.
+        /// Section 4.9.3.24 expressly names both: "because the receiving entity
+        /// does not understand the namespace <b>or</b> because the receiving
+        /// entity does not understand the element name for the applicable
+        /// namespace". The branch for XEP-0198 checked only the namespace until
+        /// now and let everything inside it drop that it did not know — the last
+        /// place in the house where a frame still fell out the back in silence.
         ///
-        /// Der zweite Fall ist der interessantere: <c>&lt;enabled/&gt;</c> ist
-        /// ein <b>richtiges</b> Element aus XEP-0198 — nur schickt es der
-        /// Server an den Client und nicht umgekehrt. Bekannt heisst nicht
-        /// „bekannt in dieser Richtung".
+        /// The second case is the more interesting one: <c>&lt;enabled/&gt;</c>
+        /// is a <b>real</b> element from XEP-0198 — only the server sends it to
+        /// the client and not the other way round. Known does not mean "known in
+        /// this direction".
         /// </remarks>
         [Test]
-        [TestCase("<quatsch xmlns='urn:xmpp:sm:3'/>",
+        [TestCase("<nonsense xmlns='urn:xmpp:sm:3'/>",
                   TestName = "AnInventedElementInTheSmNamespace_IsRefused")]
         [TestCase("<enabled xmlns='urn:xmpp:sm:3' id='x'/>",
                   TestName = "AServerToClientElement_IsRefusedFromAClient")]
-        public async Task AnUnknownElementInAKnownNamespace_IsRefusedToo(String rahmen)
+        public async Task AnUnknownElementInAKnownNamespace_IsRefusedToo(String frame)
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
-            var fehler  = Fehlerkorb(alice);
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
+            var errors  = ErrorBasket(alice);
 
-            await alice.SendRawAsync(rahmen);
+            await alice.SendRawAsync(frame);
 
-            await WaitFor(() => !fehler.IsEmpty, "den Stream-Fehler");
+            await WaitFor(() => !errors.IsEmpty, "the stream error");
 
-            fehler.TryDequeue(out var gemeldet);
+            errors.TryDequeue(out var reported);
 
-            Assert.That(gemeldet!.Condition, Is.EqualTo("unsupported-stanza-type"));
+            Assert.That(reported!.Condition, Is.EqualTo("unsupported-stanza-type"));
 
-            await WaitFor(() => !sitzung.IsOpen, "das Ende des Streams");
+            await WaitFor(() => !session.IsOpen, "the end of the stream");
 
         }
 
@@ -308,22 +307,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheKnownSmElements_StillReachTheirHandler()
 
         /// <summary>
-        /// Die Gegenprobe: Was XEP-0198 für diese Richtung vorsieht, wird
-        /// weiterhin beantwortet.
+        /// The counter-check: what XEP-0198 provides for in this direction goes
+        /// on being answered.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn der Zweig
-        /// <b>alles</b> im Namensraum abwiese — und Stream Management wäre
-        /// unbenutzbar, ohne dass ein Test es merkte.
+        /// Without it the collection would pass even if the branch turned
+        /// <b>everything</b> in the namespace away — and stream management would
+        /// be unusable without a test noticing.
         /// </remarks>
         [Test]
         public async Task TheKnownSmElements_StillReachTheirHandler()
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
 
-            var bestaetigungen = new ConcurrentQueue<String>();
+            var acknowledgements = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
@@ -331,15 +330,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                     x.Contains("<a ",           StringComparison.Ordinal) &&
                     x.Contains("urn:xmpp:sm:3", StringComparison.Ordinal))
                 {
-                    bestaetigungen.Enqueue(x);
+                    acknowledgements.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync("<r xmlns='urn:xmpp:sm:3'/>");
 
-            await WaitFor(() => !bestaetigungen.IsEmpty, "die Bestätigung des Servers");
+            await WaitFor(() => !acknowledgements.IsEmpty, "the acknowledgement of the server");
 
-            Assert.That(sitzung.IsOpen, Is.True);
+            Assert.That(session.IsOpen, Is.True);
 
         }
 
@@ -348,39 +347,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAckFromTheClient_IsProcessedAndClearsTheQueue()
 
         /// <summary>
-        /// Die Bestätigung des Clients kommt an: Sie wird vermerkt und räumt
-        /// die Warteschlange der unbestätigten Stanzas.
+        /// The acknowledgement of the client arrives: it is noted and clears the
+        /// queue of unacknowledged stanzas.
         /// </summary>
         /// <remarks>
-        /// Dieser Test fehlte, und aufgefallen ist es an einer Mutation: Sie
-        /// erklärte den <c>&lt;a/&gt;</c>-Zweig für unzuständig — womit die
-        /// Bestätigung des Clients seit D29 den Stream beendet hätte —, und
-        /// <b>kein einziger Test</b> fiel darüber. Über eine echte Verbindung
-        /// hat nie ein Client ein <c>&lt;a/&gt;</c> an den Server geschickt;
-        /// geprüft war nur der Zähler für sich, in
+        /// This test was missing, and it showed at a mutation: it declared the
+        /// <c>&lt;a/&gt;</c> branch out of scope — with which the
+        /// acknowledgement of the client would have ended the stream ever since
+        /// D29 — and <b>not a single test</b> fell over it. Over a real
+        /// connection no client has ever sent an <c>&lt;a/&gt;</c> to the
+        /// server; what was checked was the counter on its own, in
         /// <see cref="StanzaCountingTests"/>.
         ///
-        /// Die Lücke ist älter als die Zeile, die sie sichtbar gemacht hat. Der
-        /// Zweig gab vorher nichts zurück, und ob er lief, war deshalb von
-        /// aussen nicht zu sehen — ein Zweig, dessen Wirkung niemand beobachtet,
-        /// sieht aus wie einer, den niemand braucht.
+        /// The gap is older than the line that made it visible. The branch used
+        /// to give nothing back, and whether it ran was therefore not to be seen
+        /// from outside — a branch whose effect nobody observes looks like one
+        /// nobody needs.
         ///
-        /// Beide Hälften gehören zusammen: <c>LastAckFromClient</c> zeigt, dass
-        /// die Zahl gelesen wurde, die Warteschlange, dass sie auch angewandt
-        /// wurde.
+        /// Both halves belong together: <c>LastAckFromClient</c> shows that the
+        /// number was read, the queue that it was applied as well.
         ///
-        /// <b>Gemessen wird die Folgenummer und nicht die Anzahl</b>, und das
-        /// ist die Korrektur aus D32. Zuerst stand hier „nach der Bestätigung
-        /// sind weniger Stanzas offen als vorher" — eine Aussage über eine
-        /// Zahl, die auch aus einem anderen Grund steigt: Presence von Bob
-        /// kommt nach der Messung und vor der Prüfung dazu. Der Test fiel
-        /// deshalb etwa in jedem dritten Vollauf mit „Expected: less than 2,
-        /// But was: 3".
+        /// <b>What is measured is the sequence number and not the count</b>, and
+        /// that is the correction from D32. At first it said here "after the
+        /// acknowledgement fewer stanzas are outstanding than before" — a
+        /// statement about a number that also rises for another reason: presence
+        /// from Bob comes in after the measurement and before the check. The test
+        /// therefore failed in about every third full run with "Expected: less
+        /// than 2, But was: 3".
         ///
-        /// Eine Bestätigung sagt aber gar nichts über die Anzahl. Sie sagt:
-        /// <b>alles bis zu dieser Folgenummer ist erledigt.</b> Genau das steht
-        /// jetzt da — und was danach hereinkommt, darf die Warteschlange
-        /// wachsen lassen, ohne den Test zu stören.
+        /// But an acknowledgement says nothing at all about the count. It says:
+        /// <b>everything up to this sequence number is done.</b> That is exactly
+        /// what stands there now — and what comes in afterwards may let the
+        /// queue grow without disturbing the test.
         /// </remarks>
         [Test]
         public async Task AnAckFromTheClient_IsProcessedAndClearsTheQueue()
@@ -388,38 +386,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            var alice = await EinzelnAsync();
+            var alice = await AloneAsync();
             var bob   = await ConnectClientAsync("bob");
 
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
-            // Etwas, das der Server an Alice schickt und das unbestätigt
-            // liegen bleibt.
-            await bob.SendMessageAsync(alice.Connection.BareJid, "Hallo");
+            // Something the server sends to Alice and that stays lying about
+            // unacknowledged.
+            await bob.SendMessageAsync(alice.Connection.BareJid, "Hello");
 
-            await WaitFor(() => sitzung.UnacknowledgedToClient > 0,
-                          "eine unbestätigte Stanza beim Server");
+            await WaitFor(() => session.UnacknowledgedToClient > 0,
+                          "an unacknowledged stanza at the server");
 
-            var bestaetigt = sitzung.PendingToClient[^1].Seq;
+            var acknowledged = session.PendingToClient[^1].Seq;
 
-            await alice.SendRawAsync($"<a xmlns='urn:xmpp:sm:3' h='{bestaetigt}'/>");
+            await alice.SendRawAsync($"<a xmlns='urn:xmpp:sm:3' h='{acknowledged}'/>");
 
-            await WaitFor(() => sitzung.LastAckFromClient is not null,
-                          "die Bestätigung des Clients beim Server");
+            await WaitFor(() => session.LastAckFromClient is not null,
+                          "the acknowledgement of the client at the server");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(sitzung.LastAckFromClient, Is.EqualTo(bestaetigt),
-                            "Die gemeldete Zahl muss gelesen worden sein.");
+                Assert.That(session.LastAckFromClient, Is.EqualTo(acknowledged),
+                            "The number reported must have been read.");
 
-                Assert.That(sitzung.PendingToClient.Where(p => p.Seq <= bestaetigt),
+                Assert.That(session.PendingToClient.Where(p => p.Seq <= acknowledged),
                             Is.Empty,
-                            "Alles bis zu dieser Folgenummer muss aus der " +
-                            "Warteschlange verschwunden sein.");
+                            "Everything up to this sequence number must have " +
+                            "disappeared from the queue.");
 
-                Assert.That(sitzung.IsOpen, Is.True,
-                            "Und sie ist ein bekanntes Element, kein Grund zum Abbruch.");
+                Assert.That(session.IsOpen, Is.True,
+                            "And it is a known element, no reason to break off.");
 
             });
 
@@ -430,61 +428,60 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFrameWithoutAnElement_IsIgnored()
 
         /// <summary>
-        /// Ein leerer Rahmen ist kein unbekanntes Element, sondern gar keines —
-        /// und beendet nichts.
+        /// An empty frame is not an unknown element but none at all — and ends
+        /// nothing.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 4.9.3.24 spricht von „a first-level child of the stream
-        /// that is not supported". Ein leerer Rahmen ist kein Kind, das nicht
-        /// unterstützt wird; er ist kein Kind.
+        /// Section 4.9.3.24 speaks of "a first-level child of the stream that is
+        /// not supported". An empty frame is not a child that is unsupported; it
+        /// is not a child.
         ///
-        /// In D26 fiel er noch mit unter den Stream-Fehler — eine Zeile zu
-        /// weit, aufgefallen erst, als D27 dieselbe Regel für den S2S-Stream
-        /// aufschrieb und die Frage dort unumgänglich war (Leerraum als
-        /// Keepalive ist nach Abschnitt 4.6.1 erlaubt).
+        /// In D26 it still fell under the stream error — one line too far,
+        /// noticed only when D27 wrote the same rule down for the S2S stream and
+        /// the question was unavoidable there (whitespace as a keepalive is
+        /// allowed under section 4.6.1).
         ///
-        /// Der Ping danach ist der eigentliche Nachweis: Auf einem Stream wird
-        /// der Reihe nach verarbeitet. Kommt seine Antwort an, hat der Server
-        /// den leeren Rahmen bereits in der Hand gehabt und sich entschieden.
-        /// Damit braucht dieser Test keine Wartezeit, innerhalb derer nichts
-        /// passieren darf.
+        /// The ping afterwards is the real proof: on one stream things are
+        /// worked through in order. Once its answer arrives, the server has
+        /// already held the empty frame in its hands and made up its mind. So
+        /// this test needs no waiting time during which nothing may happen.
         /// </remarks>
         [Test]
         public async Task AFrameWithoutAnElement_IsIgnored()
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
-            var fehler  = Fehlerkorb(alice);
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
+            var errors  = ErrorBasket(alice);
 
-            var antworten = new ConcurrentQueue<String>();
+            var replies = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<",             StringComparison.Ordinal) &&
-                    x.Contains("id='danach'",       StringComparison.Ordinal))
+                    x.Contains("id='afterwards'",       StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(x);
+                    replies.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync("   ");
 
-            await alice.SendRawAsync("<iq type='get' id='danach'><ping xmlns='urn:xmpp:ping'/></iq>");
+            await alice.SendRawAsync("<iq type='get' id='afterwards'><ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WaitFor(() => !antworten.IsEmpty, "die Antwort auf den Ping danach");
+            await WaitFor(() => !replies.IsEmpty, "the answer to the ping afterwards");
 
             Assert.Multiple(() =>
             {
 
-                // Ohne diese Vorbedingung prüfte der Test nichts: Käme der
-                // leere Rahmen gar nicht erst an, bestünde er auch dann, wenn
-                // der Server ihn tödlich fände.
-                Assert.That(sitzung.Received.Any(f => f.Trim().Length == 0), Is.True,
-                            "Vorbedingung: der leere Rahmen muss den Server erreicht haben.");
+                // Without this precondition the test would check nothing: if the
+                // empty frame never arrived at all, it would pass even when the
+                // server found it fatal.
+                Assert.That(session.Received.Any(f => f.Trim().Length == 0), Is.True,
+                            "Precondition: the empty frame must have reached the server.");
 
-                Assert.That(fehler,          Is.Empty, "Ein leerer Rahmen ist kein Stream-Fehler.");
-                Assert.That(sitzung.IsOpen,  Is.True);
+                Assert.That(errors,          Is.Empty, "An empty frame is no stream error.");
+                Assert.That(session.IsOpen,  Is.True);
 
             });
 
@@ -495,41 +492,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheThreeStanzas_StillReachTheirHandlers()
 
         /// <summary>
-        /// Die Gegenprobe: Die drei echten Stanzas gehen weiterhin ihren Weg.
+        /// The counter-check: the three real stanzas go on taking their way.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde diese Sammlung auch dann, wenn die Weiche
-        /// <b>alles</b> abwiese. Ein Ping genügt als Nachweis für <c>iq</c>,
-        /// weil er beantwortet wird; für <c>message</c> und <c>presence</c>
-        /// zählt, dass der Stream stehen bleibt — bei einer Abweisung wäre er
-        /// nach der ersten Stanza zu.
+        /// Without it this collection would pass even if the switch turned
+        /// <b>everything</b> away. A ping suffices as proof for <c>iq</c>,
+        /// because it is answered; for <c>message</c> and <c>presence</c> what
+        /// counts is that the stream stays up — with a refusal it would be shut
+        /// after the first stanza.
         /// </remarks>
         [Test]
         public async Task TheThreeStanzas_StillReachTheirHandlers()
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
 
-            var antworten = new ConcurrentQueue<String>();
+            var replies = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<",                    StringComparison.Ordinal) &&
-                    x.Contains("id='noch-da'",             StringComparison.Ordinal))
+                    x.Contains("id='still-here'",             StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(x);
+                    replies.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync("<presence><show>away</show></presence>");
-            await alice.SendRawAsync($"<message to='alice@{Server.Domain}'><body>an mich</body></message>");
-            await alice.SendRawAsync("<iq type='get' id='noch-da'><ping xmlns='urn:xmpp:ping'/></iq>");
+            await alice.SendRawAsync($"<message to='alice@{Server.Domain}'><body>to myself</body></message>");
+            await alice.SendRawAsync("<iq type='get' id='still-here'><ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WaitFor(() => !antworten.IsEmpty, "die Antwort auf den Ping");
+            await WaitFor(() => !replies.IsEmpty, "the answer to the ping");
 
-            Assert.That(sitzung.IsOpen, Is.True,
-                        "Keine der drei darf den Stream beenden.");
+            Assert.That(session.IsOpen, Is.True,
+                        "None of the three may end the stream.");
 
         }
 
@@ -538,34 +535,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APrefixedStanza_IsStillAStanza()
 
         /// <summary>
-        /// Ein Namensraum-Präfix ändert den Stanza-Typ nicht:
-        /// <c>&lt;client:iq/&gt;</c> ist ein <c>iq</c>.
+        /// A namespace prefix does not change the stanza type:
+        /// <c>&lt;client:iq/&gt;</c> is an <c>iq</c>.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 4.8.1 schreibt keinen bestimmten Präfix vor,
-        /// sondern nur den Namensraum. Ein Server, der am Präfix scheitert,
-        /// scheitert an einer Freiheit, die der RFC ausdrücklich lässt.
+        /// RFC 6120, section 4.8.1 prescribes no particular prefix, only the
+        /// namespace. A server that fails at the prefix fails at a freedom the
+        /// RFC expressly leaves.
         ///
-        /// Geprüft wird nur die Zuordnung — dass daraus kein
-        /// <c>&lt;unsupported-stanza-type/&gt;</c> wird. Was der IQ-Weg mit
-        /// einem präfigierten Element weiter anstellt, ist eine andere Frage
-        /// und steht unter „Später".
+        /// Only the assignment is checked — that no
+        /// <c>&lt;unsupported-stanza-type/&gt;</c> comes of it. What the IQ way
+        /// goes on to do with a prefixed element is another question and stands
+        /// under "later".
         /// </remarks>
         [Test]
         public async Task APrefixedStanza_IsStillAStanza()
         {
 
-            var alice   = await EinzelnAsync();
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
-            var fehler  = Fehlerkorb(alice);
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!)!;
+            var errors  = ErrorBasket(alice);
 
             await alice.SendRawAsync(
-                      "<client:iq xmlns:client='jabber:client' type='get' id='mit-praefix'>" +
+                      "<client:iq xmlns:client='jabber:client' type='get' id='with-prefix'>" +
                       "<ping xmlns='urn:xmpp:ping'/></client:iq>");
 
-            await WaitAgainst(() => !fehler.IsEmpty, "einen Stream-Fehler");
+            await WaitAgainst(() => !errors.IsEmpty, "a stream error");
 
-            Assert.That(sitzung.IsOpen, Is.True);
+            Assert.That(session.IsOpen, Is.True);
 
         }
 

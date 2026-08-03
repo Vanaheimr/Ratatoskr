@@ -29,19 +29,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Aushandlung des Streams in gültiger, aber ungewöhnlicher
-    /// Schreibweise.
+    /// The negotiation of the stream in valid but unusual spelling.
     ///
-    /// Sie lief bis zuletzt über Textmuster: <c>&lt;mechanism&gt;…&lt;/mechanism&gt;</c>
-    /// ohne Attribute, <c>xmlns</c> als erstes Attribut, <c>Contains</c> auf
-    /// dem ganzen Rahmen. Diese Tests halten fest, was ein Server alles
-    /// schicken darf, ohne dass der Verbindungsaufbau danebengreift.
+    /// It ran over text patterns until recently:
+    /// <c>&lt;mechanism&gt;…&lt;/mechanism&gt;</c> without attributes,
+    /// <c>xmlns</c> as the first attribute, <c>Contains</c> on the whole frame.
+    /// These tests record everything a server may send without the connection
+    /// setup grasping at the wrong thing.
     /// </summary>
     [TestFixture]
     public class StreamNegotiationTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private static XElement Features(String inner)
             => XElement.Parse("<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
@@ -54,11 +54,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SaslMechanisms_ReadsIndentedElements()
 
         /// <summary>
-        /// Ein Server, der seine Features einrückt, schreibt den Namen des
-        /// Mechanismus mit Zeilenumbruch und Leerzeichen drumherum. Das frühere
-        /// Muster gab ihn ungeschnitten zurück, und der anschliessende
-        /// Vergleich auf "PLAIN" ging ins Leere - der Client hielt den Server
-        /// für einen ohne SASL.
+        /// A server that indents its features writes the name of the mechanism
+        /// with a line break and spaces around it. The earlier pattern gave it
+        /// back uncut, and the comparison against "PLAIN" that followed came to
+        /// nothing - the client took the server for one without SASL.
         /// </summary>
         [Test]
         public void SaslMechanisms_ReadsIndentedElements()
@@ -79,10 +78,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SaslMechanisms_ReadsRepeatedNamespaceDeclaration()
 
         /// <summary>
-        /// Der Namespace darf am Kindelement wiederholt werden - überflüssig,
-        /// aber gültig, und genau so serialisiert manche Bibliothek. Das
-        /// frühere Muster verlangte <c>&lt;mechanism&gt;</c> ganz ohne
-        /// Attribute und fand dann gar nichts mehr.
+        /// The namespace may be repeated on the child element - superfluous but
+        /// valid, and that is exactly how some libraries serialise it. The
+        /// earlier pattern demanded a <c>&lt;mechanism&gt;</c> with no
+        /// attributes at all and then found nothing whatsoever.
         /// </summary>
         [Test]
         public void SaslMechanisms_ReadsRepeatedNamespaceDeclaration()
@@ -101,11 +100,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SaslMechanisms_IgnoresMechanismsOfAnotherFeature()
 
         /// <summary>
-        /// Gesucht wird im <c>&lt;mechanisms/&gt;</c> von SASL, nicht irgendwo
-        /// im Rahmen. Ein gleichnamiges Element einer anderen Erweiterung -
-        /// etwa der Mechanismenliste einer Verschlüsselungsschicht - darf nicht
-        /// in die Auswahl geraten, sonst versucht der Client einen Mechanismus,
-        /// den der Server für SASL nie angeboten hat.
+        /// The search runs inside the <c>&lt;mechanisms/&gt;</c> of SASL, not
+        /// somewhere in the frame. An element of the same name belonging to
+        /// another extension - the mechanism list of an encryption layer, say -
+        /// must not get into the choice, otherwise the client tries a mechanism
+        /// the server never offered for SASL.
         /// </summary>
         [Test]
         public void SaslMechanisms_IgnoresMechanismsOfAnotherFeature()
@@ -113,8 +112,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var features = Features("<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
                                     "<mechanism>PLAIN</mechanism></mechanisms>" +
-                                    "<mechanisms xmlns='urn:example:etwas-anderes'>" +
-                                    "<mechanism>MAGIE</mechanism></mechanisms>");
+                                    "<mechanisms xmlns='urn:example:something-else'>" +
+                                    "<mechanism>MAGIC</mechanism></mechanisms>");
 
             Assert.That(StreamNegotiation.SaslMechanisms(features), Is.EqualTo(new[] { "PLAIN" }));
 
@@ -125,10 +124,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region FeatureNamespaces_FindsTrailingXmlns()
 
         /// <summary>
-        /// Das frühere Muster verlangte <c>xmlns</c> als erstes Attribut. Die
-        /// BCL serialisiert es aber als letztes, und XML schreibt keine
-        /// Reihenfolge vor - solche Features fehlten in der Liste, und der
-        /// Server wirkte weniger fähig, als er ist.
+        /// The earlier pattern demanded <c>xmlns</c> as the first attribute.
+        /// The BCL serialises it as the last, though, and XML prescribes no
+        /// order - such features were missing from the list, and the server
+        /// looked less capable than it is.
         /// </summary>
         [Test]
         public void FeatureNamespaces_FindsTrailingXmlns()
@@ -147,18 +146,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region FeatureNamespaces_IgnoresNestedElements()
 
         /// <summary>
-        /// Angekündigt ist ein Feature durch ein <b>direktes</b> Kind von
-        /// <c>&lt;features/&gt;</c>. Das frühere Muster suchte im ganzen Text
-        /// und nahm auch Namespaces aus dem Inneren eines Features auf - der
-        /// Client hielt den Server dann für fähig zu etwas, das dort nur als
-        /// Detail vorkam.
+        /// A feature is announced by a <b>direct</b> child of
+        /// <c>&lt;features/&gt;</c>. The earlier pattern searched the whole text
+        /// and took up namespaces from inside a feature as well - the client
+        /// then took the server to be capable of something that occurred there
+        /// only as a detail.
         /// </summary>
         [Test]
         public void FeatureNamespaces_IgnoresNestedElements()
         {
 
             var features = Features("<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
-                                    "<hinweis xmlns='urn:example:innen'/>" +
+                                    "<hint xmlns='urn:example:inside'/>" +
                                     "</mechanisms>");
 
             Assert.That(StreamNegotiation.FeatureNamespaces(features),
@@ -171,11 +170,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RequiresSession_IgnoresTheOptionalOfAnotherFeature()
 
         /// <summary>
-        /// Der Kern des Fehlers: <c>&lt;optional/&gt;</c> gehört jeweils zu
-        /// genau einem Feature. XEP-0198 setzt es in sein eigenes, und die
-        /// frühere Prüfung <c>!Contains("optional")</c> las das als Aussage
-        /// über die Session - ein Server, der beides ankündigt, bekam die
-        /// zwingende Session nie angefordert.
+        /// The heart of the fault: <c>&lt;optional/&gt;</c> belongs to exactly
+        /// one feature at a time. XEP-0198 puts it into its own, and the earlier
+        /// check <c>!Contains("optional")</c> read that as a statement about the
+        /// session - a server that announces both never got the required session
+        /// asked for.
         /// </summary>
         [Test]
         public void RequiresSession_IgnoresTheOptionalOfAnotherFeature()
@@ -192,7 +191,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region RequiresSession_False_WhenTheSessionItselfIsOptional()
 
-        /// <summary>Die Gegenprobe: das eigene <c>&lt;optional/&gt;</c> zählt.</summary>
+        /// <summary>The counter-check: its own <c>&lt;optional/&gt;</c> counts.</summary>
         [Test]
         public void RequiresSession_False_WhenTheSessionItselfIsOptional()
         {
@@ -208,11 +207,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OffersBind_AcceptsAPrefixedNamespace()
 
         /// <summary>
-        /// Ob der Server den Bind-Namespace als Default setzt oder über ein
-        /// Präfix bindet, ist seine Sache. Die frühere Prüfung
-        /// <c>Contains("&lt;bind")</c> traf ein <c>&lt;b:bind/&gt;</c> nicht -
-        /// der Client hätte das Binding übersprungen und wäre ohne Resource
-        /// weitergelaufen.
+        /// Whether the server sets the bind namespace as the default or binds it
+        /// through a prefix is its own affair. The earlier check
+        /// <c>Contains("&lt;bind")</c> did not match a <c>&lt;b:bind/&gt;</c> -
+        /// the client would have skipped the binding and carried on without a
+        /// resource.
         /// </summary>
         [Test]
         public void OffersBind_AcceptsAPrefixedNamespace()
@@ -229,10 +228,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReadBoundJid_ResolvesEntities()
 
         /// <summary>
-        /// Der frühere Griff mit <c>&lt;jid&gt;([^&lt;]+)&lt;/jid&gt;</c> holte
-        /// den Rohtext: aus <c>a&amp;amp;b</c> wurde nicht <c>a&amp;b</c>. Der
-        /// Client hätte sich fortan mit einem JID gemeldet, den es so nicht
-        /// gibt.
+        /// The earlier grab with <c>&lt;jid&gt;([^&lt;]+)&lt;/jid&gt;</c>
+        /// fetched the raw text: <c>a&amp;amp;b</c> did not become
+        /// <c>a&amp;b</c>. The client would have reported itself from then on
+        /// with a JID that does not exist in that form.
         /// </summary>
         [Test]
         public void ReadBoundJid_ResolvesEntities()
@@ -252,8 +251,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReadBoundJid_TrimsSurroundingWhitespace()
 
         /// <summary>
-        /// Auch hier schlägt das Einrücken zu: der JID darf nicht mit
-        /// Zeilenumbrüchen im Namen weiterverwendet werden.
+        /// Here too the indenting strikes: the JID must not be carried on with
+        /// line breaks in the name.
         /// </summary>
         [Test]
         public void ReadBoundJid_TrimsSurroundingWhitespace()
@@ -273,9 +272,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReadBoundJid_ReturnsNullForARejection()
 
         /// <summary>
-        /// Ein abgelehntes Binding muss als Ablehnung erkennbar sein. Früher
-        /// fiel der Client auf den selbst gewünschten JID zurück und meldete
-        /// sich mit einer Resource online, die ihm nie zugeteilt wurde.
+        /// A refused binding has to be recognisable as a refusal. The client
+        /// used to fall back on the JID it had wished for itself and reported
+        /// itself online with a resource it was never assigned.
         /// </summary>
         [Test]
         public void ReadBoundJid_ReturnsNullForARejection()
@@ -294,17 +293,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReadBoundJid_IgnoresAJidOfAnotherPayload()
 
         /// <summary>
-        /// Der JID muss aus dem <c>&lt;bind/&gt;</c> stammen. Die Textsuche
-        /// fand jedes <c>&lt;jid/&gt;</c> im Rahmen - auch eines, das zu einer
-        /// ganz anderen Nutzlast gehört.
+        /// The JID has to come from the <c>&lt;bind/&gt;</c>. The text search
+        /// found every <c>&lt;jid/&gt;</c> in the frame - including one
+        /// belonging to a quite different payload.
         /// </summary>
         [Test]
         public void ReadBoundJid_IgnoresAJidOfAnotherPayload()
         {
 
             var iq = XElement.Parse("<iq type='result' id='bind1'>" +
-                                    "<query xmlns='urn:example:etwas-anderes'>" +
-                                    "<jid>fremd@example.org/x</jid></query></iq>");
+                                    "<query xmlns='urn:example:something-else'>" +
+                                    "<jid>foreign@example.org/x</jid></query></iq>");
 
             Assert.That(StreamNegotiation.ReadBoundJid(iq), Is.Null);
 
@@ -315,22 +314,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region IsSasl_ChecksTheNamespace()
 
         /// <summary>
-        /// <c>&lt;success/&gt;</c> ist ein häufiger Elementname. Nur eines aus
-        /// dem SASL-Namespace beendet die Authentifizierung; die frühere Suche
-        /// nach der Zeichenfolge <c>"&lt;success"</c> im Rohtext hätte auch
-        /// jedes andere akzeptiert.
+        /// <c>&lt;success/&gt;</c> is a common element name. Only one from the
+        /// SASL namespace ends the authentication; the earlier search for the
+        /// character sequence <c>"&lt;success"</c> in the raw text would have
+        /// accepted any other one too.
         /// </summary>
         [Test]
         public void IsSasl_ChecksTheNamespace()
         {
 
-            var fremd = XElement.Parse("<success xmlns='urn:example:etwas-anderes'/>");
-            var echt  = XElement.Parse("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+            var foreign = XElement.Parse("<success xmlns='urn:example:something-else'/>");
+            var real  = XElement.Parse("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(StreamNegotiation.IsSasl(fremd, "success"), Is.False);
-                Assert.That(StreamNegotiation.IsSasl(echt,  "success"), Is.True);
+                Assert.That(StreamNegotiation.IsSasl(foreign, "success"), Is.False);
+                Assert.That(StreamNegotiation.IsSasl(real,  "success"), Is.True);
             });
 
         }
@@ -340,24 +339,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SaslPayload_IsEmptyWithoutAServerFinalMessage()
 
         /// <summary>
-        /// Die Grundlage der SCRAM-Prüfung: ein <c>&lt;success/&gt;</c> ohne
-        /// Inhalt trägt keine server-final-message. Nach RFC 5802,
-        /// Abschnitt 5 ist die Signatur damit nicht prüfbar - der
-        /// Verbindungsaufbau bricht dort jetzt ab, statt die gegenseitige
-        /// Authentifizierung stillschweigend fallen zu lassen.
+        /// The ground the SCRAM check stands on: a <c>&lt;success/&gt;</c>
+        /// without content carries no server-final-message. Under RFC 5802,
+        /// section 5 the signature is thereby not checkable - the connection
+        /// setup now breaks off there instead of dropping the mutual
+        /// authentication in silence.
         /// </summary>
         [Test]
         public void SaslPayload_IsEmptyWithoutAServerFinalMessage()
         {
 
-            var leer   = XElement.Parse("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
-            var gefuellt = XElement.Parse("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>\n" +
+            var empty   = XElement.Parse("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+            var filled = XElement.Parse("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>\n" +
                                           "  dj1yUnRDMXBUUw==\n</success>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(StreamNegotiation.SaslPayload(leer),     Is.Empty);
-                Assert.That(StreamNegotiation.SaslPayload(gefuellt), Is.EqualTo("dj1yUnRDMXBUUw=="));
+                Assert.That(StreamNegotiation.SaslPayload(empty),     Is.Empty);
+                Assert.That(StreamNegotiation.SaslPayload(filled), Is.EqualTo("dj1yUnRDMXBUUw=="));
             });
 
         }
@@ -367,16 +366,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SaslFailureCondition_SkipsTheTextElement()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 6.5 erlaubt ein erläuterndes
-        /// <c>&lt;text/&gt;</c> neben der Bedingung, ohne die Reihenfolge
-        /// festzulegen. Gemeldet gehört die Bedingung, nicht der Erläuterungstext.
+        /// RFC 6120, section 6.5 allows an explanatory <c>&lt;text/&gt;</c>
+        /// beside the condition without laying down the order. What belongs
+        /// reported is the condition, not the explanatory text.
         /// </summary>
         [Test]
         public void SaslFailureCondition_SkipsTheTextElement()
         {
 
             var failure = XElement.Parse("<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
-                                         "<text>Falsches Passwort</text>" +
+                                         "<text>Wrong password</text>" +
                                          "<not-authorized/></failure>");
 
             Assert.That(StreamNegotiation.SaslFailureCondition(failure), Is.EqualTo("not-authorized"));

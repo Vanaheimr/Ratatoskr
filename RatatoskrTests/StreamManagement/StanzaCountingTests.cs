@@ -28,8 +28,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0198: die beiden Bausteine der Zählung ohne Netzwerk -
-    /// was zählt als Stanza, und wann gilt eine Sequenznummer als bestätigt.
+    /// XEP-0198: the two building blocks of the counting without a network -
+    /// what counts as a stanza, and when a sequence number counts as
+    /// acknowledged.
     /// </summary>
     [TestFixture]
     public class StanzaCountingTests
@@ -38,7 +39,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Stanzas_AreCounted()
 
         /// <summary>
-        /// XEP-0198 Abschnitt 2 zählt genau message, presence und iq.
+        /// XEP-0198 section 2 counts exactly message, presence and iq.
         /// </summary>
         [Test]
         [TestCase("<message to='a@b' type='chat'><body>x</body></message>")]
@@ -57,9 +58,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Nonzas_AreNotCounted()
 
         /// <summary>
-        /// Nonzas zählen nicht. Besonders heikel sind <c>&lt;a/&gt;</c> und
-        /// <c>&lt;r/&gt;</c>: sie laufen bei jedem Keepalive über dieselbe
-        /// Sendestrecke wie echte Stanzas.
+        /// Nonzas do not count. Especially delicate are <c>&lt;a/&gt;</c> and
+        /// <c>&lt;r/&gt;</c>: they run over the same sending path as real
+        /// stanzas at every keepalive.
         /// </summary>
         [Test]
         [TestCase("<r xmlns='urn:xmpp:sm:3'/>")]
@@ -72,7 +73,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         [TestCase("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>")]
         [TestCase("<stream:features xmlns:stream='http://etherx.jabber.org/streams'/>")]
         [TestCase("")]
-        [TestCase("kein XML")]
+        [TestCase("not XML")]
         public void Nonzas_AreNotCounted(String xml)
         {
             Assert.That(StreamManagementManager.IsCountableStanza(xml), Is.False);
@@ -83,9 +84,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ElementsWithStanzaPrefix_AreNotCounted()
 
         /// <summary>
-        /// Ein blosser Präfixvergleich wie <c>StartsWith("&lt;a")</c> würde
-        /// auch <c>&lt;auth/&gt;</c> treffen. Der Elementname muss vollständig
-        /// übereinstimmen.
+        /// A mere prefix comparison such as <c>StartsWith("&lt;a")</c> would
+        /// match <c>&lt;auth/&gt;</c> as well. The element name has to agree in
+        /// full.
         /// </summary>
         [Test]
         [TestCase("<iqbogus/>")]
@@ -101,20 +102,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerCountsTheSameThings()
 
         /// <summary>
-        /// Dieselbe Frage auf der Serverseite — und dieselbe Antwort.
+        /// The same question on the server side — and the same answer.
         /// </summary>
         /// <remarks>
-        /// <see cref="XMPPSession.IsStanza"/> ist bewusst unabhängig
-        /// implementiert: Benutzten beide Seiten dieselbe Hilfsfunktion, prüften
-        /// die Tests, die die zwei Zähler gegeneinander halten, beide Seiten mit
-        /// derselben Logik, und ein gemeinsamer Denkfehler bliebe unentdeckt.
+        /// <see cref="XMPPSession.IsStanza"/> is deliberately implemented
+        /// independently: if both sides used the same helper, the tests that
+        /// hold the two counters against each other would be checking both sides
+        /// with the same logic, and a shared error of thought would stay
+        /// undiscovered.
         ///
-        /// Unabhängig heisst aber nicht ungeprüft. Bis D26 verglich die
-        /// Serverseite Präfixe: <c>&lt;iqbogus/&gt;</c> zählte dort mit und beim
-        /// Client nicht — ausgerechnet die zwei Zähler, die gleich laufen
-        /// müssen, wären auseinandergelaufen, und der Gegenüber hätte das
-        /// <c>h</c> als Protokollverletzung gewertet. Dieser Test hält die
-        /// beiden auf derselben Antwort, ohne sie auf denselben Weg zu zwingen.
+        /// Independent does not mean unchecked, though. Until D26 the server
+        /// side compared prefixes: <c>&lt;iqbogus/&gt;</c> counted there and did
+        /// not at the client — of all things the two counters that have to run
+        /// alike would have drifted apart, and the other end would have taken
+        /// the <c>h</c> for a protocol violation. This test holds the two to the
+        /// same answer without forcing them onto the same way.
         /// </remarks>
         [Test]
         [TestCase("<message/>",        true)]
@@ -126,18 +128,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         [TestCase("<messages/>",       false)]
         [TestCase("<presence-probe/>", false)]
         [TestCase("<r xmlns='urn:xmpp:sm:3'/>", false)]
-        public void TheServerCountsTheSameThings(String xml, Boolean erwartet)
+        public void TheServerCountsTheSameThings(String xml, Boolean expected)
         {
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(XMPPSession.IsStanza(xml),
-                            Is.EqualTo(erwartet),
-                            "Serverseite");
+                            Is.EqualTo(expected),
+                            "server side");
 
-                Assert.That(StreamManagementManager.IsCountableStanza(xml), Is.EqualTo(erwartet),
-                            "Clientseite");
+                Assert.That(StreamManagementManager.IsCountableStanza(xml), Is.EqualTo(expected),
+                            "client side");
 
             });
 
@@ -148,19 +150,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Acknowledgement_UsesModuloArithmetic()
 
         /// <summary>
-        /// Der Zähler ist ein 32-Bit-Wert, der nach 2^32-1 auf 0 überläuft
-        /// (XEP-0198, Abschnitt 4). Ein einfaches <c>Seq &lt;= h</c> würde die
-        /// noch offenen Stanzas direkt nach dem Überlauf für immer in der
-        /// Queue liegen lassen.
+        /// The counter is a 32-bit value that overflows to 0 after 2^32-1
+        /// (XEP-0198, section 4). A simple <c>Seq &lt;= h</c> would leave the
+        /// stanzas still outstanding right after the overflow lying in the
+        /// queue for ever.
         /// </summary>
         [Test]
-        [TestCase(1u,          1u,          true,  TestName = "Genau bestätigt")]
-        [TestCase(1u,          5u,          true,  TestName = "Älter als h")]
-        [TestCase(5u,          1u,          false, TestName = "Neuer als h")]
-        [TestCase(5u,          4u,          false, TestName = "Eins zu neu")]
-        [TestCase(UInt32.MaxValue, 1u,      true,  TestName = "Ueberlauf: h hat umgeschlagen")]
-        [TestCase(UInt32.MaxValue, 0u,      true,  TestName = "Ueberlauf: h genau auf 0")]
-        [TestCase(1u,          UInt32.MaxValue, false, TestName = "h liegt weit zurueck")]
+        [TestCase(1u,          1u,          true,  TestName = "Acknowledged exactly")]
+        [TestCase(1u,          5u,          true,  TestName = "Older than h")]
+        [TestCase(5u,          1u,          false, TestName = "Newer than h")]
+        [TestCase(5u,          4u,          false, TestName = "One too new")]
+        [TestCase(UInt32.MaxValue, 1u,      true,  TestName = "Overflow: h has turned over")]
+        [TestCase(UInt32.MaxValue, 0u,      true,  TestName = "Overflow: h exactly at 0")]
+        [TestCase(1u,          UInt32.MaxValue, false, TestName = "h lies far back")]
         public void Acknowledgement_UsesModuloArithmetic(UInt32 seq, UInt32 h, Boolean expected)
         {
             Assert.That(StreamManagementManager.IsAcknowledged(seq, h), Is.EqualTo(expected));
@@ -171,18 +173,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region LastAcknowledged_IsTheirNumber_NotOurs()
 
         /// <summary>
-        /// <c>LastAcknowledged</c> meldet, was die Gegenstelle gezählt hat -
-        /// nicht, was wir gezählt haben.
+        /// <c>LastAcknowledged</c> reports what the counterpart has counted -
+        /// not what we have counted.
         /// </summary>
         /// <remarks>
-        /// Die Unterscheidung ist der ganze Zweck der Eigenschaft: der Lauf
-        /// gegen einen fremden Server vergleicht sie mit
-        /// <c>OutboundCount</c>, um Übereinstimmung von blosser Duldung zu
-        /// trennen. Gäbe sie unseren eigenen Zähler zurück, ginge dieser
-        /// Vergleich immer auf und der Lauf prüfte nichts.
+        /// The distinction is the whole purpose of the property: the run against
+        /// a foreign server compares it with <c>OutboundCount</c> in order to
+        /// tell agreement from mere toleration. If it gave back our own counter,
+        /// that comparison would always add up and the run would check nothing.
         ///
-        /// Deshalb hier ein <c>h</c>, das absichtlich neben unserem Stand
-        /// liegt: gesendet wurde nichts, bestätigt werden sieben.
+        /// Hence an <c>h</c> here that lies beside our own state on purpose:
+        /// nothing was sent, seven are acknowledged.
         /// </remarks>
         [Test]
         public void LastAcknowledged_IsTheirNumber_NotOurs()
