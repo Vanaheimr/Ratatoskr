@@ -25,27 +25,26 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0420: Stanza Content Encryption - die Hülle, die verschlüsselt wird.
+/// XEP-0420: Stanza Content Encryption - the envelope that gets encrypted.
 /// </summary>
 /// <remarks>
-/// <b>Verschlüsselt wird nicht der Text, sondern eine ganze Stanza-Hülle.</b>
-/// Das ist der Unterschied zu älteren Verfahren, und er ist der Grund für
-/// dieses XEP: Wer nur den <c>&lt;body/&gt;</c> verschlüsselt, lässt alles
-/// andere im Klartext stehen - Chat States, Empfangsbestätigungen,
-/// Korrekturvermerke - und ein Mitlesender weiss dann, wann wer tippt, was
-/// ankam und was berichtigt wurde. Der Inhalt wäre geschützt, das Gespräch
-/// nicht.
+/// <b>What is encrypted is not the text but a whole stanza envelope.</b> That
+/// is the difference from older procedures, and it is the reason for this XEP:
+/// whoever encrypts only the <c>&lt;body/&gt;</c> leaves everything else
+/// standing in the clear - chat states, delivery receipts, correction notes -
+/// and somebody reading along then knows when who is typing, what arrived and
+/// what was put right. The content would be protected, the conversation not.
 ///
-/// <b>Die Beigaben („affix elements") sind gegen Verschieben.</b> Ein
-/// Geheimtext ohne sie liesse sich abfangen und an jemand anderen
-/// weiterschicken - die Verschlüsselung bliebe gültig, der Empfänger sähe eine
-/// Nachricht, die nie an ihn gerichtet war. Deshalb steht der Absender
-/// <b>innerhalb</b> der Hülle: Aussen kann ihn jeder ändern.
+/// <b>The affix elements are against displacement.</b> A ciphertext without
+/// them could be intercepted and passed on to somebody else - the encryption
+/// would stay valid, the recipient would see a message that was never directed
+/// at them. That is why the sender stands <b>inside</b> the envelope: outside,
+/// anybody can change it.
 ///
-/// <b>Und das <c>&lt;rpad/&gt;</c> ist keine Zierde.</b> Ohne es verrät die
-/// Länge des Geheimtextes die Länge der Nachricht - bei „ja" und „nein" ist
-/// das der ganze Inhalt. Die Polsterung hat zufällige Länge, damit sich aus
-/// der Grösse nichts mehr ablesen lässt.
+/// <b>And the <c>&lt;rpad/&gt;</c> is no decoration.</b> Without it the length
+/// of the ciphertext betrays the length of the message - with "yes" and "no"
+/// that is the whole content. The padding has a random length so that nothing
+/// can be read off the size any more.
 /// </remarks>
 public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
                                  String?                  From    = null,
@@ -53,22 +52,22 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
                                  DateTimeOffset?          Time    = null)
 {
 
-    /// <summary>Der Namespace von XEP-0420.</summary>
+    /// <summary>The namespace of XEP-0420.</summary>
     public const String Namespace = "urn:xmpp:sce:1";
 
-    /// <summary>Die Obergrenze der Polsterung in Zeichen (XEP-0420, Abschnitt 4).</summary>
+    /// <summary>The upper limit of the padding in characters (XEP-0420, section 4).</summary>
     public const Int32 MaxPadding = 200;
 
     #region ToXml()
 
     /// <summary>
-    /// Die Hülle als XML, mit frisch gezogener Polsterung.
+    /// The envelope as XML, with freshly drawn padding.
     /// </summary>
     /// <remarks>
-    /// Die Polsterung wird bei jedem Aufruf neu gezogen - auch für dieselbe
-    /// Nachricht. Wäre sie es nicht, hätten zwei gleiche Nachrichten wieder
-    /// gleiche Länge, und die Massnahme wäre genau so weit wirkungslos, wie
-    /// sie gedacht war.
+    /// The padding is drawn anew at every call - also for the same message. If
+    /// it were not, two identical messages would again have identical length,
+    /// and the measure would be ineffective exactly as far as it was meant to
+    /// reach.
     /// </remarks>
     public XElement ToXml()
     {
@@ -97,27 +96,27 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
     }
 
     /// <summary>
-    /// Zufällige Zeichen zufälliger Länge zwischen 0 und
+    /// Random characters of random length between 0 and
     /// <see cref="MaxPadding"/>.
     /// </summary>
     /// <remarks>
-    /// Aus dem kryptographischen Zufallsgenerator und nicht aus
-    /// <see cref="Random"/>: Eine vorhersagbare Polsterung polstert nichts.
-    /// Wer die Folge kennt, zieht sie von der Länge ab und liest die
-    /// Nachrichtenlänge wie zuvor.
+    /// From the cryptographic random generator and not from
+    /// <see cref="Random"/>: a predictable padding pads nothing. Whoever knows
+    /// the sequence subtracts it from the length and reads the message length
+    /// as before.
     /// </remarks>
     private static String RandomPadding()
     {
 
-        const String zeichen = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        const String characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-        var laenge = RandomNumberGenerator.GetInt32(0, MaxPadding + 1);
-        var puffer = new Char[laenge];
+        var length = RandomNumberGenerator.GetInt32(0, MaxPadding + 1);
+        var buffer = new Char[length];
 
-        for (var i = 0; i < laenge; i++)
-            puffer[i] = zeichen[RandomNumberGenerator.GetInt32(zeichen.Length)];
+        for (var i = 0; i < length; i++)
+            buffer[i] = characters[RandomNumberGenerator.GetInt32(characters.Length)];
 
-        return new String(puffer);
+        return new String(buffer);
 
     }
 
@@ -126,18 +125,17 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
     #region TryRead(xml, out envelope)
 
     /// <summary>
-    /// Liest eine Hülle.
+    /// Reads an envelope.
     /// </summary>
     /// <param name="expectedFrom">
-    /// Von wem die Nachricht laut Stanza stammt. Steht in der Hülle ein
-    /// anderer Absender, wird sie abgewiesen.
+    /// Whom the message comes from according to the stanza. If another sender
+    /// stands in the envelope, it is refused.
     /// </param>
     /// <remarks>
-    /// <b>Der Abgleich ist der Zweck der Beigabe</b>, und er gehört hierhin
-    /// und nicht in die Oberfläche: Eine Hülle, deren Absender niemand
-    /// nachsieht, ist ein Feld, das Platz kostet. Der Angriff, den sie
-    /// abwehrt, ist das Weiterreichen - jemand fängt einen Geheimtext ab und
-    /// schickt ihn unter eigenem Namen weiter.
+    /// <b>The comparison is the purpose of the affix</b>, and it belongs here
+    /// and not in the interface: an envelope whose sender nobody looks at is a
+    /// field that costs space. The attack it wards off is the passing on -
+    /// somebody intercepts a ciphertext and sends it on under their own name.
     /// </remarks>
     public static Boolean TryRead(XElement          xml,
                                   out SceEnvelope?  envelope,
@@ -163,15 +161,15 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
                            StringComparison.OrdinalIgnoreCase))
             return false;
 
-        DateTimeOffset? zeit = null;
+        DateTimeOffset? time = null;
 
-        if (xml.Child(Namespace, "time")?.Attr("stamp") is String stempel &&
-            DateTimeOffset.TryParse(stempel, null,
+        if (xml.Child(Namespace, "time")?.Attr("stamp") is String stamp &&
+            DateTimeOffset.TryParse(stamp, null,
                                     System.Globalization.DateTimeStyles.RoundtripKind,
-                                    out var gelesen))
-            zeit = gelesen;
+                                    out var read))
+            time = read;
 
-        envelope = new SceEnvelope([.. content.Elements()], from, to, zeit);
+        envelope = new SceEnvelope([.. content.Elements()], from, to, time);
 
         return true;
 

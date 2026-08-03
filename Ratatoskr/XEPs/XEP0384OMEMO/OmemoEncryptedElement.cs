@@ -24,52 +24,52 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Ein Schlüssel für genau ein Gerät eines Empfängers.
+/// A key for exactly one device of a recipient.
 /// </summary>
-/// <param name="DeviceId">Die Gerätekennung (<c>rid</c>).</param>
+/// <param name="DeviceId">The device identifier (<c>rid</c>).</param>
 /// <param name="Data">
-/// Die durch den Ratchet verschlüsselten 48 Byte - je nachdem als
-/// <c>OMEMOAuthenticatedMessage</c> oder als <c>OMEMOKeyExchange</c>.
+/// The 48 bytes encrypted by the ratchet - depending on the case as an
+/// <c>OMEMOAuthenticatedMessage</c> or as an <c>OMEMOKeyExchange</c>.
 /// </param>
 /// <param name="IsKeyExchange">
-/// Trägt dieser Eintrag einen Schlüsselaustausch (<c>kex='true'</c>)?
+/// Does this entry carry a key exchange (<c>kex='true'</c>)?
 /// </param>
 public sealed record OmemoKey(UInt32 DeviceId, Byte[] Data, Boolean IsKeyExchange);
 
 /// <summary>
-/// Das <c>&lt;encrypted/&gt;</c>-Element (XEP-0384, Abschnitt 4.5).
+/// The <c>&lt;encrypted/&gt;</c> element (XEP-0384, section 4.5).
 /// </summary>
-/// <param name="SenderDeviceId">Das eigene Gerät (<c>sid</c>).</param>
+/// <param name="SenderDeviceId">One's own device (<c>sid</c>).</param>
 /// <param name="Keys">
-/// Je Empfänger-JID die Schlüssel für seine Geräte.
+/// Per recipient JID the keys for their devices.
 /// </param>
 /// <param name="Payload">
-/// Die verschlüsselte Nutzlast, oder null für eine Nachricht ohne Inhalt.
+/// The encrypted payload, or null for a message without content.
 /// </param>
 /// <remarks>
-/// <b>Warum die Empfänger nach JID gruppiert sind.</b> Eine Nachricht geht an
-/// alle Geräte aller Beteiligten - auch an die eigenen, sonst sähe der eigene
-/// Rechner nicht, was das eigene Telefon geschrieben hat. Die Gruppierung
-/// hält fest, <i>wessen</i> Gerät gemeint ist, und das ist mehr als Ordnung:
-/// Ohne sie liesse sich ein Schlüsseleintrag für ein Gerät ausgeben, das
-/// jemand ganz anderem gehört.
+/// <b>Why the recipients are grouped by JID.</b> A message goes to all devices
+/// of all participants - also to one's own, otherwise one's own computer would
+/// not see what one's own telephone has written. The grouping holds fast
+/// <i>whose</i> device is meant, and that is more than tidiness: without it a
+/// key entry could be given out for a device that belongs to somebody else
+/// entirely.
 ///
-/// <b>Eine Nachricht ohne <c>&lt;payload/&gt;</c> ist kein Fehler.</b> Sie
-/// heisst „ich habe die Sitzung neu aufgebaut" und trägt nichts als den
-/// Schlüsselaustausch - so bekommt eine Gegenstelle eine Sitzung, ohne dass
-/// ein Mensch etwas schreiben müsste.
+/// <b>A message without a <c>&lt;payload/&gt;</c> is no error.</b> It means "I
+/// have rebuilt the session" and carries nothing but the key exchange - that is
+/// how a counterpart gets a session without a human being having to write
+/// anything.
 /// </remarks>
 public sealed record OmemoEncryptedElement(UInt32                                        SenderDeviceId,
                                            IReadOnlyDictionary<String, IReadOnlyList<OmemoKey>>  Keys,
                                            Byte[]?                                       Payload)
 {
 
-    /// <summary>Der Namespace von OMEMO 2.</summary>
+    /// <summary>The namespace of OMEMO 2.</summary>
     public const String Namespace = "urn:xmpp:omemo:2";
 
     #region ToXml()
 
-    /// <summary>Das Element als XML.</summary>
+    /// <summary>The element as XML.</summary>
     public XElement ToXml()
     {
 
@@ -77,20 +77,20 @@ public sealed record OmemoEncryptedElement(UInt32                               
 
         var header = new XElement(ns + "header", new XAttribute("sid", SenderDeviceId));
 
-        foreach (var (jid, schluessel) in Keys)
+        foreach (var (jid, deviceKeys) in Keys)
         {
 
             var keys = new XElement(ns + "keys", new XAttribute("jid", jid));
 
-            foreach (var k in schluessel)
+            foreach (var k in deviceKeys)
                 keys.Add(new XElement(ns + "key",
                                       new XAttribute("rid", k.DeviceId),
-                                      // Das Attribut steht nur da, wo es etwas
-                                      // aussagt: Abschnitt 4.5 gibt ihm den
-                                      // Vorgabewert 'false', und ein
-                                      // ausgeschriebener Vorgabewert ist eine
-                                      // Zeile, die bei jeder Nachricht mitreist,
-                                      // ohne je etwas zu bedeuten.
+                                      // The attribute stands only where it says
+                                      // something: section 4.5 gives it the
+                                      // default value 'false', and a written-out
+                                      // default value is a line that travels
+                                      // along with every message without ever
+                                      // meaning anything.
                                       k.IsKeyExchange ? new XAttribute("kex", "true") : null,
                                       Convert.ToBase64String(k.Data)));
 
@@ -112,19 +112,18 @@ public sealed record OmemoEncryptedElement(UInt32                               
     #region TryRead(stanza, out ...)
 
     /// <summary>
-    /// Liest ein <c>&lt;encrypted/&gt;</c> aus einer Stanza.
+    /// Reads an <c>&lt;encrypted/&gt;</c> out of a stanza.
     /// </summary>
     /// <remarks>
-    /// <b>Nur direkte Kinder</b> - dieselbe Falle wie beim Verzugsstempel
-    /// (D59) und bei der Korrektur (D60): Ein Carbon bringt in seinem
-    /// <c>&lt;forwarded/&gt;</c> eine vollständige eigene Nachricht mit, und
-    /// deren Verschlüsselung gehört nicht der äusseren.
+    /// <b>Only direct children</b> - the same trap as with the delay stamp
+    /// (D59) and with the correction (D60): a carbon brings a complete message
+    /// of its own along in its <c>&lt;forwarded/&gt;</c>, and its encryption
+    /// does not belong to the outer one.
     ///
-    /// Was sich nicht lesen lässt, ergibt <c>false</c> und keine Ausnahme:
-    /// Eine unverständliche Nachricht ist für den Empfänger dasselbe wie
-    /// keine, und ein Absturz wäre die schlechtere Antwort - er liesse sich
-    /// von jedem auslösen, der ein <c>&lt;key/&gt;</c> mit krummem Base64
-    /// schickt.
+    /// What cannot be read yields <c>false</c> and no exception: an
+    /// unintelligible message is, for the recipient, the same as none, and a
+    /// crash would be the worse answer - it could be triggered by anyone who
+    /// sends a <c>&lt;key/&gt;</c> with crooked base64.
     /// </remarks>
     public static Boolean TryRead(XElement stanza, out OmemoEncryptedElement? element)
     {
@@ -144,7 +143,7 @@ public sealed record OmemoEncryptedElement(UInt32                               
             if (header is null || !UInt32.TryParse(header.Attr("sid"), out var sid))
                 return false;
 
-            var alle = new Dictionary<String, IReadOnlyList<OmemoKey>>(StringComparer.OrdinalIgnoreCase);
+            var all = new Dictionary<String, IReadOnlyList<OmemoKey>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var keys in header.Elements().Where(e => e.Name.LocalName == "keys"))
             {
@@ -154,7 +153,7 @@ public sealed record OmemoEncryptedElement(UInt32                               
                 if (String.IsNullOrEmpty(jid))
                     return false;
 
-                var liste = new List<OmemoKey>();
+                var list = new List<OmemoKey>();
 
                 foreach (var key in keys.Elements().Where(e => e.Name.LocalName == "key"))
                 {
@@ -162,13 +161,13 @@ public sealed record OmemoEncryptedElement(UInt32                               
                     if (!UInt32.TryParse(key.Attr("rid"), out var rid))
                         return false;
 
-                    liste.Add(new OmemoKey(rid,
+                    list.Add(new OmemoKey(rid,
                                            Convert.FromBase64String(key.Value.Trim()),
                                            key.Attr("kex") is "true" or "1"));
 
                 }
 
-                alle[jid] = liste;
+                all[jid] = list;
 
             }
 
@@ -176,7 +175,7 @@ public sealed record OmemoEncryptedElement(UInt32                               
 
             element = new OmemoEncryptedElement(
                           sid,
-                          alle,
+                          all,
                           String.IsNullOrEmpty(payload) ? null : Convert.FromBase64String(payload));
 
             return true;
@@ -194,18 +193,18 @@ public sealed record OmemoEncryptedElement(UInt32                               
     #region KeyFor(jid, deviceId)
 
     /// <summary>
-    /// Der Eintrag für dieses Gerät dieses JIDs, oder null.
+    /// The entry for this device of this JID, or null.
     /// </summary>
     /// <remarks>
-    /// Beides zusammen und nicht nur die Gerätekennung: Zwei Konten können
-    /// dieselbe Kennung tragen - sie ist eine Zufallszahl je Gerät und
-    /// niemandem sonst bekannt. Wer nur nach ihr suchte, nähme unter
-    /// Umständen den Eintrag, der für ein fremdes Konto bestimmt war, und
-    /// scheiterte dann an einer Entschlüsselung, deren Grund er nicht sieht.
+    /// Both together and not only the device identifier: two accounts can carry
+    /// the same identifier - it is a random number per device and known to
+    /// nobody else. Whoever searched only by it would under some circumstances
+    /// take the entry that was meant for a foreign account, and would then
+    /// founder on a decryption whose reason they do not see.
     /// </remarks>
     public OmemoKey? KeyFor(String bareJid, UInt32 deviceId)
-        => Keys.TryGetValue(bareJid, out var liste)
-               ? liste.FirstOrDefault(k => k.DeviceId == deviceId)
+        => Keys.TryGetValue(bareJid, out var list)
+               ? list.FirstOrDefault(k => k.DeviceId == deviceId)
                : null;
 
     #endregion

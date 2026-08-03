@@ -18,20 +18,20 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Der Schlüsselaustausch am Anfang einer Sitzung
+/// The key exchange at the beginning of a session
 /// (<c>OMEMOKeyExchange.proto</c>).
 /// </summary>
-/// <param name="PreKeyId">Welcher PreKey des Empfängers benutzt wurde.</param>
-/// <param name="SignedPreKeyId">Welcher Signed PreKey.</param>
-/// <param name="IdentityKey">Der eigene IdentityKey, in Ed25519-Form.</param>
-/// <param name="EphemeralKey">Der Einwegschlüssel aus X3DH.</param>
-/// <param name="Message">Die eingepackte <c>OMEMOAuthenticatedMessage</c>.</param>
+/// <param name="PreKeyId">Which prekey of the recipient was used.</param>
+/// <param name="SignedPreKeyId">Which signed prekey.</param>
+/// <param name="IdentityKey">One's own identity key, in Ed25519 form.</param>
+/// <param name="EphemeralKey">The one-time key from X3DH.</param>
+/// <param name="Message">The packed <c>OMEMOAuthenticatedMessage</c>.</param>
 /// <remarks>
-/// <b>Er reist mit jeder Nachricht mit, bis die Gegenstelle geantwortet
-/// hat</b>, und nicht nur mit der ersten. Der Grund ist unangenehm einfach:
-/// Die erste Nachricht kann verlorengehen. Käme der Austausch nur einmal,
-/// stünde die zweite Nachricht vor einer Gegenstelle, die keine Sitzung
-/// kennt - und wäre nicht zu lesen, ohne dass jemand erführe, warum.
+/// <b>It travels along with every message until the other side has
+/// answered</b>, and not only with the first. The reason is unpleasantly
+/// simple: the first message can get lost. If the exchange came only once, the
+/// second message would stand before a counterpart that knows no session - and
+/// would not be readable without anybody learning why.
 /// </remarks>
 public sealed record OmemoKeyExchange(UInt32  PreKeyId,
                                       UInt32  SignedPreKeyId,
@@ -40,7 +40,7 @@ public sealed record OmemoKeyExchange(UInt32  PreKeyId,
                                       Byte[]  Message)
 {
 
-    /// <summary>Die Kodierung nach dem Schema der Spezifikation.</summary>
+    /// <summary>The encoding per the schema of the specification.</summary>
     public Byte[] Encode()
     {
 
@@ -56,25 +56,25 @@ public sealed record OmemoKeyExchange(UInt32  PreKeyId,
 
     }
 
-    /// <summary>Liest einen Schlüsselaustausch.</summary>
-    public static OmemoKeyExchange Decode(Byte[] daten)
+    /// <summary>Reads a key exchange.</summary>
+    public static OmemoKeyExchange Decode(Byte[] data)
     {
 
         UInt32  pk = 0, spk = 0;
         Byte[]  ik = [], ek = [], msg = [];
 
-        foreach (var (feld, _, zahl, inhalt) in Protobuf.Read(daten))
-            switch (feld)
+        foreach (var (field, _, number, content) in Protobuf.Read(data))
+            switch (field)
             {
-                case 1: pk   = (UInt32) zahl;  break;
-                case 2: spk  = (UInt32) zahl;  break;
-                case 3: ik   = inhalt;         break;
-                case 4: ek   = inhalt;         break;
-                case 5: msg  = inhalt;         break;
+                case 1: pk   = (UInt32) number;  break;
+                case 2: spk  = (UInt32) number;  break;
+                case 3: ik   = content;          break;
+                case 4: ek   = content;          break;
+                case 5: msg  = content;          break;
             }
 
         if (ik.Length == 0 || ek.Length == 0 || msg.Length == 0)
-            throw new FormatException("Dem Schlüsselaustausch fehlt ein Pflichtfeld.");
+            throw new FormatException("The key exchange is missing a mandatory field.");
 
         return new OmemoKeyExchange(pk, spk, ik, ek, msg);
 
@@ -83,18 +83,18 @@ public sealed record OmemoKeyExchange(UInt32  PreKeyId,
 }
 
 /// <summary>
-/// Die beglaubigte Nachricht (<c>OMEMOAuthenticatedMessage.proto</c>): der
-/// gekürzte HMAC und die eingepackte <c>OMEMOMessage</c>.
+/// The authenticated message (<c>OMEMOAuthenticatedMessage.proto</c>): the
+/// truncated HMAC and the packed <c>OMEMOMessage</c>.
 /// </summary>
 /// <remarks>
-/// <b>Warum der HMAC nicht in der Nachricht selbst steht.</b> Er wird über die
-/// kodierte Nachricht gerechnet - stünde er darin, prüfte er sich selbst mit.
-/// Deshalb eine Hülle: innen die Nachricht, aussen ihre Beglaubigung.
+/// <b>Why the HMAC does not stand in the message itself.</b> It is computed
+/// over the encoded message - if it stood in it, it would check itself along
+/// with it. Hence a shell: inside the message, outside its authentication.
 /// </remarks>
 public sealed record OmemoAuthenticatedMessage(Byte[] Mac, Byte[] Message)
 {
 
-    /// <summary>Die Kodierung nach dem Schema der Spezifikation.</summary>
+    /// <summary>The encoding per the schema of the specification.</summary>
     public Byte[] Encode()
     {
 
@@ -107,26 +107,26 @@ public sealed record OmemoAuthenticatedMessage(Byte[] Mac, Byte[] Message)
 
     }
 
-    /// <summary>Liest eine beglaubigte Nachricht.</summary>
-    public static OmemoAuthenticatedMessage Decode(Byte[] daten)
+    /// <summary>Reads an authenticated message.</summary>
+    public static OmemoAuthenticatedMessage Decode(Byte[] data)
     {
 
         Byte[] mac = [], msg = [];
 
-        foreach (var (feld, _, _, inhalt) in Protobuf.Read(daten))
-            switch (feld)
+        foreach (var (field, _, _, content) in Protobuf.Read(data))
+            switch (field)
             {
-                case 1: mac  = inhalt;  break;
-                case 2: msg  = inhalt;  break;
+                case 1: mac  = content;  break;
+                case 2: msg  = content;  break;
             }
 
         if (mac.Length != 16)
             throw new FormatException(
-                      $"Der HMAC hat {mac.Length} statt 16 Byte. Abschnitt 4.3 kürzt ihn auf 16 - " +
-                      "eine andere Länge ist keine Nachricht dieses Verfahrens.");
+                      $"The HMAC has {mac.Length} bytes instead of 16. Section 4.3 truncates it to 16 - " +
+                      "another length is no message of this procedure.");
 
         if (msg.Length == 0)
-            throw new FormatException("Die beglaubigte Nachricht ist leer.");
+            throw new FormatException("The authenticated message is empty.");
 
         return new OmemoAuthenticatedMessage(mac, msg);
 
@@ -135,8 +135,8 @@ public sealed record OmemoAuthenticatedMessage(Byte[] Mac, Byte[] Message)
 }
 
 /// <summary>
-/// Die Umwandlung zwischen einer <see cref="RatchetMessage"/> und ihrer
-/// Gestalt auf der Leitung.
+/// The conversion between a <see cref="RatchetMessage"/> and its shape on the
+/// wire.
 /// </summary>
 public static class OmemoWireFormat
 {
@@ -144,7 +144,7 @@ public static class OmemoWireFormat
     #region RatchetMessage <-> OMEMOAuthenticatedMessage
 
     /// <summary>
-    /// Packt eine Ratchet-Nachricht in eine <c>OMEMOAuthenticatedMessage</c>.
+    /// Packs a ratchet message into an <c>OMEMOAuthenticatedMessage</c>.
     /// </summary>
     public static Byte[] Encode(RatchetMessage message)
         => new OmemoAuthenticatedMessage(
@@ -152,42 +152,41 @@ public static class OmemoWireFormat
                message.Header.Encode(message.Ciphertext)).Encode();
 
     /// <summary>
-    /// Liest eine <c>OMEMOAuthenticatedMessage</c> zurück in eine
-    /// Ratchet-Nachricht.
+    /// Reads an <c>OMEMOAuthenticatedMessage</c> back into a ratchet message.
     /// </summary>
     /// <remarks>
-    /// <b>Ein fehlendes Pflichtfeld ist ein Formatfehler und kein Vorgabewert.</b>
-    /// Protocol Buffers kennt für <c>uint32</c> die Null und für <c>bytes</c>
-    /// das leere Feld, und beides liesse sich hier stillschweigend einsetzen -
-    /// die Nachricht sähe dann aus wie die erste einer Kette mit leerem
-    /// Ratchet-Schlüssel. Sie liesse sich nicht entschlüsseln, und niemand
-    /// wüsste, dass ein Feld fehlte.
+    /// <b>A missing mandatory field is a format error and not a default
+    /// value.</b> Protocol Buffers knows the zero for <c>uint32</c> and the
+    /// empty field for <c>bytes</c>, and both could be inserted here silently -
+    /// the message would then look like the first of a chain with an empty
+    /// ratchet key. It could not be decrypted, and nobody would know that a
+    /// field was missing.
     /// </remarks>
-    public static RatchetMessage Decode(Byte[] daten)
+    public static RatchetMessage Decode(Byte[] data)
     {
 
-        var beglaubigt = OmemoAuthenticatedMessage.Decode(daten);
+        var authenticated = OmemoAuthenticatedMessage.Decode(data);
 
         UInt32  n = 0, pn = 0;
-        Byte[]  dh = [], geheim = [];
-        var     hatN = false;
-        var     hatPn = false;
+        Byte[]  dh = [], ciphertext = [];
+        var     hasN = false;
+        var     hasPn = false;
 
-        foreach (var (feld, _, zahl, inhalt) in Protobuf.Read(beglaubigt.Message))
-            switch (feld)
+        foreach (var (field, _, number, content) in Protobuf.Read(authenticated.Message))
+            switch (field)
             {
-                case 1: n       = (UInt32) zahl;  hatN  = true;  break;
-                case 2: pn      = (UInt32) zahl;  hatPn = true;  break;
-                case 3: dh      = inhalt;                        break;
-                case 4: geheim  = inhalt;                        break;
+                case 1: n           = (UInt32) number;  hasN  = true;  break;
+                case 2: pn          = (UInt32) number;  hasPn = true;  break;
+                case 3: dh          = content;                         break;
+                case 4: ciphertext  = content;                         break;
             }
 
-        if (!hatN || !hatPn || dh.Length != Curve25519.KeyLength || geheim.Length == 0)
+        if (!hasN || !hasPn || dh.Length != Curve25519.KeyLength || ciphertext.Length == 0)
             throw new FormatException(
-                      "Der OMEMOMessage fehlt ein Pflichtfeld oder ihr Ratchet-Schlüssel hat die " +
-                      "falsche Länge.");
+                      "The OMEMOMessage is missing a mandatory field, or its ratchet key has the " +
+                      "wrong length.");
 
-        return new RatchetMessage(new RatchetHeader(dh, pn, n), geheim, beglaubigt.Mac);
+        return new RatchetMessage(new RatchetHeader(dh, pn, n), ciphertext, authenticated.Mac);
 
     }
 

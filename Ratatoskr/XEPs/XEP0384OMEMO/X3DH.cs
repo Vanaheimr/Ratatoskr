@@ -25,21 +25,21 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Das Ergebnis eines X3DH-Austauschs.
+/// The result of an X3DH exchange.
 /// </summary>
 /// <param name="SharedSecret">
-/// Das gemeinsame Geheimnis, 32 Byte - der Anfang des Double Ratchet.
+/// The shared secret, 32 bytes - the beginning of the double ratchet.
 /// </param>
 /// <param name="AssociatedData">
-/// <c>AD = Encode(IK_A) ‖ Encode(IK_B)</c>, beide in Ed25519-Form. Geht in
-/// jede Nachricht der Sitzung als mitgeprüfte Beigabe ein.
+/// <c>AD = Encode(IK_A) ‖ Encode(IK_B)</c>, both in Ed25519 form. Goes into
+/// every message of the session as associated data that is checked along.
 /// </param>
 /// <param name="EphemeralKey">
-/// Der öffentliche Teil des Einwegschlüssels des Anrufenden. Beim Annehmen
-/// null - dort ist er bekannt und kommt von aussen.
+/// The public part of the one-time key of the initiator. Null when accepting -
+/// there it is known and comes from outside.
 /// </param>
 /// <param name="UsedPreKeyId">
-/// Der benutzte PreKey, oder null, wenn keiner vorrätig war.
+/// The prekey used, or null when none was in stock.
 /// </param>
 public sealed record X3DHResult(Byte[]   SharedSecret,
                                 Byte[]   AssociatedData,
@@ -47,47 +47,45 @@ public sealed record X3DHResult(Byte[]   SharedSecret,
                                 UInt32?  UsedPreKeyId);
 
 /// <summary>
-/// X3DH nach XEP-0384, Abschnitt 4.2 - der Anfang einer Sitzung, ohne dass
-/// beide gleichzeitig da sein müssen.
+/// X3DH per XEP-0384, section 4.2 - the beginning of a session without both
+/// sides having to be there at the same time.
 /// </summary>
 /// <remarks>
-/// <b>Warum vier Diffie-Hellman und nicht einer.</b> Jeder beantwortet eine
-/// andere Frage, und erst zusammen ergeben sie das, was man von einem
-/// Sitzungsanfang erwartet:
+/// <b>Why four Diffie-Hellmans and not one.</b> Each answers a different
+/// question, and only together do they yield what one expects of the beginning
+/// of a session:
 ///
 /// <list type="bullet">
-/// <item><c>DH1 = DH(IK_A, SPK_B)</c> - beweist Bob, dass wirklich Alice
-///       schreibt; ihr Identitätsschlüssel geht ein.</item>
-/// <item><c>DH2 = DH(EK_A, IK_B)</c> - beweist Alice, dass wirklich Bob
-///       liest.</item>
-/// <item><c>DH3 = DH(EK_A, SPK_B)</c> - bringt die Frische: Alices
-///       Einwegschlüssel gegen Bobs gewechselten. Wer beide
-///       Identitätsschlüssel später stiehlt, kommt an diese Sitzung nicht
-///       heran.</item>
-/// <item><c>DH4 = DH(EK_A, OPK_B)</c> - sorgt dafür, dass zwei erste
-///       Nachrichten an dasselbe Gerät verschiedene Sitzungen ergeben.
-///       Entfällt, wenn Bobs Vorrat leer ist; dann fehlt genau diese
-///       Eigenschaft und sonst nichts.</item>
+/// <item><c>DH1 = DH(IK_A, SPK_B)</c> - proves to Bob that it really is Alice
+///       writing; her identity key goes into it.</item>
+/// <item><c>DH2 = DH(EK_A, IK_B)</c> - proves to Alice that it really is Bob
+///       reading.</item>
+/// <item><c>DH3 = DH(EK_A, SPK_B)</c> - brings the freshness: Alice's one-time
+///       key against Bob's rotated one. Whoever steals both identity keys later
+///       does not get at this session.</item>
+/// <item><c>DH4 = DH(EK_A, OPK_B)</c> - sees to it that two first messages to
+///       the same device yield different sessions. It is omitted when Bob's
+///       stock is empty; then exactly this property is missing and nothing
+///       else.</item>
 /// </list>
 ///
-/// <b>Die Reihenfolge ist Teil der Vorschrift</b>, nicht Geschmackssache:
-/// Beide Seiten hängen die vier Werte hintereinander und leiten daraus ab.
-/// Wer sie vertauscht, bekommt ein ebenso gutes Geheimnis - nur eben ein
-/// anderes als die Gegenstelle. Der Fehler zeigt sich dann nicht hier,
-/// sondern erst bei der ersten Nachricht, und sieht dort aus wie eine
-/// Fälschung.
+/// <b>The order is part of the prescription</b>, not a matter of taste: both
+/// sides hang the four values one after the other and derive from that.
+/// Whoever swaps them gets an equally good secret - only a different one from
+/// the counterpart. The error then shows up not here but only with the first
+/// message, and there it looks like a forgery.
 ///
-/// <b>Die 32 Byte 0xFF davor</b> sind kein Zierat. Sie trennen diese
-/// Ableitung von jeder anderen, die dieselbe Kurve benutzt: Ohne sie liesse
-/// sich ein Wert, der anderswo als Diffie-Hellman-Ergebnis entsteht, hier als
-/// Sitzungsgeheimnis wiederverwenden.
+/// <b>The 32 bytes of 0xFF in front</b> are no ornament. They separate this
+/// derivation from every other one that uses the same curve: without them a
+/// value that comes into being elsewhere as a Diffie-Hellman result could be
+/// reused here as a session secret.
 /// </remarks>
 public static class X3DH
 {
 
     #region Data
 
-    /// <summary>Der Info-String (XEP-0384, Abschnitt 4.2).</summary>
+    /// <summary>The info string (XEP-0384, section 4.2).</summary>
     public const String Info = "OMEMO X3DH";
 
     #endregion
@@ -95,21 +93,20 @@ public static class X3DH
     #region Initiate(own, theirBundle, preKeyId)
 
     /// <summary>
-    /// Alice beginnt: aus dem Bundle der Gegenstelle wird ein gemeinsames
-    /// Geheimnis, ohne dass die Gegenstelle etwas tun muss.
+    /// Alice begins: out of the bundle of the counterpart comes a shared
+    /// secret, without the counterpart having to do anything.
     /// </summary>
-    /// <param name="own">Das eigene Schlüsselmaterial.</param>
-    /// <param name="theirBundle">Das Bundle der Gegenstelle.</param>
+    /// <param name="own">One's own key material.</param>
+    /// <param name="theirBundle">The bundle of the counterpart.</param>
     /// <param name="preKeyId">
-    /// Welcher PreKey benutzt wird; ohne Angabe der erste des Bundles. Null
-    /// bleibt es nur, wenn das Bundle gar keinen mitbringt.
+    /// Which prekey is used; without a value the first of the bundle. It stays
+    /// null only when the bundle brings none at all.
     /// </param>
     /// <exception cref="CryptographicException">
-    /// Wenn die Signatur über den Signed PreKey nicht stimmt. <b>Hier wird
-    /// abgebrochen und nicht gewarnt:</b> Ein Bundle mit falscher Signatur ist
-    /// entweder beschädigt oder untergeschoben, und in beiden Fällen ist eine
-    /// Sitzung darauf schlimmer als keine - sie sähe aus wie eine
-    /// verschlüsselte.
+    /// When the signature over the signed prekey is not right. <b>Here it
+    /// aborts and does not warn:</b> a bundle with a wrong signature is either
+    /// damaged or slipped in, and in both cases a session on it is worse than
+    /// none - it would look like an encrypted one.
     /// </exception>
     public static X3DHResult Initiate(OmemoIdentity  own,
                                       OmemoBundle    theirBundle,
@@ -118,24 +115,24 @@ public static class X3DH
 
         if (!theirBundle.SignatureIsValid())
             throw new CryptographicException(
-                      "Die Signatur über den Signed PreKey stimmt nicht - das Bundle stammt nicht " +
-                      "von dem IdentityKey, den es nennt.");
+                      "The signature over the signed prekey is not right - the bundle does not come " +
+                      "from the identity key it names.");
 
         var ephemeral  = Curve25519.GenerateKeyPair();
 
-        var ihrIk      = theirBundle.IdentityKeyForAgreement();
-        var ihrSpk     = theirBundle.SignedPreKey;
+        var theirIk    = theirBundle.IdentityKeyForAgreement();
+        var theirSpk   = theirBundle.SignedPreKey;
 
         var preKey     = preKeyId.HasValue
                              ? theirBundle.PreKeys.FirstOrDefault(p => p.Id == preKeyId.Value)
                              : theirBundle.PreKeys.FirstOrDefault();
 
         if (preKeyId.HasValue && preKey is null)
-            throw new CryptographicException($"Das Bundle kennt keinen PreKey mit der Kennung {preKeyId}.");
+            throw new CryptographicException($"The bundle knows no prekey with the identifier {preKeyId}.");
 
-        var dh1 = Curve25519.Agree(own.IdentityKey.PrivateKey,  ihrSpk);
-        var dh2 = Curve25519.Agree(ephemeral.PrivateKey,        ihrIk);
-        var dh3 = Curve25519.Agree(ephemeral.PrivateKey,        ihrSpk);
+        var dh1 = Curve25519.Agree(own.IdentityKey.PrivateKey,  theirSpk);
+        var dh2 = Curve25519.Agree(ephemeral.PrivateKey,        theirIk);
+        var dh3 = Curve25519.Agree(ephemeral.PrivateKey,        theirSpk);
         var dh4 = preKey is not null
                       ? Curve25519.Agree(ephemeral.PrivateKey,  preKey.PublicKey)
                       : [];
@@ -153,23 +150,21 @@ public static class X3DH
     #region Accept(own, theirIdentityKey, theirEphemeralKey, signedPreKeyId, preKeyId)
 
     /// <summary>
-    /// Bob nimmt an: dieselben vier Werte, aus der anderen Richtung gerechnet.
+    /// Bob accepts: the same four values, computed from the other direction.
     /// </summary>
-    /// <param name="own">Das eigene Schlüsselmaterial.</param>
+    /// <param name="own">One's own key material.</param>
     /// <param name="theirIdentityKey">
-    /// Der IdentityKey der Gegenstelle <b>in Ed25519-Form</b>, so wie er über
-    /// die Leitung kam.
+    /// The identity key of the counterpart <b>in Ed25519 form</b>, just as it
+    /// came over the wire.
     /// </param>
-    /// <param name="theirEphemeralKey">Ihr Einwegschlüssel, Montgomery-Form.</param>
+    /// <param name="theirEphemeralKey">Their one-time key, Montgomery form.</param>
     /// <param name="signedPreKeyId">
-    /// Welchen Signed PreKey die Gegenstelle benutzt hat. Stimmt er nicht mit
-    /// dem aktuellen überein, ist die Nachricht mit einem gewechselten
-    /// Schlüssel unterwegs gewesen - dieser Stand kennt nur den aktuellen und
-    /// weist sie ab.
+    /// Which signed prekey the counterpart used. If it does not agree with the
+    /// current one, the message has been under way with a rotated key - this
+    /// state knows only the current one and refuses it.
     /// </param>
     /// <param name="preKeyId">
-    /// Welchen PreKey sie benutzt hat, oder null. Er wird dabei
-    /// <b>verbraucht</b>.
+    /// Which prekey they used, or null. It is <b>used up</b> in the process.
     /// </param>
     public static X3DHResult Accept(OmemoIdentity  own,
                                     Byte[]         theirIdentityKey,
@@ -178,29 +173,28 @@ public static class X3DH
                                     UInt32?        preKeyId)
     {
 
-        // Der aktuelle oder der eine abgelöste - eine Nachricht, die vor dem
-        // Wechsel abgeschickt wurde, nennt den alten und ist trotzdem zu
-        // lesen. Alles darüber hinaus ist endgültig fort, und das ist Absicht.
+        // The current one or the one superseded - a message that was sent off
+        // before the rotation names the old one and is to be read all the same.
+        // Everything beyond that is gone for good, and that is deliberate.
         var signedPreKey = own.SignedPreKeyFor(signedPreKeyId)
                                ?? throw new CryptographicException(
-                                      $"Die Nachricht nennt den Signed PreKey {signedPreKeyId}; dieses " +
-                                      $"Gerät hat {own.SignedPreKeyId}" +
-                                      (own.PreviousSignedPreKeyId is UInt32 alt ? $" und {alt}" : "") +
+                                      $"The message names the signed prekey {signedPreKeyId}; this " +
+                                      $"device has {own.SignedPreKeyId}" +
+                                      (own.PreviousSignedPreKeyId is UInt32 old ? $" and {old}" : "") +
                                       ".");
 
         var preKey = preKeyId.HasValue ? own.TakePreKey(preKeyId.Value) : null;
 
         if (preKeyId.HasValue && preKey is null)
             throw new CryptographicException(
-                      $"Der PreKey {preKeyId} ist unbekannt oder schon verbraucht. Eine zweite " +
-                      "Sitzung auf denselben PreKey wäre wiederholbar.");
+                      $"The prekey {preKeyId} is unknown or already used up. A second " +
+                      "session on the same prekey would be replayable.");
 
-        var ihrIk = Curve25519.EdwardsToMontgomery(theirIdentityKey);
+        var theirIk = Curve25519.EdwardsToMontgomery(theirIdentityKey);
 
-        // Dieselben vier Werte, jeweils von der anderen Seite: Wo Alice ihren
-        // geheimen Teil und Bobs öffentlichen nimmt, nimmt Bob seinen geheimen
-        // und ihren öffentlichen.
-        var dh1 = Curve25519.Agree(signedPreKey.PrivateKey,       ihrIk);
+        // The same four values, each from the other side: where Alice takes her
+        // secret part and Bob's public one, Bob takes his secret one and hers.
+        var dh1 = Curve25519.Agree(signedPreKey.PrivateKey,       theirIk);
         var dh2 = Curve25519.Agree(own.IdentityKey.PrivateKey,    theirEphemeralKey);
         var dh3 = Curve25519.Agree(signedPreKey.PrivateKey,       theirEphemeralKey);
         var dh4 = preKey is not null
@@ -217,11 +211,11 @@ public static class X3DH
 
     #endregion
 
-    #region Hilfsfunktionen
+    #region Helper functions
 
     /// <summary>
-    /// Die Ableitung: 32 Byte 0xFF, dann die vier Diffie-Hellman-Werte, durch
-    /// HKDF-SHA-256.
+    /// The derivation: 32 bytes of 0xFF, then the four Diffie-Hellman values,
+    /// through HKDF-SHA-256.
     /// </summary>
     internal static Byte[] Derive(Byte[] dh1, Byte[] dh2, Byte[] dh3, Byte[] dh4)
         => HKDF.DeriveKey(HashAlgorithmName.SHA256,
@@ -231,13 +225,13 @@ public static class X3DH
                           outputLength:  32);
 
     /// <summary>
-    /// <c>AD = Encode(IK_A) ‖ Encode(IK_B)</c> - immer der Anrufende zuerst.
+    /// <c>AD = Encode(IK_A) ‖ Encode(IK_B)</c> - always the initiator first.
     /// </summary>
     /// <remarks>
-    /// Die Reihenfolge ist die Aussage: Sie hält fest, wer angefangen hat.
-    /// Hingen die Schlüssel in beliebiger Reihenfolge da, rechneten beide
-    /// Seiten verschiedene Beigaben aus - und jede Nachricht scheiterte an
-    /// einer Prüfung, die nichts mit ihrem Inhalt zu tun hat.
+    /// The order is the statement: it holds fast who began. If the keys hung
+    /// there in any order, both sides would compute different associated data -
+    /// and every message would founder on a check that has nothing to do with
+    /// its content.
     /// </remarks>
     internal static Byte[] AssociatedData(Byte[] initiatorIdentityKey, Byte[] responderIdentityKey)
         => [.. initiatorIdentityKey, .. responderIdentityKey];

@@ -18,38 +18,38 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Ein PreKey mit seiner Kennung.
+/// A prekey with its identifier.
 /// </summary>
 /// <param name="Id">
-/// Eine positive ganze Zahl (XEP-0384, Abschnitt 5.3.2: 1 bis 2³¹-1).
+/// A positive integer (XEP-0384, section 5.3.2: 1 to 2³¹-1).
 /// </param>
-/// <param name="PublicKey">Der öffentliche Teil, 32 Byte Montgomery-u.</param>
+/// <param name="PublicKey">The public part, 32 bytes of Montgomery u.</param>
 public sealed record OmemoPreKey(UInt32 Id, Byte[] PublicKey);
 
 /// <summary>
-/// Das öffentliche Bundle eines Geräts (XEP-0384, Abschnitt 5.3.2) - alles,
-/// was ein Fremder braucht, um ohne Rückfrage eine Sitzung zu beginnen.
+/// The public bundle of a device (XEP-0384, section 5.3.2) - everything a
+/// stranger needs in order to begin a session without asking back.
 /// </summary>
 /// <param name="IdentityKey">
-/// Der IdentityKey <b>in Ed25519-Form</b>. Der Abschnitt lässt beide internen
-/// Formen zu, legt die Übertragung aber fest: „The public key is ALWAYS
-/// transferred in its Ed25519 form."
+/// The identity key <b>in Ed25519 form</b>. The section permits both internal
+/// forms but lays down the transfer: "The public key is ALWAYS transferred in
+/// its Ed25519 form."
 /// </param>
-/// <param name="SignedPreKeyId">Die Kennung des Signed PreKey.</param>
-/// <param name="SignedPreKey">Der Signed PreKey, 32 Byte Montgomery-u.</param>
+/// <param name="SignedPreKeyId">The identifier of the signed prekey.</param>
+/// <param name="SignedPreKey">The signed prekey, 32 bytes of Montgomery u.</param>
 /// <param name="SignedPreKeySignature">
-/// Die Signatur des IdentityKey über den Signed PreKey.
+/// The signature of the identity key over the signed prekey.
 /// </param>
-/// <param name="PreKeys">Die einmal verwendbaren PreKeys.</param>
+/// <param name="PreKeys">The prekeys usable once.</param>
 /// <remarks>
-/// <b>Das Bundle ist die einzige Stelle, an der eine Sitzung ohne den anderen
-/// beginnt.</b> Bob ist offline, Alice schreibt ihm trotzdem verschlüsselt -
-/// das geht nur, weil sein Server seine Schlüssel vorrätig hält. Damit ist der
-/// Server auch der naheliegende Angreifer: Er könnte ein eigenes Bundle
-/// unterschieben. Dagegen hilft genau zweierlei - die Signatur über den Signed
-/// PreKey (der Server kann sie nicht fälschen, ohne Bobs IdentityKey zu haben)
-/// und der Fingerabdruck, den ein Mensch vergleicht (gegen einen ausgetauschten
-/// IdentityKey hilft nur er).
+/// <b>The bundle is the only place where a session begins without the other
+/// side.</b> Bob is offline, Alice writes to him in encrypted form all the
+/// same - that works only because his server keeps his keys in stock. With
+/// that the server is also the obvious attacker: it could slip in a bundle of
+/// its own. Against that exactly two things help - the signature over the
+/// signed prekey (the server cannot forge it without having Bob's identity key)
+/// and the fingerprint a human being compares (against an exchanged identity
+/// key only that helps).
 /// </remarks>
 public sealed record OmemoBundle(Byte[]                       IdentityKey,
                                  UInt32                       SignedPreKeyId,
@@ -59,29 +59,30 @@ public sealed record OmemoBundle(Byte[]                       IdentityKey,
 {
 
     /// <summary>
-    /// Der IdentityKey in Montgomery-Form, wie ihn Diffie-Hellman braucht.
+    /// The identity key in Montgomery form, as Diffie-Hellman needs it.
     /// </summary>
     public Byte[] IdentityKeyForAgreement()
         => Curve25519.EdwardsToMontgomery(IdentityKey);
 
     /// <summary>
-    /// Ist die Signatur über den Signed PreKey gültig?
+    /// Is the signature over the signed prekey valid?
     /// </summary>
     /// <remarks>
-    /// <b>Vor jeder Benutzung zu fragen, und ohne Ausnahme.</b> Ein Bundle
-    /// kommt vom Server der Gegenstelle - also von genau der Partei, gegen die
-    /// eine Ende-zu-Ende-Verschlüsselung schützen soll. Ohne diese Prüfung
-    /// könnte er den Signed PreKey durch seinen eigenen ersetzen und jede
-    /// erste Nachricht mitlesen; der Fingerabdruck des IdentityKey bliebe
-    /// dabei unverändert, und der Mensch, der ihn vergleicht, sähe nichts.
+    /// <b>To be asked before every use, and without exception.</b> A bundle
+    /// comes from the server of the other side - that is, from precisely the
+    /// party an end-to-end encryption is supposed to protect against. Without
+    /// this check it could replace the signed prekey with its own and read
+    /// along with every first message; the fingerprint of the identity key
+    /// would stay unchanged in the process, and the human being who compares it
+    /// would see nothing.
     ///
-    /// Unterschrieben wird der Signed PreKey <b>in Montgomery-Form</b>, so wie
-    /// er im Bundle steht. Die Spezifikation sagt an dieser Stelle nur „the
-    /// signed PreKey signature"; welche Kodierung gemeint ist, steht dort
-    /// nicht, und es gibt hier keine fremde Gegenstelle, an der sich das
-    /// nachprüfen liesse. <b>Das ist die wahrscheinlichste Lesart und eine
-    /// ungeprüfte Annahme</b> - stimmt sie nicht, scheitert die Prüfung gegen
-    /// fremde Clients an dieser einen Zeile.
+    /// What is signed is the signed prekey <b>in Montgomery form</b>, just as
+    /// it stands in the bundle. The specification says at this place only "the
+    /// signed PreKey signature"; which encoding is meant does not stand there,
+    /// and there is no foreign counterpart here against which that could be
+    /// checked. <b>That is the most likely reading and an unchecked
+    /// assumption</b> - if it is not right, the check against foreign clients
+    /// founders on this one line.
     /// </remarks>
     public Boolean SignatureIsValid()
         => Curve25519.VerifyEdwards(IdentityKey, SignedPreKey, SignedPreKeySignature);
