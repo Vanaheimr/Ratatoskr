@@ -28,14 +28,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Gegenstellen über die Auflösung finden statt über die Liste
-    /// (RFC 6120, Abschnitt 3.2).
+    /// Finding far ends over the resolution instead of over the list
+    /// (RFC 6120, section 3.2).
     /// </summary>
     /// <remarks>
-    /// Der Resolver wird hier eingesetzt und nicht befragt. Ein Test, der
-    /// echtes DNS benutzt, prüft die Welt statt den Code: er hängt an einer
-    /// Netzverbindung, an fremden Zonendateien und an Antwortzeiten, und wenn
-    /// er rot wird, weiss niemand, woran es lag.
+    /// The resolver is put in here and not queried. A test using real DNS
+    /// checks the world instead of the code: it hangs on a net connection, on
+    /// foreign zone files and on answer times, and when it turns red, nobody
+    /// knows what it was.
     /// </remarks>
     [TestFixture]
     public class SrvResolutionTests
@@ -43,10 +43,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer _links = null!;
-        private XMPPServer _rechts = null!;
-        private TcpServerLinks _linksLinks = null!;
-        private TcpServerLinks _rechtsLinks = null!;
+        private XMPPServer _left = null!;
+        private XMPPServer _right = null!;
+        private TcpServerLinks _leftLinks = null!;
+        private TcpServerLinks _rightLinks = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -55,42 +55,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void ZweiServer()
+        public void TwoServers()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The guard on both: An error on the one server often comes about
+            // through a stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            // Nur die Empfängerseite wird verkabelt; die Senderseite soll
-            // ihre Adresse auflösen.
-            _rechtsLinks = new TcpServerLinks(_rechts, mode: TcpTlsMode.StartTls);
+            // Only the recipient side is wired up; the sender side is supposed
+            // to resolve its address.
+            _rightLinks = new TcpServerLinks(_right, mode: TcpTlsMode.StartTls);
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            if (_linksLinks  is not null) await _linksLinks.DisposeAsync();
-            if (_rechtsLinks is not null) await _rechtsLinks.DisposeAsync();
+            if (_leftLinks  is not null) await _leftLinks.DisposeAsync();
+            if (_rightLinks is not null) await _rightLinks.DisposeAsync();
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -98,70 +98,69 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Ein Resolver, der eine feste Antwort gibt und mitzählt.</summary>
-        private sealed class FesterResolver : IS2SAddressResolver
+        /// <summary>A resolver giving a fixed answer and counting along.</summary>
+        private sealed class FixedResolver : IS2SAddressResolver
         {
 
-            private readonly Func<String, IReadOnlyList<SrvTarget>> _antwort;
+            private readonly Func<String, IReadOnlyList<SrvTarget>> _reply;
 
-            public List<String> Gefragt { get; } = [];
+            public List<String> Asked { get; } = [];
 
-            public FesterResolver(Func<String, IReadOnlyList<SrvTarget>> antwort)
+            public FixedResolver(Func<String, IReadOnlyList<SrvTarget>> reply)
             {
-                _antwort = antwort;
+                _reply = reply;
             }
 
             public Task<IReadOnlyList<SrvTarget>> ResolveAsync(String             domain,
                                                                CancellationToken  cancellationToken = default)
             {
-                lock (Gefragt) Gefragt.Add(domain);
-                return Task.FromResult(_antwort(domain));
+                lock (Asked) Asked.Add(domain);
+                return Task.FromResult(_reply(domain));
             }
 
         }
 
-        /// <summary>Verkabelt die Senderseite über einen Resolver.</summary>
-        private FesterResolver SenderMitResolver(Func<String, IReadOnlyList<SrvTarget>> antwort)
+        /// <summary>Wires the sender side up over a resolver.</summary>
+        private FixedResolver SenderWithResolver(Func<String, IReadOnlyList<SrvTarget>> reply)
         {
 
-            var resolver = new FesterResolver(antwort);
+            var resolver = new FixedResolver(reply);
 
-            _linksLinks = new TcpServerLinks(_links, mode: TcpTlsMode.StartTls)
+            _leftLinks = new TcpServerLinks(_left, mode: TcpTlsMode.StartTls)
                           {
                               AddressResolver       = resolver,
-                              DefaultPeerValidator  = _rechts.IsOwnCertificate
+                              DefaultPeerValidator  = _right.IsOwnCertificate
                           };
 
-            RueckwegEintragen();
+            AddTheWayBack();
 
             return resolver;
 
         }
 
         /// <summary>
-        /// Trägt bei der Empfängerseite den Weg zurück ein.
+        /// Enters the way back at the recipient side.
         /// </summary>
         /// <remarks>
-        /// Gehört nicht zu dem, was hier geprüft wird, ist aber nötig: die
-        /// Dialback-Rückfrage geht von <c>right.example</c> aus, und ohne
-        /// Adresse für <c>left.example</c> könnte sie niemanden fragen. In
-        /// den übrigen Föderationstests erledigt das
-        /// <c>TcpServerLinks.Connect</c> für beide Richtungen; hier wird nur
-        /// eine Seite über den Resolver verkabelt, also muss die andere von
-        /// Hand nachgezogen werden.
+        /// Not part of what is checked here, but necessary: the dialback query
+        /// goes out from <c>right.example</c>, and without an address for
+        /// <c>left.example</c> it could ask nobody. In the remaining federation
+        /// tests <c>TcpServerLinks.Connect</c> takes care of that for both
+        /// directions; here only one side is wired up over the resolver, so the
+        /// other one has to be pulled along by hand.
         /// </remarks>
-        private void RueckwegEintragen()
+        private void AddTheWayBack()
 
-            => _rechtsLinks.AddPeer("left.example",
-                                    System.Net.IPAddress.Loopback.ToString(),
-                                    _linksLinks.Port,
+            => _rightLinks.AddPeer("left.example",
+                                   System.Net.IPAddress.Loopback.ToString(),
+                                    _leftLinks.Port,
                                     TcpTlsMode.StartTls,
-                                    validator: _links.IsOwnCertificate);
+                                    validator: _left.IsOwnCertificate);
 
-        private SrvTarget ZielAufRechts(UInt16 prioritaet = 0, UInt16 gewicht = 0)
-            => new (prioritaet, gewicht, System.Net.IPAddress.Loopback.ToString(), _rechtsLinks.Port);
+        private SrvTarget TargetOnTheRight(UInt16 priority = 0, UInt16 weight = 0)
+            => new (priority, weight, System.Net.IPAddress.Loopback.ToString(), _rightLinks.Port);
 
         private async Task<XMPPClient> ConnectAsync(XMPPServer server, String localPart)
         {
@@ -187,14 +186,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         private const String Stanza =
-            "<message from='alice@left.example' to='bob@right.example'><body>aufgeloest</body></message>";
+            "<message from='alice@left.example' to='bob@right.example'><body>resolved</body></message>";
 
         #endregion
 
@@ -202,28 +201,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AResolvedTarget_IsUsed()
 
         /// <summary>
-        /// Eine Domain ohne Eintrag von Hand wird aufgelöst und erreicht.
+        /// A domain without an entry by hand is resolved and reached.
         /// </summary>
         [Test]
         public async Task AResolvedTarget_IsUsed()
         {
 
-            var resolver = SenderMitResolver(_ => [ZielAufRechts()]);
+            var resolver = SenderWithResolver(_ => [TargetOnTheRight()]);
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            var zugestellt = await _linksLinks.DeliverAsync("right.example", Stanza)
+            var delivered = await _leftLinks.DeliverAsync("right.example", Stanza)
                                               .WaitAsync(TimeSpan.FromSeconds(25));
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht über das aufgelöste Ziel");
+            await WaitFor(() => received.Count > 0, "the message over the resolved target");
 
             Assert.Multiple(() =>
             {
-                Assert.That(zugestellt, Is.True);
-                Assert.That(resolver.Gefragt, Is.EquivalentTo(new[] { "right.example" }));
+                Assert.That(delivered, Is.True);
+                Assert.That(resolver.Asked, Is.EquivalentTo(new[] { "right.example" }));
             });
 
         }
@@ -233,38 +232,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AManualEntry_WinsOverTheResolver()
 
         /// <summary>
-        /// Ein Eintrag von Hand geht vor - der Resolver wird gar nicht erst
-        /// gefragt.
+        /// An entry by hand takes precedence - the resolver is not even asked.
         /// </summary>
         /// <remarks>
-        /// Eine Entscheidung des Betreibers wiegt schwerer als eine Auskunft
-        /// aus dem Netz. Ohne diesen Vorrang liesse sich eine hinterlegte
-        /// Adresse durch eine gefälschte DNS-Antwort umgehen.
+        /// A decision of the operator weighs more than a piece of information
+        /// out of the net. Without this precedence a deposited address could be
+        /// bypassed through a forged DNS answer.
         /// </remarks>
         [Test]
         public async Task AManualEntry_WinsOverTheResolver()
         {
 
-            var resolver = SenderMitResolver(_ => throw new InvalidOperationException(
-                                                      "Der Resolver darf hier nicht gefragt werden."));
+            var resolver = SenderWithResolver(_ => throw new InvalidOperationException(
+                                                       "The resolver must not be asked here."));
 
-            _linksLinks.AddPeer("right.example",
-                                System.Net.IPAddress.Loopback.ToString(),
-                                _rechtsLinks.Port,
+            _leftLinks.AddPeer("right.example",
+                               System.Net.IPAddress.Loopback.ToString(),
+                                _rightLinks.Port,
                                 TcpTlsMode.StartTls,
-                                validator: _rechts.IsOwnCertificate);
+                                validator: _right.IsOwnCertificate);
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await _linksLinks.DeliverAsync("right.example", Stanza)
+            await _leftLinks.DeliverAsync("right.example", Stanza)
                              .WaitAsync(TimeSpan.FromSeconds(25));
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht über den Eintrag von Hand");
+            await WaitFor(() => received.Count > 0, "the message over the entry by hand");
 
-            Assert.That(resolver.Gefragt, Is.Empty);
+            Assert.That(resolver.Asked, Is.Empty);
 
         }
 
@@ -273,33 +271,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnreachableFirstTarget_FallsThroughToTheNext()
 
         /// <summary>
-        /// Ist das erste Ziel nicht erreichbar, wird das nächste versucht.
+        /// If the first target is not reachable, the next one is tried.
         /// </summary>
         /// <remarks>
-        /// SRV-Einträge nennen Ausweichrechner. Sie aufzulisten und dann nur
-        /// den ersten anzuwählen wäre eine halbe Umsetzung - und eine, die
-        /// erst auffällt, wenn ein Rechner ausfällt.
+        /// SRV records name fallback machines. To list them and then dial only
+        /// the first one would be half an implementation - and one that stands
+        /// out only when a machine fails.
         /// </remarks>
         [Test]
         public async Task AnUnreachableFirstTarget_FallsThroughToTheNext()
         {
 
-            // Ein sicher toter Port zuerst, das echte Ziel danach.
-            var totesZiel = new SrvTarget(10, 0, System.Net.IPAddress.Loopback.ToString(), 1);
+            // A surely dead port first, the real target afterwards.
+            var deadTarget = new SrvTarget(10, 0, System.Net.IPAddress.Loopback.ToString(), 1);
 
-            SenderMitResolver(_ => [totesZiel, ZielAufRechts(prioritaet: 20)]);
+            SenderWithResolver(_ => [deadTarget, TargetOnTheRight(priority: 20)]);
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            var zugestellt = await _linksLinks.DeliverAsync("right.example", Stanza)
+            var delivered = await _leftLinks.DeliverAsync("right.example", Stanza)
                                               .WaitAsync(TimeSpan.FromSeconds(30));
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht über das zweite Ziel");
+            await WaitFor(() => received.Count > 0, "the message over the second target");
 
-            Assert.That(zugestellt, Is.True);
+            Assert.That(delivered, Is.True);
 
         }
 
@@ -308,25 +306,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADomainThatResolvesToNothing_YieldsAnError()
 
         /// <summary>
-        /// Löst eine Domain auf nichts auf, bleibt es beim
+        /// If a domain resolves to nothing, it stays with the
         /// <c>&lt;remote-server-not-found/&gt;</c>.
         /// </summary>
         [Test]
         public async Task ADomainThatResolvesToNothing_YieldsAnError()
         {
 
-            SenderMitResolver(_ => []);
+            SenderWithResolver(_ => []);
 
-            var alice   = await ConnectAsync(_links, "alice");
-            var fehler  = new List<StanzaError>();
+            var alice   = await ConnectAsync(_left, "alice");
+            var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => fehler.Add(e);
+            alice.OnStanzaError += (_, e) => errors.Add(e);
 
-            await alice.SendMessageAsync("niemand.example", "Hallo?");
+            await alice.SendMessageAsync("nobody.example", "Hello?");
 
-            await WarteAuf(() => fehler.Count > 0, "den Fehler zur unauflösbaren Domain");
+            await WaitFor(() => errors.Count > 0, "the error for the unresolvable domain");
 
-            Assert.That(fehler[0].Condition, Is.EqualTo("remote-server-not-found"));
+            Assert.That(errors[0].Condition, Is.EqualTo("remote-server-not-found"));
 
         }
 
@@ -335,58 +333,59 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheCertificateIsCheckedAgainstTheDomain_NotTheSrvTarget()
 
         /// <summary>
-        /// Geprüft wird gegen die <b>gesuchte Domain</b>, nicht gegen den
-        /// Rechnernamen aus dem SRV-Eintrag (RFC 6120, Abschnitt 13.7.2.1).
+        /// What is checked against is the <b>domain that was looked for</b>,
+        /// not the machine name from the SRV record (RFC 6120,
+        /// section 13.7.2.1).
         /// </summary>
         /// <remarks>
-        /// Der wichtigste Test dieser Datei. Ohne DNSSEC ist ein SRV-Eintrag
-        /// nicht beglaubigt; wer ihn fälschen kann, gibt das Ziel vor. Würde
-        /// die Zertifikatsprüfung dem Ziel folgen, brächte der Angreifer den
-        /// Massstab gleich mit, an dem er gemessen wird.
+        /// The most important test of this file. Without DNSSEC an SRV record
+        /// is not attested; whoever can forge it dictates the target. Were the
+        /// certificate check to follow the target, the attacker would bring
+        /// along the very yardstick they are measured by.
         ///
-        /// Geprüft wird das hier daran, dass die Angabe im SRV-Eintrag eine
-        /// nackte IP-Adresse ist, die in keinem Zertifikat als Domain steht.
-        /// Die Verbindung gelingt trotzdem - also stammt der Massstab nicht
-        /// von dort. Die Gegenprobe steht in
-        /// <see cref="SaslExternalTests"/>: ein Zertifikat, das die gesuchte
-        /// Domain nicht deckt, kommt nicht durch.
+        /// What that is checked by here is that the entry in the SRV record is
+        /// a bare IP address, which stands in no certificate as a domain. The
+        /// connection succeeds nevertheless - so the yardstick does not come
+        /// from there. The counter-check stands in
+        /// <see cref="SaslExternalTests"/>: a certificate not covering the
+        /// domain that was looked for does not get through.
         /// </remarks>
         [Test]
         public async Task TheCertificateIsCheckedAgainstTheDomain_NotTheSrvTarget()
         {
 
-            var gepruefteNamen = new List<String>();
+            var checkedNames = new List<String>();
 
-            var resolver = new FesterResolver(_ => [ZielAufRechts()]);
+            var resolver = new FixedResolver(_ => [TargetOnTheRight()]);
 
-            _linksLinks = new TcpServerLinks(_links, mode: TcpTlsMode.StartTls)
+            _leftLinks = new TcpServerLinks(_left, mode: TcpTlsMode.StartTls)
                           {
                               AddressResolver       = resolver,
-                              DefaultPeerValidator  = (sender, cert, chain, fehler) =>
+                              DefaultPeerValidator  = (sender, cert, chain, errors) =>
                                                       {
                                                           if (sender is System.Net.Security.SslStream s)
-                                                              lock (gepruefteNamen)
-                                                                  gepruefteNamen.Add(s.TargetHostName);
+                                                              lock (checkedNames)
+                                                                  checkedNames.Add(s.TargetHostName);
 
-                                                          return _rechts.IsOwnCertificate(sender, cert, chain, fehler);
+                                                          return _right.IsOwnCertificate(sender, cert, chain, errors);
                                                       }
                           };
 
-            RueckwegEintragen();
+            AddTheWayBack();
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await _linksLinks.DeliverAsync("right.example", Stanza)
+            await _leftLinks.DeliverAsync("right.example", Stanza)
                              .WaitAsync(TimeSpan.FromSeconds(25));
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht");
+            await WaitFor(() => received.Count > 0, "the message");
 
-            lock (gepruefteNamen)
-                Assert.That(gepruefteNamen, Has.All.EqualTo("right.example"),
-                            "TLS muss gegen die gesuchte Domain laufen, nicht gegen das SRV-Ziel.");
+            lock (checkedNames)
+                Assert.That(checkedNames, Has.All.EqualTo("right.example"),
+                            "TLS has to run against the domain that was looked for, not against the SRV target.");
 
         }
 

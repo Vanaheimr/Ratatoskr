@@ -27,41 +27,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Reihenfolge der SRV-Ziele nach RFC 2782.
+    /// The order of the SRV targets according to RFC 2782.
     /// </summary>
     /// <remarks>
-    /// Die Zufallsquelle wird hier vorgegeben, damit aus einem
-    /// wahrscheinlichkeitsbehafteten Verfahren ein prüfbarer Ablauf wird.
-    /// Das ist mehr als Bequemlichkeit: eine falsche Gewichtung fällt bei
-    /// echtem Zufall gar nicht auf, weil jedes Ergebnis irgendwie plausibel
-    /// aussieht.
+    /// The source of randomness is given here, so that a checkable sequence
+    /// comes out of a probabilistic procedure. That is more than convenience:
+    /// a wrong weighting does not stand out at all with real randomness,
+    /// because every result looks plausible somehow.
     /// </remarks>
     [TestFixture]
     public class SrvSelectionTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private static SrvTarget Ziel(UInt16 prioritaet, UInt16 gewicht, String host)
-            => new (prioritaet, gewicht, host, 5269);
+        private static SrvTarget Target(UInt16 priority, UInt16 weight, String host)
+            => new (priority, weight, host, 5269);
 
-        /// <summary>Eine Zufallsquelle, die der Reihe nach feste Werte liefert.</summary>
-        private static Func<Int32, Int32> Wuerfe(params Int32[] werte)
+        /// <summary>A source of randomness delivering fixed values in turn.</summary>
+        private static Func<Int32, Int32> Rolls(params Int32[] values)
         {
 
             var i = 0;
 
             return max =>
             {
-                var wert = i < werte.Length ? werte[i] : 0;
+                var value = i < values.Length ? values[i] : 0;
                 i++;
-                return Math.Min(wert, max);
+                return Math.Min(value, max);
             };
 
         }
 
-        private static String[] Namen(IEnumerable<SrvTarget> ziele)
-            => [.. ziele.Select(z => z.Host)];
+        private static String[] Names(IEnumerable<SrvTarget> targets)
+            => [.. targets.Select(t => t.Host)];
 
         #endregion
 
@@ -69,18 +68,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region LowerPriorityGoesFirst()
 
         /// <summary>
-        /// Die Priorität schlägt alles - auch ein hohes Gewicht.
+        /// The priority beats everything - a high weight as well.
         /// </summary>
         [Test]
         public void LowerPriorityGoesFirst()
         {
 
-            var geordnet = SrvSelection.Order(
-                               [Ziel(20, 100, "spaeter.example"),
-                                Ziel(10,   1, "zuerst.example")],
-                               Wuerfe(0, 0));
+            var ordered = SrvSelection.Order(
+                              [Target(20, 100, "later.example"),
+                               Target(10,   1, "first.example")],
+                               Rolls(0, 0));
 
-            Assert.That(Namen(geordnet), Is.EqualTo(new[] { "zuerst.example", "spaeter.example" }));
+            Assert.That(Names(ordered), Is.EqualTo(new[] { "first.example", "later.example" }));
 
         }
 
@@ -89,25 +88,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AllOfOnePriorityBeforeTheNext()
 
         /// <summary>
-        /// Erst wenn eine Prioritätsstufe erschöpft ist, kommt die nächste.
+        /// Only when one priority level is exhausted does the next one come.
         /// </summary>
         [Test]
         public void AllOfOnePriorityBeforeTheNext()
         {
 
-            var geordnet = SrvSelection.Order(
-                               [Ziel(20, 10, "c.example"),
-                                Ziel(10, 10, "a.example"),
-                                Ziel(20, 10, "d.example"),
-                                Ziel(10, 10, "b.example")],
-                               Wuerfe(0, 0, 0, 0));
+            var ordered = SrvSelection.Order(
+                              [Target(20, 10, "c.example"),
+                               Target(10, 10, "a.example"),
+                                Target(20, 10, "d.example"),
+                                Target(10, 10, "b.example")],
+                               Rolls(0, 0, 0, 0));
 
-            var namen = Namen(geordnet);
+            var names = Names(ordered);
 
             Assert.Multiple(() =>
             {
-                Assert.That(namen[..2], Is.EquivalentTo(new[] { "a.example", "b.example" }));
-                Assert.That(namen[2..], Is.EquivalentTo(new[] { "c.example", "d.example" }));
+                Assert.That(names[..2], Is.EquivalentTo(new[] { "a.example", "b.example" }));
+                Assert.That(names[2..], Is.EquivalentTo(new[] { "c.example", "d.example" }));
             });
 
         }
@@ -117,27 +116,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheWeightDecidesWithinAPriority()
 
         /// <summary>
-        /// Innerhalb einer Priorität entscheidet das Gewicht - über eine
-        /// gewichtete Ziehung, nicht über eine Sortierung.
+        /// Within one priority the weight decides - over a weighted draw, not
+        /// over a sorting.
         /// </summary>
         /// <remarks>
-        /// Die Würfe sind so gewählt, dass sie das schwächere Ziel zuerst
-        /// treffen. Wäre die Auswahl eine absteigende Sortierung nach Gewicht,
-        /// käme unabhängig vom Wurf immer das stärkere zuerst - und genau das
-        /// ist der Fehler, den dieser Test fängt.
+        /// The rolls are chosen so that they hit the weaker target first. Were
+        /// the selection a descending sort by weight, the stronger one would
+        /// always come first regardless of the roll - and that is precisely the
+        /// error this test catches.
         /// </remarks>
         [Test]
         public void TheWeightDecidesWithinAPriority()
         {
 
-            // Reihenfolge im Rest: schwer.example (90), leicht.example (10);
-            // laufende Summen 90 und 100. Ein Wurf von 100 trifft das zweite.
-            var geordnet = SrvSelection.Order(
-                               [Ziel(10, 90, "schwer.example"),
-                                Ziel(10, 10, "leicht.example")],
-                               Wuerfe(100, 0));
+            // Order in the remainder: heavy.example (90), light.example (10);
+            // running sums 90 and 100. A roll of 100 hits the second one.
+            var ordered = SrvSelection.Order(
+                              [Target(10, 90, "heavy.example"),
+                               Target(10, 10, "light.example")],
+                               Rolls(100, 0));
 
-            Assert.That(Namen(geordnet), Is.EqualTo(new[] { "leicht.example", "schwer.example" }));
+            Assert.That(Names(ordered), Is.EqualTo(new[] { "light.example", "heavy.example" }));
 
         }
 
@@ -146,19 +145,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ALowRollPicksTheFirstRunningSum()
 
         /// <summary>
-        /// Die Gegenprobe: ein kleiner Wurf trifft das erste Ziel der
-        /// laufenden Summe.
+        /// The counter-check: a small roll hits the first target of the running
+        /// sum.
         /// </summary>
         [Test]
         public void ALowRollPicksTheFirstRunningSum()
         {
 
-            var geordnet = SrvSelection.Order(
-                               [Ziel(10, 90, "schwer.example"),
-                                Ziel(10, 10, "leicht.example")],
-                               Wuerfe(1, 0));
+            var ordered = SrvSelection.Order(
+                              [Target(10, 90, "heavy.example"),
+                               Target(10, 10, "light.example")],
+                               Rolls(1, 0));
 
-            Assert.That(Namen(geordnet)[0], Is.EqualTo("schwer.example"));
+            Assert.That(Names(ordered)[0], Is.EqualTo("heavy.example"));
 
         }
 
@@ -167,26 +166,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WeightZeroIsNotExcluded()
 
         /// <summary>
-        /// Gewicht null heisst nicht "nie".
+        /// A weight of zero does not mean "never".
         /// </summary>
         /// <remarks>
-        /// RFC 2782 stellt gewichtslose Ziele an den Anfang der Liste, womit
-        /// ein Wurf von 0 genau sie trifft. Wer sie stattdessen ans Ende
-        /// sortiert oder ganz auslässt, macht aus einem Reserveziel ein totes.
+        /// RFC 2782 puts weightless targets at the beginning of the list, with
+        /// which a roll of 0 hits precisely them. Whoever sorts them to the end
+        /// instead or leaves them out entirely makes a dead target out of a
+        /// reserve one.
         /// </remarks>
         [Test]
         public void WeightZeroIsNotExcluded()
         {
 
-            var geordnet = SrvSelection.Order(
-                               [Ziel(10, 100, "haupt.example"),
-                                Ziel(10,   0, "reserve.example")],
-                               Wuerfe(0, 0));
+            var ordered = SrvSelection.Order(
+                              [Target(10, 100, "main.example"),
+                               Target(10,   0, "reserve.example")],
+                               Rolls(0, 0));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Namen(geordnet)[0], Is.EqualTo("reserve.example"));
-                Assert.That(geordnet,           Has.Count.EqualTo(2));
+                Assert.That(Names(ordered)[0], Is.EqualTo("reserve.example"));
+                Assert.That(ordered,           Has.Count.EqualTo(2));
             });
 
         }
@@ -196,22 +196,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EveryTargetAppearsExactlyOnce()
 
         /// <summary>
-        /// Gezogen wird ohne Zurücklegen - kein Ziel doppelt, keines verloren.
+        /// The drawing happens without putting back - no target twice, none
+        /// lost.
         /// </summary>
         [Test]
         public void EveryTargetAppearsExactlyOnce()
         {
 
-            var ziele = new[] {
-                            Ziel(10, 5, "a.example"),
-                            Ziel(10, 5, "b.example"),
-                            Ziel(10, 5, "c.example"),
-                            Ziel(20, 1, "d.example")
+            var targets = new[] {
+                            Target(10, 5, "a.example"),
+                            Target(10, 5, "b.example"),
+                            Target(10, 5, "c.example"),
+                            Target(20, 1, "d.example")
                         };
 
-            var geordnet = SrvSelection.Order(ziele);
+            var ordered = SrvSelection.Order(targets);
 
-            Assert.That(Namen(geordnet), Is.EquivalentTo(Namen(ziele)));
+            Assert.That(Names(ordered), Is.EquivalentTo(Names(targets)));
 
         }
 
@@ -220,21 +221,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADotMeansTheServiceIsNotOffered()
 
         /// <summary>
-        /// Ein Ziel "." heisst: diese Domain bietet den Dienst nicht an
+        /// A target of "." means: this domain does not offer the service
         /// (RFC 2782).
         /// </summary>
         /// <remarks>
-        /// Das ist eine Aussage und kein fehlender Eintrag. Sie zu übergehen
-        /// und auf den Regelport zurückzufallen hiesse, eine ausdrückliche
-        /// Absage als Schweigen zu lesen.
+        /// That is a statement and not a missing entry. To pass it over and
+        /// fall back on the default port would mean reading an express refusal
+        /// as silence.
         /// </remarks>
         [Test]
         public void ADotMeansTheServiceIsNotOffered()
         {
 
-            var geordnet = SrvSelection.Order([new SrvTarget(0, 0, ".", 0)]);
+            var ordered = SrvSelection.Order([new SrvTarget(0, 0, ".", 0)]);
 
-            Assert.That(geordnet, Is.Empty);
+            Assert.That(ordered, Is.Empty);
 
         }
 
@@ -243,17 +244,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADotAmongOthers_StillMeansNo()
 
         /// <summary>
-        /// Auch neben anderen Einträgen bleibt "." eine Absage.
+        /// Next to other entries as well "." stays a refusal.
         /// </summary>
         [Test]
         public void ADotAmongOthers_StillMeansNo()
         {
 
-            var geordnet = SrvSelection.Order(
-                               [Ziel(10, 10, "irgendwo.example"),
-                                new SrvTarget(0, 0, ".", 0)]);
+            var ordered = SrvSelection.Order(
+                              [Target(10, 10, "somewhere.example"),
+                               new SrvTarget(0, 0, ".", 0)]);
 
-            Assert.That(geordnet, Is.Empty);
+            Assert.That(ordered, Is.Empty);
 
         }
 
@@ -272,32 +273,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OverManyRuns_TheDistributionFollowsTheWeights()
 
         /// <summary>
-        /// Über viele Ziehungen mit echtem Zufall folgt die Verteilung den
-        /// Gewichten.
+        /// Over many draws with real randomness the distribution follows the
+        /// weights.
         /// </summary>
         /// <remarks>
-        /// Die vorigen Tests halten den Ablauf fest, dieser die Wirkung. Die
-        /// Schranken sind grosszügig - der Test soll eine vertauschte oder
-        /// ignorierte Gewichtung fangen, nicht die Güte der Zufallsquelle
-        /// beurteilen.
+        /// The previous tests hold the sequence fast, this one the effect. The
+        /// bounds are generous - the test is meant to catch a swapped or
+        /// ignored weighting, not to judge the quality of the source of
+        /// randomness.
         /// </remarks>
         [Test]
         public void OverManyRuns_TheDistributionFollowsTheWeights()
         {
 
-            var ziele = new[] {
-                            Ziel(10, 90, "schwer.example"),
-                            Ziel(10, 10, "leicht.example")
+            var targets = new[] {
+                            Target(10, 90, "heavy.example"),
+                            Target(10, 10, "light.example")
                         };
 
-            var schwerZuerst = 0;
+            var heavyFirst = 0;
 
             for (var i = 0; i < 2000; i++)
-                if (SrvSelection.Order(ziele)[0].Host == "schwer.example")
-                    schwerZuerst++;
+                if (SrvSelection.Order(targets)[0].Host == "heavy.example")
+                    heavyFirst++;
 
-            Assert.That(schwerZuerst, Is.InRange(1500, 1950),
-                        "Rund 90 Prozent sollten auf das schwere Ziel entfallen.");
+            Assert.That(heavyFirst, Is.InRange(1500, 1950),
+                        "Around 90 percent should fall to the heavy target.");
 
         }
 

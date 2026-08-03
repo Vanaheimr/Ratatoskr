@@ -31,22 +31,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die DNS-Auflösung selbst - gegen einen echten DNS-Server, über echte
-    /// DNS-Pakete.
+    /// The DNS resolution itself - against a real DNS server, over real DNS
+    /// packets.
     /// </summary>
     /// <remarks>
-    /// Hermod bringt einen DNS-Server mit, also gibt es keinen Grund, hier
-    /// mit einer nachgebauten Antwort zu arbeiten. Der Unterschied ist nicht
-    /// kosmetisch: geprüft wird damit auch, ob der Abfragename stimmt
-    /// (<c>_xmpp-server._tcp.&lt;domain&gt;</c>), ob die SRV-Felder in der
-    /// richtigen Reihenfolge ankommen und ob eine Domain ohne Eintrag
-    /// tatsächlich als "nichts gefunden" durchschlägt. Ein selbstgebauter
-    /// Resolver hätte all das bestätigt, weil er dieselben Annahmen gemacht
-    /// hätte wie der Code, den er prüfen soll.
+    /// Hermod brings a DNS server along, so there is no reason to work with a
+    /// rebuilt answer here. The difference is not cosmetic: what is checked
+    /// thereby is also whether the query name is right
+    /// (<c>_xmpp-server._tcp.&lt;domain&gt;</c>), whether the SRV fields
+    /// arrive in the right order and whether a domain without an entry really
+    /// comes through as "nothing found". A self-built resolver would have
+    /// confirmed all of that, because it would have made the same assumptions
+    /// as the code it is supposed to check.
     ///
-    /// Der Server horcht auf dem Loopback und auf einem freien Port; weder
-    /// Multicast noch TCP werden angeschaltet, damit der Testlauf keine
-    /// Firewall-Rückfrage auslöst.
+    /// The server listens on the loopback and on a free port; neither
+    /// multicast nor TCP are switched on, so that the test run triggers no
+    /// firewall query.
     /// </remarks>
     [TestFixture]
     public class DnsS2SAddressResolverTests
@@ -62,13 +62,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             if (_dnsServer is not null)
             {
                 try { await _dnsServer.Stop(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _dnsServer = null;
@@ -78,9 +78,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private static Int32 FreierPort()
+        private static Int32 FreePort()
         {
 
             var l = new UdpClient(0, AddressFamily.InterNetwork);
@@ -92,16 +92,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Startet einen autoritativen DNS-Server mit den angegebenen
-        /// Einträgen und liefert einen Client, der ihn befragt.
+        /// Starts an authoritative DNS server with the given entries and
+        /// delivers a client that queries it.
         /// </summary>
-        private async Task<DnsS2SAddressResolver> ServerMit(params IDNSResourceRecord[] eintraege)
+        private async Task<DnsS2SAddressResolver> ServerWith(params IDNSResourceRecord[] entries)
         {
 
             var zone = new InMemoryDNSZone();
-            zone.Add(eintraege);
+            zone.Add(entries);
 
-            var port = FreierPort();
+            var port = FreePort();
 
             _dnsServer = new DNSServer(
                              new AuthoritativeDNSRequestHandler(zone),
@@ -124,21 +124,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static SRV Eintrag(String  dienstName,
-                                   UInt16  prioritaet,
-                                   UInt16  gewicht,
-                                   String  ziel,
-                                   UInt16  port)
+        private static SRV Entry(String  serviceName,
+                                 UInt16  priority,
+                                 UInt16  weight,
+                                 String  target,
+                                 UInt16  port)
 
-            // Voll qualifiziert, mit Punkt am Ende: die Zone schlägt über den
-            // Namen aus der Frage nach, und der kommt vom Client so an.
-            => new (DNSServiceName.Parse(dienstName.TrimEnd('.') + "."),
+            // Fully qualified, with a dot at the end: the zone looks up over
+            // the name from the question, and that is how it arrives from the
+            // client.
+            => new (DNSServiceName.Parse(serviceName.TrimEnd('.') + "."),
                     DNSQueryClasses.IN,
                     TimeSpan.FromMinutes(5),
-                    prioritaet,
-                    gewicht,
+                    priority,
+                    weight,
                     IPPort.Parse(port),
-                    DomainName.Parse(ziel == "." ? "." : ziel.TrimEnd('.') + "."));
+                    DomainName.Parse(target == "." ? "." : target.TrimEnd('.') + "."));
 
         #endregion
 
@@ -146,25 +147,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASrvRecord_IsFoundAndTranslated()
 
         /// <summary>
-        /// Der Normalfall: ein SRV-Eintrag wird gefunden, und alle vier Felder
-        /// kommen richtig an.
+        /// The normal case: an SRV record is found, and all four fields arrive
+        /// correctly.
         /// </summary>
         [Test]
         public async Task ASrvRecord_IsFoundAndTranslated()
         {
 
-            var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.right.example", 10, 20, "im.right.example", 5269));
+            var resolver = await ServerWith(
+                                Entry("_xmpp-server._tcp.right.example", 10, 20, "im.right.example", 5269));
 
-            var ziele = await resolver.ResolveAsync("right.example");
+            var targets = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ziele,             Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host,     Is.EqualTo("im.right.example"));
-                Assert.That(ziele[0].Port,     Is.EqualTo(5269));
-                Assert.That(ziele[0].Priority, Is.EqualTo(10));
-                Assert.That(ziele[0].Weight,   Is.EqualTo(20));
+                Assert.That(targets,             Has.Count.EqualTo(1));
+                Assert.That(targets[0].Host,     Is.EqualTo("im.right.example"));
+                Assert.That(targets[0].Port,     Is.EqualTo(5269));
+                Assert.That(targets[0].Priority, Is.EqualTo(10));
+                Assert.That(targets[0].Weight,   Is.EqualTo(20));
             });
 
         }
@@ -174,19 +175,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePortComesFromTheRecord_NotFromTheDefault()
 
         /// <summary>
-        /// Der Port stammt aus dem Eintrag - sonst wäre die halbe Aussage
-        /// eines SRV-Eintrags verschenkt.
+        /// The port comes out of the record - otherwise half the statement of
+        /// an SRV record would be given away.
         /// </summary>
         [Test]
         public async Task ThePortComesFromTheRecord_NotFromTheDefault()
         {
 
-            var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.right.example", 0, 0, "im.right.example", 15269));
+            var resolver = await ServerWith(
+                                Entry("_xmpp-server._tcp.right.example", 0, 0, "im.right.example", 15269));
 
-            var ziele = await resolver.ResolveAsync("right.example");
+            var targets = await resolver.ResolveAsync("right.example");
 
-            Assert.That(ziele[0].Port, Is.EqualTo(15269));
+            Assert.That(targets[0].Port, Is.EqualTo(15269));
 
         }
 
@@ -195,28 +196,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheQueryUsesTheServicePrefix()
 
         /// <summary>
-        /// Gefragt wird nach <c>_xmpp-server._tcp.&lt;domain&gt;</c> und nicht
-        /// nach der Domain selbst.
+        /// What is asked for is <c>_xmpp-server._tcp.&lt;domain&gt;</c> and not
+        /// the domain itself.
         /// </summary>
         /// <remarks>
-        /// Der Eintrag liegt hier unter einem anderen Dienstnamen. Fragte der
-        /// Resolver falsch, fände er ihn - und der Test würde es merken.
+        /// The entry lies under a different service name here. Were the
+        /// resolver to ask wrongly, it would find it - and the test would
+        /// notice.
         /// </remarks>
         [Test]
         public async Task TheQueryUsesTheServicePrefix()
         {
 
-            var resolver = await ServerMit(
-                               Eintrag("_xmpp-client._tcp.right.example", 0, 0, "falsch.right.example", 5222));
+            var resolver = await ServerWith(
+                                Entry("_xmpp-client._tcp.right.example", 0, 0, "wrong.right.example", 5222));
 
-            var ziele = await resolver.ResolveAsync("right.example");
+            var targets = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ziele, Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host, Is.EqualTo("right.example"),
-                            "Ohne passenden SRV-Eintrag gilt der Rückfall auf die Domain selbst.");
-                Assert.That(ziele[0].Host, Is.Not.EqualTo("falsch.right.example"));
+                Assert.That(targets, Has.Count.EqualTo(1));
+                Assert.That(targets[0].Host, Is.EqualTo("right.example"),
+                            "Without a matching SRV record the fallback to the domain itself holds.");
+                Assert.That(targets[0].Host, Is.Not.EqualTo("wrong.right.example"));
             });
 
         }
@@ -226,22 +228,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SeveralRecords_ComeBackInPriorityOrder()
 
         /// <summary>
-        /// Mehrere Einträge kommen in der Reihenfolge zurück, in der sie
-        /// versucht werden sollen.
+        /// Several entries come back in the order in which they are to be
+        /// tried.
         /// </summary>
         [Test]
         public async Task SeveralRecords_ComeBackInPriorityOrder()
         {
 
-            var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.right.example", 30, 0, "drittens.example", 5269),
-                               Eintrag("_xmpp-server._tcp.right.example", 10, 0, "erstens.example",  5269),
-                               Eintrag("_xmpp-server._tcp.right.example", 20, 0, "zweitens.example", 5269));
+            var resolver = await ServerWith(
+                                Entry("_xmpp-server._tcp.right.example", 30, 0, "third.example",  5269),
+                               Entry("_xmpp-server._tcp.right.example", 10, 0, "first.example",  5269),
+                               Entry("_xmpp-server._tcp.right.example", 20, 0, "second.example", 5269));
 
-            var ziele = await resolver.ResolveAsync("right.example");
+            var targets = await resolver.ResolveAsync("right.example");
 
-            Assert.That(ziele.Select(z => z.Host),
-                        Is.EqualTo(new[] { "erstens.example", "zweitens.example", "drittens.example" }));
+            Assert.That(targets.Select(t => t.Host),
+                        Is.EqualTo(new[] { "first.example", "second.example", "third.example" }));
 
         }
 
@@ -250,23 +252,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAnyRecord_TheDomainItselfIsTried()
 
         /// <summary>
-        /// Ohne SRV-Eintrag gilt der Rückfall aus RFC 6120, Abschnitt 3.2.1:
-        /// die Domain selbst auf Port 5269.
+        /// Without an SRV record the fallback from RFC 6120, section 3.2.1
+        /// holds: the domain itself on port 5269.
         /// </summary>
         [Test]
         public async Task WithoutAnyRecord_TheDomainItselfIsTried()
         {
 
-            var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.woanders.example", 0, 0, "egal.example", 5269));
+            var resolver = await ServerWith(
+                                Entry("_xmpp-server._tcp.elsewhere.example", 0, 0, "whatever.example", 5269));
 
-            var ziele = await resolver.ResolveAsync("right.example");
+            var targets = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ziele,         Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host, Is.EqualTo("right.example"));
-                Assert.That(ziele[0].Port, Is.EqualTo(5269));
+                Assert.That(targets,         Has.Count.EqualTo(1));
+                Assert.That(targets[0].Host, Is.EqualTo("right.example"));
+                Assert.That(targets[0].Port, Is.EqualTo(5269));
             });
 
         }
@@ -276,23 +278,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithTheFallbackTurnedOff_NothingIsTried()
 
         /// <summary>
-        /// Wer den Rückfall abschaltet, bekommt ohne SRV-Eintrag nichts.
+        /// Whoever switches the fallback off gets nothing without an SRV
+        /// record.
         /// </summary>
         /// <remarks>
-        /// Gedacht für Betreiber, die ausschliesslich über SRV
-        /// veröffentlichte Ziele erlauben wollen - sonst würde stillschweigend
-        /// woandershin verbunden.
+        /// Meant for operators who want to permit targets published over SRV
+        /// exclusively - otherwise a connection would silently be made
+        /// somewhere else.
         /// </remarks>
         [Test]
         public async Task WithTheFallbackTurnedOff_NothingIsTried()
         {
 
-            await ServerMit(
-                Eintrag("_xmpp-server._tcp.woanders.example", 0, 0, "egal.example", 5269));
+            await ServerWith(
+                 Entry("_xmpp-server._tcp.elsewhere.example", 0, 0, "whatever.example", 5269));
 
-            var streng = new DnsS2SAddressResolver(_dnsClient!) { FallBackToDomain = false };
+            var strict = new DnsS2SAddressResolver(_dnsClient!) { FallBackToDomain = false };
 
-            Assert.That(await streng.ResolveAsync("right.example"), Is.Empty);
+            Assert.That(await strict.ResolveAsync("right.example"), Is.Empty);
 
         }
 
@@ -301,20 +304,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADotTarget_MeansTheServiceIsNotOffered()
 
         /// <summary>
-        /// Ein Ziel "." ist eine Absage und kein fehlender Eintrag - der
-        /// Rückfall greift dann <b>nicht</b>.
+        /// A target of "." is a refusal and no missing entry - the fallback
+        /// does <b>not</b> take hold then.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied ist der ganze Sinn dieser Schreibweise. Wer sie als
-        /// Schweigen liest, verbindet sich zu einer Domain, die ausdrücklich
-        /// gesagt hat, dass sie den Dienst nicht anbietet.
+        /// The difference is the whole point of this spelling. Whoever reads it
+        /// as silence connects to a domain that has expressly said that it does
+        /// not offer the service.
         /// </remarks>
         [Test]
         public async Task ADotTarget_MeansTheServiceIsNotOffered()
         {
 
-            var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.right.example", 0, 0, ".", 0));
+            var resolver = await ServerWith(
+                                Entry("_xmpp-server._tcp.right.example", 0, 0, ".", 0));
 
             Assert.That(await resolver.ResolveAsync("right.example"), Is.Empty);
 
@@ -325,33 +328,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnreachableDnsServer_YieldsTheFallback()
 
         /// <summary>
-        /// Antwortet gar kein DNS-Server, bleibt der Rückfall auf die Domain.
+        /// If no DNS server answers at all, the fallback to the domain stays.
         /// </summary>
         /// <remarks>
-        /// Eine ausbleibende Antwort ist nicht dasselbe wie eine Absage, und
-        /// eine Ausnahme darf sie schon gar nicht werden - der Aufrufer würde
-        /// sonst je nach Zustand des Netzes verschieden scheitern.
+        /// An answer that fails to come is not the same as a refusal, and it
+        /// must certainly not become an exception - the caller would otherwise
+        /// fail differently depending on the state of the net.
         /// </remarks>
         [Test]
         public async Task AnUnreachableDnsServer_YieldsTheFallback()
         {
 
-            var totesZiel = new DNSClient(IPv4Address.Localhost,
-                                          IPPort.Parse(FreierPort()),
+            var deadTarget = new DNSClient(IPv4Address.Localhost,
+                                           IPPort.Parse(FreePort()),
                                           QueryTimeout:   TimeSpan.FromSeconds(1),
                                           UseQueryCache:  false);
 
-            var resolver = new DnsS2SAddressResolver(totesZiel)
+            var resolver = new DnsS2SAddressResolver(deadTarget)
                            {
                                Timeout = TimeSpan.FromSeconds(1)
                            };
 
-            var ziele = await resolver.ResolveAsync("right.example");
+            var targets = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ziele,         Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host, Is.EqualTo("right.example"));
+                Assert.That(targets,         Has.Count.EqualTo(1));
+                Assert.That(targets[0].Host, Is.EqualTo("right.example"));
             });
 
         }

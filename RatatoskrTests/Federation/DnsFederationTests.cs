@@ -32,22 +32,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Föderation, wie sie im Betrieb aussieht: keine Gegenstelle ist von Hand
-    /// eingetragen, beide Server finden einander ausschliesslich über DNS.
+    /// Federation as it looks in operation: no far end is entered by hand,
+    /// both servers find each other exclusively over DNS.
     /// </summary>
     /// <remarks>
-    /// Der Unterschied zu <see cref="SrvResolutionTests"/> ist nicht nur die
-    /// Menge. Dort löst eine Seite auf und die andere bekommt den Rückweg
-    /// eingetragen; hier gibt es überhaupt keine Liste mehr - auch die
-    /// <b>Dialback-Rückfrage</b> muss ihren Weg über die Auflösung finden.
-    /// Genau das ist der Fall, den XEP-0220 meint, und zugleich der, in dem
-    /// die Vertrauenswurzel vom Betreiber zum DNS wandert.
+    /// The difference to <see cref="SrvResolutionTests"/> is not only the
+    /// amount. There one side resolves and the other one gets the way back
+    /// entered; here there is no list at all any more - the <b>dialback
+    /// query</b> has to find its way over the resolution too. That is
+    /// precisely the case XEP-0220 means, and at the same time the one in
+    /// which the root of trust wanders from the operator to the DNS.
     ///
-    /// Die SRV-Ziele sind IP-Adressen. Das ist im Test nötig, weil ein
-    /// erfundener Rechnername sich nicht auflösen liesse, und es prüft
-    /// nebenbei mit, dass die Zertifikate gegen die <i>gesuchte Domain</i>
-    /// geprüft werden und nicht gegen das, was im SRV-Eintrag steht - sonst
-    /// käme keine der beiden Verbindungen zustande.
+    /// The SRV targets are IP addresses. That is necessary in the test,
+    /// because an invented machine name could not be resolved, and it checks
+    /// along the way that the certificates are checked against the <i>domain
+    /// that was looked for</i> and not against what stands in the SRV record -
+    /// otherwise neither of the two connections would come about.
     /// </remarks>
     [TestFixture]
     public class DnsFederationTests
@@ -56,10 +56,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Data
 
         private DNSServer _dnsServer = null!;
-        private XMPPServer _links = null!;
-        private XMPPServer _rechts = null!;
-        private TcpServerLinks _linksLinks = null!;
-        private TcpServerLinks _rechtsLinks = null!;
+        private XMPPServer _left = null!;
+        private XMPPServer _right = null!;
+        private TcpServerLinks _leftLinks = null!;
+        private TcpServerLinks _rightLinks = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -68,33 +68,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public async Task ZweiServerUndEinDNS()
+        public async Task TwoServersAndOneDNS()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The guard on both: An error on the one server often comes about
+            // through a stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            // Die Ports werden vorab gewählt, weil sich sonst die Katze in den
-            // Schwanz beisst: die Zonendatei braucht die Ports, und die
-            // S2S-Zweige brauchen den Resolver, der ohne Zone nicht antworten
-            // kann. Dasselbe Vorgehen wie überall sonst im Projekt, wo ein
-            // freier Port gebraucht wird.
-            var portLinks   = FreierTcpPort();
-            var portRechts  = FreierTcpPort();
+            // The ports are chosen beforehand, because otherwise the cat bites
+            // its own tail: the zone file needs the ports, and the S2S branches
+            // need the resolver, which cannot answer without a zone. The same
+            // procedure as everywhere else in the project where a free port is
+            // needed.
+            var portLeft   = FreeTcpPort();
+            var portRight  = FreeTcpPort();
 
             var zone = new InMemoryDNSZone();
 
-            zone.Add(SrvEintrag("_xmpp-server._tcp.left.example.",  portLinks),
-                     SrvEintrag("_xmpp-server._tcp.right.example.", portRechts));
+            zone.Add(SrvEntry("_xmpp-server._tcp.left.example.",  portLeft),
+                     SrvEntry("_xmpp-server._tcp.right.example.", portRight));
 
-            var dnsPort = FreierUdpPort();
+            var dnsPort = FreeUdpPort();
 
             _dnsServer = new DNSServer(
                              new AuthoritativeDNSRequestHandler(zone),
@@ -113,42 +113,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                           QueryTimeout:   TimeSpan.FromSeconds(5),
                                           UseQueryCache:  false);
 
-            // Beide Seiten bekommen denselben Resolver und keine einzige
-            // Gegenstelle von Hand.
-            _linksLinks = new TcpServerLinks(_links, portLinks, TcpTlsMode.StartTls)
+            // Both sides get the same resolver and not a single far end by
+            // hand.
+            _leftLinks = new TcpServerLinks(_left, portLeft, TcpTlsMode.StartTls)
                           {
                               AddressResolver       = new DnsS2SAddressResolver(dnsClient),
-                              DefaultPeerValidator  = _rechts.IsOwnCertificate
+                              DefaultPeerValidator  = _right.IsOwnCertificate
                           };
 
-            _rechtsLinks = new TcpServerLinks(_rechts, portRechts, TcpTlsMode.StartTls)
+            _rightLinks = new TcpServerLinks(_right, portRight, TcpTlsMode.StartTls)
                            {
                                AddressResolver       = new DnsS2SAddressResolver(dnsClient),
-                               DefaultPeerValidator  = _links.IsOwnCertificate
+                               DefaultPeerValidator  = _left.IsOwnCertificate
                            };
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            await _linksLinks.DisposeAsync();
-            await _rechtsLinks.DisposeAsync();
+            await _leftLinks.DisposeAsync();
+            await _rightLinks.DisposeAsync();
 
             try { await _dnsServer.Stop(); }
-            catch { /* im Teardown egal */ }
+            catch { /* does not matter in the teardown */ }
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -156,9 +156,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private static Int32 FreierUdpPort()
+        private static Int32 FreeUdpPort()
         {
 
             var l     = new UdpClient(0, AddressFamily.InterNetwork);
@@ -169,7 +169,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static Int32 FreierTcpPort()
+        private static Int32 FreeTcpPort()
         {
 
             var l = new TcpListener(System.Net.IPAddress.Loopback, 0);
@@ -181,9 +181,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static SRV SrvEintrag(String dienstName, Int32 port)
+        private static SRV SrvEntry(String serviceName, Int32 port)
 
-            => new (DNSServiceName.Parse(dienstName),
+            => new (DNSServiceName.Parse(serviceName),
                     DNSQueryClasses.IN,
                     TimeSpan.FromMinutes(5),
                     0, 0,
@@ -214,10 +214,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         #endregion
@@ -226,35 +226,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoServersFindEachOtherThroughDnsAlone()
 
         /// <summary>
-        /// Eine Nachricht über die Grenze, ohne dass irgendwo eine Adresse
-        /// hinterlegt wäre.
+        /// A message across the border, without an address being deposited
+        /// anywhere.
         /// </summary>
         /// <remarks>
-        /// Das schliesst die Dialback-Rückfrage ein: <c>right.example</c>
-        /// muss <c>left.example</c> selbst auflösen, um den vorgelegten
-        /// Schlüssel prüfen zu können.
+        /// That includes the dialback query: <c>right.example</c> has to
+        /// resolve <c>left.example</c> itself in order to be able to check the
+        /// key it was presented with.
         /// </remarks>
         [Test]
         public async Task TwoServersFindEachOtherThroughDnsAlone()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo über DNS!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello over DNS!");
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht auf dem anderen Server");
+            await WaitFor(() => received.Count > 0, "the message on the other server");
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen[0].Body,        Is.EqualTo("Hallo über DNS!"));
-                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].Body,        Is.EqualTo("Hello over DNS!"));
+                Assert.That(received[0].FromBareJid, Is.EqualTo("alice@left.example"));
 
-                Assert.That(_rechtsLinks.DialbackVerificationCount, Is.GreaterThan(0),
-                            "Die Rückfrage muss stattgefunden haben - und ihren Weg über DNS gefunden haben.");
+                Assert.That(_rightLinks.DialbackVerificationCount, Is.GreaterThan(0),
+                            "The query must have taken place - and have found its way over DNS.");
             });
 
         }
@@ -267,22 +267,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheAnswerFindsItsWayBack()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var beiBob    = new List<XMPPMessage>();
-            var beiAlice  = new List<XMPPMessage>();
+            var atBob    = new List<XMPPMessage>();
+            var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => beiBob.Add(m);
-            alice.OnMessage  += m => beiAlice.Add(m);
+            bob.OnMessage    += m => atBob.Add(m);
+            alice.OnMessage  += m => atAlice.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Frage");
-            await WarteAuf(() => beiBob.Count > 0, "die Frage bei Bob");
+            await alice.SendMessageAsync(bob.BareJid, "Question");
+            await WaitFor(() => atBob.Count > 0, "the question at Bob");
 
-            await bob.SendMessageAsync(beiBob[0].FromBareJid, "Antwort");
-            await WarteAuf(() => beiAlice.Count > 0, "die Antwort bei Alice");
+            await bob.SendMessageAsync(atBob[0].FromBareJid, "Answer");
+            await WaitFor(() => atAlice.Count > 0, "the answer at Alice");
 
-            Assert.That(beiAlice[0].Body, Is.EqualTo("Antwort"));
+            Assert.That(atAlice[0].Body, Is.EqualTo("Answer"));
 
         }
 
@@ -291,28 +291,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADomainWithoutRecords_YieldsAnError()
 
         /// <summary>
-        /// Eine Domain, die im DNS nicht steht, führt zum
+        /// A domain that does not stand in the DNS leads to the
         /// <c>&lt;remote-server-not-found/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Der Rückfall aus RFC 6120 §3.2.1 greift zwar und versucht die
-        /// Domain selbst - aber die gibt es nicht, und dann bleibt es beim
-        /// Fehler.
+        /// The fallback from RFC 6120 §3.2.1 does take hold and tries the
+        /// domain itself - but that one does not exist, and then it stays with
+        /// the error.
         /// </remarks>
         [Test]
         public async Task ADomainWithoutRecords_YieldsAnError()
         {
 
-            var alice   = await ConnectAsync(_links, "alice");
-            var fehler  = new List<StanzaError>();
+            var alice   = await ConnectAsync(_left, "alice");
+            var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => fehler.Add(e);
+            alice.OnStanzaError += (_, e) => errors.Add(e);
 
-            await alice.SendMessageAsync("wer@niemand.example", "Hallo?");
+            await alice.SendMessageAsync("who@nobody.example", "Hello?");
 
-            await WarteAuf(() => fehler.Count > 0, "den Fehler zur unbekannten Domain");
+            await WaitFor(() => errors.Count > 0, "the error for the unknown domain");
 
-            Assert.That(fehler[0].Condition, Is.EqualTo("remote-server-not-found"));
+            Assert.That(errors[0].Condition, Is.EqualTo("remote-server-not-found"));
 
         }
 
