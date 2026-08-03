@@ -28,20 +28,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Fehlerbehandlung im Zusammenspiel: eine abgelehnte Anfrage darf für den
-    /// Aufrufer nicht wie ein Erfolg aussehen.
+    /// Error handling in the interplay: a refused request must not look like a
+    /// success to the caller.
     /// </summary>
     [TestFixture]
     public class ErrorHandlingTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private async Task<XMPPSession> SessionOfAsync(XMPPClient client)
         {
 
             await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
-                          "Serversitzung zum Client");
+                          "the server session for the client");
 
             return Server.SessionOf(client.FullJid)!;
 
@@ -53,10 +53,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RejectedPing_ReturnsNullInsteadOfARoundTripTime()
 
         /// <summary>
-        /// Der deutlichste Fall: ein mit <c>iq error</c> abgelehnter Ping lief
-        /// früher durch ProcessPong und lieferte eine gemessene Laufzeit. Eine
-        /// Gegenstelle, die XEP-0199 gar nicht unterstützt, sah damit aus wie
-        /// eine besonders schnelle.
+        /// The clearest case: a ping refused with an <c>iq error</c> used to run
+        /// through ProcessPong and delivered a measured round-trip time. A
+        /// counterpart that does not support XEP-0199 at all thereby looked like
+        /// an especially fast one.
         /// </summary>
         [Test]
         public async Task RejectedPing_ReturnsNullInsteadOfARoundTripTime()
@@ -71,16 +71,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var rtt = await client.PingAsync();
 
-            // PingAsync kehrt zurück, sobald die Anfrage aufgelöst ist; das
-            // Event wird unmittelbar danach ausgelöst.
-            await WaitFor(() => reported is not null, "gemeldeter Stanza-Fehler");
+            // PingAsync comes back as soon as the request is resolved; the event
+            // is triggered immediately afterwards.
+            await WaitFor(() => reported is not null, "the reported stanza error");
 
             Assert.Multiple(() =>
             {
                 Assert.That(rtt, Is.Null,
-                            "Ein abgelehnter Ping darf keine Laufzeit liefern.");
+                            "A refused ping must not deliver a round-trip time.");
 
-                Assert.That(reported,            Is.Not.Null, "Der Fehler wurde nicht gemeldet.");
+                Assert.That(reported,            Is.Not.Null, "The error was not reported.");
                 Assert.That(reported!.Condition, Is.EqualTo("service-unavailable"));
                 Assert.That(reported!.Type,      Is.EqualTo(StanzaErrorType.Cancel));
             });
@@ -92,7 +92,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AcceptedPing_StillMeasuresARoundTripTime()
 
         /// <summary>
-        /// Gegenprobe: der Normalfall muss weiter funktionieren.
+        /// Counter-check: the normal case has to go on working.
         /// </summary>
         [Test]
         public async Task AcceptedPing_StillMeasuresARoundTripTime()
@@ -111,9 +111,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RejectedDiscoQuery_ReturnsNullInsteadOfAnEmptyResult()
 
         /// <summary>
-        /// Eine abgelehnte disco-Abfrage lieferte früher ein leeres, aber
-        /// erfolgreiches Ergebnis - nicht zu unterscheiden von einer Entity
-        /// ohne Features.
+        /// A refused disco query used to deliver an empty but successful result
+        /// - not to be told apart from an entity without features.
         /// </summary>
         [Test]
         public async Task RejectedDiscoQuery_ReturnsNullInsteadOfAnEmptyResult()
@@ -129,20 +128,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var info = await client.Connection.Disco!.QueryInfoAsync(Server.Domain,
                                                                      timeout: TimeSpan.FromSeconds(5));
 
-            await WaitFor(() => reported is not null, "gemeldeter Stanza-Fehler");
+            await WaitFor(() => reported is not null, "the reported stanza error");
 
             Assert.Multiple(() =>
             {
                 Assert.That(info, Is.Null,
-                            "Eine abgelehnte Abfrage darf kein Ergebnis liefern.");
+                            "A refused query must not deliver a result.");
 
                 Assert.That(reported,            Is.Not.Null);
                 Assert.That(reported!.Condition, Is.EqualTo("item-not-found"));
                 Assert.That(reported!.Type,      Is.EqualTo(StanzaErrorType.Modify));
-                // Der Text sagt, was der Schalter tut: Diese Abfrage wird
-                // abgelehnt. Bis zum node-Attribut stand hier „Diesen Node gibt
-                // es hier nicht" - eine Auskunft über etwas, das der Server gar
-                // nicht ansah, und die Abfrage nennt nicht einmal einen Node.
+                // The text says what the switch does: this query is refused.
+                // Until the node attribute came along, "This node does not exist
+                // here" stood here - information about something the server did
+                // not look at at all, and the query does not even name a node.
                 Assert.That(reported!.Text,      Is.EqualTo("This information is not given here."));
             });
 
@@ -153,8 +152,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ErrorMessage_IsReportedAsAnErrorNotAsAMessage()
 
         /// <summary>
-        /// Eine <c>message type='error'</c> ist die Rückmeldung, dass die
-        /// eigene Nachricht nicht zugestellt wurde - und keine neue Nachricht.
+        /// A <c>message type='error'</c> is the report that one's own message
+        /// was not delivered - and no new message.
         /// </summary>
         [Test]
         public async Task ErrorMessage_IsReportedAsAnErrorNotAsAMessage()
@@ -170,18 +169,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             client.OnMessage     += m          => asMessage = m;
 
             await session.SendAsync(
-                $"<message type='error' from='niemand@{Server.Domain}' to='{client.FullJid}'>" +
+                $"<message type='error' from='nobody@{Server.Domain}' to='{client.FullJid}'>" +
                 "<error type='cancel'>" +
                 "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
                 "</error></message>");
 
-            await WaitFor(() => reported is not null, "gemeldeter Stanza-Fehler");
+            await WaitFor(() => reported is not null, "the reported stanza error");
 
             Assert.Multiple(() =>
             {
                 Assert.That(reported!.Condition, Is.EqualTo("service-unavailable"));
                 Assert.That(asMessage, Is.Null,
-                            "Eine Fehler-Stanza darf nicht als Nachricht durchgereicht werden.");
+                            "An error stanza must not be passed through as a message.");
             });
 
         }
@@ -191,11 +190,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ErrorPresence_DoesNotBecomeAContactState()
 
         /// <summary>
-        /// Eine <c>presence type='error'</c> wanderte früher über
-        /// <c>UpdatePresence</c> in den Roster. Weil dort nur das
-        /// <c>show</c>-Element ausgewertet wird und ein Fehler keines trägt,
-        /// landete der Kontakt im Zweig für "verfügbar" - eine abgeprallte
-        /// Presence machte ihn also online.
+        /// A <c>presence type='error'</c> used to wander into the roster by way
+        /// of <c>UpdatePresence</c>. Because only the <c>show</c> element is
+        /// evaluated there and an error carries none, the contact ended up in
+        /// the branch for "available" - so a bounced presence made them online.
         /// </summary>
         [Test]
         public async Task ErrorPresence_DoesNotMarkTheContactAsOnline()
@@ -207,10 +205,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.AddContactAsync(bob, "Bob");
 
-            await WaitFor(() => client.GetContact(bob) is not null, "Kontakt im Roster");
+            await WaitFor(() => client.GetContact(bob) is not null, "the contact in the roster");
 
             Assert.That(client.GetContact(bob)!.Presence, Is.EqualTo(PresenceState.Offline),
-                        "Vorbedingung: Bob ist offline.");
+                        "Precondition: Bob is offline.");
 
             StanzaError? reported = null;
             client.OnStanzaError += (_, error) => reported = error;
@@ -221,14 +219,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 "<remote-server-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
                 "</error></presence>");
 
-            await WaitFor(() => reported is not null, "gemeldeter Stanza-Fehler");
+            await WaitFor(() => reported is not null, "the reported stanza error");
 
             Assert.Multiple(() =>
             {
                 Assert.That(reported!.Condition, Is.EqualTo("remote-server-not-found"));
 
                 Assert.That(client.GetContact(bob)!.Presence, Is.EqualTo(PresenceState.Offline),
-                            "Ein Presence-Fehler darf den Kontakt nicht online setzen.");
+                            "A presence error must not set the contact online.");
             });
 
         }
@@ -238,9 +236,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region FatalStreamError_IsReportedAndStopsReconnecting()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 4.9: Nach <c>conflict</c> ist der Stream
-        /// endgültig verloren. Ein Reconnect liefe in dieselbe Ablehnung, also
-        /// muss er unterbleiben.
+        /// RFC 6120, section 4.9: after a <c>conflict</c> the stream is finally
+        /// lost. A reconnect would run into the same refusal, so it has to stay
+        /// undone.
         /// </summary>
         [Test]
         public async Task FatalStreamError_IsReportedAndStopsReconnecting()
@@ -254,23 +252,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var connectionsBefore = Server.ConnectionCount;
 
-            // Schliesst den Stream selbst (RFC 6120, Abschnitt 4.9.1.1) - hier
-            // stand bis D23 ein Kill() dahinter, das genau das von Hand nachholte.
-            await session.SendStreamErrorAsync("conflict", "Resource doppelt vergeben.");
+            // Closes the stream itself (RFC 6120, section 4.9.1.1) - until D23 a
+            // Kill() stood behind this that did exactly that by hand.
+            await session.SendStreamErrorAsync("conflict", "Resource assigned twice.");
 
-            await WaitFor(() => reported is not null, "gemeldeter Stream-Fehler");
+            await WaitFor(() => reported is not null, "the reported stream error");
 
-            // Dem Client Zeit geben, einen Reconnect zu versuchen - er darf keinen machen.
+            // Give the client time to attempt a reconnect - it must not make one.
             await Task.Delay(TimeSpan.FromSeconds(2));
 
             Assert.Multiple(() =>
             {
                 Assert.That(reported!.Condition,      Is.EqualTo("conflict"));
-                Assert.That(reported!.Text,           Is.EqualTo("Resource doppelt vergeben."));
+                Assert.That(reported!.Text,           Is.EqualTo("Resource assigned twice."));
                 Assert.That(reported!.IsRecoverable,  Is.False);
 
                 Assert.That(Server.ConnectionCount, Is.EqualTo(connectionsBefore),
-                            "Nach einem endgültigen Stream-Fehler darf kein Reconnect erfolgen.");
+                            "After a final stream error no reconnect may take place.");
             });
 
         }
@@ -280,8 +278,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RecoverableStreamError_IsReportedButAllowsReconnect()
 
         /// <summary>
-        /// Bei <c>system-shutdown</c> lohnt der Reconnect dagegen - der Server
-        /// kommt wieder.
+        /// With <c>system-shutdown</c>, by contrast, the reconnect is worth it -
+        /// the server comes back.
         /// </summary>
         [Test]
         public async Task RecoverableStreamError_IsReportedButAllowsReconnect()
@@ -295,14 +293,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var connectionsBefore = Server.ConnectionCount;
 
-            // Schliesst den Stream selbst; der Reconnect folgt daraus und nicht
-            // aus einem zusätzlichen Abriss von Hand.
+            // Closes the stream itself; the reconnect follows from that and not
+            // from an additional cut-off by hand.
             await session.SendStreamErrorAsync("system-shutdown");
 
-            await WaitFor(() => reported is not null, "gemeldeter Stream-Fehler");
+            await WaitFor(() => reported is not null, "the reported stream error");
 
             await WaitFor(() => Server.ConnectionCount > connectionsBefore,
-                          "Reconnect nach wiederholbarem Stream-Fehler");
+                          "the reconnect after a repeatable stream error");
 
             Assert.Multiple(() =>
             {

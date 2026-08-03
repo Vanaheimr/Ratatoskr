@@ -28,18 +28,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Stanzas in ungewöhnlicher, aber vollkommen gültiger Schreibweise.
+    /// Stanzas in unusual but perfectly valid spelling.
     ///
-    /// Alle Formen hier sind nach XML und RFC 6120 zulässig und kommen bei
-    /// echten Servern vor. Ein Parser, der sie nicht versteht, verliert
-    /// Nachrichten still - genau das ist der Grund, warum die Stanza-Auswertung
-    /// von regulären Ausdrücken auf einen XML-Parser umgestellt wurde.
+    /// All the forms here are permitted by XML and RFC 6120 and occur with real
+    /// servers. A parser that does not understand them loses messages silently -
+    /// precisely that is the reason why the stanza evaluation was moved from
+    /// regular expressions to an XML parser.
     /// </summary>
     [TestFixture]
     public class StanzaParsingTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private async Task<(XMPPClient Client, XMPPSession Session)> ConnectedPairAsync()
         {
@@ -47,14 +47,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
 
             await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
-                          "Serversitzung zum Client");
+                          "the server session for the client");
 
             return (client, Server.SessionOf(client.FullJid)!);
 
         }
 
         /// <summary>
-        /// Schickt eine rohe Stanza an den Client und wartet auf OnMessage.
+        /// Sends a raw stanza to the client and waits for OnMessage.
         /// </summary>
         private async Task<XMPPMessage?> DeliverAsync(XMPPClient client, XMPPSession session, String stanza)
         {
@@ -76,9 +76,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Message_WithNamespacePrefix_IsDelivered()
 
         /// <summary>
-        /// Der Elementname darf ein Präfix tragen, solange es an
-        /// <c>jabber:client</c> gebunden ist. Eine Erkennung über
-        /// <c>StartsWith("&lt;message")</c> verwirft solche Stanzas komplett.
+        /// The element name may carry a prefix, as long as it is bound to
+        /// <c>jabber:client</c>. A recognition by way of
+        /// <c>StartsWith("&lt;message")</c> discards such stanzas completely.
         /// </summary>
         [Test]
         public async Task Message_WithNamespacePrefix_IsDelivered()
@@ -89,9 +89,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var received = await DeliverAsync(client, session,
                                $"<c:message xmlns:c='jabber:client' from='bob@{Server.Domain}/x' " +
                                $"to='{client.FullJid}' type='chat' id='m1'>" +
-                               "<c:body>Mit Präfix</c:body></c:message>");
+                               "<c:body>With a prefix</c:body></c:message>");
 
-            Assert.That(received?.Body, Is.EqualTo("Mit Präfix"));
+            Assert.That(received?.Body, Is.EqualTo("With a prefix"));
 
         }
 
@@ -100,9 +100,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Message_WithLanguageTaggedBody_IsDelivered()
 
         /// <summary>
-        /// <c>&lt;body/&gt;</c> darf ein <c>xml:lang</c> tragen - RFC 6121
-        /// Abschnitt 5.2.3 sieht das ausdrücklich vor. Ein Muster wie
-        /// <c>&lt;body&gt;(...)&lt;/body&gt;</c> findet es dann nicht mehr.
+        /// <c>&lt;body/&gt;</c> may carry an <c>xml:lang</c> - RFC 6121
+        /// section 5.2.3 provides for that expressly. A pattern like
+        /// <c>&lt;body&gt;(...)&lt;/body&gt;</c> then does not find it any more.
         /// </summary>
         [Test]
         public async Task Message_WithLanguageTaggedBody_IsDelivered()
@@ -113,9 +113,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var received = await DeliverAsync(client, session,
                                $"<message from='bob@{Server.Domain}/x' to='{client.FullJid}' " +
                                "type='chat' id='m2'>" +
-                               "<body xml:lang='de'>Mit Sprachangabe</body></message>");
+                               "<body xml:lang='de'>With a language tag</body></message>");
 
-            Assert.That(received?.Body, Is.EqualTo("Mit Sprachangabe"));
+            Assert.That(received?.Body, Is.EqualTo("With a language tag"));
 
         }
 
@@ -124,8 +124,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Message_WithEntities_IsUnescaped()
 
         /// <summary>
-        /// Entities gehören vom Parser aufgelöst. Wer den Inhalt roh
-        /// weiterreicht, zeigt dem Benutzer <c>&amp;lt;</c> statt <c>&lt;</c>.
+        /// Entities belong resolved by the parser. Whoever passes the content on
+        /// raw shows the user <c>&amp;lt;</c> instead of <c>&lt;</c>.
         /// </summary>
         [Test]
         public async Task Message_WithEntities_IsUnescaped()
@@ -147,10 +147,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Message_WithNestedBody_UsesTheOuterOne()
 
         /// <summary>
-        /// XEP-0297: eine weitergeleitete Nachricht steckt vollständig in
-        /// <c>&lt;forwarded/&gt;</c> - mitsamt eigenem <c>&lt;body/&gt;</c>.
-        /// Ein Muster ohne Verschachtelungsbegriff nimmt das erste, also das
-        /// innere.
+        /// XEP-0297: a forwarded message sits completely inside
+        /// <c>&lt;forwarded/&gt;</c> - together with a <c>&lt;body/&gt;</c> of
+        /// its own. A pattern without a notion of nesting takes the first, that
+        /// is, the inner one.
         /// </summary>
         [Test]
         public async Task Message_WithNestedBody_UsesTheOuterOne()
@@ -162,11 +162,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                $"<message from='bob@{Server.Domain}/x' to='{client.FullJid}' " +
                                "type='chat' id='m4'>" +
                                "<forwarded xmlns='urn:xmpp:forward:0'>" +
-                               "<message xmlns='jabber:client'><body>innen</body></message>" +
+                               "<message xmlns='jabber:client'><body>inside</body></message>" +
                                "</forwarded>" +
-                               "<body>aussen</body></message>");
+                               "<body>outside</body></message>");
 
-            Assert.That(received?.Body, Is.EqualTo("aussen"));
+            Assert.That(received?.Body, Is.EqualTo("outside"));
 
         }
 
@@ -175,14 +175,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Message_WithAttributeContainingTheIdOfANestedElement_UsesTheOuterOne()
 
         /// <summary>
-        /// Ein unverankertes Attributmuster findet auch Attribute in
-        /// Kindelementen. Weil die Attribute des äusseren Elements immer zuerst
-        /// im Text stehen, fällt das nur auf, wenn das äussere Element das
-        /// gesuchte Attribut gar nicht hat: die id stammt dann aus der
-        /// eingebetteten Nachricht.
+        /// An unanchored attribute pattern finds attributes in child elements
+        /// too. Because the attributes of the outer element always stand first
+        /// in the text, that shows only when the outer element does not have the
+        /// attribute sought at all: the id then comes from the embedded message.
         ///
-        /// Das ist keine Spitzfindigkeit - eine Quittung oder ein Chat-Marker
-        /// auf diese id ginge an eine Nachricht, die nie gesendet wurde.
+        /// That is no hair-splitting - a receipt or a chat marker on this id
+        /// would go to a message that was never sent.
         /// </summary>
         [Test]
         public async Task Message_WithoutId_DoesNotBorrowOneFromANestedElement()
@@ -194,7 +193,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                $"<message to='{client.FullJid}' type='chat' " +
                                $"from='bob@{Server.Domain}/x'>" +
                                "<forwarded xmlns='urn:xmpp:forward:0'>" +
-                               "<message xmlns='jabber:client' id='innen'><body>x</body></message>" +
+                               "<message xmlns='jabber:client' id='inside'><body>x</body></message>" +
                                "</forwarded>" +
                                "<body>Text</body></message>");
 
@@ -202,7 +201,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(received?.Body,       Is.EqualTo("Text"));
                 Assert.That(received?.MessageId,  Is.Null,
-                            "Die äussere Nachricht hat keine id - sie darf sich keine ausleihen.");
+                            "The outer message has no id - it must not borrow one.");
             });
 
         }
@@ -212,8 +211,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Presence_WithLanguageTaggedStatus_IsRead()
 
         /// <summary>
-        /// Auch <c>&lt;status/&gt;</c> trägt in der Praxis oft ein
-        /// <c>xml:lang</c>.
+        /// <c>&lt;status/&gt;</c> too often carries an <c>xml:lang</c> in
+        /// practice.
         /// </summary>
         [Test]
         public async Task Presence_WithLanguageTaggedStatus_IsRead()
@@ -223,17 +222,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = $"bob@{Server.Domain}";
 
             await client.AddContactAsync(bob, "Bob");
-            await WaitFor(() => client.GetContact(bob) is not null, "Kontakt im Roster");
+            await WaitFor(() => client.GetContact(bob) is not null, "the contact in the roster");
 
             await session.SendAsync(
                 $"<presence from='{bob}/x' to='{client.FullJid}'>" +
                 "<show>away</show>" +
-                "<status xml:lang='de'>Bin essen</status></presence>");
+                "<status xml:lang='de'>Out for lunch</status></presence>");
 
             await WaitFor(() => client.GetContact(bob)!.Presence == PresenceState.Away,
-                          "Präsenzwechsel auf away");
+                          "the presence change to away");
 
-            Assert.That(client.GetContact(bob)!.PresenceStatus, Is.EqualTo("Bin essen"));
+            Assert.That(client.GetContact(bob)!.PresenceStatus, Is.EqualTo("Out for lunch"));
 
         }
 
@@ -242,7 +241,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Presence_WithNamespacePrefix_IsRead()
 
         /// <summary>
-        /// Dasselbe Präfix-Problem wie bei message.
+        /// The same prefix problem as with message.
         /// </summary>
         [Test]
         public async Task Presence_WithNamespacePrefix_IsRead()
@@ -252,14 +251,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = $"bob@{Server.Domain}";
 
             await client.AddContactAsync(bob, "Bob");
-            await WaitFor(() => client.GetContact(bob) is not null, "Kontakt im Roster");
+            await WaitFor(() => client.GetContact(bob) is not null, "the contact in the roster");
 
             await session.SendAsync(
                 $"<c:presence xmlns:c='jabber:client' from='{bob}/x' to='{client.FullJid}'>" +
                 "<c:show>dnd</c:show></c:presence>");
 
             await WaitFor(() => client.GetContact(bob)!.Presence == PresenceState.Dnd,
-                          "Präsenzwechsel auf dnd");
+                          "the presence change to dnd");
 
             Assert.That(client.GetContact(bob)!.Presence, Is.EqualTo(PresenceState.Dnd));
 
@@ -270,10 +269,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterPush_WithAttributesInAnyOrder_IsApplied()
 
         /// <summary>
-        /// Das frühere Muster verlangte die Attribute in der Reihenfolge
-        /// <c>jid</c>, <c>name</c>, <c>subscription</c>. XML kennt keine
-        /// Attributreihenfolge - ein Server, der sie anders schreibt, wurde
-        /// still ignoriert und der Kontakt fehlte im Roster.
+        /// The earlier pattern demanded the attributes in the order <c>jid</c>,
+        /// <c>name</c>, <c>subscription</c>. XML knows no attribute order - a
+        /// server that writes them differently was silently ignored and the
+        /// contact was missing from the roster.
         /// </summary>
         [Test]
         public async Task RosterPush_WithAttributesInAnyOrder_IsApplied()
@@ -288,7 +287,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<item subscription='both' name='Carol' jid='{carol}'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.GetContact(carol) is not null, "Kontakt aus dem Push");
+            await WaitFor(() => client.GetContact(carol) is not null, "the contact from the push");
 
             Assert.That(client.GetContact(carol)!.Name, Is.EqualTo("Carol"));
 
@@ -299,9 +298,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterPush_KeepsGroups()
 
         /// <summary>
-        /// Gruppen stehen als Kindelemente im <c>&lt;item/&gt;</c>. Das
-        /// Attributmuster sah sie nie, also verlor jeder Push die
-        /// Gruppenzuordnung.
+        /// Groups stand as child elements in the <c>&lt;item/&gt;</c>. The
+        /// attribute pattern never saw them, so every push lost the group
+        /// assignment.
         /// </summary>
         [Test]
         public async Task RosterPush_KeepsGroups()
@@ -314,13 +313,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<iq type='set' id='push-2' to='{client.FullJid}'>" +
                 "<query xmlns='jabber:iq:roster'>" +
                 $"<item jid='{dave}' name='Dave' subscription='both'>" +
-                "<group>Arbeit</group><group>Projekt X</group>" +
+                "<group>Work</group><group>Project X</group>" +
                 "</item></query></iq>");
 
-            await WaitFor(() => client.GetContact(dave) is not null, "Kontakt aus dem Push");
+            await WaitFor(() => client.GetContact(dave) is not null, "the contact from the push");
 
             Assert.That(client.GetContact(dave)!.Groups,
-                        Is.EquivalentTo(new[] { "Arbeit", "Projekt X" }));
+                        Is.EquivalentTo(new[] { "Work", "Project X" }));
 
         }
 
@@ -329,8 +328,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterPush_UnescapesEntitiesInNames()
 
         /// <summary>
-        /// Ein Anzeigename mit <c>&amp;</c> kommt escaped über die Leitung und
-        /// gehört aufgelöst.
+        /// A display name with an <c>&amp;</c> comes over the wire escaped and
+        /// belongs resolved.
         /// </summary>
         [Test]
         public async Task RosterPush_UnescapesEntitiesInNames()
@@ -345,7 +344,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<item jid='{eve}' name='Eve &amp; Co. &lt;Support&gt;' subscription='both'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.GetContact(eve) is not null, "Kontakt aus dem Push");
+            await WaitFor(() => client.GetContact(eve) is not null, "the contact from the push");
 
             Assert.That(client.GetContact(eve)!.Name, Is.EqualTo("Eve & Co. <Support>"));
 
@@ -356,10 +355,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Message_WithUnusualButValidSpelling_IsStillDelivered()
 
         /// <summary>
-        /// Kontrollgruppe: Anführungszeichenstil, Attributreihenfolge und
-        /// zusätzlicher Leerraum im Tag sind gültig und funktionierten auch
-        /// vorher schon. Diese Fälle dürfen durch die Umstellung nicht
-        /// kaputtgehen.
+        /// Control group: quotation mark style, attribute order and additional
+        /// whitespace in the tag are valid and worked before as well. These
+        /// cases must not break through the change.
         /// </summary>
         [Test]
         public async Task Message_WithUnusualButValidSpelling_IsStillDelivered()
@@ -371,11 +369,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                "<message   type=\"chat\"   id=\"m5\"\n" +
                                $"           to=\"{client.FullJid}\"\n" +
                                $"           from=\"bob@{Server.Domain}/x\" >" +
-                               "<body>Doppelte Anführungszeichen</body></message>");
+                               "<body>Double quotation marks</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(received?.Body,       Is.EqualTo("Doppelte Anführungszeichen"));
+                Assert.That(received?.Body,       Is.EqualTo("Double quotation marks"));
                 Assert.That(received?.MessageId,  Is.EqualTo("m5"));
             });
 

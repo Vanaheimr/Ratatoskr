@@ -28,17 +28,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Nutzlasten innerhalb von <c>iq</c>-Stanzas in gültiger, aber
-    /// ungewöhnlicher Schreibweise: Service Discovery, PubSub und Ping.
+    /// The payloads inside <c>iq</c> stanzas in valid but unusual spelling:
+    /// service discovery, PubSub and ping.
     ///
-    /// Der letzte Teil des Umbaus von regulären Ausdrücken auf einen
-    /// XML-Parser.
+    /// The last part of the rebuild from regular expressions to an XML parser.
     /// </summary>
     [TestFixture]
     public class IqPayloadParsingTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private async Task<(XMPPClient Client, XMPPSession Session)> ConnectedPairAsync()
         {
@@ -46,7 +45,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
 
             await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
-                          "Serversitzung zum Client");
+                          "the server session for the client");
 
             return (client, Server.SessionOf(client.FullJid)!);
 
@@ -58,11 +57,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Ping_WithDoubleQuotedType_IsAnsweredWithAResult()
 
         /// <summary>
-        /// Die Ping-Erkennung suchte wörtlich nach <c>type='get'</c>, also nur
-        /// mit einfachen Anführungszeichen. Gegen einen Server, der doppelte
-        /// benutzt, wurde der Ping nicht erkannt - und landete seit der
-        /// Umsetzung von RFC 6120 §8.2.3 im Rückfall, bekam also ein
-        /// <c>&lt;service-unavailable/&gt;</c> statt einer Antwort.
+        /// The ping recognition looked literally for <c>type='get'</c>, that is,
+        /// only with single quotation marks. Against a server that uses double
+        /// ones the ping was not recognised - and, since the implementation of
+        /// RFC 6120 §8.2.3, ended up in the fallback, so it got a
+        /// <c>&lt;service-unavailable/&gt;</c> instead of an answer.
         /// </summary>
         [Test]
         public async Task Ping_WithDoubleQuotedType_IsAnsweredWithAResult()
@@ -75,7 +74,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 "<ping xmlns=\"urn:xmpp:ping\"/></iq>");
 
             await WaitFor(() => session.Received.Any(f => f.Contains("id='p1'", StringComparison.Ordinal)),
-                          "Antwort auf den Ping");
+                          "the answer to the ping");
 
             var reply = session.Received.First(f => f.Contains("id='p1'", StringComparison.Ordinal));
 
@@ -83,7 +82,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(reply, Does.Contain("type='result'"));
                 Assert.That(reply, Does.Not.Contain("service-unavailable"),
-                            "Ein erkannter Ping darf nicht im Rückfall landen.");
+                            "A recognised ping must not end up in the fallback.");
             });
 
         }
@@ -93,12 +92,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DiscoInfo_WithSlashInTheIdentityName_IsParsed()
 
         /// <summary>
-        /// Das Muster für Identitäten schloss den Schrägstrich aus
-        /// (<c>&lt;identity([^/&gt;]+)/?&gt;</c>), damit es das schliessende
-        /// <c>/&gt;</c> nicht mitfrisst. Ein Name mit Schrägstrich - der eigene
-        /// Client heisst „XMPP Console Client" mit Kategorie
-        /// <c>client/console</c>, so etwas ist also alles andere als exotisch -
-        /// liess die Identität komplett verschwinden.
+        /// The pattern for identities excluded the slash
+        /// (<c>&lt;identity([^/&gt;]+)/?&gt;</c>) so that it would not eat the
+        /// closing <c>/&gt;</c> along with it. A name with a slash - our own
+        /// client is called "XMPP Console Client" with the category
+        /// <c>client/console</c>, so such a thing is anything but exotic - made
+        /// the identity vanish completely.
         /// </summary>
         [Test]
         public async Task DiscoInfo_WithSlashInTheIdentityName_IsParsed()
@@ -132,7 +131,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(info, Is.Not.Null);
                 Assert.That(info!.Identities, Has.Count.EqualTo(1));
                 Assert.That(info!.Identities[0].Name, Is.EqualTo("Foo/Bar & Co."),
-                            "Schrägstrich und Entity im Namen müssen erhalten bleiben.");
+                            "Slash and entity in the name have to be kept.");
                 Assert.That(info!.Features, Does.Contain("urn:xmpp:ping"));
             });
 
@@ -143,10 +142,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DiscoInfo_WithVarNotBeingTheFirstAttribute_IsParsed()
 
         /// <summary>
-        /// Das Feature-Muster verlangte <c>var</c> unmittelbar nach
-        /// <c>&lt;feature</c>. Steht ein anderes Attribut davor, verschwand das
-        /// Feature aus der Liste - und der Client hielt die Gegenstelle für
-        /// weniger fähig, als sie ist.
+        /// The feature pattern demanded <c>var</c> immediately after
+        /// <c>&lt;feature</c>. If another attribute stands in front of it, the
+        /// feature vanished from the list - and the client took the counterpart
+        /// for less capable than it is.
         /// </summary>
         [Test]
         public async Task DiscoInfo_WithVarNotBeingTheFirstAttribute_IsParsed()
@@ -180,15 +179,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(info?.Features, Does.Contain("urn:xmpp:carbons:2"));
 
-                // Über HasFeature und nicht nur über die Liste: Das ist die
-                // Frage, die ein Aufrufer stellt. Bis D57 stand sie nur hinter
-                // fünf Abkürzungen (SupportsCarbons und vier weitere), die
-                // niemand aufrief - und damit war auch HasFeature selbst von
-                // keinem Test berührt.
+                // By way of HasFeature and not only by way of the list: that is
+                // the question a caller asks. Until D57 it stood only behind
+                // five abbreviations (SupportsCarbons and four more) that nobody
+                // called - and with that HasFeature itself was touched by no
+                // test either.
                 Assert.That(info!.HasFeature("urn:xmpp:carbons:2"), Is.True);
 
-                Assert.That(info.HasFeature("urn:xmpp:gibtesnicht"), Is.False,
-                            "HasFeature muss auch verneinen können.");
+                Assert.That(info.HasFeature("urn:xmpp:doesnotexist"), Is.False,
+                            "HasFeature has to be able to deny as well.");
 
             });
 
@@ -199,9 +198,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PubSubEvent_WithDoubleQuotedNamespace_IsRecognised()
 
         /// <summary>
-        /// Das Event-Muster suchte wörtlich nach
-        /// <c>&lt;event xmlns='…pubsub#event'</c> - einfache Anführungszeichen,
-        /// und <c>xmlns</c> als erstes Attribut. Beides schreibt XML nicht vor.
+        /// The event pattern looked literally for
+        /// <c>&lt;event xmlns='…pubsub#event'</c> - single quotation marks, and
+        /// <c>xmlns</c> as the first attribute. XML prescribes neither.
         /// </summary>
         [Test]
         public async Task PubSubEvent_WithDoubleQuotedNamespace_IsRecognised()
@@ -215,15 +214,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync(
                 $"<iq type='set' id='ps1' from='pubsub.{Server.Domain}' to='{client.FullJid}'>" +
                 "<event xmlns=\"http://jabber.org/protocol/pubsub#event\">" +
-                "<items node=\"urn:example:nachrichten\">" +
-                "<item id=\"1\"><payload xmlns='urn:example:x'>Inhalt</payload></item>" +
+                "<items node=\"urn:example:news\">" +
+                "<item id=\"1\"><payload xmlns='urn:example:x'>Content</payload></item>" +
                 "</items></event></iq>");
 
-            await WaitFor(() => reported is not null, "gemeldetes PubSub-Event");
+            await WaitFor(() => reported is not null, "the reported PubSub event");
 
             Assert.Multiple(() =>
             {
-                Assert.That(reported!.NodeId, Is.EqualTo("urn:example:nachrichten"));
+                Assert.That(reported!.NodeId, Is.EqualTo("urn:example:news"));
                 Assert.That(reported!.Type,   Is.EqualTo(PubSubEventType.Items));
                 Assert.That(reported!.Items,  Has.Count.EqualTo(1));
             });
@@ -235,10 +234,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PubSubEvent_WithItemWithoutPayload_IsRecognised()
 
         /// <summary>
-        /// Ein <c>&lt;item/&gt;</c> ohne Nutzlast ist zulässig - XEP-0060
-        /// erlaubt reine Benachrichtigungen ohne Inhalt. Das frühere Muster
-        /// verlangte ein Paar aus öffnendem und schliessendem Tag und übersah
-        /// selbstschliessende Items ganz.
+        /// An <c>&lt;item/&gt;</c> without a payload is permitted - XEP-0060
+        /// allows pure notifications without content. The earlier pattern
+        /// demanded a pair of an opening and a closing tag and overlooked
+        /// self-closing items entirely.
         /// </summary>
         [Test]
         public async Task PubSubEvent_WithItemWithoutPayload_IsRecognised()
@@ -252,16 +251,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync(
                 $"<iq type='set' id='ps2' from='pubsub.{Server.Domain}' to='{client.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
-                "<items node='urn:example:signale'>" +
-                "<item id='ohne-inhalt'/>" +
+                "<items node='urn:example:signals'>" +
+                "<item id='without-content'/>" +
                 "</items></event></iq>");
 
-            await WaitFor(() => reported is not null, "gemeldetes PubSub-Event");
+            await WaitFor(() => reported is not null, "the reported PubSub event");
 
             Assert.Multiple(() =>
             {
                 Assert.That(reported!.Items, Has.Count.EqualTo(1));
-                Assert.That(reported!.Items[0].Id, Is.EqualTo("ohne-inhalt"));
+                Assert.That(reported!.Items[0].Id, Is.EqualTo("without-content"));
             });
 
         }
@@ -271,10 +270,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterNamespaceInsideAForwardedMessage_IsNotTakenAsARosterPush()
 
         /// <summary>
-        /// Die Fallunterscheidung in ProcessIq lief über
-        /// <c>stanza.Contains("jabber:iq:roster")</c> - der Namensraum musste
-        /// also nur irgendwo im Text vorkommen. Eine eingebettete Nachricht,
-        /// die ihn erwähnt, wurde damit als Roster-Push behandelt.
+        /// The case distinction in ProcessIq ran over
+        /// <c>stanza.Contains("jabber:iq:roster")</c> - so the namespace only
+        /// had to occur somewhere in the text. An embedded message that mentions
+        /// it was thereby treated as a roster push.
         /// </summary>
         [Test]
         public async Task RosterNamespaceInsideAForwardedMessage_IsNotTakenAsARosterPush()
@@ -287,14 +286,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 "<forwarded xmlns='urn:xmpp:forward:0'>" +
                 "<message xmlns='jabber:client'>" +
                 "<query xmlns='jabber:iq:roster'>" +
-                $"<item jid='eindringling@{Server.Domain}' subscription='both'/>" +
+                $"<item jid='intruder@{Server.Domain}' subscription='both'/>" +
                 "</query></message></forwarded></iq>");
 
             await WaitFor(() => session.Received.Any(f => f.Contains("id='fake-push'", StringComparison.Ordinal)),
-                          "Antwort auf das IQ");
+                          "the answer to the IQ");
 
-            Assert.That(client.GetContact($"eindringling@{Server.Domain}"), Is.Null,
-                        "Ein eingebettetes Roster-Element ist kein Roster-Push.");
+            Assert.That(client.GetContact($"intruder@{Server.Domain}"), Is.Null,
+                        "An embedded roster element is no roster push.");
 
         }
 
