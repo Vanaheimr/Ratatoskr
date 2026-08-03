@@ -28,20 +28,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Wache über alle Server: Sie findet auch den, den niemand
-    /// angemeldet hat.
+    /// The watch over all servers: it finds even the one nobody signed up.
     /// </summary>
     /// <remarks>
-    /// Der Fall, um den es geht, ist nicht der Fehler, sondern das
-    /// <b>Vergessen</b>: Jemand schreibt ein neues Fixture, erzeugt einen
-    /// Server ohne <c>Watched(…)</c> — und ab da verschluckt dieser Server
-    /// Programmierfehler wieder lautlos, ohne dass irgendetwas rot wird.
-    /// Genau deshalb hielt kein Test die Verdrahtung; gesichert war sie durch
-    /// eine Quelltextprüfung von Hand (siehe D19).
+    /// The case this is about is not the error but the <b>forgetting</b>:
+    /// somebody writes a new fixture, creates a server without
+    /// <c>Watched(…)</c> — and from then on this server swallows programming
+    /// errors noiselessly again, without anything turning red. Precisely for
+    /// that reason no test held the wiring; it was secured by a source
+    /// inspection by hand (see D19).
     ///
-    /// Diese Tests erzeugen den vergessenen Server mit Absicht. Sie sind die
-    /// einzige Stelle der Sammlung, an der ein <c>new XMPPServer(…)</c>
-    /// <b>ohne</b> <c>Watched(…)</c> richtig ist.
+    /// These tests create the forgotten server on purpose. They are the only
+    /// place in the collection where a <c>new XMPPServer(…)</c> <b>without</b>
+    /// <c>Watched(…)</c> is right.
     /// </remarks>
     [TestFixture]
     public class GlobalErrorWatchTests : AXMPPTests
@@ -50,13 +49,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnwatchedServer_IsStillSeen()
 
         /// <summary>
-        /// Ein Server, den kein Fixture angemeldet hat, meldet trotzdem.
+        /// A server that no fixture has signed up reports all the same.
         /// </summary>
         /// <remarks>
-        /// <c>ExpectInternalErrors()</c> steht hier nicht, weil der Fehler
-        /// erwartet <i>wäre</i>, sondern weil er es <b>ist</b>: Ohne diese
-        /// Zeile liesse die Wache diesen Test scheitern - und das ist der
-        /// Nachweis, den er führt.
+        /// <c>ExpectInternalErrors()</c> does not stand here because the error
+        /// <i>would be</i> expected, but because it <b>is</b>: without this line
+        /// the watch would let this test fail - and that is the proof it
+        /// carries.
         /// </remarks>
         [Test]
         public async Task AnUnwatchedServer_IsStillSeen()
@@ -64,33 +63,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             ExpectInternalErrors();
 
-            // Ohne Watched(…) - der Fall, den es zu erwischen gilt.
-            await using var vergessen = new XMPPServer("vergessen.example");
+            // Without Watched(…) - the case that is to be caught.
+            await using var forgotten = new XMPPServer("forgotten.example");
 
-            vergessen.Start();
-            vergessen.FailFrameHandling = true;
+            forgotten.Start();
+            forgotten.FailFrameHandling = true;
 
             var client = new XMPPClient(
-                             new XMPPConnection($"alice@{vergessen.Domain}", "pw", vergessen.Uri)
+                             new XMPPConnection($"alice@{forgotten.Domain}", "pw", forgotten.Uri)
                              {
                                  MaxReconnectAttempts        = 0,
                                  KeepaliveEnabled            = false,
-                                 ServerCertificateValidator  = vergessen.IsOwnCertificate
+                                 ServerCertificateValidator  = forgotten.IsOwnCertificate
                              });
 
-            vergessen.AddAccount("alice");
+            forgotten.AddAccount("alice");
 
-            // Der Aufbau scheitert, denn schon der erste Rahmen fliegt dem
-            // Server um die Ohren. Genau das ist der Zweck.
+            // The setup fails, for the very first frame blows up in the
+            // server's face. That is exactly the point.
             try { await client.ConnectAsync(); }
-            catch { /* erwartet */ }
+            catch { /* expected */ }
 
             await WaitFor(() => GlobalErrorWatchAttribute.Errors.Count > 0,
-                          "die Meldung der Wache über alle Server");
+                          "the report of the watch over all servers");
 
             Assert.That(GlobalErrorWatchAttribute.Errors[0],
                         Does.Contain("FailFrameHandling"),
-                        "Gemeldet wird die Ausnahme samt Grund.");
+                        "What is reported is the exception together with the reason.");
 
             await client.DisposeAsync();
 
@@ -101,44 +100,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheWatchFailsTheTest_AndStartsTheNextOneClean()
 
         /// <summary>
-        /// Die Wache lässt tatsächlich scheitern — und beginnt den nächsten
-        /// Test wieder mit leeren Händen.
+        /// The watch actually lets things fail — and begins the next test empty
+        /// handed again.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test wäre die schlimmste Fassung eine bestandene: eine
-        /// Wache, die alles aufnimmt und nie etwas daraus macht. Sie sähe aus
-        /// wie eine Sicherung, wäre keine, und die ganze Sammlung bliebe grün —
-        /// genau dieselbe Falle, die
-        /// <see cref="InternalErrorGuard.Record"/> für die Wache je Fixture
-        /// entschärft.
+        /// Without this test the worst version would be a passing one: a watch
+        /// that takes everything in and never makes anything of it. It would
+        /// look like a safeguard, would be none, and the whole collection would
+        /// stay green — precisely the same trap that
+        /// <see cref="InternalErrorGuard.Record"/> defuses for the watch per
+        /// fixture.
         ///
-        /// Der zweite Teil gehört dazu, weil er sonst von der Reihenfolge der
-        /// Tests abhinge: Bliebe eine Meldung über das Testende hinaus stehen,
-        /// fiele das nur dem <i>nachfolgenden</i> Test auf — und welcher das
-        /// ist, entscheidet der Testläufer. Hier wird der Übergang selbst
-        /// nachgestellt: melden, scheitern lassen, den nächsten Test beginnen,
-        /// nachsehen.
+        /// The second part belongs with it, because otherwise it would depend on
+        /// the order of the tests: if a report stayed standing past the end of
+        /// the test, that would show only to the <i>following</i> test — and
+        /// which one that is, the test runner decides. Here the transition
+        /// itself is staged: report, let it fail, begin the next test, look.
         /// </remarks>
         [Test]
         public void TheWatchFailsTheTest_AndStartsTheNextOneClean()
         {
 
-            var wache = new GlobalErrorWatchAttribute();
+            var watch = new GlobalErrorWatchAttribute();
 
-            GlobalErrorWatchAttribute.Record("Erfunden: NullReferenceException im Zustellweg");
+            GlobalErrorWatchAttribute.Record("Invented: NullReferenceException in the delivery route");
 
             Assert.That(GlobalErrorWatchAttribute.Errors, Is.Not.Empty);
 
-            Assert.That(() => wache.AfterTest(null!),
+            Assert.That(() => watch.AfterTest(null!),
                         Throws.InstanceOf<AssertionException>(),
-                        "Eine Wache, die nur aufnimmt und nie etwas daraus macht, ist keine.");
+                        "A watch that only takes things in and never makes anything of it is none.");
 
-            // Der nächste Test beginnt - und findet nichts mehr vor. Damit ist
-            // zugleich der echte Durchgang am Ende dieses Tests wieder still.
-            wache.BeforeTest(null!);
+            // The next test begins - and finds nothing there any more. With that
+            // the real pass at the end of this test is quiet again too.
+            watch.BeforeTest(null!);
 
             Assert.That(GlobalErrorWatchAttribute.Errors, Is.Empty,
-                        "Eine Meldung, die stehenbleibt, lässt den nächsten Test scheitern.");
+                        "A report that stays standing lets the next test fail.");
 
         }
 
@@ -147,17 +145,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AWatchedServerWithoutErrors_KeepsTheWatchSilent()
 
         /// <summary>
-        /// Und die Gegenprobe: Ein gewöhnlicher Test lässt sie schweigen.
+        /// And the counter-check: an ordinary test lets it stay silent.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test wäre eine Wache, die <i>immer</i> meldet, eine
-        /// bestandene Lösung - und die ganze Sammlung rot. Dass sie es nicht
-        /// ist, prüft zwar jeder andere Test mit, aber nur als Nebenwirkung;
-        /// hier steht es als Zusicherung.
+        /// Without this test a watch that <i>always</i> reports would be a
+        /// passing solution - and the whole collection red. That it is not,
+        /// every other test does check along, but only as a side effect; here it
+        /// stands as an assertion.
         ///
-        /// Die Zusicherung gilt zugleich der Trennung zwischen den Tests: Was
-        /// der vorige gemeldet hat, muss zu Beginn dieses hier fort sein,
-        /// sonst schlüge er fehl.
+        /// The assertion holds at the same time for the separation between the
+        /// tests: what the previous one reported has to be gone at the beginning
+        /// of this one, otherwise it would fail.
         /// </remarks>
         [Test]
         public async Task AWatchedServerWithoutErrors_KeepsTheWatchSilent()
@@ -165,10 +163,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync();
 
-            await alice.SendMessageAsync($"alice@{Server.Domain}", "An mich selbst");
+            await alice.SendMessageAsync($"alice@{Server.Domain}", "To myself");
 
             await WaitAgainst(() => GlobalErrorWatchAttribute.Errors.Count > 0,
-                              "eine Meldung, obwohl nichts schiefgegangen ist");
+                              "a report although nothing went wrong");
 
         }
 

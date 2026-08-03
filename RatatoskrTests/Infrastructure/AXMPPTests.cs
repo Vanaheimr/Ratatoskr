@@ -28,8 +28,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Basis für alle XMPP-Client-Tests: startet je Test einen
-    /// <see cref="XMPPServer"/> und räumt Server und Clients wieder ab.
+    /// The base for all XMPP client tests: starts an <see cref="XMPPServer"/>
+    /// per test and clears server and clients away again.
     /// </summary>
     public abstract class AXMPPTests
     {
@@ -39,14 +39,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private readonly List<XMPPClient> _clients = [];
 
         /// <summary>
-        /// Die Wache gegen verschluckte Programmierfehler - sie hängt an
-        /// <b>jedem</b> Test und nicht an einem eigenen. Anders wäre sie
-        /// wertlos: Wo ein solcher Fehler auftritt, weiss man vorher nicht, und
-        /// ein einzelner Test bewacht nur den Weg, den er selbst geht.
+        /// The guard against swallowed programming errors - it hangs on
+        /// <b>every</b> test and not on one of its own. Otherwise it would be
+        /// worthless: where such an error occurs one does not know beforehand,
+        /// and a single test guards only the route it goes itself.
         /// </summary>
         private readonly InternalErrorGuard _guard = new();
 
-        /// <summary>Der Testserver des laufenden Tests.</summary>
+        /// <summary>The test server of the running test.</summary>
         protected XMPPServer Server { get; private set; } = null!;
 
         #endregion
@@ -74,7 +74,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* all the same in the teardown */ }
             }
 
             _clients.Clear();
@@ -88,36 +88,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #endregion
 
         /// <summary>
-        /// Stellt einen weiteren Server unter dieselbe Wache und gibt ihn
-        /// zurück - für Tests, die neben <see cref="Server"/> noch eigene
-        /// betreiben.
+        /// Puts a further server under the same guard and gives it back - for
+        /// tests that run servers of their own beside <see cref="Server"/>.
         /// </summary>
         protected XMPPServer Watched(XMPPServer server)
             => _guard.Watched(server);
 
         /// <summary>
-        /// Sagt der Wache, dass dieser Test einen internen Fehler absichtlich
-        /// auslöst.
+        /// Tells the guard that this test triggers an internal error on
+        /// purpose.
         /// </summary>
         protected void ExpectInternalErrors()
             => _guard.Expect();
 
-        /// <summary>Die gemeldeten internen Fehler dieses Tests.</summary>
+        /// <summary>The internal errors reported in this test.</summary>
         protected IReadOnlyList<String> InternalErrors
             => _guard.Errors;
 
 
         /// <summary>
-        /// Legt ein Konto an und verbindet einen echten <see cref="XMPPClient"/>
-        /// damit. Der Client wird am Testende automatisch abgeräumt.
+        /// Creates an account and connects a real <see cref="XMPPClient"/> to
+        /// it. The client is cleared away automatically at the end of the test.
         /// </summary>
-        /// <param name="localPart">Lokalteil des JIDs, z.B. "alice".</param>
-        /// <param name="createAccount">Konto anlegen, falls es noch nicht existiert.</param>
-        /// <param name="keepalive">Keepalive-Intervall; null schaltet Keepalive ab.</param>
-        /// <param name="reconnectDelay">Wartezeit vor dem ersten Reconnect-Versuch.</param>
+        /// <param name="localPart">Local part of the JID, e.g. "alice".</param>
+        /// <param name="createAccount">Create the account if it does not exist yet.</param>
+        /// <param name="keepalive">Keepalive interval; null switches keepalive off.</param>
+        /// <param name="reconnectDelay">Waiting time before the first reconnect attempt.</param>
         /// <param name="streamManagement">
-        /// XEP-0198 Stream Management aushandeln? <c>null</c> lässt den
-        /// Vorgabewert stehen.
+        /// Negotiate XEP-0198 stream management? <c>null</c> leaves the default
+        /// value standing.
         /// </param>
         protected async Task<XMPPClient> ConnectClientAsync(String     localPart             = "alice",
                                                             Boolean    createAccount         = true,
@@ -141,16 +140,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Erstellt einen noch nicht verbundenen Client gegen den Testserver.
+        /// Creates a client against the test server that is not connected yet.
         /// </summary>
         /// <remarks>
-        /// <paramref name="streamManagement"/> ist absichtlich
-        /// <see cref="Nullable{T}"/> und nicht <c>false</c>: <c>null</c> lässt
-        /// den Vorgabewert von <see cref="XMPPConnection"/> stehen, und damit
-        /// läuft die ganze Sammlung mit dem, was ein Aufrufer ohne eigene
-        /// Meinung bekommt. Stünde hier ein hartes <c>false</c>, prüfte kein
-        /// einziger Test den Vorgabewert - eine Umstellung ginge geräuschlos
-        /// durch.
+        /// <paramref name="streamManagement"/> is deliberately
+        /// <see cref="Nullable{T}"/> and not <c>false</c>: <c>null</c> leaves
+        /// the default value of <see cref="XMPPConnection"/> standing, and with
+        /// that the whole collection runs with what a caller without an opinion
+        /// of their own gets. If a hard <c>false</c> stood here, not a single
+        /// test would check the default value - a change would go through
+        /// noiselessly.
         /// </remarks>
         protected XMPPClient CreateClient(String     localPart             = "alice",
                                           TimeSpan?  keepalive             = null,
@@ -169,10 +168,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 InitialReconnectDelay    = reconnectDelay ?? TimeSpan.FromMilliseconds(200),
                 MaxReconnectAttempts     = maxReconnectAttempts,
 
-                // Der Testserver signiert sein Zertifikat selbst; kein Rechner
-                // vertraut ihm. Angeheftet wird der Fingerabdruck genau dieses
-                // Servers - eine Prüfung, die alles annimmt, liesse die Tests
-                // auch gegen eine fremde Gegenstelle bestehen.
+                // The test server signs its certificate itself; no machine
+                // trusts it. What is pinned is the fingerprint of precisely this
+                // server - a check that accepts everything would let the tests
+                // pass against a foreign counterpart too.
                 ServerCertificateValidator = Server.IsOwnCertificate
             };
 
@@ -187,12 +186,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Trägt einen Kontakt in den serverseitigen Roster eines Kontos ein.
-        /// Beide Konten werden angelegt, falls es sie noch nicht gibt.
+        /// Enters a contact into the server-side roster of an account. Both
+        /// accounts are created if they do not exist yet.
         /// </summary>
-        /// <param name="localPart">Wessen Roster.</param>
-        /// <param name="contact">Wer eingetragen wird.</param>
-        /// <param name="subscription">none, to, from oder both.</param>
+        /// <param name="localPart">Whose roster.</param>
+        /// <param name="contact">Who is entered.</param>
+        /// <param name="subscription">none, to, from or both.</param>
         protected void SetServerRoster(String localPart, String contact, String subscription)
         {
 
@@ -206,9 +205,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Stellt die beidseitige Presence-Berechtigung her, wie sie nach einem
-        /// vollständigen Subscription-Handshake bestünde (RFC 6121,
-        /// Abschnitt 3.1).
+        /// Establishes the two-sided presence permission as it would exist after
+        /// a complete subscription handshake (RFC 6121, section 3.1).
         /// </summary>
         protected void MakeContacts(String localPartA, String localPartB)
         {
@@ -217,8 +215,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Wartet, bis die Bedingung zutrifft, und lässt den Test sonst
-        /// mit einer verständlichen Meldung scheitern.
+        /// Waits until the condition holds, and otherwise lets the test fail
+        /// with an intelligible message.
         /// </summary>
         protected static async Task WaitFor(Func<Boolean>  condition,
                                             String         what,
@@ -227,14 +225,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var ok = await XMPPServer.WaitUntilAsync(condition, timeout);
 
-            Assert.That(ok, Is.True, $"Zeitüberschreitung beim Warten auf: {what}");
+            Assert.That(ok, Is.True, $"Timeout while waiting for: {what}");
 
         }
 
         /// <summary>
-        /// Prüft, dass die Bedingung innerhalb der Wartezeit <b>nicht</b>
-        /// eintritt. Die Wartezeit ist bewusst kurz - ein negativer Nachweis
-        /// kostet sie in jedem Fall vollständig.
+        /// Checks that the condition does <b>not</b> come about within the
+        /// waiting time. The waiting time is deliberately short - a negative
+        /// proof costs it in full in every case.
         /// </summary>
         protected static async Task WaitAgainst(Func<Boolean>  condition,
                                                 String         what,
@@ -244,25 +242,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var happened = await XMPPServer.WaitUntilAsync(condition,
                                                            timeout ?? TimeSpan.FromSeconds(2));
 
-            Assert.That(happened, Is.False, $"Hätte nicht eintreten dürfen: {what}");
+            Assert.That(happened, Is.False, $"Should not have come about: {what}");
 
         }
 
         /// <summary>
-        /// Ein Verbindungsaufbau, der scheitern <b>soll</b> — und gibt den
-        /// Fehler zurück, statt ihn nach oben durchzulassen.
+        /// A connection setup that <b>is supposed to</b> fail — and gives back
+        /// the error instead of letting it through upwards.
         /// </summary>
         /// <remarks>
-        /// Seit D31 wirft <c>ConnectAsync</c> bei einem gescheiterten Aufbau.
-        /// Elf Tests prüften bis dahin einen erwarteten Fehlschlag mit einem
-        /// blossen <c>await</c> und den Zusicherungen danach; das ging nur, weil
-        /// der Aufruf stillschweigend zurückkam.
+        /// Since D31 <c>ConnectAsync</c> throws on a failed setup. Eleven tests
+        /// until then checked an expected failure with a mere <c>await</c> and
+        /// the assertions after it; that worked only because the call came back
+        /// silently.
         ///
-        /// Dieser Helfer macht die Erwartung ausdrücklich, statt sie in jedem
-        /// Test einzeln in ein <c>try</c> zu verpacken: <b>Hier muss es
-        /// scheitern.</b> Damit prüfen die elf Tests seitdem eine Zusicherung
-        /// mehr als vorher — dass der Fehlschlag überhaupt beim Aufrufer
-        /// ankommt.
+        /// This helper makes the expectation express instead of packing it into
+        /// a <c>try</c> in every test separately: <b>here it has to fail.</b>
+        /// With that the eleven tests have since checked one assertion more than
+        /// before — that the failure arrives at the caller at all.
         /// </remarks>
         protected static async Task<Exception> FailingConnectAsync(XMPPClient client)
         {
@@ -276,7 +273,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 return e;
             }
 
-            Assert.Fail("Der Verbindungsaufbau hätte scheitern müssen, kam aber durch.");
+            Assert.Fail("The connection setup should have failed, but came through.");
 
             return null!;
 

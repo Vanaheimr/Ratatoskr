@@ -24,42 +24,40 @@ using org.GraphDefined.Vanaheimr.Ratatoskr.Server;
 
 #endregion
 
-// Für jeden Test dieser Sammlung, ohne dass ein Fixture etwas dafür tun muss.
-// Genau darin liegt der Zweck: Was von einer Zeile in jedem Fixture abhängt,
-// hängt an dem, der sie schreibt.
+// For every test of this collection, without a fixture having to do anything
+// for it. Precisely therein lies the point: what depends on a line in every
+// fixture depends on whoever writes it.
 [assembly: org.GraphDefined.Vanaheimr.Ratatoskr.Tests.GlobalErrorWatch]
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Wache über alle Server der Sammlung: Sie hängt sich an jeden
-    /// <see cref="XMPPServer"/>, der irgendwo entsteht, und lässt den Test
-    /// scheitern, wenn das Verarbeiten eines Frames mit einer Ausnahme geendet
-    /// hat.
+    /// The watch over all servers of the collection: it hangs itself on every
+    /// <see cref="XMPPServer"/> that comes into being anywhere, and lets the
+    /// test fail when the processing of a frame has ended with an exception.
     /// </summary>
     /// <remarks>
-    /// <see cref="InternalErrorGuard"/> tut dasselbe je Fixture und bleibt
-    /// bestehen — Tests, die die Meldungen <i>ansehen</i> wollen, brauchen ihn.
-    /// Was ihm fehlte, war die Gewissheit: Er hing an zwei Zeilen, die jedes
-    /// Fixture selbst schreiben musste (<c>Watched(…)</c> und
-    /// <c>AssertClean()</c>). Beide lassen sich vergessen, und ihr Fehlen
-    /// meldet sich nicht — <b>ein Server ohne Wache verschluckt Ausnahmen
-    /// genauso lautlos wie vor der Wache</b>. Gesichert war das bis hierher
-    /// durch eine Quelltextprüfung von Hand („kein <c>new XMPPServer(</c> ohne
-    /// <c>Watched(…)</c>", siehe D19).
+    /// <see cref="InternalErrorGuard"/> does the same per fixture and stays —
+    /// tests that want to <i>look at</i> the reports need it. What it lacked was
+    /// the certainty: it hung on two lines every fixture had to write itself
+    /// (<c>Watched(…)</c> and <c>AssertClean()</c>). Both can be forgotten, and
+    /// their absence does not report itself — <b>a server without a guard
+    /// swallows exceptions just as noiselessly as before the guard</b>. Up to
+    /// here that was secured by a source inspection by hand ("no <c>new
+    /// XMPPServer(</c> without <c>Watched(…)</c>", see D19).
     ///
-    /// Diese Wache kennt jeden Server über
-    /// <see cref="XMPPServer.OnInstanceCreated"/> und braucht dafür niemandes
-    /// Mitwirkung. Damit ist die Verdrahtung keine Eigenschaft mehr, die
-    /// jemand herstellen muss, sondern eine, die von selbst gilt.
+    /// This watch knows every server through
+    /// <see cref="XMPPServer.OnInstanceCreated"/> and needs nobody's cooperation
+    /// for it. With that the wiring is no longer a property somebody has to
+    /// establish but one that holds of itself.
     ///
-    /// <b>Zur Reihenfolge:</b> Ein Aktionsattribut mit
-    /// <see cref="ActionTargets.Test"/> auf Assembly-Ebene umschliesst jeden
-    /// Test <i>samt</i> seinem SetUp und TearDown. Der Server entsteht also
-    /// nach <see cref="BeforeTest"/> und wird vor <see cref="AfterTest"/>
-    /// abgeräumt — beides ist nötig, damit hier nichts durchrutscht und nichts
-    /// aus dem vorigen Test hängenbleibt.
+    /// <b>On the order:</b> an action attribute with
+    /// <see cref="ActionTargets.Test"/> at assembly level encloses every test
+    /// <i>together with</i> its SetUp and TearDown. The server therefore comes
+    /// into being after <see cref="BeforeTest"/> and is cleared away before
+    /// <see cref="AfterTest"/> — both are necessary so that nothing slips
+    /// through here and nothing hangs over from the previous test.
     /// </remarks>
     internal sealed class GlobalErrorWatchAttribute : Attribute, ITestAction
     {
@@ -75,14 +73,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Properties
 
-        /// <summary>Was in diesem Test gemeldet wurde.</summary>
+        /// <summary>What was reported in this test.</summary>
         internal static IReadOnlyList<String> Errors
         {
             get { lock (_lock) return _errors.ToList(); }
         }
 
         /// <summary>
-        /// Läuft für jeden Test einzeln, nicht einmal für die ganze Sammlung.
+        /// Runs for every test separately, not once for the whole collection.
         /// </summary>
         public ActionTargets Targets => ActionTargets.Test;
 
@@ -100,11 +98,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 _errors.Clear();
                 _expected = false;
 
-                // Einmal für den ganzen Lauf: Das Ereignis ist statisch, ein
-                // zweites Abonnement zählte jede Meldung doppelt.
+                // Once for the whole run: the event is static, a second
+                // subscription would count every report twice.
                 if (!_armed)
                 {
-                    XMPPServer.OnInstanceCreated += Anhaengen;
+                    XMPPServer.OnInstanceCreated += Attach;
                     _armed = true;
                 }
 
@@ -119,7 +117,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void AfterTest(ITest test)
         {
 
-            List<String> gemeldet;
+            List<String> reported;
 
             lock (_lock)
             {
@@ -127,15 +125,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 if (_expected)
                     return;
 
-                gemeldet = [.. _errors];
+                reported = [.. _errors];
 
             }
 
-            Assert.That(gemeldet, Is.Empty,
-                        "Ein Server hat beim Verarbeiten eines Frames eine Ausnahme gemeldet. " +
-                        "Das ist ein Programmierfehler im Zustellweg und kein Ergebnis dieses " +
-                        "Tests:" + Environment.NewLine +
-                        String.Join(Environment.NewLine, gemeldet));
+            Assert.That(reported, Is.Empty,
+                        "A server has reported an exception while processing a frame. " +
+                        "That is a programming error in the delivery route and no result of this " +
+                        "test:" + Environment.NewLine +
+                        String.Join(Environment.NewLine, reported));
 
         }
 
@@ -144,12 +142,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Expect()
 
         /// <summary>
-        /// Sagt der Wache, dass dieser Test einen internen Fehler absichtlich
-        /// auslöst.
+        /// Tells the watch that this test triggers an internal error on
+        /// purpose.
         /// </summary>
         /// <remarks>
-        /// Aufgerufen von <see cref="InternalErrorGuard.Expect"/>, damit ein
-        /// Fixture es nur an einer Stelle sagen muss.
+        /// Called by <see cref="InternalErrorGuard.Expect"/>, so that a fixture
+        /// has to say it in only one place.
         /// </remarks>
         internal static void Expect()
         {
@@ -162,17 +160,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Record(error)
 
         /// <summary>
-        /// Nimmt eine Meldung auf.
+        /// Takes a report in.
         /// </summary>
         /// <remarks>
-        /// Getrennt vom Anhängen an den Server, damit die Wache selbst prüfbar
-        /// ist - derselbe Grund wie bei
-        /// <see cref="InternalErrorGuard.Record"/>. Ohne diese Trennung liesse
-        /// sich nur zeigen, dass sie schweigt, wenn nichts gemeldet wurde;
-        /// dass sie den Test <b>scheitern lässt</b>, wenn doch, bliebe
-        /// unbelegt. Eine Wache, die immer freigibt, fällt sonst niemandem
-        /// auf, und ausgerechnet sie wäre die schlimmste Fassung: Sie sieht
-        /// aus wie eine Sicherung und ist keine.
+        /// Separate from the hanging-on to the server, so that the watch itself
+        /// is checkable - the same reason as with
+        /// <see cref="InternalErrorGuard.Record"/>. Without this separation it
+        /// could only be shown that it stays silent when nothing was reported;
+        /// that it <b>lets the test fail</b> when something was would stay
+        /// unproven. A watch that always lets things through is otherwise
+        /// noticed by nobody, and precisely that would be the worst version: it
+        /// looks like a safeguard and is none.
         /// </remarks>
         internal static void Record(String error)
         {
@@ -182,14 +180,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region (private, static) Anhaengen(server)
+        #region (private, static) Attach(server)
 
-        private static void Anhaengen(XMPPServer server)
+        private static void Attach(XMPPServer server)
 
             => server.OnInternalError += (session, frame, e)
                    => Record($"{e.GetType().Name}: {e.Message}" +
                              Environment.NewLine +
-                             $"    beim Frame: {frame}");
+                             $"    at the frame: {frame}");
 
         #endregion
 

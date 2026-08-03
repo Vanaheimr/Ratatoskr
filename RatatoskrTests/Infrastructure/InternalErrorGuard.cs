@@ -27,30 +27,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Wache gegen verschluckte Programmierfehler: Sie hängt sich an
-    /// <see cref="XMPPServer.OnInternalError"/> und lässt den Test scheitern,
-    /// wenn das Verarbeiten eines Frames mit einer Ausnahme geendet hat.
+    /// The guard against swallowed programming errors: it hangs itself on
+    /// <see cref="XMPPServer.OnInternalError"/> and lets the test fail when the
+    /// processing of a frame has ended with an exception.
     /// </summary>
     /// <remarks>
-    /// Bis vor kurzem stand um das Verarbeiten eines Frames ein <c>catch</c> ohne
-    /// Filter mit dem Vermerk „Verbindung abgerissen - im Test der Normalfall".
-    /// Eine Messung über die gesamte Sammlung fing dort <b>keine einzige</b>
-    /// Ausnahme: Was der Fang noch leistete, war das lautlose Verschlucken von
-    /// Programmierfehlern. In D15 überlebte eine Mutation nur deshalb, weil ihre
-    /// <c>NullReferenceException</c> dort verschwand.
+    /// Until recently a <c>catch</c> without a filter stood around the
+    /// processing of a frame, with the note "connection cut off - the normal
+    /// case in a test". A measurement over the whole collection caught <b>not a
+    /// single</b> exception there: what the catch still achieved was the
+    /// noiseless swallowing of programming errors. In D15 a mutation survived
+    /// only because its <c>NullReferenceException</c> vanished there.
     ///
-    /// Eine eigene Klasse und keine Methode in
-    /// <see cref="AXMPPTests"/>, weil die Wache nicht an der Vererbung hängen
-    /// darf: Mehrere Fixtures betreiben eigene Server ohne diese Basis, und
-    /// gerade dort - zwischen zwei Servern - lag der Fall, der den Fehler
-    /// aufgedeckt hat.
+    /// A class of its own and not a method in <see cref="AXMPPTests"/>, because
+    /// the guard must not hang on the inheritance: several fixtures run servers
+    /// of their own without this base, and precisely there - between two servers
+    /// - lay the case that uncovered the error.
     ///
-    /// Nicht gefiltert wird bewusst. Eine Liste von Ausnahmen, die ein Abriss
-    /// „wirklich" erzeugt, wäre geraten; die Messung sagt, dass keine davon
-    /// vorkommt. Jede Meldung gilt daher als Mangel, bis das Gegenteil gezeigt
-    /// ist - und wenn doch einmal ein Abriss darunter ist, nennt die Meldung
-    /// ihren Typ und der Fall ist in einem Zug geklärt statt für immer
-    /// unsichtbar.
+    /// There is deliberately no filtering. A list of exceptions that a cut-off
+    /// "really" produces would be guesswork; the measurement says that none of
+    /// them occurs. Every report therefore counts as a defect until the opposite
+    /// is shown - and if a cut-off is among them after all, the report names its
+    /// type and the case is settled in one go instead of staying invisible for
+    /// ever.
     /// </remarks>
     internal sealed class InternalErrorGuard
     {
@@ -65,7 +64,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Properties
 
-        /// <summary>Die bisher gemeldeten internen Fehler.</summary>
+        /// <summary>The internal errors reported so far.</summary>
         public IReadOnlyList<String> Errors
         {
             get { lock (_lock) return _errors.ToList(); }
@@ -75,8 +74,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
 
         /// <summary>
-        /// Beginnt einen neuen Test: alles Gemeldete verwerfen und wieder
-        /// scharf stellen.
+        /// Begins a new test: discard everything reported and arm again.
         /// </summary>
         public void Reset()
         {
@@ -89,8 +87,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Hängt die Wache an einen Server. Beliebig oft aufrufbar - ein Test
-        /// mit zwei Servern bewacht beide.
+        /// Hangs the guard on a server. Callable any number of times - a test
+        /// with two servers guards both.
         /// </summary>
         public void Watch(XMPPServer server)
 
@@ -98,16 +96,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                    => Record(e.GetType().Name + ": " + e.Message, frame);
 
         /// <summary>
-        /// Wie <see cref="Watch"/>, gibt den Server aber zurück - damit sich ein
-        /// <c>new XMPPServer(…)</c> an der Stelle umschliessen lässt, an der er
-        /// steht.
+        /// Like <see cref="Watch"/>, but gives the server back - so that a
+        /// <c>new XMPPServer(…)</c> can be wrapped at the place where it stands.
         /// </summary>
         /// <remarks>
-        /// Mehrere Fixtures erzeugen ihre Server nicht im SetUp, sondern
-        /// mitten im Test. Für die wäre eine getrennte
-        /// <see cref="Watch"/>-Zeile ein zweiter Ort, den man beim nächsten
-        /// Server vergessen kann; so steht die Wache dort, wo der Server
-        /// entsteht.
+        /// Several fixtures create their servers not in the SetUp but in the
+        /// middle of the test. For those a separate <see cref="Watch"/> line
+        /// would be a second place one can forget at the next server; this way
+        /// the guard stands where the server comes into being.
         /// </remarks>
         public XMPPServer Watched(XMPPServer server)
         {
@@ -119,31 +115,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Nimmt eine Meldung auf.
+        /// Takes a report in.
         /// </summary>
         /// <remarks>
-        /// Getrennt von <see cref="Watch"/>, damit die Wache selbst prüfbar ist:
-        /// Ohne diese Trennung liesse sich nur zeigen, dass sie schweigt, wenn
-        /// nichts gemeldet wurde - nicht aber, dass sie den Test tatsächlich
-        /// scheitern lässt, wenn doch. Eine Wache, die immer freigibt, fällt
-        /// sonst niemandem auf; genau diese Mutation überlebte, bevor es diesen
-        /// Weg gab.
+        /// Separate from <see cref="Watch"/> so that the guard itself is
+        /// checkable: without this separation it could only be shown that it
+        /// stays silent when nothing was reported - but not that it actually
+        /// lets the test fail when something was. A guard that always lets
+        /// things through is otherwise noticed by nobody; precisely this
+        /// mutation survived before this route existed.
         /// </remarks>
         public void Record(String error, String frame)
         {
             lock (_lock)
-                _errors.Add($"{error}{Environment.NewLine}    beim Frame: {frame}");
+                _errors.Add($"{error}{Environment.NewLine}    at the frame: {frame}");
         }
 
         /// <summary>
-        /// Sagt der Wache, dass dieser Test einen internen Fehler absichtlich
-        /// auslöst.
+        /// Tells the guard that this test triggers an internal error on
+        /// purpose.
         /// </summary>
         /// <remarks>
-        /// Weitergereicht an <see cref="GlobalErrorWatchAttribute"/>: Seit es
-        /// die Wache über alle Server gibt, sieht die den Fehler ebenfalls, und
-        /// ein Fixture soll seine Absicht trotzdem nur an einer Stelle sagen
-        /// müssen.
+        /// Passed on to <see cref="GlobalErrorWatchAttribute"/>: since the watch
+        /// over all servers exists, it sees the error as well, and a fixture
+        /// shall still have to say its intention in only one place.
         /// </remarks>
         public void Expect()
         {
@@ -152,8 +147,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Lässt den Test scheitern, wenn etwas gemeldet wurde - aufzurufen im
-        /// TearDown.
+        /// Lets the test fail when something was reported - to be called in the
+        /// teardown.
         /// </summary>
         public void AssertClean()
         {
@@ -161,13 +156,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             if (_expected)
                 return;
 
-            var gemeldet = Errors;
+            var reported = Errors;
 
-            Assert.That(gemeldet, Is.Empty,
-                        "Der Server hat beim Verarbeiten eines Frames eine Ausnahme " +
-                        "gemeldet. Das ist ein Programmierfehler im Zustellweg und " +
-                        "kein Ergebnis dieses Tests:" + Environment.NewLine +
-                        String.Join(Environment.NewLine, gemeldet));
+            Assert.That(reported, Is.Empty,
+                        "The server has reported an exception while processing a frame. " +
+                        "That is a programming error in the delivery route and " +
+                        "no result of this test:" + Environment.NewLine +
+                        String.Join(Environment.NewLine, reported));
 
         }
 

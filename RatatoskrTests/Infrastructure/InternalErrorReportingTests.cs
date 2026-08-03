@@ -30,21 +30,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Scheitert das Verarbeiten eines Frames, wird es gemeldet statt
-    /// verschluckt.
+    /// If the processing of a frame fails, it is reported instead of swallowed.
     /// </summary>
     /// <remarks>
-    /// Um das Verarbeiten eines Frames stand ein <c>catch</c> ohne Filter, mit
-    /// dem Vermerk „Verbindung abgerissen - im Test der Normalfall". Eine
-    /// Messung über die gesamte Sammlung fing dort <b>keine einzige</b>
-    /// Ausnahme: Der Normalfall war er längst nicht mehr. Was er noch leistete,
-    /// war das lautlose Verschlucken von Programmierfehlern — in D15 überlebte
-    /// eine Mutation nur deshalb, weil ihre <c>NullReferenceException</c> dort
-    /// verschwand.
+    /// Around the processing of a frame stood a <c>catch</c> without a filter,
+    /// with the note "connection cut off - the normal case in a test". A
+    /// measurement over the whole collection caught <b>not a single</b>
+    /// exception there: the normal case it had long since ceased to be. What it
+    /// still achieved was the noiseless swallowing of programming errors — in
+    /// D15 a mutation survived only because its <c>NullReferenceException</c>
+    /// vanished there.
     ///
-    /// Diese Sammlung prüft den Meldeweg selbst. Alles andere prüft ihn
-    /// nebenbei: Die Wache hängt an jedem Test, und jede Meldung lässt ihn
-    /// scheitern.
+    /// This collection checks the reporting route itself. Everything else checks
+    /// it beside the point: the watch hangs on every test, and every report lets
+    /// it fail.
     /// </remarks>
     [TestFixture]
     public class InternalErrorReportingTests : AXMPPTests
@@ -53,23 +52,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFailureWhileHandlingAFrame_IsReported()
 
         /// <summary>
-        /// Der Kern: Eine Ausnahme beim Verarbeiten eines Frames wird gemeldet,
-        /// mit Ausnahme <b>und</b> Frame.
+        /// The core: an exception while processing a frame is reported, with the
+        /// exception <b>and</b> the frame.
         /// </summary>
         /// <remarks>
-        /// Der Frame gehört dazu und ist nicht Zierde. Eine Meldung, die nur
-        /// „NullReferenceException" sagt, nützt bei einem Server, der tausend
-        /// Frames verarbeitet, fast nichts; erst mit der Stanza in der Hand ist
-        /// der Weg nachvollziehbar, der dorthin geführt hat.
+        /// The frame belongs with it and is no decoration. A report that says
+        /// only "NullReferenceException" is of almost no use with a server that
+        /// processes a thousand frames; only with the stanza in hand is the
+        /// route that led there traceable.
         ///
-        /// <b>Gesucht wird die Meldung zum eigenen Rahmen, nicht die erste</b>,
-        /// und das ist die Korrektur aus D32. Vorher nahm der Test die erste
-        /// Meldung überhaupt — und traf damit gelegentlich die automatische
-        /// Anmelde-Presence des Clients, die noch unterwegs war, als der
-        /// Schalter umgelegt wurde. Der Test fiel dann mit einer Meldung über
-        /// <c>&lt;presence&gt;&lt;c .../&gt;&lt;/presence&gt;</c> statt über den
-        /// Auslöser. Was zuerst gemeldet wird, entscheidet der Zeitverlauf; was
-        /// der Test wissen will, ist eine andere Frage.
+        /// <b>What is sought is the report for one's own frame, not the
+        /// first</b>, and that is the correction from D32. Before, the test took
+        /// the first report at all — and thereby occasionally hit the automatic
+        /// sign-on presence of the client, which was still under way when the
+        /// switch was thrown. The test then failed with a report about
+        /// <c>&lt;presence&gt;&lt;c .../&gt;&lt;/presence&gt;</c> instead of
+        /// about the trigger. What is reported first is decided by the passage
+        /// of time; what the test wants to know is another question.
         /// </remarks>
         [Test]
         public async Task AFailureWhileHandlingAFrame_IsReported()
@@ -79,65 +78,64 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            // Ohne Reconnect: Der Stream endet nach dem Fehlschlag, und ein
-            // Client, der es erneut versucht, läuft in denselben - solange der
-            // Schalter steht.
+            // Without reconnect: the stream ends after the failure, and a client
+            // that tries again runs into the same one - as long as the switch
+            // stands.
             var alice = CreateClient("alice", maxReconnectAttempts: 0);
             await alice.ConnectAsync();
 
-            var gemeldet = new ConcurrentQueue<(String Frame, Exception Error)>();
-            Server.OnInternalError += (session, frame, e) => gemeldet.Enqueue((frame, e));
+            var reported = new ConcurrentQueue<(String Frame, Exception Error)>();
+            Server.OnInternalError += (session, frame, e) => reported.Enqueue((frame, e));
 
-            // Warten, bis der Client wirklich still ist - nicht nur, bis
-            // ConnectAsync zurückkommt.
+            // Wait until the client is really quiet - not merely until
+            // ConnectAsync comes back.
             //
-            // Das ist die Korrektur aus D69, und sie hat eine Vorgeschichte:
-            // Nach dem Aufbau ist noch etwas unterwegs - die erste Presence,
-            // die Antwort auf den Roster-Abruf. Fällt der Schalter unten,
-            // während davon noch etwas beim Server ankommt, scheitert *dieser*
-            // Rahmen zuerst, der Server beendet den Stream mit
-            // <internal-server-error/> (RFC 6120, Abschnitt 4.9.1.1), und die
-            // Nachricht mit der gesuchten Kennung wird nie verschickt. Der
-            // Test wartet dann zehn Sekunden auf eine Meldung, die es nicht
-            // mehr geben kann.
+            // That is the correction from D69, and it has a prehistory: after
+            // the setup something is still under way - the first presence, the
+            // answer to the roster fetch. If the switch below falls while
+            // something of that is still arriving at the server, *that* frame
+            // fails first, the server ends the stream with
+            // <internal-server-error/> (RFC 6120, section 4.9.1.1), and the
+            // message with the identifier sought is never sent. The test then
+            // waits ten seconds for a report that cannot exist any more.
             //
-            // Das war immer schon ein Wettlauf; sichtbar wurde er erst, als
-            // die OMEMO-Tests die Maschine genug beschäftigten. Zwei von vier
-            // vollen Läufen fielen darüber - **ein Test, der die Hälfte der
-            // Zeit fällt, misst nichts mehr**.
-            var sitzung = Server.SessionOf(alice.FullJid)!;
+            // That was always a race; it became visible only when the OMEMO
+            // tests kept the machine busy enough. Two out of four full runs fell
+            // over it - **a test that fails half the time measures nothing any
+            // more**.
+            var session = Server.SessionOf(alice.FullJid)!;
 
-            var ruhe = 0;
-            var stand = -1;
+            var quiet = 0;
+            var level = -1;
 
             await WaitFor(() =>
             {
-                var jetzt = sitzung.Received.Count;
-                ruhe  = jetzt == stand ? ruhe + 1 : 0;
-                stand = jetzt;
-                return ruhe >= 3;
+                var now = session.Received.Count;
+                quiet  = now == level ? quiet + 1 : 0;
+                level = now;
+                return quiet >= 3;
             },
-            "einen Client, von dem nichts mehr nachkommt");
+            "a client from which nothing more follows");
 
             Server.FailFrameHandling = true;
 
-            await alice.SendRawAsync("<message to='bob@localhost' id='ausloeser'><body>Hallo</body></message>");
+            await alice.SendRawAsync("<message to='bob@localhost' id='trigger'><body>Hello</body></message>");
 
-            await WaitFor(() => gemeldet.Any(m => m.Frame.Contains("ausloeser", StringComparison.Ordinal)),
-                          "die Meldung zum ausgelösten Frame");
+            await WaitFor(() => reported.Any(m => m.Frame.Contains("trigger", StringComparison.Ordinal)),
+                          "the report for the frame triggered");
 
-            var meldung = gemeldet.First(m => m.Frame.Contains("ausloeser", StringComparison.Ordinal));
+            var report = reported.First(m => m.Frame.Contains("trigger", StringComparison.Ordinal));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(meldung.Error, Is.TypeOf<InvalidOperationException>());
+                Assert.That(report.Error, Is.TypeOf<InvalidOperationException>());
 
-                Assert.That(meldung.Frame, Does.Contain("ausloeser"),
-                            "Die Meldung muss den Frame nennen, bei dem es schiefging.");
+                Assert.That(report.Frame, Does.Contain("trigger"),
+                            "The report has to name the frame it went wrong at.");
 
                 Assert.That(InternalErrors, Is.Not.Empty,
-                            "Und die Wache der Testbasis muss dasselbe sehen.");
+                            "And the guard of the test base has to see the same.");
 
             });
 
@@ -148,27 +146,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStreamEndsWithInternalServerError()
 
         /// <summary>
-        /// Nach der Meldung endet der Stream — mit
-        /// <c>&lt;internal-server-error/&gt;</c> (RFC 6120, Abschnitte 4.9.3.8
-        /// und 4.9.1.1).
+        /// After the report the stream ends — with
+        /// <c>&lt;internal-server-error/&gt;</c> (RFC 6120, sections 4.9.3.8 and
+        /// 4.9.1.1).
         /// </summary>
         /// <remarks>
-        /// Bis D21 lief der Stream weiter, und an dieser Stelle stand ein Test,
-        /// der genau das festhielt. Er war nicht falsch, sondern beschrieb eine
-        /// Entscheidung, die nun anders gefallen ist: Was der Frame ändern
-        /// sollte, ist halb geändert, und niemand weiss, wie weit. Der Client
-        /// rechnet mit einem Zustand, den der Server nicht mehr hat — und
-        /// ausgerechnet der Fehler, der am wahrscheinlichsten Zustand
-        /// hinterlässt, blieb der einzige ohne Folgen.
+        /// Until D21 the stream ran on, and at this place stood a test that held
+        /// precisely that fast. It was not wrong but described a decision that
+        /// has now fallen out differently: what the frame was supposed to change
+        /// is half changed, and nobody knows how far. The client reckons with a
+        /// state the server does not have any more — and of all things the error
+        /// that most likely leaves state behind was the only one without
+        /// consequences.
         ///
-        /// Abschnitt 4.9.1.1 lässt danach keine Wahl: „Stream-level errors are
-        /// unrecoverable." Der Client erfährt den Grund und kann von vorn
-        /// beginnen; das ist mehr, als ein zufallender Socket ihm sagt.
+        /// Section 4.9.1.1 leaves no choice after that: "Stream-level errors are
+        /// unrecoverable." The client learns the reason and can begin from the
+        /// front; that is more than a socket falling shut tells it.
         ///
-        /// Kein Reconnect in diesem Test — <c>internal-server-error</c> gilt als
-        /// wiederholbar, und der Client würde in denselben Fehlschlag laufen,
-        /// solange der Schalter steht. Was hier geprüft wird, ist der Abschluss
-        /// des <b>ersten</b> Streams.
+        /// No reconnect in this test — <c>internal-server-error</c> counts as
+        /// repeatable, and the client would run into the same failure as long as
+        /// the switch stands. What is checked here is the ending of the
+        /// <b>first</b> stream.
         /// </remarks>
         [Test]
         public async Task TheStreamEndsWithInternalServerError()
@@ -180,48 +178,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = CreateClient("alice", maxReconnectAttempts: 0);
 
-            var fehler = new ConcurrentQueue<StreamError>();
-            alice.OnStreamError += e => fehler.Enqueue(e);
+            var errors = new ConcurrentQueue<StreamError>();
+            alice.OnStreamError += e => errors.Enqueue(e);
 
-            var rohe = new ConcurrentQueue<String>();
+            var rawFrames = new ConcurrentQueue<String>();
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal))
-                    rohe.Enqueue(x);
+                    rawFrames.Enqueue(x);
             };
 
             await alice.ConnectAsync();
 
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
             Server.FailFrameHandling = true;
 
-            await alice.SendRawAsync("<message to='bob@localhost' id='faellt-aus'><body>Geht schief</body></message>");
+            await alice.SendRawAsync("<message to='bob@localhost' id='fails'><body>Goes wrong</body></message>");
 
-            await WaitFor(() => !fehler.IsEmpty, "den Stream-Fehler beim Client");
+            await WaitFor(() => !errors.IsEmpty, "the stream error at the client");
 
-            fehler.TryDequeue(out var gemeldet);
+            errors.TryDequeue(out var reported);
 
-            await WaitFor(() => !sitzung.IsOpen, "das Ende des Streams");
+            await WaitFor(() => !session.IsOpen, "the end of the stream");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gemeldet!.Condition, Is.EqualTo("internal-server-error"));
+                Assert.That(reported!.Condition, Is.EqualTo("internal-server-error"));
 
-                Assert.That(gemeldet.IsRecoverable, Is.True,
-                            "Der Client darf es erneut versuchen - der Server ist " +
-                            "gestolpert, nicht zerstört.");
+                Assert.That(reported.IsRecoverable, Is.True,
+                            "The client may try again - the server has " +
+                            "stumbled, not been destroyed.");
 
-                // RFC 7395, Abschnitt 3.6: Über WebSocket steht <close/> für das
-                // </stream:stream>. Ohne es sieht der Client einen Socket, der
-                // ohne Abschied zufällt - ein Netzwerkausfall und kein
-                // beendeter Stream.
-                Assert.That(rohe.Any(x => x.Contains("<close",       StringComparison.Ordinal) &&
+                // RFC 7395, section 3.6: over WebSocket <close/> stands for the
+                // </stream:stream>. Without it the client sees a socket falling
+                // shut without a farewell - a network failure and not an ended
+                // stream.
+                Assert.That(rawFrames.Any(x => x.Contains("<close",       StringComparison.Ordinal) &&
                                           x.Contains("xmpp-framing", StringComparison.Ordinal)),
                             Is.True,
-                            "Der Stream muss ordentlich geschlossen werden und nicht " +
-                            "bloss die Verbindung wegfallen.");
+                            "The stream has to be closed properly and not " +
+                            "merely the connection fall away.");
 
             });
 
@@ -232,15 +230,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFailedFrameIsNotDeliveredAfterwards()
 
         /// <summary>
-        /// Der gescheiterte Frame wird nicht doch noch zugestellt.
+        /// The failed frame is not delivered after all.
         /// </summary>
         /// <remarks>
-        /// Die Kehrseite des Abschlusses: Dass der Stream endet, darf nicht
-        /// heissen, dass die halb verarbeitete Stanza noch irgendwohin gelangt.
-        /// Bob wartet auf eine Nachricht, die Alices Server nie zu Ende
-        /// verarbeitet hat — sie darf nicht auf einem Umweg doch ankommen, denn
-        /// dann wäre der Fehlschlag für den Absender folgenlos und für den
-        /// Empfänger unsichtbar.
+        /// The other side of the ending: that the stream ends must not mean that
+        /// the half-processed stanza still gets somewhere. Bob waits for a
+        /// message that Alice's server never finished processing — it must not
+        /// arrive by a detour after all, for then the failure would be without
+        /// consequence for the sender and invisible for the recipient.
         /// </remarks>
         [Test]
         public async Task TheFailedFrameIsNotDeliveredAfterwards()
@@ -255,18 +252,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await ConnectClientAsync("bob");
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            bob.OnMessage += m => inbox.Enqueue(m);
 
             Server.FailFrameHandling = true;
 
-            await alice.SendRawAsync($"<message to='{bob.FullJid}' type='chat' id='faellt-aus'>" +
-                                     "<body>Geht schief</body></message>");
+            await alice.SendRawAsync($"<message to='{bob.FullJid}' type='chat' id='fails'>" +
+                                     "<body>Goes wrong</body></message>");
 
-            await WaitFor(() => InternalErrors.Count > 0, "die Meldung");
+            await WaitFor(() => InternalErrors.Count > 0, "the report");
 
-            await WaitAgainst(() => eingang.Any(m => m.MessageId == "faellt-aus"),
-                              "die Zustellung des gescheiterten Frames");
+            await WaitAgainst(() => inbox.Any(m => m.MessageId == "fails"),
+                              "the delivery of the failed frame");
 
         }
 
@@ -275,27 +272,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASecondServer_IsWatchedThroughWatched()
 
         /// <summary>
-        /// <c>Watched</c> stellt auch einen zweiten Server unter dieselbe Wache -
-        /// und gibt ihn zurück.
+        /// <c>Watched</c> puts a second server under the same guard too - and
+        /// gives it back.
         /// </summary>
         /// <remarks>
-        /// Elf Fixtures betreiben eigene Server und verdrahten sie über diesen
-        /// einen Weg. Wäre er ein Durchreicher, der nichts anhängt, wären sie
-        /// alle unbewacht, und keiner der übrigen Tests würde es merken: Wo kein
-        /// Fehler auftritt, sieht eine fehlende Wache wie eine wirksame aus -
-        /// dieselbe Falle wie beim alten <c>catch</c>.
+        /// Eleven fixtures run servers of their own and wire them up through
+        /// this one route. If it were a pass-through that hangs nothing on, they
+        /// would all be unguarded, and none of the other tests would notice:
+        /// where no error occurs, a missing guard looks like an effective one -
+        /// the same trap as with the old <c>catch</c>.
         ///
-        /// Geprüft wird deshalb am echten Weg und nicht bloss die Rückgabe: Der
-        /// zweite Server bekommt einen Client, scheitert absichtlich, und die
-        /// Meldung muss bei der Wache dieses Tests ankommen.
+        /// It is therefore checked on the real route and not merely the return
+        /// value: the second server gets a client, fails on purpose, and the
+        /// report has to arrive at the guard of this test.
         ///
-        /// Gewartet wird auf <b>irgendeine</b> Meldung und nicht auf die zu einem
-        /// bestimmten Frame. Nur der zweite Server scheitert absichtlich, also
-        /// kann die Meldung von keinem anderen kommen — und welcher Frame ihn
-        /// zuerst erreicht, hängt seit D21 am Zufall: Der erste gescheiterte
-        /// beendet den Stream, und ob das die eigene Nachricht ist oder ein
-        /// <c>&lt;a/&gt;</c> des Stream Managements, entscheidet die Zeit. Der
-        /// Test prüfte sonst die Reihenfolge der Frames statt die Verdrahtung.
+        /// What is waited for is <b>any</b> report and not the one for a
+        /// particular frame. Only the second server fails on purpose, so the
+        /// report can come from no other — and which frame reaches it first has
+        /// hung on chance since D21: the first failed one ends the stream, and
+        /// whether that is one's own message or an <c>&lt;a/&gt;</c> of the
+        /// stream management is decided by timing. The test would otherwise
+        /// check the order of the frames instead of the wiring.
         /// </remarks>
         [Test]
         public async Task ASecondServer_IsWatchedThroughWatched()
@@ -303,33 +300,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             ExpectInternalErrors();
 
-            var roh = new XMPPServer("zweiter.example");
+            var raw = new XMPPServer("second.example");
 
-            await using var zweiter = Watched(roh);
+            await using var second = Watched(raw);
 
-            Assert.That(zweiter, Is.SameAs(roh),
-                        "Watched muss denselben Server zurückgeben - sonst zeigt die " +
-                        "Wache auf einen anderen als der Test benutzt.");
+            Assert.That(second, Is.SameAs(raw),
+                        "Watched has to give back the same server - otherwise the " +
+                        "guard points at a different one from the one the test uses.");
 
-            zweiter.Start();
-            zweiter.AddAccount("carol");
+            second.Start();
+            second.AddAccount("carol");
 
-            var verbindung = new XMPPConnection($"carol@{zweiter.Domain}", "pw", zweiter.Uri)
+            var connection = new XMPPConnection($"carol@{second.Domain}", "pw", second.Uri)
             {
                 KeepaliveEnabled            = false,
                 MaxReconnectAttempts        = 0,
-                ServerCertificateValidator  = zweiter.IsOwnCertificate
+                ServerCertificateValidator  = second.IsOwnCertificate
             };
 
-            await using var carol = new XMPPClient(verbindung);
+            await using var carol = new XMPPClient(connection);
             await carol.ConnectAsync();
 
-            zweiter.FailFrameHandling = true;
+            second.FailFrameHandling = true;
 
-            await carol.SendRawAsync("<message to='dave@zweiter.example' id='am-zweiten'/>");
+            await carol.SendRawAsync("<message to='dave@second.example' id='at-the-second'/>");
 
             await WaitFor(() => InternalErrors.Count > 0,
-                          "die Meldung des zweiten Servers bei derselben Wache");
+                          "the report of the second server at the same guard");
 
         }
 
@@ -338,54 +335,54 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheGuardItselfFailsAndForgivesAsItShould()
 
         /// <summary>
-        /// Die Wache selbst: Sie schweigt, solange nichts gemeldet ist, lässt
-        /// scheitern, sobald etwas gemeldet ist, und verzeiht nur, wenn man sie
-        /// darum bittet.
+        /// The guard itself: it stays silent as long as nothing is reported,
+        /// lets things fail as soon as something is reported, and forgives only
+        /// when asked to.
         /// </summary>
         /// <remarks>
-        /// Ein Wächter, den nichts auslöst, ist selbst unbewacht — dieselbe
-        /// Falle, die den alten <c>catch</c> so lange gedeckt hat, nur eine
-        /// Ebene höher. Die Mutation „gib immer frei" überlebte jeden anderen
-        /// Test: Wo kein Fehler gemeldet wird, verhält sich eine wirkungslose
-        /// Wache genau wie eine wirksame, und ein Test, der scheitern <i>muss</i>,
-        /// lässt sich nicht als bestehender Test schreiben.
+        /// A guard that nothing triggers is itself unguarded — the same trap
+        /// that covered the old <c>catch</c> for so long, only one level up. The
+        /// mutation "always let through" survived every other test: where no
+        /// error is reported, an ineffective guard behaves exactly like an
+        /// effective one, and a test that <i>has to</i> fail cannot be written as
+        /// a passing test.
         ///
-        /// Deshalb wird hier nicht der Weg über den Server genommen, sondern die
-        /// Wache unmittelbar befragt. Das ist die einzige Stelle der Sammlung,
-        /// an der ein <c>Assert</c> geprüft wird, statt zu prüfen.
+        /// That is why the route through the server is not taken here; instead
+        /// the guard is asked directly. That is the only place in the collection
+        /// where an <c>Assert</c> is checked instead of checking.
         /// </remarks>
         [Test]
         public void TheGuardItselfFailsAndForgivesAsItShould()
         {
 
-            var wache = new InternalErrorGuard();
+            var watch = new InternalErrorGuard();
 
             Assert.Multiple(() =>
             {
 
-                Assert.DoesNotThrow(wache.AssertClean,
-                                    "Ohne Meldung darf sie nicht scheitern.");
+                Assert.DoesNotThrow(watch.AssertClean,
+                                    "Without a report it must not fail.");
 
-                wache.Record("NullReferenceException: Objektverweis", "<message id='x'/>");
+                watch.Record("NullReferenceException: object reference", "<message id='x'/>");
 
-                var fehlschlag = Assert.Throws<AssertionException>(wache.AssertClean,
-                                     "Mit Meldung muss sie scheitern.");
+                var failure = Assert.Throws<AssertionException>(watch.AssertClean,
+                                     "With a report it has to fail.");
 
-                Assert.That(fehlschlag!.Message, Does.Contain("NullReferenceException"),
-                            "Und dabei sagen, was gemeldet wurde.");
+                Assert.That(failure!.Message, Does.Contain("NullReferenceException"),
+                            "And say in the process what was reported.");
 
-                Assert.That(fehlschlag.Message, Does.Contain("<message id='x'/>"),
-                            "Samt dem Frame, bei dem es schiefging.");
+                Assert.That(failure.Message, Does.Contain("<message id='x'/>"),
+                            "Together with the frame it went wrong at.");
 
-                wache.Expect();
+                watch.Expect();
 
-                Assert.DoesNotThrow(wache.AssertClean,
-                                    "Wer sie um Nachsicht bittet, bekommt sie.");
+                Assert.DoesNotThrow(watch.AssertClean,
+                                    "Whoever asks it for leniency gets it.");
 
-                wache.Reset();
+                watch.Reset();
 
-                Assert.That(wache.Errors, Is.Empty,
-                            "Und der nächste Test beginnt mit leerer Liste.");
+                Assert.That(watch.Errors, Is.Empty,
+                            "And the next test begins with an empty list.");
 
             });
 
@@ -396,20 +393,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGreenRunReportsNothing()
 
         /// <summary>
-        /// Die Gegenprobe, und die wichtigste: Ein gewöhnlicher Ablauf meldet
-        /// nichts.
+        /// The counter-check, and the most important one: an ordinary run
+        /// reports nothing.
         /// </summary>
         /// <remarks>
-        /// Sie ist der Grund, warum die Wache an jedem Test hängen darf, ohne
-        /// die Sammlung unbrauchbar zu machen. Meldete der normale Betrieb
-        /// laufend etwas — abgerissene Verbindungen etwa, wie der alte Kommentar
-        /// behauptete —, wäre eine Wache, die darauf scheitert, nicht zu
-        /// gebrauchen, und man müsste doch filtern.
+        /// It is the reason why the watch may hang on every test without making
+        /// the collection unusable. If normal operation reported something
+        /// continually — cut-off connections, say, as the old comment claimed —
+        /// a watch that fails on that would be unusable, and one would have to
+        /// filter after all.
         ///
-        /// Der Test steht hier ausdrücklich und nicht bloss implizit in den
-        /// übrigen: Was er behauptet, ist eine Aussage über den Server und nicht
-        /// über diesen einen Ablauf. Und er hält fest, dass die Messung, die
-        /// diesen Umbau begründet hat, kein Zufall eines Laufs war.
+        /// The test stands here expressly and not merely implicitly in the
+        /// others: what it asserts is a statement about the server and not about
+        /// this one run. And it holds fast that the measurement which justified
+        /// this rebuild was no accident of one run.
         /// </remarks>
         [Test]
         public async Task AGreenRunReportsNothing()
@@ -420,26 +417,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            bob.OnMessage += m => inbox.Enqueue(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Ein ganz gewöhnlicher Ablauf");
-            await WaitFor(() => !eingang.IsEmpty, "die Nachricht");
+            await alice.SendMessageAsync(bob.BareJid, "A quite ordinary run");
+            await WaitFor(() => !inbox.IsEmpty, "the message");
 
-            // Ein Abriss - genau das, was der alte Kommentar für den Normalfall
-            // hielt. Die Sitzung bleibt dabei in der Liste: Ein Stream mit
-            // zugesagter Wiederaufnahme wird aufgehoben und nicht abgemeldet
-            // (XEP-0198, Abschnitt 5). Gewartet wird deshalb darauf, dass die
-            // Verbindung weg ist, nicht die Sitzung.
+            // A cut-off - precisely what the old comment took for the normal
+            // case. The session stays in the list in the process: a stream with
+            // a granted resumption is kept and not signed off (XEP-0198,
+            // section 5). What is waited for is therefore that the connection is
+            // gone, not the session.
             Server.KillSessionsOf(bob.BareJid);
 
             await WaitFor(() => Server.SessionsOf(bob.BareJid).All(s => !s.IsOpen),
-                          "das Ende der Verbindung");
+                          "the end of the connection");
 
-            await alice.SendMessageAsync(bob.BareJid, "Und noch eine, ins Leere");
+            await alice.SendMessageAsync(bob.BareJid, "And another one, into the void");
 
             Assert.That(InternalErrors, Is.Empty,
-                        "Auch ein Abriss ist kein interner Fehler.");
+                        "A cut-off is no internal error either.");
 
         }
 
