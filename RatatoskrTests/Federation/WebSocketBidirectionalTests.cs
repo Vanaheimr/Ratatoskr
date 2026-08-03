@@ -28,24 +28,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0288 über den WebSocket-Transport.
+    /// XEP-0288 over the WebSocket transport.
     /// </summary>
     /// <remarks>
-    /// Die Protokollschicht ist dieselbe wie über TCP und dort schon geprüft
-    /// (<see cref="BidirectionalStreamTests"/>). Hier geht es allein darum,
-    /// dass dieser Transport die Aushandlung auch anstösst und die Rückrichtung
-    /// wirklich benutzt - beides sind Zeilen in
-    /// <see cref="WebSocketServerLinks"/> und nicht in <see cref="S2SStream"/>.
+    /// The protocol layer is the same as over TCP and is checked there already
+    /// (<see cref="BidirectionalStreamTests"/>). Here it is solely about this
+    /// transport starting the negotiation off as well and really using the
+    /// return direction - both of these are lines in
+    /// <see cref="WebSocketServerLinks"/> and not in <see cref="S2SStream"/>.
     ///
-    /// <b>Ein Unterschied zum TCP-Aufbau, und er ist eingestanden:</b> dort
-    /// kennt die Gegenstelle uns nicht, und ohne Rückrichtung geht die Antwort
-    /// verloren. Das ginge hier nicht - der WebSocket-Weg weist sich
-    /// ausschliesslich über Dialback aus (SASL-EXTERNAL gibt es hier nicht),
-    /// und dessen Rückfrage braucht genau die Richtung, die es dann nicht
-    /// gäbe. Beide Seiten sind hier also eingetragen, und die Antwort käme auch
-    /// ohne Bidi an. Deshalb prüfen diese Tests
-    /// <see cref="WebSocketServerLinks.BidirectionalDeliveryCount"/> und nicht
-    /// die Ankunft: nur die Zahl sagt, welchen Weg sie genommen hat.
+    /// <b>One difference to the TCP set-up, and it is admitted:</b> there the
+    /// far end does not know us, and without a return direction the answer is
+    /// lost. That would not work here - the WebSocket path identifies itself
+    /// exclusively over dialback (there is no SASL-EXTERNAL here), and its
+    /// query needs precisely the direction that would then not exist. Both
+    /// sides are therefore entered here, and the answer would arrive without
+    /// bidi as well. That is why these tests check
+    /// <see cref="WebSocketServerLinks.BidirectionalDeliveryCount"/> and not
+    /// the arrival: only the number says which path it took.
     /// </remarks>
     [TestFixture]
     public class WebSocketBidirectionalTests
@@ -53,10 +53,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer            _links   = null!;
-        private XMPPServer            _rechts  = null!;
-        private WebSocketServerLinks  _linksS  = null!;
-        private WebSocketServerLinks  _rechtsS = null!;
+        private XMPPServer            _left    = null!;
+        private XMPPServer            _right   = null!;
+        private WebSocketServerLinks  _leftS   = null!;
+        private WebSocketServerLinks  _rightS  = null!;
 
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
@@ -65,27 +65,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TearDown
 
-        /// <summary>Die Wache vor jedem Test scharfstellen.</summary>
+        /// <summary>Arm the guard before every test.</summary>
         [SetUp]
-        public void WacheScharfstellen()
+        public void ArmTheGuard()
             => _guard.Reset();
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
-                try { await client.DisposeAsync(); } catch { /* im Teardown egal */ }
+                try { await client.DisposeAsync(); } catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            if (_linksS  is not null) await _linksS.DisposeAsync();
-            if (_rechtsS is not null) await _rechtsS.DisposeAsync();
+            if (_leftS  is not null) await _leftS.DisposeAsync();
+            if (_rightS is not null) await _rightS.DisposeAsync();
 
-            if (_links   is not null) await _links.DisposeAsync();
-            if (_rechts  is not null) await _rechts.DisposeAsync();
+            if (_left   is not null) await _left.DisposeAsync();
+            if (_right  is not null) await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -93,22 +93,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private void Verkabeln(Boolean bidi)
+        private void Wire(Boolean bidi)
         {
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            _linksS   = new WebSocketServerLinks(_links)  { OfferBidirectionalStreams = bidi, RequestBidirectionalStreams = bidi };
-            _rechtsS  = new WebSocketServerLinks(_rechts) { OfferBidirectionalStreams = bidi, RequestBidirectionalStreams = bidi };
+            _leftS   = new WebSocketServerLinks(_left)  { OfferBidirectionalStreams = bidi, RequestBidirectionalStreams = bidi };
+            _rightS  = new WebSocketServerLinks(_right) { OfferBidirectionalStreams = bidi, RequestBidirectionalStreams = bidi };
 
-            _linksS.AddPeer(_rechts.Domain, _rechtsS.Uri, _rechts.IsOwnCertificate);
-            _rechtsS.AddPeer(_links.Domain, _linksS.Uri,  _links.IsOwnCertificate);
+            _leftS.AddPeer(_right.Domain, _rightS.Uri, _right.IsOwnCertificate);
+            _rightS.AddPeer(_left.Domain, _leftS.Uri,  _left.IsOwnCertificate);
 
         }
 
@@ -118,7 +118,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             if (server.GetAccount($"{localPart}@{server.Domain}") is null)
                 server.AddAccount(localPart);
 
-            var connection = new XMPPConnection($"{localPart}@{server.Domain}", "pw", server.Uri) {
+            var connection                                   = new XMPPConnection($"{localPart}@{server.Domain}", "pw", server.Uri) {
                                  KeepaliveEnabled            = false,
                                  MaxReconnectAttempts        = 0,
                                  ServerCertificateValidator  = server.IsOwnCertificate
@@ -133,37 +133,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         /// <summary>
-        /// Schickt hin und zurück und liefert, was bei Alice ankam.
+        /// Sends there and back and delivers what arrived at Alice's.
         /// </summary>
-        private async Task<List<String>> HinUndZurueckAsync()
+        private async Task<List<String>> ThereAndBackAsync()
         {
 
-            var alice  = await ConnectAsync(_links,  "alice");
-            var juliet = await ConnectAsync(_rechts, "juliet");
+            var alice  = await ConnectAsync(_left,  "alice");
+            var juliet = await ConnectAsync(_right, "juliet");
 
-            _links.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-            _rechts.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
+            _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
 
-            var beiJuliet = new List<String>();
-            var beiAlice  = new List<String>();
+            var atJuliet = new List<String>();
+            var atAlice  = new List<String>();
 
-            juliet.OnMessage += m => beiJuliet.Add(m.Body ?? "");
-            alice.OnMessage  += m => beiAlice.Add(m.Body ?? "");
+            juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
+            alice.OnMessage  += m => atAlice.Add(m.Body ?? "");
 
-            await alice.SendMessageAsync(juliet.BareJid, "Hin");
-            await WarteAuf(() => beiJuliet.Count > 0, "die Nachricht bei Juliet");
+            await alice.SendMessageAsync(juliet.BareJid, "There");
+            await WaitFor(() => atJuliet.Count > 0, "the message at Juliet's");
 
-            await juliet.SendMessageAsync(alice.BareJid, "Zurück");
-            await WarteAuf(() => beiAlice.Any(b => b == "Zurück"), "die Antwort bei Alice");
+            await juliet.SendMessageAsync(alice.BareJid, "Back");
+            await WaitFor(() => atAlice.Any(b => b == "Back"), "the answer at Alice's");
 
-            return beiAlice;
+            return atAlice;
 
         }
 
@@ -173,30 +173,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAnswerTakesTheReturnPath()
 
         /// <summary>
-        /// Mit XEP-0288 nimmt die Antwort die bestehende Verbindung.
+        /// With XEP-0288 the answer takes the existing connection.
         /// </summary>
         /// <remarks>
-        /// Geprüft wird die Seite, die angewählt <i>wurde</i>. Dass die andere
-        /// Seite ihre Rückrichtung nicht benutzt, wäre die naheliegende
-        /// Gegenprobe - sie stimmt aber nicht: sobald auch nur eine Stanza in
-        /// die Gegenrichtung läuft (schon eine Empfangsbestätigung nach
-        /// XEP-0184 genügt), wählt die Gegenstelle ihrerseits an, und dann hat
-        /// auch die erste Seite eine eingehende Verbindung, die sie fortan
-        /// bevorzugt. Zwei sich gegenseitig kennende Server fallen unter Bidi
-        /// also auf die Verbindungen zusammen, die sie ohnehin schon haben -
-        /// genau der Zweck der Erweiterung, aber nichts, worauf sich eine
-        /// zeitunabhängige Zusicherung stützen liesse.
+        /// What is checked is the side that <i>was</i> dialled. That the other
+        /// side does not use its return direction would be the obvious
+        /// counter-check - but it does not hold: as soon as even one stanza
+        /// runs in the reverse direction (a delivery receipt according to
+        /// XEP-0184 is already enough), the far end dials in turn, and then the
+        /// first side has an inbound connection too, which it prefers from then
+        /// on. Two servers knowing each other therefore collapse under bidi
+        /// onto the connections they have anyway - precisely the purpose of the
+        /// extension, but nothing a time-independent assurance could rest on.
         /// </remarks>
         [Test]
         public async Task TheAnswerTakesTheReturnPath()
         {
 
-            Verkabeln(bidi: true);
+            Wire(bidi: true);
 
-            await HinUndZurueckAsync();
+            await ThereAndBackAsync();
 
-            Assert.That(_rechtsS.BidirectionalDeliveryCount, Is.GreaterThan(0),
-                        "Die Antwort kam an, aber über eine eigene Verbindung.");
+            Assert.That(_rightS.BidirectionalDeliveryCount, Is.GreaterThan(0),
+                        "The answer arrived, but over a connection of its own.");
 
         }
 
@@ -205,28 +204,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutBidi_TheAnswerTakesItsOwnConnection()
 
         /// <summary>
-        /// Ohne die Erweiterung wählt die Gegenstelle an - die Antwort kommt
-        /// an, aber auf dem anderen Weg.
+        /// Without the extension the far end dials - the answer arrives, but on
+        /// the other path.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum Zähler. Ohne sie bewiese eine Zahl grösser null
-        /// nichts, denn sie könnte auch ohne die Erweiterung zustande kommen -
-        /// und die Ankunft allein unterscheidet die beiden Wege überhaupt
-        /// nicht.
+        /// The counter-check to the counter. Without it a number greater than
+        /// zero would establish nothing, because it could come about without
+        /// the extension as well - and the arrival alone does not tell the two
+        /// paths apart at all.
         /// </remarks>
         [Test]
         public async Task WithoutBidi_TheAnswerTakesItsOwnConnection()
         {
 
-            Verkabeln(bidi: false);
+            Wire(bidi: false);
 
-            var beiAlice = await HinUndZurueckAsync();
+            var atAlice = await ThereAndBackAsync();
 
             Assert.Multiple(() =>
             {
-                Assert.That(beiAlice, Does.Contain("Zurück"),
-                            "Ohne Bidi muss der gewöhnliche Weg weiter tragen.");
-                Assert.That(_rechtsS.BidirectionalDeliveryCount, Is.Zero);
+                Assert.That(atAlice, Does.Contain("Back"),
+                            "Without bidi the ordinary path has to keep carrying.");
+                Assert.That(_rightS.BidirectionalDeliveryCount, Is.Zero);
             });
 
         }
@@ -236,42 +235,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStanzaForAnUnknownDomain_DoesNotTakeSomeoneElsesReturnPath()
 
         /// <summary>
-        /// Eine Stanza an eine dritte Domain darf nicht über die
-        /// Rückrichtung einer anderen hinausgehen.
+        /// A stanza to a third domain must not go out over the return direction
+        /// of another one.
         /// </summary>
         /// <remarks>
-        /// Der Abgleich der Domain steht seit S9b in
-        /// <c>S2SStream.TryDeliverOverBidiAsync</c> und gilt damit für beide
-        /// Transporte - aber "gilt gemeinsam" ist eine Behauptung über den
-        /// Aufbau des Codes, und die prüft kein Test des anderen Transports.
+        /// The comparison of the domain has stood in
+        /// <c>S2SStream.TryDeliverOverBidiAsync</c> since S9b and thereby holds
+        /// for both transports - but "holds jointly" is a claim about the
+        /// build of the code, and no test of the other transport checks that.
         ///
-        /// Hier ohne dritten Server: eine Domain, die niemand kennt, hat keine
-        /// Verbindung und keine Rückrichtung. Ginge die Stanza trotzdem
-        /// hinaus, hätte sie die Verbindung von <c>rechts</c> genommen.
+        /// Here without a third server: a domain nobody knows has no connection
+        /// and no return direction. Were the stanza to go out nevertheless, it
+        /// would have taken the connection of <c>right</c>.
         /// </remarks>
         [Test]
         public async Task AStanzaForAnUnknownDomain_DoesNotTakeSomeoneElsesReturnPath()
         {
 
-            Verkabeln(bidi: true);
+            Wire(bidi: true);
 
-            await HinUndZurueckAsync();
+            await ThereAndBackAsync();
 
-            Assert.That(_rechtsS.BidirectionalDeliveryCount, Is.GreaterThan(0),
-                        "Aufbau des Tests: es gibt eine benutzte Rückrichtung.");
+            Assert.That(_rightS.BidirectionalDeliveryCount, Is.GreaterThan(0),
+                        "Set-up of the test: there is a used return direction.");
 
-            var vorher = _rechtsS.BidirectionalDeliveryCount;
+            var before = _rightS.BidirectionalDeliveryCount;
 
-            var ging = await _rechtsS.DeliverAsync(
-                           "woanders.example",
-                           "<message from='juliet@right.example' to='romeo@woanders.example'/>");
+            var wentOut = await _rightS.DeliverAsync(
+                             "elsewhere.example",
+                           "<message from='juliet@right.example' to='romeo@elsewhere.example'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ging, Is.False,
-                            "Für eine unbekannte Domain gibt es keinen Weg.");
-                Assert.That(_rechtsS.BidirectionalDeliveryCount, Is.EqualTo(vorher),
-                            "Und schon gar nicht die Rückrichtung einer anderen.");
+                Assert.That(wentOut, Is.False,
+                            "For an unknown domain there is no path.");
+                Assert.That(_rightS.BidirectionalDeliveryCount, Is.EqualTo(before),
+                            "And certainly not the return direction of another one.");
             });
 
         }

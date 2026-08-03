@@ -28,18 +28,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Der Subscription-Handshake aus RFC 6121, Abschnitt 3 über eine
-    /// Domain-Grenze hinweg.
+    /// The subscription handshake from RFC 6121, section 3 across a domain
+    /// border.
     /// </summary>
     /// <remarks>
-    /// Bisher ging das nicht: der Handshake nahm an, dass derselbe Server
-    /// beide Roster in der Hand hat. Über die Grenze führt jede Seite nur
-    /// ihre eigene Hälfte, und was die andere weiss, erfährt sie
-    /// ausschliesslich aus dem, was ausdrücklich geschickt wird.
+    /// So far that did not work: the handshake assumed that the same server has
+    /// both rosters in hand. Across the border each side carries only its own
+    /// half, and what the other one knows it learns exclusively from what is
+    /// expressly sent.
     ///
-    /// Verbunden über <see cref="DirectServerLinks"/>: geprüft wird der
-    /// Handshake, nicht der Transport. Dass Stanzas über echte Sockets,
-    /// Dialback und TLS gehen, steht in den Transporttests.
+    /// Connected over <see cref="DirectServerLinks"/>: what is checked is the
+    /// handshake, not the transport. That stanzas go over real sockets,
+    /// dialback and TLS stands in the transport tests.
     /// </remarks>
     [TestFixture]
     public class CrossDomainSubscriptionTests
@@ -47,8 +47,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer _links = null!;
-        private XMPPServer _rechts = null!;
+        private XMPPServer _left  = null!;
+        private XMPPServer _right = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -57,37 +57,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void ZweiServer()
+        public void TwoServers()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The guard on both: An error on the one server often comes about
+            // through a stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            DirectServerLinks.Connect(_links, _rechts);
+            DirectServerLinks.Connect(_left, _right);
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -95,15 +95,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <param name="vorDemVerbinden">
-        /// Wird gerufen, bevor die Verbindung steht - für Ereignisse, die
-        /// sonst zwischen Anmeldung und Anhängen verlorengingen.
+        /// <param name="beforeConnecting">
+        /// Is called before the connection stands - for events that would
+        /// otherwise be lost between the login and the attaching.
         /// </param>
         private async Task<XMPPClient> ConnectAsync(XMPPServer            server,
                                                     String                localPart,
-                                                    Action<XMPPClient>?   vorDemVerbinden = null)
+                                                    Action<XMPPClient>?   beforeConnecting = null)
         {
 
             if (server.GetAccount($"{localPart}@{server.Domain}") is null)
@@ -121,7 +121,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = new XMPPClient(connection);
             _clients.Add(client);
 
-            vorDemVerbinden?.Invoke(client);
+            beforeConnecting?.Invoke(client);
 
             await client.ConnectAsync();
 
@@ -129,15 +129,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
-        /// <summary>Der Subscription-Zustand, wie ihn ein Server führt.</summary>
-        private static String? Zustand(XMPPServer server, String konto, String kontakt)
-            => server.GetAccount(konto)?.SubscriptionOf(kontakt);
+        /// <summary>The subscription state as a server carries it.</summary>
+        private static String? State(XMPPServer server, String account, String contact)
+            => server.GetAccount(account)?.SubscriptionOf(contact);
 
         #endregion
 
@@ -145,29 +145,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRequestReachesTheOtherDomain()
 
         /// <summary>
-        /// Abschnitt 3.1.3: die Anfrage geht über die Grenze und erreicht den
-        /// Kontakt.
+        /// Section 3.1.3: the request goes across the border and reaches the
+        /// contact.
         /// </summary>
         [Test]
         public async Task TheRequestReachesTheOtherDomain()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
 
-            await WarteAuf(() => anfragen.Count > 0, "die Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the request at Bob's");
 
             Assert.Multiple(() =>
             {
-                Assert.That(anfragen[0], Is.EqualTo("alice@left.example"));
+                Assert.That(requests[0], Is.EqualTo("alice@left.example"));
 
-                // Abschnitt 3.1.2: beim Antragsteller ist die Anfrage offen.
-                Assert.That(Zustand(_links, "alice@left.example", "bob@right.example"),
+                // Section 3.1.2: at the applicant's the request is open.
+                Assert.That(State(_left, "alice@left.example", "bob@right.example"),
                             Is.EqualTo("none"));
             });
 
@@ -178,41 +178,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFullHandshakeSetsBothHalves()
 
         /// <summary>
-        /// Der ganze Vorgang: Anfrage, Zustimmung, und beide Server führen
-        /// danach die passende Hälfte.
+        /// The whole procedure: request, approval, and both servers carry the
+        /// matching half afterwards.
         /// </summary>
         /// <remarks>
-        /// Das ist der Kern. Jede Seite kennt nur ihre eigene Hälfte, und die
-        /// Übereinstimmung entsteht allein daraus, dass beide dieselbe
-        /// Stanzafolge verschieden auslegen - der eine setzt 'from', der
-        /// andere 'to'.
+        /// That is the core. Each side knows only its own half, and the
+        /// agreement comes about solely from both interpreting the same
+        /// sequence of stanzas differently - the one sets 'from', the other
+        /// 'to'.
         /// </remarks>
         [Test]
         public async Task TheFullHandshakeSetsBothHalves()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
-            await WarteAuf(() => anfragen.Count > 0, "die Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the request at Bob's");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
 
-            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "to",
-                           "die 'to'-Hälfte bei Alice");
+            await WaitFor(() => State(_left, "alice@left.example", "bob@right.example") == "to",
+                          "the 'to' half at Alice's");
 
             Assert.Multiple(() =>
             {
-                // Alice darf Bob sehen.
-                Assert.That(Zustand(_links,  "alice@left.example", "bob@right.example"),
+                // Alice may see Bob.
+                Assert.That(State(_left,  "alice@left.example", "bob@right.example"),
                             Is.EqualTo("to"));
 
-                // Bob erlaubt Alice, ihn zu sehen.
-                Assert.That(Zustand(_rechts, "bob@right.example",  "alice@left.example"),
+                // Bob permits Alice to see him.
+                Assert.That(State(_right, "bob@right.example",  "alice@left.example"),
                             Is.EqualTo("from"));
             });
 
@@ -223,38 +223,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AfterApproval_PresenceCrossesTheBoundary()
 
         /// <summary>
-        /// Und danach fliesst Presence - ohne dass jemand den Roster von Hand
-        /// gefüllt hätte.
+        /// And afterwards presence flows - without anybody having filled the
+        /// roster by hand.
         /// </summary>
         /// <remarks>
-        /// Die bisherigen Föderationstests haben den Roster beider Seiten
-        /// selbst gesetzt, weil der Handshake über die Grenze nicht ging. Erst
-        /// hier entsteht die Berechtigung aus dem Protokoll.
+        /// The federation tests so far have set the roster of both sides
+        /// themselves, because the handshake across the border did not work.
+        /// Only here does the permission come about out of the protocol.
         /// </remarks>
         [Test]
         public async Task AfterApproval_PresenceCrossesTheBoundary()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
-            await WarteAuf(() => anfragen.Count > 0, "die Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the request at Bob's");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
-            await WarteAuf(() => Zustand(_rechts, "bob@right.example", "alice@left.example") == "from",
-                           "die 'from'-Hälfte bei Bob");
+            await WaitFor(() => State(_right, "bob@right.example", "alice@left.example") == "from",
+                          "the 'from' half at Bob's");
 
-            var gesehen = new List<String>();
-            alice.OnPresenceChanged += (from, _) => gesehen.Add(from);
+            var seen = new List<String>();
+            alice.OnPresenceChanged += (from, _) => seen.Add(from);
 
             await bob.SetPresenceAsync();
 
-            await WarteAuf(() => gesehen.Any(g => g.StartsWith("bob@right.example", StringComparison.Ordinal)),
-                           "Bobs Presence bei Alice");
+            await WaitFor(() => seen.Any(g => g.StartsWith("bob@right.example", StringComparison.Ordinal)),
+                          "Bob's presence at Alice's");
 
         }
 
@@ -263,40 +263,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ApprovalItself_DeliversTheContactsPresence()
 
         /// <summary>
-        /// Abschnitt 3.1.5: mit der Zustimmung schickt der Server des Kontakts
-        /// dessen aktuelle Presence - der Antragsteller soll nicht warten
-        /// müssen, bis der Kontakt das nächste Mal von sich aus etwas tut.
+        /// Section 3.1.5: with the approval the server of the contact sends
+        /// their current presence - the applicant is not supposed to have to
+        /// wait until the contact does something of their own accord the next
+        /// time.
         /// </summary>
         /// <remarks>
-        /// Hier wird bewusst <b>keine</b> weitere Presence gesendet. Der
-        /// vorige Test tut das und verdeckt damit, ob die Zustimmung allein
-        /// schon genügt.
+        /// Here <b>no</b> further presence is sent on purpose. The previous
+        /// test does that and thereby covers up whether the approval alone is
+        /// already enough.
         ///
-        /// Über die Grenze hängt daran mehr als die Höflichkeit: die
-        /// gespeicherte Presence ist ungerichtet und trägt nur ein 'from'.
-        /// Ohne Adresse verwirft die Gegenstelle sie, weil sie ohne 'to' nicht
-        /// weiss, wem sie gilt - innerhalb eines Servers fiele das nie auf.
+        /// Across the border more hangs on that than politeness: the stored
+        /// presence is undirected and carries only a 'from'. Without an address
+        /// the far end discards it, because without a 'to' it does not know who
+        /// it is for - within one server that would never stand out.
         /// </remarks>
         [Test]
         public async Task ApprovalItself_DeliversTheContactsPresence()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
-            var gesehen = new List<String>();
-            alice.OnPresenceChanged += (from, _) => gesehen.Add(from);
+            var seen = new List<String>();
+            alice.OnPresenceChanged += (from, _) => seen.Add(from);
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
-            await WarteAuf(() => anfragen.Count > 0, "die Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the request at Bob's");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
 
-            await WarteAuf(() => gesehen.Any(g => g.StartsWith("bob@right.example", StringComparison.Ordinal)),
-                           "Bobs Presence allein aufgrund der Zustimmung");
+            await WaitFor(() => seen.Any(g => g.StartsWith("bob@right.example", StringComparison.Ordinal)),
+                          "Bob's presence on the grounds of the approval alone");
 
         }
 
@@ -305,42 +306,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARepeatedRequest_IsAnsweredByTheServer()
 
         /// <summary>
-        /// Abschnitt 3.1.4: darf der Antragsteller den Kontakt ohnehin schon
-        /// sehen, beantwortet dessen Server die Anfrage selbst.
+        /// Section 3.1.4: if the applicant may see the contact anyway already,
+        /// their server answers the request itself.
         /// </summary>
         /// <remarks>
-        /// Ohne das würde der Kontakt bei jeder wiederholten Anfrage erneut
-        /// gefragt, obwohl er längst zugestimmt hat - und ein Antragsteller,
-        /// dessen Roster verlorenging, käme nie wieder in Ordnung, ohne den
-        /// Kontakt zu behelligen.
+        /// Without that the contact would be asked anew at every repeated
+        /// request although they approved long ago - and an applicant whose
+        /// roster got lost would never come right again without bothering the
+        /// contact.
         /// </remarks>
         [Test]
         public async Task ARepeatedRequest_IsAnsweredByTheServer()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
-            await WarteAuf(() => anfragen.Count > 0, "die erste Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the first request at Bob's");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
-            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "to",
-                           "die Zustimmung bei Alice");
+            await WaitFor(() => State(_left, "alice@left.example", "bob@right.example") == "to",
+                          "the approval at Alice's");
 
-            // Alice fragt noch einmal - Bob soll davon nichts merken.
+            // Alice asks once more - Bob is not supposed to notice.
             await alice.AddContactAsync(bob.BareJid, "Bob");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(anfragen, Has.Count.EqualTo(1),
-                            "Der Kontakt darf nicht erneut gefragt werden.");
-                Assert.That(Zustand(_links, "alice@left.example", "bob@right.example"),
+                Assert.That(requests, Has.Count.EqualTo(1),
+                            "The contact must not be asked anew.");
+                Assert.That(State(_left, "alice@left.example", "bob@right.example"),
                             Is.EqualTo("to"));
             });
 
@@ -351,36 +352,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARevocationCrossesTheBoundary()
 
         /// <summary>
-        /// Abschnitt 3.2: der Entzug nimmt der Gegenseite die Berechtigung -
-        /// auch über die Grenze.
+        /// Section 3.2: the revocation takes the permission from the other side
+        /// - across the border as well.
         /// </summary>
         [Test]
         public async Task ARevocationCrossesTheBoundary()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var anfragen = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from);
+            var requests = new List<String>();
+            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
-            await WarteAuf(() => anfragen.Count > 0, "die Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the request at Bob's");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
-            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "to",
-                           "die Zustimmung bei Alice");
+            await WaitFor(() => State(_left, "alice@left.example", "bob@right.example") == "to",
+                          "the approval at Alice's");
 
             await bob.DenySubscriptionAsync(alice.BareJid);
 
-            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "none",
-                           "den Entzug bei Alice");
+            await WaitFor(() => State(_left, "alice@left.example", "bob@right.example") == "none",
+                          "the revocation at Alice's");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Zustand(_links,  "alice@left.example", "bob@right.example"),
+                Assert.That(State(_left,  "alice@left.example", "bob@right.example"),
                             Is.EqualTo("none"));
-                Assert.That(Zustand(_rechts, "bob@right.example",  "alice@left.example"),
+                Assert.That(State(_right, "bob@right.example",  "alice@left.example"),
                             Is.EqualTo("none"));
             });
 
@@ -391,21 +392,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASubscriptionForAnUnknownLocalAccount_ChangesNothing()
 
         /// <summary>
-        /// Eine Anfrage an ein Konto, das es hier nicht gibt, ändert nichts
-        /// (RFC 6121, Abschnitt 8.1).
+        /// A request to an account that does not exist here changes nothing
+        /// (RFC 6121, section 8.1).
         /// </summary>
         [Test]
         public async Task ASubscriptionForAnUnknownLocalAccount_ChangesNothing()
         {
 
-            var angenommen = await _rechts.ReceiveFromRemoteAsync(
-                                 "left.example",
-                                 "<presence from='alice@left.example' to='niemand@right.example' type='subscribe'/>");
+            var accepted = await _right.ReceiveFromRemoteAsync(
+                              "left.example",
+                                 "<presence from='alice@left.example' to='nobody@right.example' type='subscribe'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(angenommen, Is.True, "Die Stanza selbst ist in Ordnung.");
-                Assert.That(_rechts.GetAccount("niemand@right.example"), Is.Null);
+                Assert.That(accepted, Is.True, "The stanza itself is in order.");
+                Assert.That(_right.GetAccount("nobody@right.example"), Is.Null);
             });
 
         }
@@ -415,41 +416,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARequestToAnOfflineAccount_IsKeptAcrossTheBoundary()
 
         /// <summary>
-        /// Abschnitt 3.1.3, Regel 4 gilt unabhängig davon, woher die Anfrage
-        /// kam: auch eine von jenseits der Grenze wird aufbewahrt, bis der
-        /// Kontakt sie sehen kann.
+        /// Section 3.1.3, rule 4 holds regardless of where the request came
+        /// from: one from beyond the border is stored as well, until the
+        /// contact can see it.
         /// </summary>
         /// <remarks>
-        /// Über die Grenze ist der Fall der Regelfall und nicht die Ausnahme.
-        /// Innerhalb eines Servers sind beide Seiten meist gleichzeitig da;
-        /// zwischen zwei Servern kennt der eine die Anmeldezeiten des anderen
-        /// nicht, und eine Anfrage kommt gerade dann an, wenn es passt - nicht
-        /// wenn es passt.
+        /// Across the border the case is the normal one and not the exception.
+        /// Within one server both sides are mostly there at the same time;
+        /// between two servers the one does not know the login times of the
+        /// other, and a request arrives precisely when it suits - not when it
+        /// suits.
         /// </remarks>
         [Test]
         public async Task ARequestToAnOfflineAccount_IsKeptAcrossTheBoundary()
         {
 
-            var alice = await ConnectAsync(_links, "alice");
+            var alice = await ConnectAsync(_left, "alice");
 
-            // Bob gibt es, aber er ist nicht verbunden.
-            _rechts.AddAccount("bob");
+            // Bob exists, but he is not connected.
+            _right.AddAccount("bob");
 
             await alice.AddContactAsync("bob@right.example", "Bob");
 
-            await WarteAuf(() => _rechts.GetAccount("bob@right.example")!
-                                        .PendingSubscriptionRequests
+            await WaitFor(() => _right.GetAccount("bob@right.example")!
+                                       .PendingSubscriptionRequests
                                         .ContainsKey("alice@left.example"),
-                           "die aufbewahrte Anfrage auf der anderen Seite");
+                           "the stored request on the other side");
 
-            var anfragen = new List<String>();
+            var requests = new List<String>();
 
-            await ConnectAsync(_rechts, "bob",
-                               bob => bob.OnSubscriptionRequest += (from, _) => anfragen.Add(from));
+            await ConnectAsync(_right, "bob",
+                               bob => bob.OnSubscriptionRequest += (from, _) => requests.Add(from));
 
-            await WarteAuf(() => anfragen.Count > 0, "die nachgereichte Anfrage bei Bob");
+            await WaitFor(() => requests.Count > 0, "the handed-over request at Bob's");
 
-            Assert.That(anfragen[0], Is.EqualTo("alice@left.example"));
+            Assert.That(requests[0], Is.EqualTo("alice@left.example"));
 
         }
 

@@ -27,20 +27,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0288: beide Richtungen über eine Verbindung - die Protokollschicht,
-    /// ohne Transport darunter.
+    /// XEP-0288: both directions over one connection - the protocol layer,
+    /// without a transport underneath.
     /// </summary>
     /// <remarks>
-    /// Ohne die Erweiterung ist eine S2S-Verbindung einseitig (RFC 6120,
-    /// Abschnitt 4.1): wer eine Stanza bekommt, beantwortet sie über eine
-    /// eigene Verbindung zur Absenderdomain. Das setzt voraus, dass er die
-    /// Gegenstelle erreichen kann. Kann er das nicht - hinter NAT, hinter einer
-    /// Firewall, ohne DNS-Eintrag -, geht die Antwort verloren, und zwar
-    /// stillschweigend.
+    /// Without the extension an S2S connection is one-sided (RFC 6120,
+    /// section 4.1): whoever gets a stanza answers it over a connection of
+    /// their own to the sender domain. That presupposes that they can reach the
+    /// far end. If they cannot - behind NAT, behind a firewall, without a DNS
+    /// record -, the answer is lost, and silently at that.
     ///
-    /// Wie in <see cref="S2SStreamTests"/> werden die Handshakes von Hand
-    /// gebaut. Zwei Instanzen gegeneinander laufen zu lassen prüfte nur, dass
-    /// die Klasse zu sich selbst passt.
+    /// As in <see cref="S2SStreamTests"/> the handshakes are built by hand. To
+    /// let two instances run against each other would only check that the class
+    /// fits itself.
     /// </remarks>
     [TestFixture]
     public class BidirectionalStreamTests
@@ -48,33 +47,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private List<String> _gesendet = null!;
+        private List<String> _sent = null!;
 
         #endregion
 
-        #region SetUp / Hilfsfunktionen
+        #region SetUp / helper functions
 
         [SetUp]
-        public void Leeren()
+        public void Clear()
         {
-            _gesendet = [];
+            _sent = [];
         }
 
-        private Task Senden(String frame, CancellationToken _)
+        private Task Send(String frame, CancellationToken _)
         {
-            _gesendet.Add(frame);
+            _sent.Add(frame);
             return Task.CompletedTask;
         }
 
-        private static String OpenVon(String from, String? to = "right.example", String? id = null)
+        private static String OpenFrom(String from, String? to = "right.example", String? id = null)
 
             => $"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' from='{from}'" +
                (to is not null ? $" to='{to}'" : "") +
                (id is not null ? $" id='{id}'" : "") +
                " version='1.0'/>";
 
-        /// <summary>Die Features des Empfängers, wahlweise mit Bidi-Ankündigung.</summary>
-        private static String FeaturesMit(Boolean bidi, Boolean external = true)
+        /// <summary>The features of the recipient, optionally with a bidi announcement.</summary>
+        private static String FeaturesWith(Boolean bidi, Boolean external = true)
 
             => "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                (external
@@ -83,11 +82,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                (bidi ? $"<bidi xmlns='{S2SStream.BidiFeatureNamespace}'/>" : "") +
                "</stream:features>";
 
-        private Boolean Gesendet(String enthaelt)
-            => _gesendet.Any(f => f.Contains(enthaelt, StringComparison.Ordinal));
+        private Boolean WasSent(String contains)
+            => _sent.Any(f => f.Contains(contains, StringComparison.Ordinal));
 
-        private Int32 IndexVon(String enthaelt)
-            => _gesendet.FindIndex(f => f.Contains(enthaelt, StringComparison.Ordinal));
+        private Int32 IndexOf(String contains)
+            => _sent.FindIndex(f => f.Contains(contains, StringComparison.Ordinal));
 
         #endregion
 
@@ -95,39 +94,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheReceiverAnnouncesBidi()
 
         /// <summary>
-        /// XEP-0288, Abschnitt 3: wer es beherrscht, kündigt es in den
-        /// Features an - in beiden Formen, die in freier Wildbahn vorkommen.
+        /// XEP-0288, section 3: whoever masters it announces it in the features
+        /// - in both forms that occur in the wild.
         /// </summary>
         /// <remarks>
-        /// Die XEP-Form (<c>urn:xmpp:features:bidi</c>) ist die richtige, und
-        /// Prosody greift genau sie auf. ejabberd 24.12 nicht: es kündigt
-        /// selbst <c>urn:xmpp:bidi</c> an und sucht offenbar dasselbe. Ohne
-        /// die zweite Form nimmt es unsere Rückrichtung nicht - beobachtet in
-        /// <c>ThePeerTakesTheReturnPathWeOffered</c>, nicht vermutet.
+        /// The XEP form (<c>urn:xmpp:features:bidi</c>) is the right one, and
+        /// Prosody picks up precisely that one. ejabberd 24.12 does not: it
+        /// announces <c>urn:xmpp:bidi</c> itself and evidently looks for the
+        /// same. Without the second form it does not take our return direction
+        /// - observed in <c>ThePeerTakesTheReturnPathWeOffered</c>, not
+        /// surmised.
         ///
-        /// Auf dem Draht bleibt es eindeutig: das Freischalt-Element heisst in
-        /// beiden Lesarten <c>urn:xmpp:bidi</c>, es kommt also nur eine
-        /// Antwort zurück.
+        /// On the wire it stays unambiguous: the enabling element is called
+        /// <c>urn:xmpp:bidi</c> in both readings, so only one answer comes
+        /// back.
         /// </remarks>
         [Test]
         public async Task TheReceiverAnnouncesBidi()
         {
 
             var stream = S2SStream.Accept("right.example",
-                                          Senden,
+                                          Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           offerBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Gesendet($"<bidi xmlns='{S2SStream.BidiFeatureNamespace}'/>"), Is.True,
-                            "Die Form der XEP fehlt.");
+                Assert.That(WasSent($"<bidi xmlns='{S2SStream.BidiFeatureNamespace}'/>"), Is.True,
+                            "The form of the XEP is missing.");
 
-                Assert.That(Gesendet($"<bidi xmlns='{S2SStream.BidiNamespace}'/>"), Is.True,
-                            "Die Form, die ejabberd 24.12 sucht, fehlt.");
+                Assert.That(WasSent($"<bidi xmlns='{S2SStream.BidiNamespace}'/>"), Is.True,
+                            "The form ejabberd 24.12 looks for is missing.");
 
             });
 
@@ -138,22 +138,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheSwitch_NothingIsAnnounced()
 
         /// <summary>
-        /// Abgeschaltet wird nichts angekündigt - und ohne Ankündigung darf
-        /// die Gegenstelle es nicht benutzen.
+        /// Switched off nothing is announced - and without an announcement the
+        /// far end must not use it.
         /// </summary>
         [Test]
         public async Task WithoutTheSwitch_NothingIsAnnounced()
         {
 
             var stream = S2SStream.Accept("right.example",
-                                          Senden,
+                                          Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted));
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet(S2SStream.BidiFeatureNamespace), Is.False);
+                Assert.That(WasSent(S2SStream.BidiFeatureNamespace), Is.False);
                 Assert.That(stream.BidiEnabled, Is.False);
             });
 
@@ -164,30 +164,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnannouncedBidi_IsRefused()
 
         /// <summary>
-        /// Ein <c>&lt;bidi/&gt;</c> ohne vorherige Ankündigung schaltet nichts
-        /// frei.
+        /// A <c>&lt;bidi/&gt;</c> without a previous announcement enables
+        /// nothing.
         /// </summary>
         /// <remarks>
-        /// Sonst liesse sich eine Rückrichtung erzwingen, die dieser Server nie
-        /// angeboten hat - und über die er anschliessend Stanzas hinausschickte,
-        /// die er sonst über eine eigene, geprüfte Verbindung geschickt hätte.
+        /// Otherwise a return direction could be forced that this server never
+        /// offered - and over which it would subsequently send out stanzas that
+        /// it would otherwise have sent over a connection of its own, a checked
+        /// one.
         /// </remarks>
         [Test]
         public async Task AnUnannouncedBidi_IsRefused()
         {
 
             var stream = S2SStream.Accept("right.example",
-                                          Senden,
+                                          Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted));
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            var angenommen = await stream.ProcessFrameAsync(
-                                 $"<bidi xmlns='{S2SStream.BidiNamespace}'/>");
+            var accepted = await stream.ProcessFrameAsync(
+                               $"<bidi xmlns='{S2SStream.BidiNamespace}'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(angenommen,         Is.False);
+                Assert.That(accepted,           Is.False);
                 Assert.That(stream.BidiEnabled, Is.False);
             });
 
@@ -198,37 +199,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheInitiatorAsksForBidi_OnlyWhenOffered()
 
         /// <summary>
-        /// Abschnitt 4: der aufbauende Server schickt das
-        /// <c>&lt;bidi/&gt;</c> - aber nur, wenn die Gegenstelle es angeboten
-        /// hat.
+        /// Section 4: the building server sends the <c>&lt;bidi/&gt;</c> - but
+        /// only if the far end has offered it.
         /// </summary>
         [Test]
         public async Task TheInitiatorAsksForBidi_OnlyWhenOffered()
         {
 
-            var mitAngebot = S2SStream.Initiate("left.example", "right.example", Senden,
-                                                canOfferExternal: true, useBidi: true);
+            var withOffer = S2SStream.Initiate("left.example", "right.example", Send,
+                                               canOfferExternal: true, useBidi: true);
 
-            await mitAngebot.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
-            await mitAngebot.ProcessFrameAsync(FeaturesMit(bidi: true));
+            await withOffer.ProcessFrameAsync(OpenFrom("right.example", "left.example", "abc"));
+            await withOffer.ProcessFrameAsync(FeaturesWith(bidi: true));
 
-            Assert.That(Gesendet($"<bidi xmlns='{S2SStream.BidiNamespace}'/>"), Is.True,
-                        "Angeboten und nicht erbeten.");
-            Assert.That(mitAngebot.BidiEnabled, Is.True);
+            Assert.That(WasSent($"<bidi xmlns='{S2SStream.BidiNamespace}'/>"), Is.True,
+                        "Offered and not requested.");
+            Assert.That(withOffer.BidiEnabled, Is.True);
 
-            _gesendet.Clear();
+            _sent.Clear();
 
-            var ohneAngebot = S2SStream.Initiate("left.example", "right.example", Senden,
-                                                 canOfferExternal: true, useBidi: true);
+            var withoutOffer = S2SStream.Initiate("left.example", "right.example", Send,
+                                                  canOfferExternal: true, useBidi: true);
 
-            await ohneAngebot.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
-            await ohneAngebot.ProcessFrameAsync(FeaturesMit(bidi: false));
+            await withoutOffer.ProcessFrameAsync(OpenFrom("right.example", "left.example", "abc"));
+            await withoutOffer.ProcessFrameAsync(FeaturesWith(bidi: false));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet(S2SStream.BidiNamespace), Is.False,
-                            "Nicht angeboten und trotzdem erbeten.");
-                Assert.That(ohneAngebot.BidiEnabled, Is.False);
+                Assert.That(WasSent(S2SStream.BidiNamespace), Is.False,
+                            "Not offered and requested nevertheless.");
+                Assert.That(withoutOffer.BidiEnabled, Is.False);
             });
 
         }
@@ -238,37 +238,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnOfferInTheEnableNamespace_IsUnderstood()
 
         /// <summary>
-        /// Eine Ankündigung im Namensraum des Freischalt-Elements wird
-        /// ebenfalls als Angebot gelesen.
+        /// An announcement in the namespace of the enabling element is read as
+        /// an offer as well.
         /// </summary>
         /// <remarks>
-        /// XEP-0288 vergibt zwei Namensräume: <c>urn:xmpp:features:bidi</c>
-        /// für die Ankündigung in den Features, <c>urn:xmpp:bidi</c> für das
-        /// Element, mit dem der aufbauende Server sie annimmt. Prosody hält
-        /// sich daran.
+        /// XEP-0288 hands out two namespaces: <c>urn:xmpp:features:bidi</c> for
+        /// the announcement in the features, <c>urn:xmpp:bidi</c> for the
+        /// element with which the building server takes it. Prosody keeps to
+        /// that.
         ///
-        /// ejabberd 24.12 nicht: seine annehmende Seite legt das
-        /// <i>Freischalt</i>-Element in die Features, kündigt also
-        /// <c>&lt;bidi xmlns='urn:xmpp:bidi'/&gt;</c> an. Upstream ist das
-        /// inzwischen behoben - in den ausgelieferten Fassungen steht es noch.
+        /// ejabberd 24.12 does not: its accepting side puts the
+        /// <i>enabling</i> element into the features, so it announces
+        /// <c>&lt;bidi xmlns='urn:xmpp:bidi'/&gt;</c>. Upstream that has been
+        /// fixed by now - in the shipped versions it still stands.
         ///
-        /// Das ist kein Fehler, den wir mitmachen: wir kündigen weiter die
-        /// Form der XEP an, und ejabberds aufbauende Seite sucht genau die
-        /// (sein Codec bildet beide Formen auf getrennte Typen ab). Nur beim
-        /// <b>Lesen</b> eines fremden Angebots sind wir nachsichtig - sonst
-        /// verlöre die Rückrichtung gegen jeden dieser Server, und übrig
-        /// bliebe eine Verbindung, die stillschweigend einseitig ist.
+        /// That is not an error we go along with: we go on announcing the form
+        /// of the XEP, and ejabberd's building side looks for precisely that
+        /// one (its codec maps both forms onto separate types). Only in the
+        /// <b>reading</b> of a foreign offer are we lenient - otherwise the
+        /// return direction would be lost against every one of these servers,
+        /// and what would be left is a connection that is silently one-sided.
         /// </remarks>
         [Test]
         public async Task AnOfferInTheEnableNamespace_IsUnderstood()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             canOfferExternal: true, useBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", "left.example", "abc"));
 
-            // Wortwörtlich das, was ejabberd 24.12 schickt.
+            // Literally what ejabberd 24.12 sends.
             await stream.ProcessFrameAsync(
                       "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                       $"<mechanisms xmlns='{S2SStream.SaslNamespace}'><mechanism>EXTERNAL</mechanism></mechanisms>" +
@@ -279,8 +279,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(Gesendet($"<bidi xmlns='{S2SStream.BidiNamespace}'/>"), Is.True,
-                            "Das Angebot stand da, nur im anderen Namensraum.");
+                Assert.That(WasSent($"<bidi xmlns='{S2SStream.BidiNamespace}'/>"), Is.True,
+                            "The offer stood there, only in the other namespace.");
 
                 Assert.That(stream.BidiEnabled, Is.True);
 
@@ -293,34 +293,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region BidiGoesOutBeforeTheAuthentication()
 
         /// <summary>
-        /// Abschnitt 4: <i>"This SHOULD be done before either SASL negotiation
+        /// Section 4: <i>"This SHOULD be done before either SASL negotiation
         /// or Server Dialback."</i>
         /// </summary>
         /// <remarks>
-        /// Die Reihenfolge ist kein Schönheitsfehler. Die Gegenstelle
-        /// entscheidet beim Abschluss der Authentifizierung, wie sie künftig
-        /// antwortet; ein <c>&lt;bidi/&gt;</c> danach käme zu spät und liesse
-        /// sie eine eigene Verbindung aufbauen.
+        /// The order is no blemish. The far end decides at the conclusion of
+        /// the authentication how it answers from then on; a
+        /// <c>&lt;bidi/&gt;</c> afterwards would come too late and would let it
+        /// build a connection of its own.
         /// </remarks>
         [Test]
         public async Task BidiGoesOutBeforeTheAuthentication()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             canOfferExternal: true, useBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
-            await stream.ProcessFrameAsync(FeaturesMit(bidi: true));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", "left.example", "abc"));
+            await stream.ProcessFrameAsync(FeaturesWith(bidi: true));
 
-            var bidi = IndexVon(S2SStream.BidiNamespace);
-            var auth = IndexVon("<auth");
+            var bidi = IndexOf(S2SStream.BidiNamespace);
+            var auth = IndexOf("<auth");
 
             Assert.Multiple(() =>
             {
-                Assert.That(bidi, Is.GreaterThanOrEqualTo(0), "Kein <bidi/> geschickt.");
-                Assert.That(auth, Is.GreaterThanOrEqualTo(0), "Kein <auth/> geschickt.");
+                Assert.That(bidi, Is.GreaterThanOrEqualTo(0), "No <bidi/> sent.");
+                Assert.That(auth, Is.GreaterThanOrEqualTo(0), "No <auth/> sent.");
                 Assert.That(bidi, Is.LessThan(auth),
-                            "Das <bidi/> muss vor der Authentifizierung hinausgehen.");
+                            "The <bidi/> has to go out before the authentication.");
             });
 
         }
@@ -330,21 +330,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region BidiAlsoGoesOutBeforeDialback()
 
         /// <summary>
-        /// Dasselbe für den Dialback-Weg - der Abschnitt nennt beide.
+        /// The same for the dialback path - the section names both.
         /// </summary>
         [Test]
         public async Task BidiAlsoGoesOutBeforeDialback()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             secret:  DialbackKey.NewSecret(),
                                             useBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
-            await stream.ProcessFrameAsync(FeaturesMit(bidi: true, external: false));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", "left.example", "abc"));
+            await stream.ProcessFrameAsync(FeaturesWith(bidi: true, external: false));
 
-            var bidi     = IndexVon(S2SStream.BidiNamespace);
-            var dialback = IndexVon("<db:result");
+            var bidi     = IndexOf(S2SStream.BidiNamespace);
+            var dialback = IndexOf("<db:result");
 
             Assert.Multiple(() =>
             {
@@ -360,51 +360,51 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheInitiatorTakesStanzasOnlyOnceBidiIsEnabled()
 
         /// <summary>
-        /// Ohne Bidi trägt ein ausgehender Stream nur eine Richtung; mit Bidi
-        /// nimmt er entgegen, was zurückkommt.
+        /// Without bidi an outbound stream carries only one direction; with
+        /// bidi it takes in what comes back.
         /// </summary>
         [Test]
         public async Task TheInitiatorTakesStanzasOnlyOnceBidiIsEnabled()
         {
 
-            var zugestellt = new List<String>();
+            var delivered = new List<String>();
 
-            Task<RemoteStanzaResult> Zustellen(String _, String stanza)
+            Task<RemoteStanzaResult> Deliver(String _, String stanza)
             {
-                zugestellt.Add(stanza);
+                delivered.Add(stanza);
                 return Task.FromResult(RemoteStanzaResult.Accepted);
             }
 
-            var ohne = S2SStream.Initiate("left.example", "right.example", Senden,
-                                          deliverStanza: Zustellen);
+            var withoutBidi = S2SStream.Initiate("left.example", "right.example", Send,
+                                                 deliverStanza: Deliver);
 
-            await ohne.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
+            await withoutBidi.ProcessFrameAsync(OpenFrom("right.example", "left.example", "abc"));
 
-            var abgewiesen = await ohne.ProcessFrameAsync(
-                                 "<message from='juliet@right.example' to='romeo@left.example'/>");
+            var refused = await withoutBidi.ProcessFrameAsync(
+                                     "<message from='juliet@right.example' to='romeo@left.example'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(abgewiesen, Is.False,
-                            "Ohne Bidi darf ein ausgehender Stream nichts entgegennehmen.");
-                Assert.That(zugestellt, Is.Empty);
+                Assert.That(refused, Is.False,
+                            "Without bidi an outbound stream must take nothing in.");
+                Assert.That(delivered, Is.Empty);
             });
 
-            var mit = S2SStream.Initiate("left.example", "right.example", Senden,
-                                         canOfferExternal:  true,
-                                         deliverStanza:     Zustellen,
+            var withBidi = S2SStream.Initiate("left.example", "right.example", Send,
+                                              canOfferExternal:  true,
+                                         deliverStanza:     Deliver,
                                          useBidi:           true);
 
-            await mit.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
-            await mit.ProcessFrameAsync(FeaturesMit(bidi: true));
+            await withBidi.ProcessFrameAsync(OpenFrom("right.example", "left.example", "abc"));
+            await withBidi.ProcessFrameAsync(FeaturesWith(bidi: true));
 
-            var angenommen = await mit.ProcessFrameAsync(
-                                 "<message from='juliet@right.example' to='romeo@left.example'/>");
+            var accepted = await withBidi.ProcessFrameAsync(
+                                    "<message from='juliet@right.example' to='romeo@left.example'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(angenommen, Is.True);
-                Assert.That(zugestellt, Has.Count.EqualTo(1));
+                Assert.That(accepted, Is.True);
+                Assert.That(delivered, Has.Count.EqualTo(1));
             });
 
         }
@@ -414,38 +414,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheReturnPath_StaysShutBeforeAuthentication()
 
         /// <summary>
-        /// Abschnitt 4: <i>"The receiving server MUST NOT send stanzas to the
+        /// Section 4: <i>"The receiving server MUST NOT send stanzas to the
         /// peer before it has authenticated via SASL, or the peer's identity
         /// has been verified via Server Dialback."</i>
         /// </summary>
         /// <remarks>
-        /// Wer noch nicht belegt hat, wer er ist, bekommt auch nichts. Ohne
-        /// diese Zeile liesse sich mit einer blossen Behauptung im
-        /// Stream-Kopf fremde Post abholen - man baut eine Verbindung auf,
-        /// nennt sich <c>example.com</c>, bittet um die Rückrichtung und
-        /// wartet.
+        /// Whoever has not yet established who they are gets nothing either.
+        /// Without this line foreign mail could be fetched with a mere claim in
+        /// the stream header - one builds a connection up, calls oneself
+        /// <c>example.com</c>, asks for the return direction and waits.
         /// </remarks>
         [Test]
         public async Task TheReturnPath_StaysShutBeforeAuthentication()
         {
 
             var stream = S2SStream.Accept("right.example",
-                                          Senden,
+                                          Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           verifyKey:  (_, _, _) => Task.FromResult(true),
                                           offerBidi:  true);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
             await stream.ProcessFrameAsync($"<bidi xmlns='{S2SStream.BidiNamespace}'/>");
 
             Assert.That(stream.BidiEnabled,  Is.True);
-            Assert.That(stream.IsAuthenticated, Is.False, "Aufbau des Tests: noch nicht ausgewiesen.");
+            Assert.That(stream.IsAuthenticated, Is.False, "Set-up of the test: not identified yet.");
 
-            var ging = await stream.SendStanzaOverBidiAsync(
-                           "<message from='juliet@right.example' to='romeo@left.example'/>");
+            var wentOut = await stream.SendStanzaOverBidiAsync(
+                              "<message from='juliet@right.example' to='romeo@left.example'/>");
 
-            Assert.That(ging, Is.False,
-                        "Vor dem Ausweis darf über die Rückrichtung nichts hinausgehen.");
+            Assert.That(wentOut, Is.False,
+                        "Before the identification nothing may go out over the return direction.");
 
         }
 
@@ -454,48 +453,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheReturnPath_CarriesOnlyOurOwnDomain()
 
         /// <summary>
-        /// Abschnitt 4: <i>"The receiving server MUST only send stanzas for
+        /// Section 4: <i>"The receiving server MUST only send stanzas for
         /// which it has been authenticated - ... this is the value of the
         /// stream's 'to' attribute."</i>
         /// </summary>
         /// <remarks>
-        /// Das <c>to</c> des eingehenden Stream-Kopfs ist die eigene Domain.
-        /// Für eine fremde zu sprechen wäre hier genauso falsch wie in der
-        /// Gegenrichtung, wo wir es der Gegenstelle verbieten - und der
-        /// Abschnitt sagt ausdrücklich, dass die Bidi-Rückrichtung diese
-        /// Prüfung nicht überspringen darf.
+        /// The <c>to</c> of the inbound stream header is one's own domain. To
+        /// speak for a foreign one would be just as wrong here as in the
+        /// reverse direction, where we forbid it to the far end - and the
+        /// section says expressly that the bidi return direction must not skip
+        /// this check.
         /// </remarks>
         [Test]
         public async Task TheReturnPath_CarriesOnlyOurOwnDomain()
         {
 
             var stream = S2SStream.Accept("right.example",
-                                          Senden,
+                                          Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           verifyKey:  (_, _, _) => Task.FromResult(true),
                                           offerBidi:  true);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example", id: "s1"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example", id: "s1"));
             await stream.ProcessFrameAsync($"<bidi xmlns='{S2SStream.BidiNamespace}'/>");
 
-            // Dialback abschliessen, damit nur noch die Absenderprüfung im Weg
-            // stehen kann.
+            // Conclude the dialback, so that only the sender check can stand in
+            // the way any more.
             await stream.ProcessFrameAsync(
                       $"<db:result xmlns:db='{DialbackKey.Namespace}' " +
-                      "from='left.example' to='right.example'>egal</db:result>");
+                      "from='left.example' to='right.example'>whatever</db:result>");
 
-            Assert.That(stream.IsAuthenticated, Is.True, "Aufbau des Tests: ausgewiesen.");
+            Assert.That(stream.IsAuthenticated, Is.True, "Set-up of the test: identified.");
 
-            var eigene = await stream.SendStanzaOverBidiAsync(
-                             "<message from='juliet@right.example' to='romeo@left.example'/>");
+            var ownDomain = await stream.SendStanzaOverBidiAsync(
+                                "<message from='juliet@right.example' to='romeo@left.example'/>");
 
-            var fremde = await stream.SendStanzaOverBidiAsync(
-                             "<message from='eve@woanders.example' to='romeo@left.example'/>");
+            var foreignDomain = await stream.SendStanzaOverBidiAsync(
+                                    "<message from='eve@elsewhere.example' to='romeo@left.example'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(eigene, Is.True,  "Die eigene Domain muss durchgehen.");
-                Assert.That(fremde, Is.False, "Eine fremde Domain nicht.");
+                Assert.That(ownDomain, Is.True,  "One's own domain has to get through.");
+                Assert.That(foreignDomain, Is.False, "A foreign domain does not.");
             });
 
         }

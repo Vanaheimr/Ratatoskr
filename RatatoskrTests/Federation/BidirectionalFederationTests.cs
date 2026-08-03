@@ -28,20 +28,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0288 über echte Sockets - und zwar in der Lage, für die es die
-    /// Erweiterung gibt: die Gegenstelle kann uns <b>nicht</b> anwählen.
+    /// XEP-0288 over real sockets - and that in the situation the extension
+    /// exists for: the far end can<b>not</b> dial us.
     /// </summary>
     /// <remarks>
-    /// Der Aufbau ist absichtlich einseitig. <c>links</c> kennt <c>rechts</c>,
-    /// <c>rechts</c> kennt <c>links</c> nicht - kein Eintrag, kein Resolver,
-    /// nichts. Damit steht und fällt die Antwort mit der Rückrichtung.
+    /// The set-up is one-sided on purpose. <c>left</c> knows <c>right</c>,
+    /// <c>right</c> does not know <c>left</c> - no entry, no resolver,
+    /// nothing. With that the answer stands and falls with the return
+    /// direction.
     ///
-    /// Der übliche <see cref="TcpServerLinks.Connect"/> taugt hier nicht: er
-    /// trägt beide Seiten gegenseitig ein, und dann käme die Antwort über eine
-    /// eigene Verbindung an - der Test bestünde, ohne von Bidi je Gebrauch
-    /// gemacht zu haben. Genau deshalb prüft er auch
-    /// <see cref="TcpServerLinks.BidirectionalDeliveryCount"/> und nicht nur
-    /// die Ankunft.
+    /// The usual <see cref="TcpServerLinks.Connect"/> is no good here: it
+    /// enters both sides mutually, and then the answer would arrive over a
+    /// connection of its own - the test would pass without ever having made
+    /// use of bidi. That is precisely why it checks
+    /// <see cref="TcpServerLinks.BidirectionalDeliveryCount"/> as well and not
+    /// only the arrival.
     /// </remarks>
     [TestFixture]
     public class BidirectionalFederationTests
@@ -49,10 +50,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer      _links   = null!;
-        private XMPPServer      _rechts  = null!;
-        private TcpServerLinks  _linksS  = null!;
-        private TcpServerLinks  _rechtsS = null!;
+        private XMPPServer      _left    = null!;
+        private XMPPServer      _right   = null!;
+        private TcpServerLinks  _leftS   = null!;
+        private TcpServerLinks  _rightS  = null!;
 
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
@@ -61,24 +62,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region SetUp / TearDown
 
-        /// <summary>Die Wache vor jedem Test scharfstellen.</summary>
+        /// <summary>Arm the guard before every test.</summary>
         [SetUp]
-        public void WacheScharfstellen()
+        public void ArmTheGuard()
             => _guard.Reset();
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
-                try { await client.DisposeAsync(); } catch { /* im Teardown egal */ }
+                try { await client.DisposeAsync(); } catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            if (_links  is not null) await _links.DisposeAsync();
-            if (_rechts is not null) await _rechts.DisposeAsync();
+            if (_left  is not null) await _left.DisposeAsync();
+            if (_right is not null) await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -86,46 +87,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Zwei Server, aber nur eine Richtung ist eingetragen.
+        /// Two servers, but only one direction is entered.
         /// </summary>
-        private void EinseitigVerbinden(Boolean bidi)
+        private void ConnectOneSided(Boolean bidi)
         {
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            // SASL-EXTERNAL und nicht Dialback: dessen Rueckfrage ginge
-            // ausgerechnet in die Richtung, die es hier nicht gibt. Rechts
-            // muesste links anwaehlen, um den Schluessel pruefen zu lassen -
-            // und koennte dann auch gleich die Antwort schicken. Der Nachweis
-            // ueber das Zertifikat kommt ohne Rueckweg aus, und genau darum
-            // geht es hier.
-            _linksS   = new TcpServerLinks(_links) {
-                            UseSaslExternal          = true,
+            // SASL-EXTERNAL and not dialback: its query would go in of all
+            // directions the one that does not exist here. Right would have to
+            // dial left in order to have the key checked - and could then just
+            // as well send the answer straight away. The proof over the
+            // certificate manages without a way back, and that is exactly what
+            // this is about.
+            _leftS                                       = new TcpServerLinks(_left) {
+                            UseSaslExternal              = true,
                             OfferBidirectionalStreams    = bidi,
                             RequestBidirectionalStreams  = bidi
                         };
 
-            _rechtsS  = new TcpServerLinks(_rechts) {
-                            UseSaslExternal          = true,
+            _rightS                                      = new TcpServerLinks(_right) {
+                            UseSaslExternal              = true,
                             OfferBidirectionalStreams    = bidi,
                             RequestBidirectionalStreams  = bidi
                         };
 
-            // Nur links kennt rechts. Ausdrücklich die Adresse und nicht
-            // "localhost": der Listener bindet IPv4-Loopback, und ein Name, der
-            // zuerst nach IPv6 auflöst, kostet je Verbindung den Fallback ab.
-            _linksS.AddPeer(_rechts.Domain,
-                            System.Net.IPAddress.Loopback.ToString(),
-                            _rechtsS.Port,
+            // Only left knows right. Expressly the address and not
+            // "localhost": the listener binds the IPv4 loopback, and a name
+            // resolving to IPv6 first costs the fallback per connection.
+            _leftS.AddPeer(_right.Domain,
+                           System.Net.IPAddress.Loopback.ToString(),
+                            _rightS.Port,
                             TcpTlsMode.StartTls,
-                            _rechts.IsOwnCertificate);
+                            _right.IsOwnCertificate);
 
         }
 
@@ -135,7 +136,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             if (server.GetAccount($"{localPart}@{server.Domain}") is null)
                 server.AddAccount(localPart);
 
-            var connection = new XMPPConnection($"{localPart}@{server.Domain}", "pw", server.Uri) {
+            var connection                                   = new XMPPConnection($"{localPart}@{server.Domain}", "pw", server.Uri) {
                                  KeepaliveEnabled            = false,
                                  MaxReconnectAttempts        = 0,
                                  ServerCertificateValidator  = server.IsOwnCertificate
@@ -150,10 +151,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         #endregion
@@ -162,36 +163,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAnswerComesBackOverTheSameConnection()
 
         /// <summary>
-        /// Der Kern von XEP-0288: die Antwort nimmt die Verbindung, über die
-        /// die Frage kam.
+        /// The core of XEP-0288: the answer takes the connection the question
+        /// came over.
         /// </summary>
         [Test]
         public async Task TheAnswerComesBackOverTheSameConnection()
         {
 
-            EinseitigVerbinden(bidi: true);
+            ConnectOneSided(bidi: true);
 
-            var alice  = await ConnectAsync(_links,  "alice");
-            var juliet = await ConnectAsync(_rechts, "juliet");
+            var alice  = await ConnectAsync(_left,  "alice");
+            var juliet = await ConnectAsync(_right, "juliet");
 
-            _links.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-            _rechts.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
+            _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
 
-            var beiJuliet = new List<String>();
-            var beiAlice  = new List<String>();
+            var atJuliet = new List<String>();
+            var atAlice  = new List<String>();
 
-            juliet.OnMessage += m => beiJuliet.Add(m.Body ?? "");
-            alice.OnMessage  += m => beiAlice.Add(m.Body ?? "");
+            juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
+            alice.OnMessage  += m => atAlice.Add(m.Body ?? "");
 
-            await alice.SendMessageAsync(juliet.BareJid, "Hin");
-            await WarteAuf(() => beiJuliet.Count > 0, "die Nachricht bei Juliet");
+            await alice.SendMessageAsync(juliet.BareJid, "There");
+            await WaitFor(() => atJuliet.Count > 0, "the message at Juliet's");
 
-            // Und jetzt die Antwort - für die rechts keinen Weg zu links hat.
-            await juliet.SendMessageAsync(alice.BareJid, "Zurück");
-            await WarteAuf(() => beiAlice.Any(b => b == "Zurück"), "die Antwort bei Alice");
+            // And now the answer - for which right has no path to left.
+            await juliet.SendMessageAsync(alice.BareJid, "Back");
+            await WaitFor(() => atAlice.Any(b => b == "Back"), "the answer at Alice's");
 
-            Assert.That(_rechtsS.BidirectionalDeliveryCount, Is.GreaterThan(0),
-                        "Die Antwort kam an, aber nicht über die Rückrichtung.");
+            Assert.That(_rightS.BidirectionalDeliveryCount, Is.GreaterThan(0),
+                        "The answer arrived, but not over the return direction.");
 
         }
 
@@ -200,49 +201,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutBidi_TheAnswerIsLost()
 
         /// <summary>
-        /// Die Gegenprobe. Ohne die Erweiterung gibt es keinen Rückweg, und
-        /// die Antwort geht verloren.
+        /// The counter-check. Without the extension there is no way back, and
+        /// the answer is lost.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test bewiese der vorige nichts: käme die Antwort auch
-        /// ohne Bidi an, hätte sie einen anderen Weg genommen und die
-        /// Erweiterung wäre unbeteiligt gewesen.
+        /// Without this test the previous one would establish nothing: were the
+        /// answer to arrive without bidi as well, it would have taken another
+        /// path and the extension would have been uninvolved.
         ///
-        /// Das stille Verschwinden ist dabei der eigentliche Schaden. Juliets
-        /// Client hält die Nachricht für abgeschickt, ihr Server hat sie
-        /// verworfen, und niemand erfährt davon - genau so verhielt sich
-        /// Prosody im Lauf aus S8.
+        /// The silent vanishing is the actual damage in this. Juliet's client
+        /// considers the message sent off, her server has discarded it, and
+        /// nobody learns of it - that is exactly how Prosody behaved in the run
+        /// from S8.
         /// </remarks>
         [Test]
         public async Task WithoutBidi_TheAnswerIsLost()
         {
 
-            EinseitigVerbinden(bidi: false);
+            ConnectOneSided(bidi: false);
 
-            var alice  = await ConnectAsync(_links,  "alice");
-            var juliet = await ConnectAsync(_rechts, "juliet");
+            var alice  = await ConnectAsync(_left,  "alice");
+            var juliet = await ConnectAsync(_right, "juliet");
 
-            _links.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-            _rechts.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
+            _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
 
-            var beiJuliet = new List<String>();
-            var beiAlice  = new List<String>();
+            var atJuliet = new List<String>();
+            var atAlice  = new List<String>();
 
-            juliet.OnMessage += m => beiJuliet.Add(m.Body ?? "");
-            alice.OnMessage  += m => beiAlice.Add(m.Body ?? "");
+            juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
+            alice.OnMessage  += m => atAlice.Add(m.Body ?? "");
 
-            await alice.SendMessageAsync(juliet.BareJid, "Hin");
-            await WarteAuf(() => beiJuliet.Count > 0, "die Nachricht bei Juliet");
+            await alice.SendMessageAsync(juliet.BareJid, "There");
+            await WaitFor(() => atJuliet.Count > 0, "the message at Juliet's");
 
-            await juliet.SendMessageAsync(alice.BareJid, "Zurück");
+            await juliet.SendMessageAsync(alice.BareJid, "Back");
 
             await Task.Delay(TimeSpan.FromSeconds(2));
 
             Assert.Multiple(() =>
             {
-                Assert.That(beiAlice.Any(b => b == "Zurück"), Is.False,
-                            "Ohne Bidi darf es keinen Rückweg geben.");
-                Assert.That(_rechtsS.BidirectionalDeliveryCount, Is.Zero);
+                Assert.That(atAlice.Any(b => b == "Back"), Is.False,
+                            "Without bidi there must be no way back.");
+                Assert.That(_rightS.BidirectionalDeliveryCount, Is.Zero);
             });
 
         }
@@ -252,34 +253,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOutgoingDirection_StillWorksWithoutAReturnPath()
 
         /// <summary>
-        /// Bidi darf die gewöhnliche Richtung nicht antasten.
+        /// Bidi must not touch the ordinary direction.
         /// </summary>
         /// <remarks>
-        /// Die Rückrichtung greift nur, wo es eine ausgewiesene eingehende
-        /// Verbindung derselben Domain gibt. Für alles andere bleibt es beim
-        /// Anwählen - sonst hätte die Erweiterung die Föderation umgebaut
-        /// statt sie zu ergänzen.
+        /// The return direction takes hold only where there is an identified
+        /// inbound connection of the same domain. For everything else it stays
+        /// with the dialling - otherwise the extension would have rebuilt the
+        /// federation instead of adding to it.
         /// </remarks>
         [Test]
         public async Task TheOutgoingDirection_StillWorksWithoutAReturnPath()
         {
 
-            EinseitigVerbinden(bidi: true);
+            ConnectOneSided(bidi: true);
 
-            var alice  = await ConnectAsync(_links,  "alice");
-            var juliet = await ConnectAsync(_rechts, "juliet");
+            var alice  = await ConnectAsync(_left,  "alice");
+            var juliet = await ConnectAsync(_right, "juliet");
 
-            _links.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
 
-            var beiJuliet = new List<String>();
-            juliet.OnMessage += m => beiJuliet.Add(m.Body ?? "");
+            var atJuliet = new List<String>();
+            juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
 
-            await alice.SendMessageAsync(juliet.BareJid, "Hin");
+            await alice.SendMessageAsync(juliet.BareJid, "There");
 
-            await WarteAuf(() => beiJuliet.Count > 0, "die Nachricht bei Juliet");
+            await WaitFor(() => atJuliet.Count > 0, "the message at Juliet's");
 
-            Assert.That(_linksS.BidirectionalDeliveryCount, Is.Zero,
-                        "Links hat angewählt und keine Rückrichtung benutzt.");
+            Assert.That(_leftS.BidirectionalDeliveryCount, Is.Zero,
+                        "Left has dialled and used no return direction.");
 
         }
 
@@ -288,83 +289,84 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheReturnPath_GoesToTheRightDomain()
 
         /// <summary>
-        /// Hängen mehrere Gegenstellen mit Rückrichtung an, muss eine Stanza
-        /// die Verbindung <b>ihrer</b> Domain nehmen.
+        /// If several far ends hang on with a return direction, a stanza has to
+        /// take the connection of <b>its</b> domain.
         /// </summary>
         /// <remarks>
-        /// Der Fall, den ein Aufbau mit nur einer Gegenstelle nie zeigt - und
-        /// genau daran kam eine Mutation vorbei, die den Domainabgleich aus der
-        /// Auswahl entfernt: bei einer einzigen Verbindung ändert das nichts.
+        /// The case a set-up with only one far end never shows - and precisely
+        /// that is what a mutation got past that removes the domain comparison
+        /// from the selection: with a single connection it changes nothing.
         ///
-        /// Im Betrieb wäre es ein Leck zwischen zwei fremden Servern. Die
-        /// Stanza ginge an die falsche Gegenstelle, die sie zwar verwirft
-        /// (falscher Empfänger), aber vorher gelesen hat - und der eigentliche
-        /// Empfänger bekäme nie etwas, ohne dass irgendwo ein Fehler aufliefe.
+        /// In operation it would be a leak between two foreign servers. The
+        /// stanza would go to the wrong far end, which does discard it (wrong
+        /// recipient) but has read it beforehand - and the actual recipient
+        /// would never get anything, without an error turning up anywhere.
         ///
-        /// <c>ferner</c> baut zuerst auf: eine Auswahl ohne Abgleich nähme die
-        /// erstbeste Verbindung, und das wäre dann die falsche.
+        /// <c>farther</c> builds up first: a selection without a comparison
+        /// would take the first connection to hand, and that would then be the
+        /// wrong one.
         /// </remarks>
         [Test]
         public async Task TheReturnPath_GoesToTheRightDomain()
         {
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            var ferner = _guard.Watched(new XMPPServer("ferner.example"));
+            var farther = _guard.Watched(new XMPPServer("farther.example"));
 
-            _links.Start();
-            _rechts.Start();
-            ferner.Start();
+            _left.Start();
+            _right.Start();
+            farther.Start();
 
             try
             {
 
-                _linksS   = new TcpServerLinks(_links)  { UseSaslExternal = true, OfferBidirectionalStreams = true, RequestBidirectionalStreams = true };
-                _rechtsS  = new TcpServerLinks(_rechts) { UseSaslExternal = true, OfferBidirectionalStreams = true, RequestBidirectionalStreams = true };
+                _leftS   = new TcpServerLinks(_left)  { UseSaslExternal = true, OfferBidirectionalStreams = true, RequestBidirectionalStreams = true };
+                _rightS  = new TcpServerLinks(_right) { UseSaslExternal = true, OfferBidirectionalStreams = true, RequestBidirectionalStreams = true };
 
-                var fernerS = new TcpServerLinks(ferner) { UseSaslExternal = true, OfferBidirectionalStreams = true, RequestBidirectionalStreams = true };
+                var fartherS = new TcpServerLinks(farther) { UseSaslExternal = true, OfferBidirectionalStreams = true, RequestBidirectionalStreams = true };
 
-                // Beide wählen rechts an; rechts kennt keinen von beiden.
-                fernerS.AddPeer(_rechts.Domain, System.Net.IPAddress.Loopback.ToString(),
-                                _rechtsS.Port, TcpTlsMode.StartTls, _rechts.IsOwnCertificate);
+                // Both dial right; right knows neither of them.
+                fartherS.AddPeer(_right.Domain, System.Net.IPAddress.Loopback.ToString(),
+                                 _rightS.Port, TcpTlsMode.StartTls, _right.IsOwnCertificate);
 
-                _linksS.AddPeer(_rechts.Domain, System.Net.IPAddress.Loopback.ToString(),
-                                _rechtsS.Port, TcpTlsMode.StartTls, _rechts.IsOwnCertificate);
+                _leftS.AddPeer(_right.Domain, System.Net.IPAddress.Loopback.ToString(),
+                               _rightS.Port, TcpTlsMode.StartTls, _right.IsOwnCertificate);
 
-                var alice  = await ConnectAsync(_links,  "alice");
-                var juliet = await ConnectAsync(_rechts, "juliet");
-                var dritte = await ConnectAsync(ferner,  "dritte");
+                var alice  = await ConnectAsync(_left,  "alice");
+                var juliet = await ConnectAsync(_right, "juliet");
+                var third  = await ConnectAsync(farther,  "third");
 
-                _links.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-                ferner.GetAccount(dritte.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-                _rechts.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+                _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
+                farther.GetAccount(third.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
+                _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
 
-                var beiJuliet = new List<String>();
-                var beiAlice  = new List<String>();
+                var atJuliet = new List<String>();
+                var atAlice  = new List<String>();
 
-                juliet.OnMessage += m => beiJuliet.Add(m.Body ?? "");
-                alice.OnMessage  += m => beiAlice.Add(m.Body ?? "");
+                juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
+                alice.OnMessage  += m => atAlice.Add(m.Body ?? "");
 
-                // Erst ferner, dann links - die Reihenfolge ist der Kern des Tests.
-                await dritte.SendMessageAsync(juliet.BareJid, "von ferner");
-                await WarteAuf(() => beiJuliet.Count > 0, "die Nachricht von ferner");
+                // First farther, then left - the order is the core of the test.
+                await third.SendMessageAsync(juliet.BareJid, "from farther");
+                await WaitFor(() => atJuliet.Count > 0, "the message from farther");
 
-                await alice.SendMessageAsync(juliet.BareJid, "von links");
-                await WarteAuf(() => beiJuliet.Count > 1, "die Nachricht von links");
+                await alice.SendMessageAsync(juliet.BareJid, "from left");
+                await WaitFor(() => atJuliet.Count > 1, "the message from left");
 
-                // Jetzt hängen zwei Rückrichtungen an rechts.
-                await juliet.SendMessageAsync(alice.BareJid, "Zurück an links");
+                // Now two return directions hang on right.
+                await juliet.SendMessageAsync(alice.BareJid, "Back to left");
 
-                await WarteAuf(() => beiAlice.Any(b => b == "Zurück an links"),
-                               "die Antwort bei Alice und nicht bei ferner");
+                await WaitFor(() => atAlice.Any(b => b == "Back to left"),
+                              "the answer at Alice's and not at farther's");
 
-                Assert.That(_rechtsS.BidirectionalDeliveryCount, Is.GreaterThan(0));
+                Assert.That(_rightS.BidirectionalDeliveryCount, Is.GreaterThan(0));
 
             }
             finally
             {
-                await ferner.DisposeAsync();
+                await farther.DisposeAsync();
             }
 
         }
