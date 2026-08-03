@@ -34,48 +34,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0198 Stream Management und Wiederaufnahme gegen eine fremde
-    /// Gegenstelle - unser Client als Client.
+    /// XEP-0198 stream management and resumption against a foreign counterpart
+    /// - our client as the client.
     /// </summary>
     /// <remarks>
-    /// Die Zählung stimmt gegen <see cref="XMPPServer"/>, also gegen unsere
-    /// eigene Auffassung davon, was eine Stanza ist. Genau das ist bei
-    /// XEP-0198 die heikle Stelle: Abschnitt 2 zählt ausschliesslich
-    /// <c>message</c>, <c>presence</c> und <c>iq</c>. Alles andere -
-    /// <c>&lt;enable/&gt;</c>, <c>&lt;r/&gt;</c>, <c>&lt;a/&gt;</c>,
-    /// SASL-Elemente, der Stream-Kopf - zählt nicht. Wer eines davon mitzählt,
-    /// merkt es nie an sich selbst, sondern erst an einem fremden Server.
+    /// The counting agrees against <see cref="XMPPServer"/>, that is against
+    /// our own understanding of what a stanza is. That is precisely the
+    /// delicate spot in XEP-0198: section 2 counts <c>message</c>,
+    /// <c>presence</c> and <c>iq</c> and nothing else. Everything else -
+    /// <c>&lt;enable/&gt;</c>, <c>&lt;r/&gt;</c>, <c>&lt;a/&gt;</c>, SASL
+    /// elements, the stream header - does not count. Whoever counts one of them
+    /// in never notices it on themselves, but only at a foreign server.
     ///
-    /// Dasselbe gilt für die Wiederaufnahme: gegen den eigenen Server teilen
-    /// beide Seiten eine Auffassung davon, wann ein <c>&lt;resume/&gt;</c>
-    /// geschickt werden darf, was hineingehört und was zurückkommt. Ein fremder
-    /// Server hat diese Auffassung nicht von uns.
+    /// The same holds for the resumption: against our own server both sides
+    /// share an understanding of when a <c>&lt;resume/&gt;</c> may be sent, what
+    /// belongs in it and what comes back. A foreign server does not have that
+    /// understanding from us.
     ///
-    /// Die Tests stehen hier und nicht in den Ableitungen: sie prüfen für jede
-    /// Gegenstelle dasselbe, und was sich unterscheidet - Domain, Endpunkt,
-    /// Port, Konten, Umgebungsvariable - legen die Ableitungen fest. Ein
-    /// dritter Server kostet damit zwanzig Zeilen.
+    /// The tests stand here and not in the derived classes: they check the same
+    /// thing for every counterpart, and what differs - domain, endpoint, port,
+    /// accounts, environment variable - the derived classes lay down. A third
+    /// server thereby costs twenty lines.
     /// </remarks>
     public abstract class AForeignPeerStreamManagementTests
     {
 
-        #region Was die Gegenstelle ausmacht
+        #region What makes up the counterpart
 
-        /// <summary>Name der Gegenstelle - nur für Fehlermeldungen.</summary>
+        /// <summary>Name of the counterpart - for error messages only.</summary>
         protected abstract String  PeerName      { get; }
 
-        /// <summary>Die Domain, die die Gegenstelle bedient.</summary>
+        /// <summary>The domain the counterpart serves.</summary>
         protected abstract String  PeerDomain    { get; }
 
-        /// <summary>Der WebSocket-Endpunkt (RFC 7395).</summary>
+        /// <summary>The WebSocket endpoint (RFC 7395).</summary>
         protected abstract String  Endpoint      { get; }
 
-        /// <summary>Der Port dahinter - für die Erreichbarkeitsprüfung.</summary>
+        /// <summary>The port behind it - for the reachability check.</summary>
         protected abstract Int32   EndpointPort  { get; }
 
         /// <summary>
-        /// Die Umgebungsvariable, die auf das Zertifikatsverzeichnis des
-        /// Aufbaus zeigt.
+        /// The environment variable pointing at the certificate directory of
+        /// the setup.
         /// </summary>
         protected abstract String  CertVariable  { get; }
 
@@ -83,12 +83,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        /// <summary>Das Konto des Clients selbst.</summary>
+        /// <summary>The account of the client itself.</summary>
         protected const String User      = "alice";
 
-        /// <summary>Ein zweites Konto als Absender.</summary>
+        /// <summary>A second account as the sender.</summary>
         protected const String User2     = "bob";
 
+        // Stays German on purpose: this is the password of the real accounts
+        // that tools/prosody/setup.sh and tools/ejabberd/setup.sh create in
+        // the WSL setups. Translating it here would lock us out there.
         protected const String Password  = "geheim";
 
         private readonly List<XMPPClient>  _clients = [];
@@ -96,40 +99,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Aufbau / Abbau
+        #region Setting up / tearing down
 
         private String CertDirectory
             => Environment.GetEnvironmentVariable(CertVariable) ?? "";
 
         /// <summary>
-        /// Meldet einen Client an, oder überspringt den Test.
+        /// Logs a client in, or skips the test.
         /// </summary>
-        /// <param name="localPart">Welches der beiden Testkonten.</param>
+        /// <param name="localPart">Which of the two test accounts.</param>
         /// <param name="reconnect">
-        /// Wie oft der Client nach einem Abriss wiederkommen darf. Null für
-        /// alles, was den Reconnect nicht braucht - dann steht am Testende
-        /// nichts mehr im Hintergrund.
+        /// How often the client may come back after a tear. Zero for everything
+        /// that does not need the reconnect - then nothing is left running in
+        /// the background at the end of the test.
         /// </param>
-        protected async Task<XMPPClient> VerbindeAsync(String  localPart  = User,
+        protected async Task<XMPPClient> ConnectAsync(String  localPart  = User,
                                                        Int32   reconnect  = 0)
         {
 
-            var verzeichnis = CertDirectory;
+            var directory = CertDirectory;
 
-            if (verzeichnis.Length == 0 || !File.Exists(Path.Combine(verzeichnis, "ca.crt")))
-                Assert.Ignore($"Kein {PeerName}-Aufbau: {CertVariable} zeigt auf keine Test-CA.");
+            if (directory.Length == 0 || !File.Exists(Path.Combine(directory, "ca.crt")))
+                Assert.Ignore($"No {PeerName} setup: {CertVariable} points at no test CA.");
 
-            if (!PortAntwortet())
-                Assert.Ignore($"Auf 127.0.0.1:{EndpointPort} antwortet kein {PeerName}-WebSocket.");
+            if (!PortAnswers())
+                Assert.Ignore($"On 127.0.0.1:{EndpointPort} no {PeerName} WebSocket answers.");
 
-            _ca = X509CertificateLoader.LoadCertificateFromFile(Path.Combine(verzeichnis, "ca.crt"));
+            _ca = X509CertificateLoader.LoadCertificateFromFile(Path.Combine(directory, "ca.crt"));
 
             var connection = new XMPPConnection($"{localPart}@{PeerDomain}", Password, Endpoint) {
                                  KeepaliveEnabled            = false,
                                  MaxReconnectAttempts        = reconnect,
                                  InitialReconnectDelay       = TimeSpan.FromMilliseconds(300),
                                  StreamManagementEnabled     = true,
-                                 ServerCertificateValidator  = TrautDerTestCA
+                                 ServerCertificateValidator  = TrustsTheTestCA
                              };
 
             var client = new XMPPClient(connection);
@@ -138,19 +141,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.ConnectAsync();
 
             Assert.That(client.StreamManagement, Is.Not.Null,
-                        "Ohne Stream-Management-Manager hat dieser Test nichts zu prüfen.");
+                        "Without a stream management manager this test has nothing to check.");
 
             return client;
 
         }
 
         [TearDown]
-        public async Task Abbau()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
-                try { await client.DisposeAsync(); } catch { /* im Teardown egal */ }
+                try { await client.DisposeAsync(); } catch { /* never mind in the teardown */ }
             }
 
             _clients.Clear();
@@ -159,9 +162,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private Boolean PortAntwortet()
+        private Boolean PortAnswers()
         {
             try
             {
@@ -175,17 +178,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Nimmt genau die Zertifikate an, die von der Test-CA signiert sind.
+        /// Accepts exactly the certificates that are signed by the test CA.
         /// </summary>
         /// <remarks>
-        /// Der Name wird bewusst nicht geprüft: angewählt wird 127.0.0.1, das
-        /// Zertifikat lautet auf die Domain der Gegenstelle. Ein Name liesse
-        /// sich nur über einen Eintrag in <c>/etc/hosts</c> auflösen, und der
-        /// bräuchte root. Die Kette wird dafür vollständig geprüft - "alles
-        /// annehmen" bestünde auch gegen eine beliebige fremde Gegenstelle und
-        /// sagte nichts.
+        /// The name is deliberately not checked: what is dialled is 127.0.0.1,
+        /// the certificate reads on the domain of the counterpart. A name could
+        /// only be resolved through an entry in <c>/etc/hosts</c>, and that
+        /// would need root. The chain is checked in full for that - "accept
+        /// everything" would pass against any foreign counterpart too and would
+        /// say nothing.
         /// </remarks>
-        private Boolean TrautDerTestCA(Object            sender,
+        private Boolean TrustsTheTestCA(Object            sender,
                                        X509Certificate?  certificate,
                                        X509Chain?        chain,
                                        SslPolicyErrors   errors)
@@ -194,178 +197,175 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             if (certificate is null)
                 return false;
 
-            var zertifikat = certificate as X509Certificate2
+            var certificate2 = certificate as X509Certificate2
                                  ?? X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
 
-            using var pruefung = new X509Chain();
+            using var check = new X509Chain();
 
-            pruefung.ChainPolicy.TrustMode       = X509ChainTrustMode.CustomRootTrust;
-            pruefung.ChainPolicy.RevocationMode  = X509RevocationMode.NoCheck;
-            pruefung.ChainPolicy.CustomTrustStore.Add(_ca);
+            check.ChainPolicy.TrustMode       = X509ChainTrustMode.CustomRootTrust;
+            check.ChainPolicy.RevocationMode  = X509RevocationMode.NoCheck;
+            check.ChainPolicy.CustomTrustStore.Add(_ca);
 
-            return pruefung.Build(zertifikat);
+            return check.Build(certificate2);
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
 
-            var ok = await XMPPServer.WaitUntilAsync(bedingung, TimeSpan.FromSeconds(15));
+            var ok = await XMPPServer.WaitUntilAsync(condition, TimeSpan.FromSeconds(15));
 
-            Assert.That(ok, Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(ok, Is.True, $"Timeout while waiting for: {what}");
 
         }
 
         /// <summary>
-        /// Zählt die Übergänge nach <c>Connected</c> - der einzige Zeitpunkt,
-        /// zu dem der Aufbau nachweislich abgeschlossen ist.
+        /// Counts the transitions into <c>Connected</c> - the only moment at
+        /// which the setup is demonstrably finished.
         /// </summary>
         /// <remarks>
-        /// Auf etwas Früheres zu warten - etwa darauf, dass die Gegenstelle
-        /// den Stream abgeholt hat - prüft den Client mitten in seiner
-        /// Aufbauphase, in einem Zustand, den er gleich wieder verlässt.
+        /// Waiting for something earlier - that the counterpart has picked the
+        /// stream up, say - checks the client in the middle of its setup phase,
+        /// in a state it is about to leave again.
         /// </remarks>
         /// <remarks>
-        /// Mitgeschrieben wird seit D33 auch der <b>Weg</b> dorthin. Die
-        /// Zählung allein genügte, solange alles gutging; blieb die
-        /// Wiederaufnahme aus, sagte die Meldung nur „Zeitüberschreitung beim
-        /// Warten auf: den wiederaufgenommenen Stream" — und damit nichts
-        /// darüber, wie weit der Client gekommen ist: ob er es überhaupt
-        /// versucht hat, wie oft, und woran es lag.
+        /// Since D33 the <b>way</b> there is recorded as well. The counting
+        /// alone sufficed as long as everything went well; if the resumption
+        /// failed to come, the message said only "timeout while waiting for: the
+        /// resumed stream" — and thereby nothing about how far the client got:
+        /// whether it tried at all, how often, and what it was down to.
         ///
-        /// Genau das ist in D16 passiert — ein Fehlschlag in einem von vier
-        /// Vollläufen, unaufklärbar, weil die Meldung nichts hergab. Er stand
-        /// seitdem als offener Punkt im Plan.
+        /// That is exactly what happened in D16 — one failure in one of four
+        /// full runs, unexplainable, because the message gave nothing away. It
+        /// has stood as an open point in the plan ever since.
         /// </remarks>
-        private static Verlauf ZaehleWiederverbindungen(XMPPClient client)
+        private static History CountReconnects(XMPPClient client)
             => new(client);
 
         /// <summary>
-        /// Zählt die abgeschlossenen Aufbauten und schreibt mit, was dazwischen
-        /// geschah.
+        /// Counts the finished setups and records what happened in between.
         /// </summary>
         /// <remarks>
-        /// Zwanzig gezielte Durchgänge in D33 konnten den Fehlschlag aus D16
-        /// nicht wiederholen: Die vierzig Ausführungen lagen alle zwischen 519
-        /// und 669 Millisekunden, bei einer Frist von 15 Sekunden. Die damalige
-        /// Vermutung „unter Last knapp" trägt damit nicht — die Frist bleibt
-        /// deshalb unverändert.
+        /// Twenty targeted runs in D33 could not repeat the failure from D16:
+        /// the forty executions all lay between 519 and 669 milliseconds,
+        /// against a deadline of 15 seconds. The guess of the time, "tight under
+        /// load", therefore does not carry — which is why the deadline stays as
+        /// it was.
         ///
-        /// Was bleibt, ist die Vorsorge für das nächste Mal: Der Verlauf steht
-        /// dann in der Meldung. <b>Ein Fehlschlag, der sich selbst erklärt,
-        /// kostet einmal Schreibarbeit; einer, der es nicht tut, kostet jedes
-        /// Mal eine Untersuchung.</b>
+        /// What remains is the provision for next time: the history then stands
+        /// in the message. <b>A failure that explains itself costs writing once;
+        /// one that does not costs an investigation every time.</b>
         /// </remarks>
-        protected sealed class Verlauf
+        protected sealed class History
         {
 
-            private readonly ConcurrentQueue<String> _schritte = new();
-            private Int32 _verbunden;
+            private readonly ConcurrentQueue<String> _steps = new();
+            private Int32 _connected;
 
-            public Verlauf(XMPPClient client)
+            public History(XMPPClient client)
             {
 
-                client.OnStateChanged += (alt, neu) =>
+                client.OnStateChanged += (oldState, newState) =>
                 {
 
-                    _schritte.Enqueue($"{alt}->{neu}");
+                    _steps.Enqueue($"{oldState}->{newState}");
 
-                    if (neu == ConnectionState.Connected)
-                        Interlocked.Increment(ref _verbunden);
+                    if (newState == ConnectionState.Connected)
+                        Interlocked.Increment(ref _connected);
 
                 };
 
-                client.OnError += meldung => _schritte.Enqueue($"Fehler: {meldung}");
+                client.OnError += message => _steps.Enqueue($"Error: {message}");
 
             }
 
-            /// <summary>Hat der Client den Aufbau mindestens einmal abgeschlossen?</summary>
-            public Boolean WiederVerbunden
-                => Volatile.Read(ref _verbunden) > 0;
+            /// <summary>Has the client finished the setup at least once?</summary>
+            public Boolean Reconnected
+                => Volatile.Read(ref _connected) > 0;
 
             public override String ToString()
-                => _schritte.IsEmpty
-                       ? "(nichts geschehen - der Client hat es nicht einmal versucht)"
-                       : String.Join(" | ", _schritte);
+                => _steps.IsEmpty
+                       ? "(nothing happened - the client did not even try)"
+                       : String.Join(" | ", _steps);
 
         }
 
         /// <summary>
-        /// Was ein Verbindungsaufbau gegen die Gegenstelle kosten darf -
-        /// Aushandlung, TLS, SASL, Bind und Wiederaufnahme.
+        /// What a connection setup against the counterpart may cost -
+        /// negotiation, TLS, SASL, bind and resumption.
         /// </summary>
         /// <remarks>
-        /// Grosszügig gewählt: Die gemessenen Durchgänge in D33 lagen bei rund
-        /// einer halben Sekunde für den ganzen Vorgang. Diese Zahl deckt den
-        /// <i>fehlgeschlagenen</i> Anlauf mit ab, der weit teurer sein kann als
-        /// der geglückte - eine Gegenstelle, die den Abriss noch nicht bemerkt
-        /// hat, antwortet nicht sofort mit einer Abweisung.
+        /// Generously chosen: the runs measured in D33 lay at around half a
+        /// second for the whole procedure. This number covers the <i>failed</i>
+        /// attempt as well, which can be far dearer than the successful one - a
+        /// counterpart that has not yet noticed the tear does not answer with a
+        /// refusal at once.
         /// </remarks>
-        private static readonly TimeSpan AufbauProVersuch = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan SetupPerAttempt = TimeSpan.FromSeconds(3);
 
         /// <summary>
-        /// Wie lange dieser Test auf die Wiederaufnahme wartet - abgeleitet aus
-        /// der Wiederverbindungs-Politik des Clients selbst.
+        /// How long this test waits for the resumption - derived from the
+        /// client's own reconnection policy.
         /// </summary>
         /// <remarks>
-        /// Hier stand eine feste Frist von 15 Sekunden, und daran ist der Test
-        /// in D16 einmal gescheitert. In D33 wurde daraufhin gemessen: vierzig
-        /// Ausführungen zwischen 519 und 669 ms, und daraus geschlossen, die
-        /// Erklärung „unter Last knapp" trage nicht.
+        /// A fixed deadline of 15 seconds stood here, and the test failed at it
+        /// once in D16. In D33 measurements were taken in consequence: forty
+        /// executions between 519 and 669 ms, and from that it was concluded
+        /// that the explanation "tight under load" does not carry.
         ///
-        /// <b>Der Schluss war falsch, und zwar aus Arithmetik.</b> Der Client
-        /// darf hier fünfmal wiederkommen und wartet dazwischen mit
-        /// Verdopplung: 300, 600, 1200, 2400 und 4800 Millisekunden - allein
-        /// <b>9,3 Sekunden</b> reines Warten. Von den 15 blieben also 5,7
-        /// Sekunden für fünf vollständige Verbindungsaufbauten. Zwei
-        /// fehlgeschlagene Anläufe reichen, und die Frist ist überschritten,
-        /// während der Client sich genau so verhält, wie er eingestellt ist.
+        /// <b>The conclusion was wrong, and by arithmetic at that.</b> The
+        /// client may come back five times here and waits in between with
+        /// doubling: 300, 600, 1200, 2400 and 4800 milliseconds - <b>9.3
+        /// seconds</b> of pure waiting on its own. Of the 15 there remained 5.7
+        /// seconds for five complete connection setups. Two failed attempts
+        /// suffice and the deadline is exceeded, while the client behaves
+        /// exactly as it is configured to.
         ///
-        /// Die vierzig schnellen Durchgänge widerlegen das nicht - sie sind
-        /// alle beim <i>ersten</i> Anlauf durchgekommen und sagen über den Fall
-        /// mit Wiederholungen nichts. <b>Ein Mittelwert aus lauter geglückten
-        /// Läufen begrenzt den Ausreisser nicht; er beschreibt nur, wie es
-        /// aussieht, wenn nichts schiefgeht.</b>
+        /// The forty fast runs do not refute that - they all came through at
+        /// the <i>first</i> attempt and say nothing about the case with
+        /// repetitions. <b>An average made of nothing but successful runs does
+        /// not bound the outlier; it only describes what it looks like when
+        /// nothing goes wrong.</b>
         ///
-        /// Die Geduld ist deshalb keine geratene Zahl mehr, sondern die Summe
-        /// dessen, was der Client tun darf.
+        /// The patience is therefore no longer a guessed number, but the sum of
+        /// what the client is allowed to do.
         /// </remarks>
-        protected static TimeSpan Geduld(XMPPConnection verbindung)
+        protected static TimeSpan Patience(XMPPConnection connection)
         {
 
-            var summe = TimeSpan.Zero;
+            var total = TimeSpan.Zero;
 
-            for (var versuch = 1; versuch <= Math.Max(verbindung.MaxReconnectAttempts, 1); versuch++)
+            for (var attempt = 1; attempt <= Math.Max(connection.MaxReconnectAttempts, 1); attempt++)
             {
 
-                var warten = Math.Min(
-                                 verbindung.InitialReconnectDelay.TotalMilliseconds * Math.Pow(2, versuch - 1),
-                                 verbindung.MaxReconnectDelay.TotalMilliseconds);
+                var wait = Math.Min(
+                                 connection.InitialReconnectDelay.TotalMilliseconds * Math.Pow(2, attempt - 1),
+                                 connection.MaxReconnectDelay.TotalMilliseconds);
 
-                summe += TimeSpan.FromMilliseconds(warten) + AufbauProVersuch;
+                total += TimeSpan.FromMilliseconds(wait) + SetupPerAttempt;
 
             }
 
-            return summe;
+            return total;
 
         }
 
         /// <summary>
-        /// Wartet auf die Wiederaufnahme und nennt beim Scheitern den Verlauf.
+        /// Waits for the resumption and names the history when it fails.
         /// </summary>
-        private static async Task WarteAufWiederaufnahmeAsync(Verlauf verlauf, XMPPClient client)
+        private static async Task WaitForResumptionAsync(History history, XMPPClient client)
         {
 
-            var geduld  = Geduld(client.Connection);
+            var patience  = Patience(client.Connection);
 
-            var ok      = await XMPPServer.WaitUntilAsync(() => verlauf.WiederVerbunden, geduld);
+            var ok      = await XMPPServer.WaitUntilAsync(() => history.Reconnected, patience);
 
             Assert.That(ok, Is.True,
-                        $"Der Stream wurde binnen {geduld.TotalSeconds:0.#} Sekunden nicht wieder " +
-                        $"aufgenommen - das ist die Zeit, die der Client selbst brauchen darf " +
-                        $"({client.Connection.MaxReconnectAttempts} Anläufe, ab " +
-                        $"{client.Connection.InitialReconnectDelay.TotalMilliseconds:0} ms mit " +
-                        $"Verdopplung). Verlauf: {verlauf}");
+                        $"The stream was not resumed within {patience.TotalSeconds:0.#} seconds " +
+                        $"- that is the time the client itself is allowed to take " +
+                        $"({client.Connection.MaxReconnectAttempts} attempts, from " +
+                        $"{client.Connection.InitialReconnectDelay.TotalMilliseconds:0} ms with " +
+                        $"doubling). History: {history}");
 
         }
 
@@ -375,23 +375,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerAcceptsOurEnable()
 
         /// <summary>
-        /// Die Gegenstelle nimmt unser <c>&lt;enable/&gt;</c> an.
+        /// The counterpart accepts our <c>&lt;enable/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Der schwächste dieser Tests und trotzdem nicht überflüssig: er
-        /// belegt, dass unser <c>&lt;enable/&gt;</c> im richtigen Namensraum
-        /// (<c>urn:xmpp:sm:3</c>) und an der richtigen Stelle des Aufbaus steht
-        /// - nach dem Bind, vor allem Weiteren. Steht es falsch, kommt
-        /// <c>&lt;failed/&gt;</c> statt <c>&lt;enabled/&gt;</c>.
+        /// The weakest of these tests and not superfluous all the same: it
+        /// vouches for our <c>&lt;enable/&gt;</c> standing in the right
+        /// namespace (<c>urn:xmpp:sm:3</c>) and at the right place of the setup
+        /// - after the bind, before everything further. If it stands wrongly, a
+        /// <c>&lt;failed/&gt;</c> comes instead of an <c>&lt;enabled/&gt;</c>.
         /// </remarks>
         [Test]
         public async Task TheServerAcceptsOurEnable()
         {
 
-            var client = await VerbindeAsync();
+            var client = await ConnectAsync();
 
             Assert.That(client.StreamManagement!.IsEnabled, Is.True,
-                        $"{PeerName} hat Stream Management nicht freigeschaltet.");
+                        $"{PeerName} has not switched stream management on.");
 
         }
 
@@ -400,40 +400,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerCountsTheSetupExactlyAsWeDo()
 
         /// <summary>
-        /// Nach dem Aufbau melden beide Seiten denselben Stand.
+        /// After the setup both sides report the same state.
         /// </summary>
         /// <remarks>
-        /// Der Test, um dessentwillen dieser Aufbau existiert. Zwischen
-        /// <c>&lt;enabled/&gt;</c> und diesem Punkt schickt der Client Carbons,
-        /// eine Roster-Abfrage und die erste Presence - und dazwischen Nonzas.
-        /// Zählen wir eine davon mit, die die Gegenstelle nicht zählt, weichen
-        /// die Stände hier um genau diese eine ab.
+        /// The test for whose sake this setup exists. Between the
+        /// <c>&lt;enabled/&gt;</c> and this point the client sends carbons, a
+        /// roster query and the first presence - and nonzas in between. If we
+        /// count one of those in that the counterpart does not, the states
+        /// differ here by exactly that one.
         ///
-        /// Geprüft wird Gleichheit, nicht nur eine leere Warteschlange: ein zu
-        /// grosses <c>h</c> räumte sie ebenfalls, und ein Client, der zu wenig
-        /// zählt, käme damit durch.
+        /// Equality is checked, not merely an empty queue: too large an
+        /// <c>h</c> would clear it as well, and a client that counts too few
+        /// would get away with it.
         /// </remarks>
         [Test]
         public async Task TheServerCountsTheSetupExactlyAsWeDo()
         {
 
-            var client  = await VerbindeAsync();
+            var client  = await ConnectAsync();
             var sm      = client.StreamManagement!;
 
-            var unser   = sm.OutboundCount;
+            var ours   = sm.OutboundCount;
 
             await sm.RequestAckAsync();
-            await WarteAuf(() => sm.LastAcknowledged == unser,
-                           $"ein <a/> über {unser} Stanzas (zuletzt {sm.LastAcknowledged})");
+            await WaitFor(() => sm.LastAcknowledged == ours,
+                           $"an <a/> over {ours} stanzas (last {sm.LastAcknowledged})");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(sm.LastAcknowledged, Is.EqualTo(unser),
-                            $"{PeerName} zählt den Aufbau anders als wir.");
+                Assert.That(sm.LastAcknowledged, Is.EqualTo(ours),
+                            $"{PeerName} counts the setup differently from us.");
 
                 Assert.That(sm.UnackedCount, Is.Zero,
-                            "Nach einem vollständigen Ack darf nichts offen bleiben.");
+                            "After a complete ack nothing may stay outstanding.");
 
             });
 
@@ -444,76 +444,74 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NonzasDoNotAdvanceTheCount()
 
         /// <summary>
-        /// XEP-0198 Abschnitt 2: Nonzas zählen nicht - auf beiden Seiten.
+        /// XEP-0198 section 2: nonzas do not count - on either side.
         /// </summary>
         /// <remarks>
-        /// Drei Nachrichten, dazwischen je ein <c>&lt;r/&gt;</c>, und die
-        /// Gegenstelle beantwortet jedes davon mit einem <c>&lt;a/&gt;</c>.
-        /// Zählte eine der beiden Seiten die Nonzas mit, liefen die Stände
-        /// auseinander - und zwar so, wie keine Gegenprobe gegen den eigenen
-        /// Server es je zeigte, weil dort beide Seiten denselben Fehler
-        /// machten.
+        /// Three messages, an <c>&lt;r/&gt;</c> between each, and the
+        /// counterpart answers every one of those with an <c>&lt;a/&gt;</c>. If
+        /// one of the two sides counted the nonzas in, the states would drift
+        /// apart - and in a way no counter-check against our own server ever
+        /// showed, because both sides made the same mistake there.
         ///
-        /// <b>Gemessen wird gegen den Mitschnitt, nicht gegen die Absicht.</b>
-        /// Hier stand einmal „der Stand muss um genau drei gestiegen sein", und
-        /// genau daran ist der Test in D34 einmal gefallen: Prosody bestätigte
-        /// sechs - also exakt die drei Nachrichten -, unser Zähler stand bei
-        /// acht. Es gingen also zwei Stanzas hinaus, die dieser Test nicht
-        /// geschickt hat, und zwar nachdem Prosody bestätigt hatte. Ein Client
-        /// tut das durchaus zu Recht: Er beantwortet, was hereinkommt, und wann
-        /// das geschieht, bestimmt nicht der Test.
+        /// <b>The measurement runs against the recording, not against the
+        /// intention.</b> It once said here "the state must have risen by
+        /// exactly three", and that is exactly what the test fell over once in
+        /// D34: Prosody acknowledged six - so exactly the three messages - and
+        /// our counter stood at eight. So two stanzas went out that this test
+        /// did not send, and after Prosody had acknowledged at that. A client
+        /// does that quite rightly: it answers what comes in, and when that
+        /// happens is not for the test to decide.
         ///
-        /// Die Aussage von Abschnitt 2 ist ohnehin keine Zahl, sondern eine
-        /// Beziehung: <i>Der Zähler steigt um die Stanzas und um nichts
-        /// sonst.</i> Genau die steht jetzt da - drei ist nur noch die
-        /// Untergrenze, damit überhaupt etwas gemessen wird.
+        /// The statement of section 2 is not a number anyway, but a relation:
+        /// <i>the counter rises by the stanzas and by nothing else.</i> That is
+        /// what stands there now - three is only the lower bound any more, so
+        /// that something is measured at all.
         /// </remarks>
         [Test]
         public async Task NonzasDoNotAdvanceTheCount()
         {
 
-            var client  = await VerbindeAsync();
+            var client  = await ConnectAsync();
             var sm      = client.StreamManagement!;
 
-            // Was tatsächlich hinausgeht. Zahlen sagen, *dass* etwas nicht
-            // stimmt, und nie *was* - dieselbe Sackgasse wie in D16 und D29.
-            // Seit D35 ist der Mitschnitt dabei; jetzt ist er auch die
-            // Messlatte.
-            var hinaus = new ConcurrentQueue<String>();
+            // What actually goes out. Numbers say *that* something is wrong,
+            // and never *what* - the same dead end as in D16 and D29. Since D35
+            // the recording is there; now it is also the yardstick.
+            var outgoing = new ConcurrentQueue<String>();
 
             client.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith(">>> ", StringComparison.Ordinal))
-                    hinaus.Enqueue(x[4..]);
+                    outgoing.Enqueue(x[4..]);
             };
 
-            var vorher  = sm.OutboundCount;
+            var before  = sm.OutboundCount;
 
             for (var i = 0; i < 3; i++)
             {
 
                 await client.SendRawAsync(
-                          $"<message to='{User}@{PeerDomain}' type='chat' id='zaehl-{i}'>" +
+                          $"<message to='{User}@{PeerDomain}' type='chat' id='count-{i}'>" +
                           $"<body>{i}</body></message>");
 
                 await sm.RequestAckAsync();
 
             }
 
-            // Bis zu drei Anläufe: Jede Nachfrage bestätigt, was bis dahin
-            // hinausging. Ist danach noch etwas hinausgegangen - eine Antwort
-            // auf etwas, das gerade hereinkam -, fragt der nächste Anlauf
-            // erneut nach. Ohne das bliebe genau diese Stanza für immer
-            // unbestätigt, und die Gleichheit käme nie zustande.
-            for (var versuch = 0; versuch < 3; versuch++)
+            // Up to three attempts: every enquiry acknowledges what went out up
+            // to then. If something went out after that - an answer to something
+            // that just came in - the next attempt enquires anew. Without that
+            // exactly this stanza would stay unacknowledged for ever, and the
+            // equality would never come about.
+            for (var attempt = 0; attempt < 3; attempt++)
             {
 
                 await sm.RequestAckAsync();
 
                 if (await XMPPServer.WaitUntilAsync(
                               () => sm.LastAcknowledged == sm.OutboundCount &&
-                                    sm.OutboundCount    == vorher + Gezaehlt(hinaus) &&
-                                    sm.OutboundCount    >= vorher + 3,
+                                    sm.OutboundCount    == before + Counted(outgoing) &&
+                                    sm.OutboundCount    >= before + 3,
                               TimeSpan.FromSeconds(5)))
                 {
                     break;
@@ -521,45 +519,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             }
 
-            var mitschnitt = String.Join("\n   ", hinaus);
+            var recording = String.Join("\n   ", outgoing);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(sm.OutboundCount - vorher, Is.EqualTo(Gezaehlt(hinaus)),
-                            "Der Zähler passt nicht zu dem, was hinausgegangen ist:\n   " +
-                            mitschnitt);
+                Assert.That(sm.OutboundCount - before, Is.EqualTo(Counted(outgoing)),
+                            "The counter does not match what went out:\n   " +
+                            recording);
 
                 Assert.That(sm.LastAcknowledged, Is.EqualTo(sm.OutboundCount),
-                            $"{PeerName} hat anders gezählt als wir. Hinausgegangen ist:\n   " +
-                            mitschnitt);
+                            $"{PeerName} counted differently from us. What went out is:\n   " +
+                            recording);
 
-                Assert.That(hinaus.Count(f => !IstStanza(f)), Is.GreaterThanOrEqualTo(3),
-                            "Ohne Nonzas im Ausgang prüft dieser Test nichts:\n   " + mitschnitt);
+                Assert.That(outgoing.Count(f => !IsStanza(f)), Is.GreaterThanOrEqualTo(3),
+                            "Without nonzas in the outgoing traffic this test checks nothing:\n   " + recording);
 
-                Assert.That(sm.OutboundCount, Is.GreaterThanOrEqualTo(vorher + 3),
-                            "Die drei Nachrichten sind nicht mitgezählt worden:\n   " + mitschnitt);
+                Assert.That(sm.OutboundCount, Is.GreaterThanOrEqualTo(before + 3),
+                            "The three messages have not been counted in:\n   " + recording);
 
             });
 
         }
 
-        /// <summary>Wie viele Stanzas im Mitschnitt stehen.</summary>
-        private static UInt32 Gezaehlt(IEnumerable<String> frames)
-            => (UInt32) frames.Count(IstStanza);
+        /// <summary>How many stanzas stand in the recording.</summary>
+        private static UInt32 Counted(IEnumerable<String> frames)
+            => (UInt32) frames.Count(IsStanza);
 
         /// <summary>
-        /// Was XEP-0198, Abschnitt 2 zählt - hier noch einmal von Hand.
+        /// What XEP-0198, section 2 counts - here once more by hand.
         /// </summary>
         /// <remarks>
-        /// Absichtlich <b>nicht</b>
-        /// <see cref="StreamManagementManager.IsCountableStanza"/>: Das ist die
-        /// Funktion, deren Ergebnis hier geprüft wird. Nähme der Test sie,
-        /// verglich er eine Zahl mit sich selbst und bestünde auch dann, wenn
-        /// sie falsch antwortet - dieselbe Falle, wegen der auch der Testserver
-        /// eigenständig zählt.
+        /// Deliberately <b>not</b>
+        /// <see cref="StreamManagementManager.IsCountableStanza"/>: that is the
+        /// function whose result is being checked here. If the test took it, it
+        /// would compare a number with itself and would pass even when it
+        /// answers wrongly - the same trap for whose sake the test server counts
+        /// independently as well.
         /// </remarks>
-        private static Boolean IstStanza(String frame)
+        private static Boolean IsStanza(String frame)
             => Regex.IsMatch(frame, @"^\s*<(message|presence|iq)(\s|/|>)");
 
         #endregion
@@ -567,35 +565,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OurInboundCountIsNotTooHigh()
 
         /// <summary>
-        /// Die Gegenrichtung: unser <c>&lt;a h='...'/&gt;</c> übersteigt nicht,
-        /// was die Gegenstelle geschickt hat.
+        /// The other direction: our <c>&lt;a h='...'/&gt;</c> does not exceed
+        /// what the counterpart has sent.
         /// </summary>
         /// <remarks>
-        /// Für die eingehende Richtung gibt es keinen Wert, den die Gegenstelle
-        /// uns nennt - wir können unseren Zähler also nicht direkt vergleichen.
-        /// Sie prüft ihn aber: ein <c>h</c>, das grösser ist als die Zahl der
-        /// tatsächlich geschickten Stanzas, ist ein Protokollfehler und beendet
-        /// den Stream.
+        /// For the incoming direction there is no value the counterpart names to
+        /// us - so we cannot compare our counter directly. It does check it,
+        /// though: an <c>h</c> greater than the number of stanzas actually sent
+        /// is a protocol error and ends the stream.
         ///
-        /// Der Nachweis läuft deshalb über das Weiterleben: wir melden unseren
-        /// Stand und fragen danach nach. Kommt die Antwort, wurde der Wert
-        /// hingenommen. Nach unten ist er damit nicht abgesichert - ein zu
-        /// kleines <c>h</c> wäre zulässig und fiele hier nicht auf.
+        /// The proof therefore runs over the living on: we report our state and
+        /// enquire afterwards. If the answer comes, the value was accepted.
+        /// Downwards it is not secured by that - too small an <c>h</c> would be
+        /// admissible and would not show up here.
         /// </remarks>
         [Test]
         public async Task OurInboundCountIsNotTooHigh()
         {
 
-            var client  = await VerbindeAsync();
+            var client  = await ConnectAsync();
             var sm      = client.StreamManagement!;
 
             await sm.SendAckAsync();
 
-            var dauer = await client.PingAsync();
+            var duration = await client.PingAsync();
 
-            Assert.That(dauer, Is.Not.Null,
-                        $"{PeerName} hat nach unserem <a h='{sm.InboundCount}'/> nicht mehr " +
-                        "geantwortet - vermutlich haben wir mehr gezählt, als es geschickt hat.");
+            Assert.That(duration, Is.Not.Null,
+                        $"{PeerName} did not answer any more after our <a h='{sm.InboundCount}'/> " +
+                        "- presumably we counted more than it sent.");
 
         }
 
@@ -604,23 +601,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerPromisesToKeepTheStream()
 
         /// <summary>
-        /// Die Gegenstelle sagt die Wiederaufnahme zu.
+        /// The counterpart promises the resumption.
         /// </summary>
         /// <remarks>
-        /// Kommt hier eine Kennung an, hat sie unser
-        /// <c>&lt;enable resume='true'/&gt;</c> verstanden.
+        /// If an id arrives here, it has understood our
+        /// <c>&lt;enable resume='true'/&gt;</c>.
         /// </remarks>
         [Test]
         public async Task TheServerPromisesToKeepTheStream()
         {
 
-            var alice = await VerbindeAsync();
+            var alice = await ConnectAsync();
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(alice.StreamManagement!.CanResume, Is.True,
-                            $"{PeerName} hat die Wiederaufnahme nicht zugesagt.");
+                            $"{PeerName} has not promised the resumption.");
 
                 Assert.That(alice.StreamManagement.ResumeId, Is.Not.Null.And.Not.Empty);
 
@@ -633,41 +630,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePatienceCoversWhatTheClientMayTake()
 
         /// <summary>
-        /// Die Geduld dieses Tests deckt ab, was der Client selbst brauchen
-        /// darf.
+        /// The patience of this test covers what the client itself is allowed
+        /// to take.
         /// </summary>
         /// <remarks>
-        /// Die einzige Prüfung hier, die keine Gegenstelle braucht - und die
-        /// einzige, die den Fehlschlag aus D16 fassen kann: Er trat einmal auf
-        /// und war danach in vierzig Ausführungen nicht zu wiederholen. Was
-        /// sich <b>nicht</b> herbeiführen lässt, lässt sich auch nicht durch
-        /// einen Test halten, der auf sein Eintreten wartet.
+        /// The only check here that needs no counterpart - and the only one that
+        /// can catch the failure from D16: it occurred once and was afterwards
+        /// not to be repeated in forty executions. What <b>cannot</b> be brought
+        /// about cannot be held by a test that waits for it to occur either.
         ///
-        /// Nachrechnen kann man es dafür: Fünf Anläufe mit 300 Millisekunden
-        /// und Verdopplung sind 300 + 600 + 1200 + 2400 + 4800 = 9,3 Sekunden
-        /// <i>reines Warten</i>, dazu fünf vollständige Verbindungsaufbauten.
-        /// Eine feste Frist von 15 Sekunden liess dafür 5,7 Sekunden - und
-        /// jeder fehlgeschlagene Anlauf ging davon ab.
+        /// It can be recomputed, though: five attempts with 300 milliseconds and
+        /// doubling are 300 + 600 + 1200 + 2400 + 4800 = 9.3 seconds of <i>pure
+        /// waiting</i>, plus five complete connection setups. A fixed deadline
+        /// of 15 seconds left 5.7 seconds for that - and every failed attempt
+        /// came off it.
         ///
-        /// Die Zahlen stehen hier von Hand und nicht als Aufruf derselben
-        /// Rechnung: Sonst prüfte der Test die Formel gegen sich selbst.
+        /// The numbers stand here by hand and not as a call of the same
+        /// computation: otherwise the test would check the formula against
+        /// itself.
         /// </remarks>
         [Test]
         public void ThePatienceCoversWhatTheClientMayTake()
         {
 
-            var verbindung = new XMPPConnection($"{User}@{PeerDomain}", Password, Endpoint)
+            var connection = new XMPPConnection($"{User}@{PeerDomain}", Password, Endpoint)
             {
                 MaxReconnectAttempts   = 5,
                 InitialReconnectDelay  = TimeSpan.FromMilliseconds(300),
                 MaxReconnectDelay      = TimeSpan.FromSeconds(30)
             };
 
-            Assert.That(Geduld(verbindung),
+            Assert.That(Patience(connection),
                         Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(9300) +
                                                 TimeSpan.FromSeconds(5 * 3)),
-                        "Die Geduld unterschreitet, was der Client selbst brauchen darf - " +
-                        "9,3 Sekunden Wartezeit zwischen fünf Anläufen und die Anläufe selbst.");
+                        "The patience falls short of what the client itself is allowed to take - " +
+                        "9.3 seconds of waiting between five attempts and the attempts themselves.");
 
         }
 
@@ -676,47 +673,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStreamSurvivesABrokenConnection()
 
         /// <summary>
-        /// Nach einem Abriss knüpft der Client an denselben Stream an, statt
-        /// eine neue Resource zu binden.
+        /// After a tear the client ties on to the same stream instead of
+        /// binding a new resource.
         /// </summary>
         /// <remarks>
-        /// Die Verbindung wird von <b>unserer</b> Seite abgerissen - gegen eine
-        /// fremde Gegenstelle gibt es keinen anderen Weg, und ein ordentliches
-        /// Abmelden wäre gerade das Gegenteil dessen, was hier zu prüfen ist.
+        /// The connection is torn from <b>our</b> side - against a foreign
+        /// counterpart there is no other way, and signing off properly would be
+        /// precisely the opposite of what is to be checked here.
         ///
-        /// Die unveränderte Kennung ist der Beleg; die Full-JID allein taugt
-        /// nicht, weil die Resource prozessfest ist und ein neuer Bind dieselbe
-        /// Adresse ergäbe.
+        /// The unchanged id is the proof; the full JID alone is no good, because
+        /// the resource is fixed per process and a new bind would give the same
+        /// address.
         /// </remarks>
         [Test]
         public async Task TheStreamSurvivesABrokenConnection()
         {
 
-            var alice = await VerbindeAsync(reconnect: 5);
+            var alice = await ConnectAsync(reconnect: 5);
 
-            var vorher   = alice.FullJid;
-            var kennung  = alice.StreamManagement!.ResumeId;
+            var before   = alice.FullJid;
+            var resumeId  = alice.StreamManagement!.ResumeId;
 
-            // Ohne zugesagte Wiederaufnahme wäre die Kennung auf beiden Seiten
-            // null - und damit "unverändert". Der Vergleich unten sagte dann
-            // nichts.
+            // Without the resumption promised, the id would be null on both
+            // sides - and thereby "unchanged". The comparison below would then
+            // say nothing.
             Assert.That(alice.StreamManagement.CanResume, Is.True,
-                        $"{PeerName} hat die Wiederaufnahme gar nicht zugesagt.");
+                        $"{PeerName} has not promised the resumption at all.");
 
-            var wiederVerbunden = ZaehleWiederverbindungen(alice);
+            var reconnected = CountReconnects(alice);
 
             alice.KillConnection();
 
-            await WarteAufWiederaufnahmeAsync(wiederVerbunden, alice);
+            await WaitForResumptionAsync(reconnected, alice);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(alice.FullJid, Is.EqualTo(vorher),
-                            "Eine neue Resource vergeben - dann wurde neu gebunden.");
+                Assert.That(alice.FullJid, Is.EqualTo(before),
+                            "A new resource handed out - then a new bind took place.");
 
-                Assert.That(alice.StreamManagement.ResumeId, Is.EqualTo(kennung),
-                            "Neue Kennung, also neu ausgehandelt statt wieder aufgenommen.");
+                Assert.That(alice.StreamManagement.ResumeId, Is.EqualTo(resumeId),
+                            "A new id, so negotiated afresh instead of resumed.");
 
             });
 
@@ -727,60 +724,59 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerHoldsBackWhatArrivedDuringTheOutage()
 
         /// <summary>
-        /// Was während des Abrisses ankam, liefert die Gegenstelle nach.
+        /// What arrived during the tear the counterpart hands on afterwards.
         /// </summary>
         /// <remarks>
-        /// Der eigentliche Gewinn, und die Stelle, an der eine fremde
-        /// Gegenstelle mehr sagt als die eigene: unser Server puffert, weil wir
-        /// ihm das beigebracht haben.
+        /// The real gain, and the place where a foreign counterpart says more
+        /// than our own: our server buffers because we taught it to.
         ///
-        /// <b>Dass die Nachricht ankommt, genügt als Beleg nicht.</b> Ein
-        /// Server stellt sie auch dann zu, wenn die Wiederaufnahme gar nicht
-        /// versucht wird und der Client eine neue Resource bindet - sie geht
-        /// dann eben dorthin, und der Test bestünde, ohne von der
-        /// Wiederaufnahme etwas zu wissen. Genau das ist ihm bei der Mutation
-        /// „nie wiederaufnehmen" passiert. Geprüft wird deshalb beides.
+        /// <b>That the message arrives does not suffice as proof.</b> A server
+        /// delivers it even when the resumption is not attempted at all and the
+        /// client binds a new resource - it then simply goes there, and the test
+        /// would pass without knowing anything about the resumption. That is
+        /// exactly what happened to it at the mutation "never resume". So both
+        /// are checked.
         ///
-        /// Alice und Bob brauchen dafür keine Subscription - eine Nachricht
-        /// geht auch ohne, nur Presence nicht.
+        /// Alice and Bob need no subscription for this - a message goes without
+        /// one, only presence does not.
         /// </remarks>
         [Test]
         public async Task TheServerHoldsBackWhatArrivedDuringTheOutage()
         {
 
-            var alice = await VerbindeAsync(reconnect: 5);
-            var bob   = await VerbindeAsync(User2);
+            var alice = await ConnectAsync(reconnect: 5);
+            var bob   = await ConnectAsync(User2);
 
-            var vorher  = alice.FullJid;
-            var kennung = alice.StreamManagement!.ResumeId;
+            var before  = alice.FullJid;
+            var resumeId = alice.StreamManagement!.ResumeId;
 
             Assert.That(alice.StreamManagement.CanResume, Is.True,
-                        $"{PeerName} hat die Wiederaufnahme gar nicht zugesagt.");
+                        $"{PeerName} has not promised the resumption at all.");
 
-            var angekommen = new List<String>();
-            alice.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            alice.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
-            var wiederVerbunden = ZaehleWiederverbindungen(alice);
+            var reconnected = CountReconnects(alice);
 
-            // Die Gegenstelle weiss noch nichts vom Abriss: was Bob jetzt
-            // schickt, geht in den aufgehobenen Stream.
+            // The counterpart knows nothing of the tear yet: what Bob sends now
+            // goes into the stream that is being held.
             alice.KillConnection();
 
-            await bob.SendMessageAsync($"{User}@{PeerDomain}", "Im Dunkeln geschickt");
+            await bob.SendMessageAsync($"{User}@{PeerDomain}", "Sent in the dark");
 
-            await WarteAufWiederaufnahmeAsync(wiederVerbunden, alice);
+            await WaitForResumptionAsync(reconnected, alice);
 
-            await WarteAuf(() => { lock (angekommen) return angekommen.Contains("Im Dunkeln geschickt"); },
-                           "die nachgelieferte Nachricht");
+            await WaitFor(() => { lock (arrived) return arrived.Contains("Sent in the dark"); },
+                           "the message handed on afterwards");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(alice.FullJid, Is.EqualTo(vorher),
-                            "Die Nachricht kam an, aber an einer neu gebundenen Resource - " +
-                            "dann prüft dieser Test nicht die Wiederaufnahme.");
+                Assert.That(alice.FullJid, Is.EqualTo(before),
+                            "The message arrived, but at a newly bound resource - " +
+                            "then this test does not check the resumption.");
 
-                Assert.That(alice.StreamManagement.ResumeId, Is.EqualTo(kennung));
+                Assert.That(alice.StreamManagement.ResumeId, Is.EqualTo(resumeId));
 
             });
 

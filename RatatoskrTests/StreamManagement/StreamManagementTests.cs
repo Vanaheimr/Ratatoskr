@@ -28,25 +28,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0198 Stream Management: die Zähler beider Seiten müssen exakt
-    /// übereinstimmen.
+    /// XEP-0198 stream management: the counters of both sides have to agree
+    /// exactly.
     ///
-    /// Der Testserver zählt unabhängig mit (siehe
-    /// <see cref="XMPPSession.IsStanza"/>) und beantwortet
-    /// <c>&lt;r/&gt;</c>. Damit lässt sich prüfen, ob der Client dem Server
-    /// genau das meldet, was der Server tatsächlich geschickt hat - der
-    /// Punkt, an dem ein echter Server bei Abweichung die Verbindung als
-    /// Protokollverletzung abbricht.
+    /// The test server counts along independently (see
+    /// <see cref="XMPPSession.IsStanza"/>) and answers <c>&lt;r/&gt;</c>. That
+    /// makes it possible to check whether the client reports to the server
+    /// exactly what the server actually sent - the point at which a real server
+    /// breaks the connection off as a protocol violation if they differ.
     /// </summary>
     [TestFixture]
     public class StreamManagementTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Verbindet einen Client mit ausgehandeltem Stream Management und
-        /// liefert Client und zugehörige Serversitzung.
+        /// Connects a client with stream management negotiated and delivers the
+        /// client and the server session belonging to it.
         /// </summary>
         private async Task<(XMPPClient Client, XMPPSession Session)> ConnectWithSmAsync()
         {
@@ -54,12 +53,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync(streamManagement: true);
 
             await WaitFor(() => Server.Sessions.Count(s => s.StreamManagementEnabled) == 1,
-                          "ausgehandeltes Stream Management");
+                          "the negotiated stream management");
 
             var session = Server.Sessions.Single(s => s.StreamManagementEnabled);
 
             Assert.That(client.StreamManagement?.IsEnabled, Is.True,
-                        "Der Client hält Stream Management nicht für aktiv.");
+                        "The client does not hold stream management to be active.");
 
             return (client, session);
 
@@ -71,14 +70,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ClientAck_ReportsEveryStanzaTheServerSent()
 
         /// <summary>
-        /// Der Kern des Fehlers: der Client muss auf <c>&lt;r/&gt;</c> mit
-        /// genau der Anzahl Stanzas antworten, die der Server seit
-        /// <c>&lt;enabled/&gt;</c> geschickt hat.
+        /// The heart of the fault: on an <c>&lt;r/&gt;</c> the client has to
+        /// answer with exactly the number of stanzas the server has sent since
+        /// the <c>&lt;enabled/&gt;</c>.
         ///
-        /// Früher zählte nur ProcessStanza mit. Die Ergebnisse von
-        /// Carbons-Enable und Roster-Abruf werden aber in der Aufbauphase
-        /// direkt über ReceiveStanzaAsync gelesen und kamen dort nie an, so
-        /// dass der Client dauerhaft zu wenig bestätigte.
+        /// Only ProcessStanza used to count along. The results of the carbons
+        /// enable and the roster fetch are read straight through
+        /// ReceiveStanzaAsync in the setup phase, though, and never arrived
+        /// there, so that the client permanently acknowledged too few.
         /// </summary>
         [Test]
         public async Task ClientAck_ReportsEveryStanzaTheServerSent()
@@ -86,20 +85,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var (_, session) = await ConnectWithSmAsync();
 
-            // Der Server muss in der Aufbauphase nach <enabled/> überhaupt
-            // etwas geschickt haben, sonst prüft der Test nichts.
+            // The server has to have sent something at all in the setup phase
+            // after the <enabled/>, otherwise the test checks nothing.
             await WaitFor(() => session.StanzasSentToClient > 0,
-                          "Stanzas vom Server nach <enabled/>");
+                          "stanzas from the server after the <enabled/>");
 
             var sent = session.StanzasSentToClient;
 
             await session.RequestAckAsync();
 
             await WaitFor(() => session.LastAckFromClient is not null,
-                          "<a h='...'/> vom Client");
+                          "an <a h='...'/> from the client");
 
             Assert.That(session.LastAckFromClient, Is.EqualTo(sent),
-                        $"Der Client bestätigt {session.LastAckFromClient} von {sent} Stanzas.");
+                        $"The client acknowledges {session.LastAckFromClient} of {sent} stanzas.");
 
         }
 
@@ -108,9 +107,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ClientAck_CountsStanzasArrivingAfterConnect()
 
         /// <summary>
-        /// Auch nach dem Verbindungsaufbau, also über die Empfangsschleife,
-        /// muss weitergezählt werden - und zwar zusätzlich zu den in der
-        /// Aufbauphase empfangenen Stanzas.
+        /// After the connection setup too, that is over the receive loop, the
+        /// counting has to carry on - and in addition to the stanzas received
+        /// in the setup phase.
         /// </summary>
         [Test]
         public async Task ClientAck_CountsStanzasArrivingAfterConnect()
@@ -119,21 +118,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (_, session) = await ConnectWithSmAsync();
 
             await WaitFor(() => session.StanzasSentToClient > 0,
-                          "Stanzas vom Server nach <enabled/>");
+                          "stanzas from the server after the <enabled/>");
 
             var before = session.StanzasSentToClient;
 
             await session.SendAsync(
                 $"<message from='bob@{Server.Domain}/x' to='{session.FullJid}' type='chat'>" +
-                "<body>Hallo</body></message>");
+                "<body>Hello</body></message>");
 
             await WaitFor(() => session.StanzasSentToClient == before + 1,
-                          "gezählte Nachricht auf Serverseite");
+                          "the counted message on the server side");
 
             await session.RequestAckAsync();
 
             await WaitFor(() => session.LastAckFromClient == before + 1,
-                          $"<a h='{before + 1}'/> vom Client");
+                          $"an <a h='{before + 1}'/> from the client");
 
             Assert.That(session.LastAckFromClient, Is.EqualTo(before + 1));
 
@@ -144,11 +143,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OutboundCount_CoversEveryStanzaNotJustMessages()
 
         /// <summary>
-        /// Der ausgehende Zähler muss jede Stanza erfassen, nicht nur die aus
-        /// SendMessageAsync. Schon der Verbindungsaufbau schickt nach
-        /// <c>&lt;enabled/&gt;</c> mehrere IQs und eine Presence; früher wurde
-        /// davon nichts gezählt, weil TrackOutgoing nur an einer einzigen von
-        /// rund 25 Sendestellen stand.
+        /// The outgoing counter has to take in every stanza, not just the ones
+        /// from SendMessageAsync. The connection setup alone sends several IQs
+        /// and a presence after the <c>&lt;enabled/&gt;</c>; none of that used
+        /// to be counted, because TrackOutgoing stood at a single one of some
+        /// 25 sending places.
         /// </summary>
         [Test]
         public async Task OutboundCount_CoversEveryStanzaNotJustMessages()
@@ -157,14 +156,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectWithSmAsync();
 
             await WaitFor(() => session.StanzasReceivedFromClient > 1,
-                          "mehrere Stanzas vom Client");
+                          "several stanzas from the client");
 
             await WaitFor(() => client.StreamManagement!.OutboundCount == session.StanzasReceivedFromClient,
-                          "übereinstimmende Ausgangszähler");
+                          "agreeing outgoing counters");
 
             Assert.That(client.StreamManagement!.OutboundCount,
                         Is.EqualTo(session.StanzasReceivedFromClient),
-                        "Client und Server zählen unterschiedlich viele ausgehende Stanzas.");
+                        "Client and server count different numbers of outgoing stanzas.");
 
         }
 
@@ -173,9 +172,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OutboundCount_IgnoresNonzas()
 
         /// <summary>
-        /// <c>&lt;r/&gt;</c> und <c>&lt;a/&gt;</c> sind Nonzas und zählen nach
-        /// XEP-0198 Abschnitt 2 nicht mit. Würden sie mitgezählt, liefe der
-        /// Zähler bei jedem Keepalive weiter auseinander.
+        /// <c>&lt;r/&gt;</c> and <c>&lt;a/&gt;</c> are nonzas and do not count
+        /// under XEP-0198 section 2. Were they counted in, the counter would
+        /// drift further apart at every keepalive.
         /// </summary>
         [Test]
         public async Task OutboundCount_IgnoresNonzas()
@@ -184,21 +183,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectWithSmAsync();
 
             await WaitFor(() => session.StanzasReceivedFromClient > 0,
-                          "Stanzas vom Client");
+                          "stanzas from the client");
 
             var before = client.StreamManagement!.OutboundCount;
 
-            // <r/> vom Client an den Server ...
+            // An <r/> from the client to the server ...
             await client.RequestAckAsync();
 
-            // ... und <a/> vom Client als Antwort auf ein <r/> des Servers.
+            // ... and an <a/> from the client in answer to an <r/> of the server.
             await session.RequestAckAsync();
 
             await WaitFor(() => session.LastAckFromClient is not null,
-                          "<a h='...'/> vom Client");
+                          "an <a h='...'/> from the client");
 
             Assert.That(client.StreamManagement!.OutboundCount, Is.EqualTo(before),
-                        "Nonzas dürfen den Ausgangszähler nicht erhöhen.");
+                        "Nonzas must not raise the outgoing counter.");
 
         }
 
@@ -207,9 +206,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SentMessage_IsCountedAndAcknowledged()
 
         /// <summary>
-        /// Eine gesendete Nachricht muss gezählt, in die Unacked-Queue gelegt
-        /// und durch das <c>&lt;a/&gt;</c> des Servers wieder daraus entfernt
-        /// werden.
+        /// A message that has been sent has to be counted, laid into the
+        /// unacked queue and taken out of it again by the <c>&lt;a/&gt;</c> of
+        /// the server.
         /// </summary>
         [Test]
         public async Task SentMessage_IsCountedAndAcknowledged()
@@ -218,20 +217,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectWithSmAsync();
 
             await WaitFor(() => session.StanzasReceivedFromClient > 0,
-                          "Stanzas vom Client");
+                          "stanzas from the client");
 
             var before = client.StreamManagement!.OutboundCount;
 
-            await client.SendMessageAsync($"bob@{Server.Domain}", "Hallo");
+            await client.SendMessageAsync($"bob@{Server.Domain}", "Hello");
 
             await WaitFor(() => client.StreamManagement!.OutboundCount == before + 1,
-                          "gezählte Nachricht");
+                          "the counted message");
 
-            // Der Server bestätigt alles, was er bisher empfangen hat.
+            // The server acknowledges everything it has received so far.
             await client.RequestAckAsync();
 
             await WaitFor(() => client.StreamManagement!.UnackedCount == 0,
-                          "geleerte Unacked-Queue");
+                          "the emptied unacked queue");
 
             Assert.That(client.StreamManagement!.UnackedCount, Is.Zero);
 
@@ -242,8 +241,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CountersStayEqual_UnderConcurrentSends()
 
         /// <summary>
-        /// Gleichzeitige Sendeaufrufe dürfen die Zählung nicht durcheinander
-        /// bringen. Deshalb wird unter dem Sende-Lock gezählt und nicht davor.
+        /// Simultaneous send calls must not throw the counting into disorder.
+        /// That is why the counting happens under the send lock and not ahead
+        /// of it.
         /// </summary>
         [Test]
         public async Task CountersStayEqual_UnderConcurrentSends()
@@ -252,18 +252,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectWithSmAsync();
 
             await WaitFor(() => session.StanzasReceivedFromClient > 0,
-                          "Stanzas vom Client");
+                          "stanzas from the client");
 
             var before = client.StreamManagement!.OutboundCount;
 
             await Task.WhenAll(Enumerable.Range(0, 50)
-                                         .Select(i => client.SendMessageAsync($"bob@{Server.Domain}", $"Nachricht {i}")));
+                                         .Select(i => client.SendMessageAsync($"bob@{Server.Domain}", $"Message {i}")));
 
             await WaitFor(() => client.StreamManagement!.OutboundCount == before + 50,
-                          "50 gezählte Nachrichten");
+                          "50 counted messages");
 
             await WaitFor(() => session.StanzasReceivedFromClient == client.StreamManagement!.OutboundCount,
-                          "übereinstimmende Zähler nach parallelem Senden");
+                          "agreeing counters after sending in parallel");
 
             Assert.That(client.StreamManagement!.OutboundCount,
                         Is.EqualTo(session.StanzasReceivedFromClient));
@@ -275,9 +275,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DisabledStreamManagement_DoesNotCount()
 
         /// <summary>
-        /// Ohne ausgehandeltes Stream Management darf nichts gezählt werden -
-        /// sonst stünde beim späteren <c>&lt;enable/&gt;</c> ein Wert im
-        /// Zähler, der dem Server nie gemeldet wurde.
+        /// Without stream management negotiated nothing may be counted -
+        /// otherwise a value would stand in the counter at the later
+        /// <c>&lt;enable/&gt;</c> that was never reported to the server.
         /// </summary>
         [Test]
         public async Task DisabledStreamManagement_DoesNotCount()
@@ -285,7 +285,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync(streamManagement: false);
 
-            await client.SendMessageAsync($"bob@{Server.Domain}", "Hallo");
+            await client.SendMessageAsync($"bob@{Server.Domain}", "Hello");
 
             Assert.Multiple(() =>
             {
@@ -301,23 +301,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region StreamManagement_IsNegotiatedByDefault()
 
         /// <summary>
-        /// Ein Client, der nichts einstellt, handelt Stream Management aus.
+        /// A client that sets nothing negotiates stream management.
         /// </summary>
         /// <remarks>
-        /// Der Vorgabewert stand jahrelang auf <c>false</c>, weil die Zählung
-        /// einmal falsch war. Sie ist es nicht mehr und ist gegen Prosody 13
-        /// belegt (<c>ProsodyStreamManagementTests</c>) - deshalb steht er
-        /// jetzt auf <c>true</c>.
+        /// The default stood at <c>false</c> for years, because the counting
+        /// was wrong once. It is not any more and is vouched for against
+        /// Prosody 13 (<c>ProsodyStreamManagementTests</c>) - which is why it
+        /// now stands at <c>true</c>.
         ///
-        /// Geprüft wird beides: der Wert selbst und dass er bis auf die
-        /// Leitung durchschlägt. Ein Test nur auf die Eigenschaft bestünde
-        /// auch dann, wenn der Aufbau sie danach ignorierte; ein Test nur auf
-        /// die Aushandlung liesse offen, ob sie am Vorgabewert hängt oder an
-        /// etwas anderem.
+        /// Both are checked: the value itself and that it carries through onto
+        /// the wire. A test on the property alone would pass even if the setup
+        /// ignored it afterwards; a test on the negotiation alone would leave
+        /// open whether it hangs on the default or on something else.
         ///
-        /// Dass die übrige Sammlung diesen Weg überhaupt geht, hängt daran,
-        /// dass <c>CreateClient</c> den Schalter <i>nicht</i> setzt, solange
-        /// niemand ihn verlangt - siehe <see cref="AXMPPTests"/>.
+        /// That the rest of the collection goes this way at all hangs on
+        /// <c>CreateClient</c> <i>not</i> setting the switch as long as nobody
+        /// asks for it - see <see cref="AXMPPTests"/>.
         /// </remarks>
         [Test]
         public async Task StreamManagement_IsNegotiatedByDefault()
@@ -325,15 +324,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.That(new XMPPConnection("alice@example.com", "pw").StreamManagementEnabled,
                         Is.True,
-                        "Der Vorgabewert von XMPPConnection.StreamManagementEnabled.");
+                        "The default of XMPPConnection.StreamManagementEnabled.");
 
             var client = await ConnectClientAsync();
 
             await WaitFor(() => Server.Sessions.Count(s => s.StreamManagementEnabled) == 1,
-                          "ausgehandeltes Stream Management ohne Zutun des Aufrufers");
+                          "stream management negotiated without the caller doing anything");
 
             Assert.That(client.StreamManagement?.IsEnabled, Is.True,
-                        "Der Client hält Stream Management nicht für aktiv.");
+                        "The client does not hold stream management to be active.");
 
         }
 

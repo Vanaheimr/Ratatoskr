@@ -25,24 +25,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0198 samt Wiederaufnahme gegen ejabberd 24.12 - dieselbe Probe wie
-    /// gegen Prosody, an einem zweiten Gegenüber.
+    /// XEP-0198 including resumption against ejabberd 24.12 - the same trial as
+    /// against Prosody, at a second counterpart.
     /// </summary>
     /// <remarks>
-    /// Bei XEP-0288 wichen die beiden voneinander ab: ejabberd legte in die
-    /// Stream-Features das Freischalt-Element statt der Ankündigung, und wir
-    /// übersahen sein Angebot deshalb. Prosody allein hätte das nie gezeigt.
-    /// <c>mod_stream_mgmt</c> ist die nächste Gelegenheit für eine Abweichung,
-    /// die kein einzelner Server sichtbar macht.
+    /// With XEP-0288 the two diverged: ejabberd put the enabling element into
+    /// the stream features instead of the announcement, and we therefore
+    /// overlooked its offer. Prosody alone would never have shown that.
+    /// <c>mod_stream_mgmt</c> is the next opportunity for a divergence that no
+    /// single server makes visible.
     ///
-    /// Der Aufbau steht in <c>tools/ejabberd/setup.sh</c>: ejabberd bekommt
-    /// einen <c>ejabberd_http_ws</c>-Handler auf 5443, <c>mod_stream_mgmt</c>
-    /// und zwei Konten. Der Endpunkt heisst <c>/websocket</c> und nicht
-    /// <c>/xmpp-websocket</c> wie bei Prosody - RFC 7395 schreibt keinen Pfad
-    /// vor, und wer ihn fest verdrahtet, kommt nur bei einem der beiden
-    /// hinein.
+    /// The setup stands in <c>tools/ejabberd/setup.sh</c>: ejabberd gets an
+    /// <c>ejabberd_http_ws</c> handler on 5443, <c>mod_stream_mgmt</c> and two
+    /// accounts. The endpoint is called <c>/websocket</c> and not
+    /// <c>/xmpp-websocket</c> as with Prosody - RFC 7395 prescribes no path,
+    /// and whoever hard-wires one gets into only one of the two.
     ///
-    /// Was geprüft wird, steht in
+    /// What is checked stands in
     /// <see cref="AForeignPeerStreamManagementTests"/>.
     /// </remarks>
     [TestFixture]

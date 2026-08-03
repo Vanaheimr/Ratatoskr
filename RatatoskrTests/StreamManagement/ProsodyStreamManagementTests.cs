@@ -25,16 +25,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0198 samt Wiederaufnahme gegen Prosody 13.
+    /// XEP-0198 including resumption against Prosody 13.
     /// </summary>
     /// <remarks>
-    /// Der Aufbau steht in <c>tools/prosody/setup.sh</c>: Prosody bekommt
-    /// <c>mod_smacks</c> und <c>mod_websocket</c>, einen HTTPS-Endpunkt auf
-    /// 5281 und zwei Konten. Unser Client spricht XMPP über WebSocket
-    /// (RFC 7395), nicht über den rohen 5222er-Strom - der Weg dorthin ist
-    /// also <c>wss://</c>, und ohne <c>mod_websocket</c> gäbe es gar keinen.
+    /// The setup stands in <c>tools/prosody/setup.sh</c>: Prosody gets
+    /// <c>mod_smacks</c> and <c>mod_websocket</c>, an HTTPS endpoint on 5281
+    /// and two accounts. Our client speaks XMPP over WebSocket (RFC 7395), not
+    /// over the raw 5222 stream - the way there is therefore <c>wss://</c>, and
+    /// without <c>mod_websocket</c> there would be none at all.
     ///
-    /// Was geprüft wird, steht in
+    /// What is checked stands in
     /// <see cref="AForeignPeerStreamManagementTests"/>.
     /// </remarks>
     [TestFixture]
