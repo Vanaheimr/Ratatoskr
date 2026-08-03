@@ -30,27 +30,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 8.5 gilt für <b>jede</b> eingehende Stanza — auch
-    /// für die, die über die Servergrenze kommt.
+    /// RFC 6121, section 8.5 holds for <b>every</b> inbound stanza — for the
+    /// one crossing the server border as well.
     /// </summary>
     /// <remarks>
-    /// Der Abschnitt spricht durchweg von einer „inbound stanza" und
-    /// unterscheidet nicht, ob sie von einem Client oder von einem anderen
-    /// Server kam. Für den Empfänger ist der Unterschied auch keiner: Es ist
-    /// eine Nachricht an sein Konto.
+    /// The section speaks of an "inbound stanza" throughout and does not
+    /// distinguish whether it came from a client or from another server. For
+    /// the recipient the difference is none either: It is a message to their
+    /// account.
     ///
-    /// Dieser Server behandelte die beiden Herkünfte dennoch verschieden. Was
-    /// über die Grenze kam, ging unbesehen ins Routing — ohne Offline-Ablage,
-    /// ohne Rücksicht auf negative Prioritäten, ohne Unterscheidung nach Art.
-    /// Damit lag die Lücke genau im häufigsten Fall: Der Bekannte auf einem
-    /// anderen Server ist der Regelfall und nicht die Ausnahme, und wer eine
-    /// Offline-Ablage baut, baut sie vor allem für ihn.
+    /// This server nevertheless treated the two origins differently. What came
+    /// across the border went into the routing unexamined — without an offline
+    /// store, without regard for negative priorities, without a distinction by
+    /// kind. The gap thereby lay in precisely the most frequent case: The
+    /// acquaintance on another server is the normal case and not the
+    /// exception, and whoever builds an offline store builds it above all for
+    /// them.
     ///
-    /// Geprüft wird über zwei echte Server mit
-    /// <see cref="DirectServerLinks"/> dazwischen und an jedem ein echter
-    /// Client. Das ist wichtiger als es aussieht: Eine Fehlerantwort muss den
-    /// Rückweg über die Grenze finden, und ein Mitschnitt am Server bewiese nur,
-    /// dass sie abgeschickt wurde.
+    /// What is checked runs over two real servers with
+    /// <see cref="DirectServerLinks"/> in between and a real client at each of
+    /// them. That matters more than it looks: An error reply has to find the
+    /// way back across the border, and a recording at the server would prove
+    /// only that it was sent off.
     /// </remarks>
     [TestFixture]
     public class RemoteDeliveryRulesTests
@@ -58,8 +59,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer _links   = null!;
-        private XMPPServer _rechts  = null!;
+        private XMPPServer _left   = null!;
+        private XMPPServer _right  = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -71,37 +72,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void ZweiServer()
+        public void TwoServers()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The guard on both: An error on the one server often comes about
+            // through a stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            DirectServerLinks.Connect(_links, _rechts);
+            DirectServerLinks.Connect(_left, _right);
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -109,21 +110,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein noch nicht verbundener Client an einem der beiden Server.
+        /// A not yet connected client at one of the two servers.
         /// </summary>
         /// <remarks>
-        /// Getrennt vom Verbinden, weil ein Eingangskorb <b>vor</b> der ersten
-        /// Presence hängen muss: Eine nachgereichte Nachricht kommt unmittelbar
-        /// danach, und ein erst später angemeldeter Empfänger verpasst sie je
-        /// nach Zeitverlauf.
+        /// Separated from the connecting, because an inbox has to be attached
+        /// <b>before</b> the first presence: A handed-over message comes
+        /// immediately afterwards, and a recipient logging in only later misses
+        /// it depending on the timing.
         /// </remarks>
-        private XMPPClient Erzeuge(XMPPServer  server,
-                                   String      localPart,
-                                   String?     resource  = null,
-                                   Int32?      priority  = null)
+        private XMPPClient Create(XMPPServer  server,
+                                  String      localPart,
+                                  String?     resource  = null,
+                                  Int32?      priority  = null)
         {
 
             if (server.GetAccount($"{localPart}@{server.Domain}") is null)
@@ -149,34 +150,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private async Task<XMPPClient> VerbindeAsync(XMPPServer  server,
+        private async Task<XMPPClient> ConnectAsync(XMPPServer  server,
                                                     String      localPart,
                                                     String?     resource  = null,
                                                     Int32?      priority  = null)
         {
 
-            var client = Erzeuge(server, localPart, resource, priority);
+            var client = Create(server, localPart, resource, priority);
             await client.ConnectAsync();
 
             return client;
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
-        private static async Task WarteGegen(Func<Boolean> bedingung, String was)
+        private static async Task WaitAgainst(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung, TimeSpan.FromSeconds(2)),
-                        Is.False, $"Hätte nicht eintreten dürfen: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition, TimeSpan.FromSeconds(2)),
+                        Is.False, $"Should not have come about: {what}");
         }
 
-        /// <summary>Die Offline-Ablage von Bobs Konto auf dem rechten Server.</summary>
-        private IReadOnlyList<OfflineMessage> AblageVonBob
-            => _rechts.GetAccount(Bob)!.OfflineMessages;
+        /// <summary>The offline store of Bob's account on the right server.</summary>
+        private IReadOnlyList<OfflineMessage> BobsStore
+            => _right.GetAccount(Bob)!.OfflineMessages;
 
         #endregion
 
@@ -184,48 +185,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessageToAnAbsentUser_IsStoredOnTheirServer()
 
         /// <summary>
-        /// Der Kern: Bob ist auf seinem Server nicht angemeldet, als Alice von
-        /// einem anderen Server schreibt — und liest es beim nächsten Anmelden.
+        /// The core: Bob is not logged in on his server when Alice writes from
+        /// another one — and reads it at the next login.
         /// </summary>
         /// <remarks>
-        /// Vorher verschwand diese Nachricht: Das Routing fand keine Sitzung und
-        /// tat nichts. Alice hielt sie für zugestellt, Bob erfuhr nie, dass es
-        /// sie gab. Genau der Fall, für den die Ablage gemacht ist — und der
-        /// einzige, in dem sie einem Menschen etwas nützt, denn zwei Konten auf
-        /// demselben Server sind die Ausnahme.
+        /// Before, this message vanished: The routing found no session and did
+        /// nothing. Alice considered it delivered, Bob never learned that it
+        /// existed. Precisely the case the store is made for — and the only one
+        /// in which it is of any use to a human being, because two accounts on
+        /// the same server are the exception.
         /// </remarks>
         [Test]
         public async Task AMessageToAnAbsentUser_IsStoredOnTheirServer()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
-            _rechts.AddAccount("bob");
+            var alice = await ConnectAsync(_left, "alice");
+            _right.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Bis später");
+            await alice.SendMessageAsync(Bob, "See you later");
 
-            await WarteAuf(() => AblageVonBob.Count == 1,
-                           "die abgelegte Nachricht auf Bobs Server");
+            await WaitFor(() => BobsStore.Count == 1,
+                          "the stored message on Bob's server");
 
-            var bob      = Erzeuge(_rechts, "bob");
-            var eingang  = new ConcurrentQueue<XMPPMessage>();
+            var bob    = Create(_right, "bob");
+            var inbox  = new ConcurrentQueue<XMPPMessage>();
 
-            bob.OnMessage += m => eingang.Enqueue(m);
+            bob.OnMessage += m => inbox.Enqueue(m);
 
             await bob.ConnectAsync();
 
-            await WarteAuf(() => !eingang.IsEmpty, "die nachgereichte Nachricht");
+            await WaitFor(() => !inbox.IsEmpty, "the handed-over message");
 
-            eingang.TryDequeue(out var nachricht);
+            inbox.TryDequeue(out var message);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(nachricht!.Body,         Is.EqualTo("Bis später"));
+                Assert.That(message!.Body,          Is.EqualTo("See you later"));
 
-                Assert.That(nachricht.FromBareJid,   Is.EqualTo(Alice),
-                            "Nachgereicht wird mit dem Absender von der anderen Domain.");
+                Assert.That(message.FromBareJid,    Is.EqualTo(Alice),
+                            "The handing over happens with the sender from the other domain.");
 
-                Assert.That(AblageVonBob,            Is.Empty);
+                Assert.That(BobsStore,              Is.Empty);
 
             });
 
@@ -236,45 +237,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStoredRemoteMessage_ArrivesInTheClientNamespace()
 
         /// <summary>
-        /// Was über die Grenze kam, trägt <c>jabber:server</c>; was an einen
-        /// Client geht, muss <c>jabber:client</c> tragen (RFC 6120,
-        /// Abschnitt 4.8.1).
+        /// What came across the border carries <c>jabber:server</c>; what goes
+        /// to a client has to carry <c>jabber:client</c> (RFC 6120,
+        /// section 4.8.1).
         /// </summary>
         /// <remarks>
-        /// Die Ablage ist die Stelle, an der das leicht schiefgeht: Aufbewahrt
-        /// wird die Stanza, wie sie hereinkam, und zugestellt wird sie viel
-        /// später über einen anderen Stream. Läge der Namensraumwechsel nicht am
-        /// Ausgang, sondern am Eingang, käme sie mit dem falschen heraus — und
-        /// ein Client, der prüft, verwürfe sie.
+        /// The store is the place where that easily goes wrong: What is kept is
+        /// the stanza as it came in, and it is delivered much later over a
+        /// different stream. Were the namespace change not at the exit but at
+        /// the entrance, it would come out with the wrong one — and a client
+        /// that checks would discard it.
         /// </remarks>
         [Test]
         public async Task AStoredRemoteMessage_ArrivesInTheClientNamespace()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
-            _rechts.AddAccount("bob");
+            var alice = await ConnectAsync(_left, "alice");
+            _right.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Aus der Ablage");
+            await alice.SendMessageAsync(Bob, "Out of the store");
 
-            await WarteAuf(() => AblageVonBob.Count == 1, "die abgelegte Nachricht");
+            await WaitFor(() => BobsStore.Count == 1, "the stored message");
 
-            Assert.That(AblageVonBob[0].Stanza, Does.Contain("jabber:server"),
-                        "Aufbewahrt wird, was über die Grenze kam.");
+            Assert.That(BobsStore[0].Stanza, Does.Contain("jabber:server"),
+                        "What is kept is what came across the border.");
 
-            var bob   = Erzeuge(_rechts, "bob");
-            var rohe  = new ConcurrentQueue<String>();
+            var bob        = Create(_right, "bob");
+            var rawFrames  = new ConcurrentQueue<String>();
 
             bob.Connection.OnRawXml += x =>
             {
-                if (x.Contains("Aus der Ablage", StringComparison.Ordinal))
-                    rohe.Enqueue(x);
+                if (x.Contains("Out of the store", StringComparison.Ordinal))
+                    rawFrames.Enqueue(x);
             };
 
             await bob.ConnectAsync();
 
-            await WarteAuf(() => !rohe.IsEmpty, "die nachgereichte Nachricht auf dem Draht");
+            await WaitFor(() => !rawFrames.IsEmpty, "the handed-over message on the wire");
 
-            rohe.TryDequeue(out var stanza);
+            rawFrames.TryDequeue(out var stanza);
 
             Assert.Multiple(() =>
             {
@@ -289,55 +290,53 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGroupchatAcrossTheBorder_IsRefusedToTheSender()
 
         /// <summary>
-        /// Abschnitt 8.5.2.1.1 gilt auch über die Grenze: Ein
-        /// <c>groupchat</c> an ein Konto wird abgelehnt — und die Ablehnung
-        /// findet den Rückweg.
+        /// Section 8.5.2.1.1 holds across the border too: A <c>groupchat</c> to
+        /// an account is refused — and the refusal finds the way back.
         /// </summary>
         /// <remarks>
-        /// Der Rückweg ist der eigentliche Gegenstand dieses Tests. Innerhalb
-        /// eines Servers geht eine Fehlerantwort in den Stream des Absenders;
-        /// über die Grenze gibt es keinen Stream, sondern nur das <c>from</c> der
-        /// eingegangenen Stanza und den Weg wieder hinaus. Beides zu verwechseln
-        /// wäre nicht auffällig: Die Ablehnung fände einfach niemanden, und
-        /// Alice wartete auf eine Antwort, die es nie gab.
+        /// The way back is the actual subject of this test. Within one server
+        /// an error reply goes into the stream of the sender; across the border
+        /// there is no stream, but only the <c>from</c> of the stanza that came
+        /// in and the way out again. To mistake the two would not stand out:
+        /// The refusal would simply find nobody, and Alice would wait for an
+        /// answer that never existed.
         ///
-        /// Dass sie beim <b>Client</b> ankommt und nicht bloss am Server
-        /// abgeschickt wurde, ist der Grund für die zwei echten Server in diesem
-        /// Aufbau.
+        /// That it arrives at the <b>client</b> and was not merely sent off at
+        /// the server is the reason for the two real servers in this setup.
         /// </remarks>
         [Test]
         public async Task AGroupchatAcrossTheBorder_IsRefusedToTheSender()
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            var bob   = await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var beiBob   = new ConcurrentQueue<XMPPMessage>();
-            var fehler   = new ConcurrentQueue<(String? From, StanzaError Error)>();
+            var atBob    = new ConcurrentQueue<XMPPMessage>();
+            var errors   = new ConcurrentQueue<(String? From, StanzaError Error)>();
 
-            bob.OnMessage                  += m => beiBob.Enqueue(m);
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue((from, e));
+            bob.OnMessage                  += m => atBob.Enqueue(m);
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue((from, e));
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='groupchat' id='ueber-die-grenze'>" +
-                      "<body>Gehört in einen Raum</body></message>");
+                      $"<message to='{Bob}' type='groupchat' id='across-the-border'>" +
+                      "<body>Belongs into a room</body></message>");
 
-            await WarteAuf(() => !fehler.IsEmpty, "die Ablehnung zurück über die Grenze");
+            await WaitFor(() => !errors.IsEmpty, "the refusal back across the border");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt.Error.Condition, Is.EqualTo("service-unavailable"));
+                Assert.That(refused.Error.Condition, Is.EqualTo("service-unavailable"));
 
-                Assert.That(abgelehnt.From, Is.EqualTo(Bob),
-                            "Die Antwort kommt von der Adresse, an die es nicht ging - " +
-                            "Alices Frage ist, was aus ihrer Nachricht an Bob geworden ist, " +
-                            "und nicht, was Bobs Server von sich aus meint.");
+                Assert.That(refused.From, Is.EqualTo(Bob),
+                            "The reply comes from the address it did not go to - " +
+                            "Alice's question is what has become of her message to Bob, " +
+                            "and not what Bob's server thinks of its own accord.");
 
-                Assert.That(beiBob, Is.Empty,
-                            "Ein groupchat an ein Konto darf keine Resource erreichen.");
+                Assert.That(atBob, Is.Empty,
+                            "A groupchat to an account must not reach a resource.");
 
             });
 
@@ -348,39 +347,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheStore_TheRemoteSenderIsTold()
 
         /// <summary>
-        /// Der zweite von Abschnitt 8.5.2.2.1 erlaubte Weg, ebenfalls über die
-        /// Grenze: keine Ablage, sondern <c>&lt;service-unavailable/&gt;</c>.
+        /// The second path permitted by section 8.5.2.2.1, across the border as
+        /// well: no store, but <c>&lt;service-unavailable/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Die Ablehnung hat hier zwei verschiedene Ursprungsstellen im Server -
-        /// die eine für <c>groupchat</c>, die andere für die voll gelaufene oder
-        /// abgeschaltete Ablage. Beide brauchen den Rückweg, und nur eine davon
-        /// zu prüfen liesse die andere im Dunkeln: Genau in dem Fall, für den
-        /// dieser Server bis vor kurzem gar keine Antwort hatte, käme wieder
-        /// keine.
+        /// The refusal has two different places of origin in the server here -
+        /// the one for <c>groupchat</c>, the other for the store that has run
+        /// full or been switched off. Both need the way back, and to check only
+        /// one of them would leave the other in the dark: In precisely the case
+        /// for which this server had no answer at all until recently, none
+        /// would come again.
         /// </remarks>
         [Test]
         public async Task WithoutTheStore_TheRemoteSenderIsTold()
         {
 
-            _rechts.StoreOfflineMessages = false;
+            _right.StoreOfflineMessages = false;
 
-            var alice = await VerbindeAsync(_links, "alice");
-            _rechts.AddAccount("bob");
+            var alice = await ConnectAsync(_left, "alice");
+            _right.AddAccount("bob");
 
-            var fehler = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            var errors = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
 
-            await alice.SendMessageAsync(Bob, "Kommt nicht an");
+            await alice.SendMessageAsync(Bob, "Does not arrive");
 
-            await WarteAuf(() => !fehler.IsEmpty, "die Ablehnung zurück über die Grenze");
+            await WaitFor(() => !errors.IsEmpty, "the refusal back across the border");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
-                Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
-                Assert.That(AblageVonBob,         Is.Empty);
+                Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
+                Assert.That(BobsStore,          Is.Empty);
             });
 
         }
@@ -390,43 +389,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARefusalAcrossTheBorder_IsNotAnsweredWithARefusal()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 8.3.1: Auf eine Fehler-Stanza folgt nie ein
-        /// Fehler.
+        /// RFC 6120, section 8.3.1: An error stanza is never followed by an
+        /// error.
         /// </summary>
         /// <remarks>
-        /// Zwischen zwei Servern ist das keine Formalie, sondern der Unterschied
-        /// zwischen einer verlorenen Nachricht und zwei Servern, die sich
-        /// gegenseitig Meldungen zuschieben, bis einer aufgibt. Die Gefahr ist
-        /// hier neu: Solange nur Clients diesen Weg nahmen, endete jede Antwort
-        /// in einem Stream. Jetzt geht sie wieder hinaus, und der Empfänger ist
-        /// eine Maschine, die ihrerseits antworten könnte.
+        /// Between two servers that is no formality but the difference between
+        /// a lost message and two servers pushing notices at each other until
+        /// one of them gives up. The danger is new here: As long as only
+        /// clients took this path, every reply ended in a stream. Now it goes
+        /// out again, and the recipient is a machine that could answer in turn.
         ///
-        /// Geprüft wird beides in einem: der Fehler an das Konto (der
-        /// stillschweigend übergangen werden muss) und der an eine Resource, die
-        /// es nicht gibt.
+        /// Both are checked in one: the error to the account (which has to be
+        /// passed over silently) and the one to a resource that does not exist.
         /// </remarks>
         [Test]
         public async Task ARefusalAcrossTheBorder_IsNotAnsweredWithARefusal()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
-            _rechts.AddAccount("bob");
+            var alice = await ConnectAsync(_left, "alice");
+            _right.AddAccount("bob");
 
-            var beiAlice = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => beiAlice.Enqueue(e);
+            var atAlice = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => atAlice.Enqueue(e);
 
-            const String rumpf = "<error type='cancel'>" +
-                                 "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
-                                 "</error>";
+            const String errorBody = "<error type='cancel'>" +
+                                     "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
+                                     "</error>";
 
-            await alice.SendRawAsync($"<message to='{Bob}' type='error' id='an-das-konto'>{rumpf}</message>");
-            await alice.SendRawAsync($"<message to='{Bob}/weg' type='error' id='an-die-resource'>{rumpf}</message>");
+            await alice.SendRawAsync($"<message to='{Bob}' type='error' id='to-the-account'>{errorBody}</message>");
+            await alice.SendRawAsync($"<message to='{Bob}/nowhere' type='error' id='to-the-resource'>{errorBody}</message>");
 
-            await WarteGegen(() => !beiAlice.IsEmpty,
-                             "einen Fehler als Antwort auf einen Fehler");
+            await WaitAgainst(() => !atAlice.IsEmpty,
+                              "an error as the answer to an error");
 
-            Assert.That(AblageVonBob, Is.Empty,
-                        "Eine Fehler-Stanza gehört auch nicht in die Ablage.");
+            Assert.That(BobsStore, Is.Empty,
+                        "An error stanza does not belong into the store either.");
 
         }
 
@@ -435,52 +432,53 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ANegativePriorityAcrossTheBorder_GetsNothingFromTheAccount()
 
         /// <summary>
-        /// Die negative Priorität wirkt auch gegen Nachrichten von einem anderen
-        /// Server — und die Nachricht ist damit nicht verloren, sondern liegt.
+        /// The negative priority takes effect against messages from another
+        /// server as well — and the message is thereby not lost but lies
+        /// stored.
         /// </summary>
         /// <remarks>
-        /// Vorher war die Priorität für diesen Weg wirkungslos: Das Routing
-        /// stellte an jede Sitzung zu, die es fand. Ein Zweitgerät, das sich
-        /// ausdrücklich aus dem Verkehr an das Konto heraushält, bekam die
-        /// Nachricht trotzdem — und weil sie damit als zugestellt galt, sah der
-        /// Mensch sie an dem Gerät, an dem er gerade nicht sass.
+        /// Before, the priority was without effect for this path: The routing
+        /// delivered to every session it found. A second device expressly
+        /// keeping out of the traffic to the account got the message
+        /// nevertheless — and because it thereby counted as delivered, the
+        /// human being saw it on the device they were not sitting at.
         ///
-        /// Die zweite Hälfte gehört dazu: Gerichtet ansprechbar bleibt das Gerät.
-        /// Ohne sie wäre eine negative Priorität ein Abmelden, und das ist sie
-        /// gerade nicht.
+        /// The second half belongs to it: The device stays addressable
+        /// directly. Without it a negative priority would be a logging out, and
+        /// that is precisely what it is not.
         /// </remarks>
         [Test]
         public async Task ANegativePriorityAcrossTheBorder_GetsNothingFromTheAccount()
         {
 
-            var alice        = await VerbindeAsync(_links, "alice");
-            var zweitgeraet  = Erzeuge(_rechts, "bob", "Zweitgerät", priority: -1);
-            var eingang      = new ConcurrentQueue<XMPPMessage>();
+            var alice         = await ConnectAsync(_left, "alice");
+            var secondDevice  = Create(_right, "bob", "SecondDevice", priority: -1);
+            var inbox         = new ConcurrentQueue<XMPPMessage>();
 
-            zweitgeraet.OnMessage += m => eingang.Enqueue(m);
+            secondDevice.OnMessage += m => inbox.Enqueue(m);
 
-            await zweitgeraet.ConnectAsync();
+            await secondDevice.ConnectAsync();
 
-            await WarteAuf(() => _rechts.SessionOf(zweitgeraet.FullJid!)?.PresencePriority == -1,
-                           "die negative Priorität auf Bobs Server");
+            await WaitFor(() => _right.SessionOf(secondDevice.FullJid!)?.PresencePriority == -1,
+                          "the negative priority on Bob's server");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='chat' id='an-das-konto'>" +
-                      "<body>An das Konto</body></message>");
+                      $"<message to='{Bob}' type='chat' id='to-the-account'>" +
+                      "<body>To the account</body></message>");
 
-            await WarteAuf(() => AblageVonBob.Count == 1,
-                           "die Ablage statt der Zustellung");
+            await WaitFor(() => BobsStore.Count == 1,
+                          "the storing instead of the delivery");
 
-            // Gerichtet an dieselbe Resource - das muss ankommen.
+            // Addressed to the same resource - that must arrive.
             await alice.SendRawAsync(
-                      $"<message to='{zweitgeraet.FullJid}' type='chat' id='an-die-resource'>" +
-                      "<body>An die Resource</body></message>");
+                      $"<message to='{secondDevice.FullJid}' type='chat' id='to-the-resource'>" +
+                      "<body>To the resource</body></message>");
 
-            await WarteAuf(() => eingang.Any(m => m.MessageId == "an-die-resource"),
-                           "die gerichtete Nachricht");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "to-the-resource"),
+                          "the directed message");
 
-            Assert.That(eingang.Any(m => m.MessageId == "an-das-konto"), Is.False,
-                        "Was an das Konto ging, darf eine negative Priorität nicht erreichen.");
+            Assert.That(inbox.Any(m => m.MessageId == "to-the-account"), Is.False,
+                        "What went to the account must not reach a negative priority.");
 
         }
 
@@ -489,51 +487,51 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatToAVanishedResource_IsHandledLikeTheAccount()
 
         /// <summary>
-        /// Abschnitt 8.5.3.2.1 über die Grenze: Ein <c>chat</c> an eine Resource,
-        /// die es nicht gibt, wird behandelt, als wäre er an das Konto gegangen.
+        /// Section 8.5.3.2.1 across the border: A <c>chat</c> to a resource
+        /// that does not exist is handled as if it had gone to the account.
         /// </summary>
         /// <remarks>
-        /// Über die Grenze ist dieser Fall häufiger als daheim, und zwar aus
-        /// einem einfachen Grund: Die Full-JID des Gegenübers hat der Client aus
-        /// einer Nachricht, die durchs Netz kam, und zwischen ihr und seiner
-        /// Antwort liegt mehr Zeit. Hat der andere in der Zwischenzeit das Gerät
-        /// gewechselt, ist die Resource weg — und der Absender meinte nie sie,
-        /// sondern seinen Gegenüber.
+        /// Across the border this case is more frequent than at home, and that
+        /// for a simple reason: The full JID of the counterpart the client has
+        /// from a message that came through the net, and between it and their
+        /// answer lies more time. If the other one switched the device in the
+        /// meantime, the resource is gone — and the sender never meant it, but
+        /// their counterpart.
         /// </remarks>
         [Test]
         public async Task AChatToAVanishedResource_IsHandledLikeTheAccount()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
-            _rechts.AddAccount("bob");
+            var alice = await ConnectAsync(_left, "alice");
+            _right.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}/gibtsnichtmehr' type='chat' id='abgelegt'>" +
-                      "<body>Bist du weg?</body></message>");
+                      $"<message to='{Bob}/gone-already' type='chat' id='stored'>" +
+                      "<body>Are you gone?</body></message>");
 
-            await WarteAuf(() => AblageVonBob.Count == 1,
-                           "die abgelegte Nachricht an die verschwundene Resource");
+            await WaitFor(() => BobsStore.Count == 1,
+                          "the stored message to the vanished resource");
 
-            var bob      = Erzeuge(_rechts, "bob", "Neu");
-            var eingang  = new ConcurrentQueue<XMPPMessage>();
+            var bob    = Create(_right, "bob", "New");
+            var inbox  = new ConcurrentQueue<XMPPMessage>();
 
-            bob.OnMessage += m => eingang.Enqueue(m);
+            bob.OnMessage += m => inbox.Enqueue(m);
 
             await bob.ConnectAsync();
 
-            await WarteAuf(() => eingang.Any(m => m.MessageId == "abgelegt"),
-                           "die nachgereichte Nachricht");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "stored"),
+                          "the handed-over message");
 
-            // Und nun ist Bob da, nur unter einem anderen Namen.
+            // And now Bob is there, only under a different name.
             await alice.SendRawAsync(
-                      $"<message to='{Bob}/gibtsnichtmehr' type='chat' id='zugestellt'>" +
-                      "<body>Doch nicht</body></message>");
+                      $"<message to='{Bob}/gone-already' type='chat' id='delivered'>" +
+                      "<body>Not after all</body></message>");
 
-            await WarteAuf(() => eingang.Any(m => m.MessageId == "zugestellt"),
-                           "die Zustellung an die erreichbare Resource");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "delivered"),
+                          "the delivery to the reachable resource");
 
-            Assert.That(AblageVonBob, Is.Empty,
-                        "Solange eine Resource erreichbar ist, wird nichts abgelegt.");
+            Assert.That(BobsStore, Is.Empty,
+                        "As long as a resource is reachable, nothing is stored.");
 
         }
 
@@ -542,33 +540,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AHeadlineToAnAbsentUser_IsNotStored()
 
         /// <summary>
-        /// Die Gegenprobe: <c>headline</c> wird nicht abgelegt, auch nicht von
-        /// einem anderen Server.
+        /// The counter-check: a <c>headline</c> is not stored, not from another
+        /// server either.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn über die Grenze
-        /// schlicht alles abgelegt würde, was nicht zustellbar war — und eine
-        /// Meldung von gestern beim Anmelden nachgereicht zu bekommen ist
-        /// schlechter, als sie zu verpassen: Sie sieht aus wie die von heute.
+        /// Without it the collection would pass even if simply everything that
+        /// was not deliverable were stored across the border — and getting a
+        /// notice from yesterday handed over at the login is worse than missing
+        /// it: It looks like today's one.
         /// </remarks>
         [Test]
         public async Task AHeadlineToAnAbsentUser_IsNotStored()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
-            _rechts.AddAccount("bob");
+            var alice = await ConnectAsync(_left, "alice");
+            _right.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='headline' id='meldung'>" +
-                      "<body>Kurs gefallen</body></message>");
+                      $"<message to='{Bob}' type='headline' id='notice'>" +
+                      "<body>Price has fallen</body></message>");
 
-            // Danach eine, die abgelegt werden muss - sie belegt, dass die
-            // Ablage lief, während die Meldung durchfiel.
-            await alice.SendMessageAsync(Bob, "Und das bleibt liegen");
+            // Afterwards one that has to be stored - it establishes that the
+            // store ran while the notice fell through.
+            await alice.SendMessageAsync(Bob, "And this one stays lying");
 
-            await WarteAuf(() => AblageVonBob.Count == 1, "die abgelegte Nachricht");
+            await WaitFor(() => BobsStore.Count == 1, "the stored message");
 
-            Assert.That(AblageVonBob[0].Stanza, Does.Contain("Und das bleibt liegen"));
+            Assert.That(BobsStore[0].Stanza, Does.Contain("And this one stays lying"));
 
         }
 
@@ -577,85 +575,85 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqAcrossTheBorder_ToAnAccount_IsAnsweredOnce()
 
         /// <summary>
-        /// Abschnitt 8.5.2.1.3 gilt auch über die Grenze: Eine Anfrage an ein
-        /// Konto wird vom Server des Empfängers beantwortet und an keine
-        /// Resource verteilt.
+        /// Section 8.5.2.1.3 holds across the border too: A request to an
+        /// account is answered by the server of the recipient and distributed
+        /// to no resource.
         /// </summary>
         /// <remarks>
-        /// Über die Grenze ist der Schaden grösser als daheim. Ein fremder
-        /// Server, der eine Anfrage an alle Resourcen verteilt, schickt dem
-        /// Fragenden mehrere Antworten auf eine <c>id</c> — und der hat keine
-        /// Möglichkeit, das der Gegenstelle anzulasten: Für ihn sieht es aus, als
-        /// hätte sein eigener Client die Zählung verloren.
+        /// Across the border the damage is greater than at home. A foreign
+        /// server distributing a request to all resources sends the asker
+        /// several replies to one <c>id</c> — and they have no way of laying it
+        /// at the far end's door: To them it looks as if their own client had
+        /// lost count.
         /// </remarks>
         [Test]
         public async Task AnIqAcrossTheBorder_ToAnAccount_IsAnsweredOnce()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
+            var alice = await ConnectAsync(_left, "alice");
 
-            var handy    = Erzeuge(_rechts, "bob", "Handy");
-            var rechner  = Erzeuge(_rechts, "bob", "Rechner");
+            var mobile   = Create(_right, "bob", "Mobile");
+            var desktop  = Create(_right, "bob", "Desktop");
 
-            var amHandy    = new ConcurrentQueue<String>();
-            var amRechner  = new ConcurrentQueue<String>();
+            var atTheMobile   = new ConcurrentQueue<String>();
+            var atTheDesktop  = new ConcurrentQueue<String>();
 
-            handy.Connection.OnRawXml += x =>
+            mobile.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("urn:xmpp:ping", StringComparison.Ordinal))
                 {
-                    amHandy.Enqueue(x);
+                    atTheMobile.Enqueue(x);
                 }
             };
 
-            rechner.Connection.OnRawXml += x =>
+            desktop.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("urn:xmpp:ping", StringComparison.Ordinal))
                 {
-                    amRechner.Enqueue(x);
+                    atTheDesktop.Enqueue(x);
                 }
             };
 
-            await handy.ConnectAsync();
-            await rechner.ConnectAsync();
+            await mobile.ConnectAsync();
+            await desktop.ConnectAsync();
 
-            var antworten = new ConcurrentQueue<String>();
-            var fehler    = new ConcurrentQueue<StanzaError>();
+            var replies = new ConcurrentQueue<String>();
+            var errors  = new ConcurrentQueue<StanzaError>();
 
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
             alice.Connection.OnRawXml      += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("<iq",              StringComparison.Ordinal) &&
-                    x.Contains("id='ueber-die-grenze'", StringComparison.Ordinal))
+                    x.Contains("id='across-the-border'", StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(x);
+                    replies.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync(
-                      $"<iq type='get' id='ueber-die-grenze' to='{Bob}'>" +
+                      $"<iq type='get' id='across-the-border' to='{Bob}'>" +
                       "<ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WarteAuf(() => !fehler.IsEmpty, "die Antwort von Bobs Server");
+            await WaitFor(() => !errors.IsEmpty, "the reply of Bob's server");
 
-            // Den Resourcen Zeit geben, die Anfrage doch zu bekommen.
+            // Give the resources time to get the request after all.
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+                Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
-                Assert.That(antworten, Has.Count.EqualTo(1),
-                            "Genau eine Antwort auf eine id.");
+                Assert.That(replies, Has.Count.EqualTo(1),
+                            "Exactly one reply to one id.");
 
-                Assert.That(amHandy,   Is.Empty, "Die Anfrage darf keine Resource erreichen.");
-                Assert.That(amRechner, Is.Empty, "Auch nicht die zweite.");
+                Assert.That(atTheMobile,  Is.Empty, "The request must reach no resource.");
+                Assert.That(atTheDesktop, Is.Empty, "The second one neither.");
 
             });
 
@@ -666,46 +664,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqAcrossTheBorder_ToAResource_IsDelivered()
 
         /// <summary>
-        /// Die Gegenprobe über die Grenze: An eine passende Resource gerichtet
-        /// kommt die Anfrage an, und die Antwort findet zurück.
+        /// The counter-check across the border: addressed to a matching
+        /// resource the request arrives, and the reply finds its way back.
         /// </summary>
         /// <remarks>
-        /// Das ist der ganze Sinn von IQ zwischen zwei Servern — eine
-        /// Versionsabfrage, ein Ping, eine Dateiübertragung gehen an eine
-        /// Full-JID. Ohne diese Gegenprobe bestünde die Sammlung auch dann, wenn
-        /// über die Grenze jede Anfrage abgewiesen würde.
+        /// That is the whole point of IQ between two servers — a version query,
+        /// a ping, a file transfer go to a full JID. Without this
+        /// counter-check the collection would pass even if every request across
+        /// the border were turned away.
         ///
-        /// Die beiden sind Kontakte, weil Abschnitt 8.5.3.1 die Anfrage nur
-        /// durchlässt, wenn der Fragende die Presence des Empfängers sehen darf.
-        /// Gepflegt wird dafür der Roster auf Bobs Server: Dort fällt die
-        /// Entscheidung, und dort steht die Hälfte, die zählt.
+        /// The two are contacts, because section 8.5.3.1 lets the request
+        /// through only if the asker may see the presence of the recipient.
+        /// What is tended for that is the roster on Bob's server: There the
+        /// decision falls, and there stands the half that counts.
         /// </remarks>
         [Test]
         public async Task AnIqAcrossTheBorder_ToAResource_IsDelivered()
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            var bob   = await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "both"));
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "both"));
 
-            var antworten = new ConcurrentQueue<String>();
+            var replies = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("type='result'",         StringComparison.Ordinal) &&
-                    x.Contains("id='an-die-resource'",  StringComparison.Ordinal))
+                    x.Contains("id='to-the-resource'",  StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(x);
+                    replies.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync(
-                      $"<iq type='get' id='an-die-resource' to='{bob.FullJid}'>" +
+                      $"<iq type='get' id='to-the-resource' to='{bob.FullJid}'>" +
                       "<ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WarteAuf(() => !antworten.IsEmpty, "Bobs Antwort zurück über die Grenze");
+            await WaitFor(() => !replies.IsEmpty, "Bob's reply back across the border");
 
             Assert.Pass();
 
@@ -716,60 +714,60 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToTheServersOwnAddress_IsNotClaimedByTheUserPath()
 
         /// <summary>
-        /// Der Zustellweg für Nutzer fasst eine Anfrage an die Serveradresse
-        /// nicht an.
+        /// The delivery path for users does not touch a request to the server
+        /// address.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 8.5.2 handelt von einer Adresse „of the form
-        /// <c>&lt;localpart@domainpart&gt;</c>". Eine Anfrage an die Domain
-        /// selbst richtet sich an den Server und nicht an einen Nutzer.
+        /// Section 8.5.2 deals with an address "of the form
+        /// <c>&lt;localpart@domainpart&gt;</c>". A request to the domain itself
+        /// addresses the server and not a user.
         ///
-        /// Bis D36 blieb sie deshalb <b>unbeantwortet</b> — eine Lücke, die hier
-        /// ausdrücklich vermerkt war: Der Server beantwortet an seiner eigenen
-        /// Adresse Ping und disco#info, aber die Antworten standen im Weg für
-        /// hiesige Clients und wollten eine Sitzung.
+        /// Until D36 it therefore stayed <b>unanswered</b> — a gap that was
+        /// expressly noted here: The server answers ping and disco#info at its
+        /// own address, but the answers stood in the way for local clients and
+        /// wanted a session.
         ///
-        /// Wogegen dieser Test seit jeher schützt, ist die naheliegende
-        /// Verwechslung: den <b>Nutzer</b>-Zustellweg auch für die Serveradresse
-        /// zu nehmen. Der antwortet auf alles mit
-        /// <c>&lt;service-unavailable/&gt;</c> — auf einen Ping also auch, und
-        /// das wäre falsch. Ein <c>result</c> kann er gar nicht erzeugen; genau
-        /// daran ist die Verwechslung zu erkennen.
+        /// What this test has protected against all along is the obvious
+        /// mistake: to take the <b>user</b> delivery path for the server
+        /// address as well. That one answers everything with
+        /// <c>&lt;service-unavailable/&gt;</c> — a ping therefore too, and that
+        /// would be wrong. A <c>result</c> it cannot produce at all; that is
+        /// precisely how the mistake can be recognised.
         /// </remarks>
         [Test]
         public async Task APingToTheServersOwnAddress_IsAnsweredByTheServerItself()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
+            var alice = await ConnectAsync(_left, "alice");
 
-            var antworten = new ConcurrentQueue<String>();
+            var replies = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("an-den-server", StringComparison.Ordinal))
+                    x.Contains("to-the-server", StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(x);
+                    replies.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync(
-                      $"<iq type='get' id='an-den-server' to='{_rechts.Domain}'>" +
+                      $"<iq type='get' id='to-the-server' to='{_right.Domain}'>" +
                       "<ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WarteAuf(() => !antworten.IsEmpty, "die Antwort des fremden Servers");
+            await WaitFor(() => !replies.IsEmpty, "the reply of the foreign server");
 
-            antworten.TryDequeue(out var antwort);
+            replies.TryDequeue(out var reply);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort, Does.Contain("type='result'"),
-                            "Ein Ping wird beantwortet - und der Nutzer-Zustellweg " +
-                            "könnte ein result gar nicht erzeugen.");
+                Assert.That(reply, Does.Contain("type='result'"),
+                            "A ping is answered - and the user delivery path " +
+                            "could not produce a result at all.");
 
-                Assert.That(antwort, Does.Contain($"from='{_rechts.Domain}'"),
-                            "Geantwortet hat der Server, an den gefragt wurde.");
+                Assert.That(reply, Does.Contain($"from='{_right.Domain}'"),
+                            "The one that answered is the server that was asked.");
 
             });
 
@@ -780,45 +778,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADiscoInfoToTheServersOwnAddress_IsAnswered()
 
         /// <summary>
-        /// Dasselbe für disco#info: Die Gegenstelle erfährt, was dieser Server
-        /// kann.
+        /// The same for disco#info: The far end learns what this server can do.
         /// </summary>
         /// <remarks>
-        /// Der praktische Fall hinter der Regel. Ein fremder Server fragt vor
-        /// dem ersten Gespräch, was das Gegenüber beherrscht; bleibt die Frage
-        /// unbeantwortet, hält er ihn für einen Server ohne Eigenschaften — und
-        /// merkt nicht einmal, dass er nichts erfahren hat.
+        /// The practical case behind the rule. A foreign server asks before the
+        /// first conversation what the counterpart is capable of; if the
+        /// question stays unanswered, it takes them for a server without
+        /// features — and does not even notice that it learned nothing.
         /// </remarks>
         [Test]
         public async Task ADiscoInfoToTheServersOwnAddress_IsAnswered()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
+            var alice = await ConnectAsync(_left, "alice");
 
-            var antworten = new ConcurrentQueue<String>();
+            var replies = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("was-kannst-du", StringComparison.Ordinal))
+                    x.Contains("what-can-you-do", StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(x);
+                    replies.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync(
-                      $"<iq type='get' id='was-kannst-du' to='{_rechts.Domain}'>" +
+                      $"<iq type='get' id='what-can-you-do' to='{_right.Domain}'>" +
                       "<query xmlns='http://jabber.org/protocol/disco#info'/></iq>");
 
-            await WarteAuf(() => !antworten.IsEmpty, "die Auskunft des fremden Servers");
+            await WaitFor(() => !replies.IsEmpty, "the information of the foreign server");
 
-            antworten.TryDequeue(out var antwort);
+            replies.TryDequeue(out var reply);
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='result'"));
-                Assert.That(antwort, Does.Contain("<identity"));
-                Assert.That(antwort, Does.Contain("urn:xmpp:ping"));
+                Assert.That(reply, Does.Contain("type='result'"));
+                Assert.That(reply, Does.Contain("<identity"));
+                Assert.That(reply, Does.Contain("urn:xmpp:ping"));
             });
 
         }
@@ -828,34 +825,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownRequestToTheServersOwnAddress_IsRefusedNotIgnored()
 
         /// <summary>
-        /// Und was der Server nicht kennt, bekommt einen Fehler statt
-        /// Schweigen.
+        /// And what the server does not know gets an error instead of silence.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 8.2.3, Regel 3 kennt keine dritte Möglichkeit:
-        /// Auf ein <c>get</c> oder <c>set</c> folgt <c>result</c> oder
-        /// <c>error</c>. Schweigen lässt die Gegenstelle bis in ihre
-        /// Zeitüberschreitung warten — und sie erfährt nie, ob die Frage
-        /// angekommen ist oder nur nicht verstanden wurde.
+        /// RFC 6120, section 8.2.3, rule 3 knows no third possibility: A
+        /// <c>get</c> or <c>set</c> is followed by <c>result</c> or
+        /// <c>error</c>. Silence lets the far end wait into its timeout — and
+        /// it never learns whether the question arrived or merely was not
+        /// understood.
         /// </remarks>
         [Test]
         public async Task AnUnknownRequestToTheServersOwnAddress_IsRefusedNotIgnored()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
+            var alice = await ConnectAsync(_left, "alice");
 
-            var fehler = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            var errors = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
 
             await alice.SendRawAsync(
-                      $"<iq type='get' id='kennt-er-nicht' to='{_rechts.Domain}'>" +
-                      "<query xmlns='urn:example:gibt-es-nicht'/></iq>");
+                      $"<iq type='get' id='does-not-know-it' to='{_right.Domain}'>" +
+                      "<query xmlns='urn:example:does-not-exist'/></iq>");
 
-            await WarteAuf(() => !fehler.IsEmpty, "die Ablehnung des fremden Servers");
+            await WaitFor(() => !errors.IsEmpty, "the refusal of the foreign server");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+            Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
         }
 
@@ -864,37 +860,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AResultToTheServersOwnAddress_IsNotAnswered()
 
         /// <summary>
-        /// Auf eine <b>Antwort</b> an die Serveradresse folgt nichts.
+        /// A <b>reply</b> to the server address is followed by nothing.
         /// </summary>
         /// <remarks>
-        /// Regel 4 gilt auch hier, und sie ist die Gegenprobe zur Regel 3
-        /// darüber: Wer jede Stanza an die Serveradresse beantwortet, schickt
-        /// auf ein <c>result</c> einen Fehler zurück — an jemanden, der nichts
-        /// gefragt hat, unter der <c>id</c> einer Frage, die er selbst
-        /// beantwortet hat. Zwei Server, die es so halten, schieben sich
-        /// gegenseitig Meldungen zu.
+        /// Rule 4 holds here as well, and it is the counter-check to rule 3
+        /// above: Whoever answers every stanza to the server address sends an
+        /// error back on a <c>result</c> — to somebody who has not asked
+        /// anything, under the <c>id</c> of a question they answered
+        /// themselves. Two servers keeping it that way push notices at each
+        /// other.
         /// </remarks>
         [Test]
         public async Task AResultToTheServersOwnAddress_IsNotAnswered()
         {
 
-            var alice = await VerbindeAsync(_links, "alice");
+            var alice = await ConnectAsync(_left, "alice");
 
-            var antworten = new ConcurrentQueue<String>();
+            var replies = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("keine-frage", StringComparison.Ordinal))
+                    x.Contains("no-question", StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(x);
+                    replies.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync(
-                      $"<iq type='result' id='keine-frage' to='{_rechts.Domain}'/>");
+                      $"<iq type='result' id='no-question' to='{_right.Domain}'/>");
 
-            await WarteGegen(() => !antworten.IsEmpty, "eine Antwort auf eine Antwort");
+            await WaitAgainst(() => !replies.IsEmpty, "a reply to a reply");
 
         }
 
@@ -903,58 +899,58 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AProbeFromAnotherServer_IsAnsweredNotDelivered()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 4.3: Eine Presence-Probe beantwortet der Server
-        /// selbst — sie erreicht keinen Client.
+        /// RFC 6121, section 4.3: A presence probe the server answers itself —
+        /// it reaches no client.
         /// </summary>
         /// <remarks>
-        /// Bis hierher ging sie ins Routing und landete bei Bobs Client. Das war
-        /// in beide Richtungen falsch: Der Client bekam eine Stanza zu sehen, die
-        /// nicht für ihn bestimmt ist und auf die er nichts antworten kann, und
-        /// Alices Server bekam nie eine Antwort — er fragt nach Bobs Zustand und
-        /// erhält Schweigen, obwohl Bobs Server die Auskunft hat.
+        /// Up to here it went into the routing and landed at Bob's client. That
+        /// was wrong in both directions: The client got to see a stanza that is
+        /// not meant for it and that it cannot answer anything to, and Alice's
+        /// server never got an answer — it asks after Bob's state and receives
+        /// silence, although Bob's server has the information.
         ///
-        /// Dieselbe Asymmetrie wie bei Nachricht und IQ, und die letzte ihrer
-        /// Art: Für einen hiesigen Client wurde die Probe seit jeher beantwortet.
+        /// The same asymmetry as with the message and the IQ, and the last of
+        /// its kind: For a local client the probe has been answered all along.
         ///
-        /// Beide Hälften stehen im Test. „Kommt an" allein wäre auch erfüllt,
-        /// wenn die Probe zusätzlich durchgereicht würde; „erreicht den Client
-        /// nicht" allein wäre auch erfüllt, wenn sie spurlos verschwände.
+        /// Both halves stand in the test. "Arrives" alone would be fulfilled if
+        /// the probe were passed on in addition; "does not reach the client"
+        /// alone would be fulfilled if it vanished without a trace.
         /// </remarks>
         [Test]
         public async Task AProbeFromAnotherServer_IsAnsweredNotDelivered()
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            var bob   = await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            // Erst warten, bis Bobs *erste* Presence verarbeitet ist, und dann
-            // den Roster setzen. Andersherum ist es ein Wettlauf: Trifft die
-            // erste Presence den Eintrag schon an, geht sie über die gewöhnliche
-            // Verteilung an Alice - und der Test bestünde, ohne dass je eine
-            // Probe beantwortet wurde. Genau das hat er zuerst getan.
-            await WarteAuf(() => _rechts.SessionOf(bob.FullJid!)?.IsAvailable == true,
-                           "Bobs erste Presence auf seinem Server");
+            // First wait until Bob's *first* presence is processed, and only
+            // then set the roster. The other way round it is a race: If the
+            // first presence already meets the entry, it goes to Alice over the
+            // ordinary distribution - and the test would pass without a probe
+            // ever having been answered. That is exactly what it did at first.
+            await WaitFor(() => _right.SessionOf(bob.FullJid!)?.IsAvailable == true,
+                          "Bob's first presence on his server");
 
-            // Bob lässt Alice seinen Zustand sehen - ohne das bleibt jede Probe
-            // unbeantwortet, und der Test prüfte nur das Schweigen.
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
+            // Bob lets Alice see his state - without that every probe stays
+            // unanswered, and the test would check the silence only.
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
 
-            var beiAlice = new ConcurrentQueue<(String From, String? Type)>();
-            var beiBob   = new ConcurrentQueue<(String From, String? Type)>();
+            var atAlice = new ConcurrentQueue<(String From, String? Type)>();
+            var atBob   = new ConcurrentQueue<(String From, String? Type)>();
 
-            alice.Connection.OnPresence += (from, type) => beiAlice.Enqueue((from, type));
-            bob.Connection.OnPresence   += (from, type) => beiBob.Enqueue((from, type));
+            alice.Connection.OnPresence += (from, type) => atAlice.Enqueue((from, type));
+            bob.Connection.OnPresence   += (from, type) => atBob.Enqueue((from, type));
 
             await alice.SendRawAsync($"<presence to='{Bob}' type='probe'/>");
 
-            await WarteAuf(() => beiAlice.Any(p => p.From.StartsWith(Bob, StringComparison.Ordinal)),
-                           "Bobs Zustand als Antwort auf die Probe");
+            await WaitFor(() => atAlice.Any(p => p.From.StartsWith(Bob, StringComparison.Ordinal)),
+                          "Bob's state as the answer to the probe");
 
-            // Der Probe Zeit geben, doch noch bei Bob aufzuschlagen.
+            // Give the probe time to turn up at Bob's after all.
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            Assert.That(beiBob.Any(p => p.Type == "probe"), Is.False,
-                        "Eine Probe darf keinen Client erreichen.");
+            Assert.That(atBob.Any(p => p.Type == "probe"), Is.False,
+                        "A probe must reach no client.");
 
         }
 
@@ -963,47 +959,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AProbeWithoutPermission_IsNotAnswered()
 
         /// <summary>
-        /// Ohne Berechtigung bleibt die Probe unbeantwortet — und verrät auch
-        /// nicht, dass es das Konto gibt.
+        /// Without permission the probe stays unanswered — and does not give
+        /// away that the account exists either.
         /// </summary>
         /// <remarks>
-        /// Gefragt wird der Roster des <b>Befragten</b> nach <c>from</c> oder
-        /// <c>both</c>: „der darf mich sehen". Dieselbe Hälfte wie bei der
-        /// IQ-Prüfung aus Abschnitt 8.5.3.1 — und dieselbe Verwechslungsgefahr,
-        /// weshalb hier ein einseitiger Roster steht: Alice darf Bobs Zustand
-        /// <i>nicht</i> sehen, Bob aber Alices.
+        /// What is asked is the roster of the <b>one being asked about</b> for
+        /// <c>from</c> or <c>both</c>: "that one may see me". The same half as
+        /// with the IQ check from section 8.5.3.1 — and the same danger of
+        /// mistaking it, which is why a one-sided roster stands here: Alice may
+        /// <i>not</i> see Bob's state, but Bob may see Alice's.
         ///
-        /// Abschnitt 8.5.1 stellt für ein unbekanntes Konto
-        /// <c>&lt;unsubscribed/&gt;</c> und Schweigen frei; dieser Server
-        /// schweigt, und damit sieht ein unbekanntes Konto genauso aus wie ein
-        /// vorhandenes ohne Berechtigung. Das ist der Sinn der Wahl.
+        /// Section 8.5.1 leaves <c>&lt;unsubscribed/&gt;</c> and silence open
+        /// for an unknown account; this server keeps silent, and thereby an
+        /// unknown account looks exactly like an existing one without
+        /// permission. That is the point of the choice.
         /// </remarks>
         [Test]
         public async Task AProbeWithoutPermission_IsNotAnswered()
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            var bob   = await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            await WarteAuf(() => _rechts.SessionOf(bob.FullJid!)?.IsAvailable == true,
-                           "Bobs erste Presence auf seinem Server");
+            await WaitFor(() => _right.SessionOf(bob.FullJid!)?.IsAvailable == true,
+                          "Bob's first presence on his server");
 
-            // Die falsche Hälfte: Bob sieht Alice, Alice sieht Bob nicht.
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "to"));
+            // The wrong half: Bob sees Alice, Alice does not see Bob.
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "to"));
 
-            var beiAlice = new ConcurrentQueue<(String From, String? Type)>();
-            alice.Connection.OnPresence += (from, type) => beiAlice.Enqueue((from, type));
+            var atAlice = new ConcurrentQueue<(String From, String? Type)>();
+            alice.Connection.OnPresence += (from, type) => atAlice.Enqueue((from, type));
 
             await alice.SendRawAsync($"<presence to='{Bob}' type='probe'/>");
 
-            await WarteGegen(() => beiAlice.Any(p => p.From.StartsWith(Bob, StringComparison.Ordinal)),
-                             "eine Antwort auf eine unberechtigte Probe");
+            await WaitAgainst(() => atAlice.Any(p => p.From.StartsWith(Bob, StringComparison.Ordinal)),
+                              "an answer to an unauthorised probe");
 
-            // Und für ein Konto, das es nicht gibt, dasselbe Bild.
-            await alice.SendRawAsync($"<presence to='gibtsnicht@{_rechts.Domain}' type='probe'/>");
+            // And for an account that does not exist, the same picture.
+            await alice.SendRawAsync($"<presence to='doesnotexist@{_right.Domain}' type='probe'/>");
 
-            await WarteGegen(() => beiAlice.Count > 0,
-                             "eine Antwort auf die Probe an ein unbekanntes Konto");
+            await WaitAgainst(() => atAlice.Count > 0,
+                              "an answer to the probe to an unknown account");
 
         }
 
@@ -1012,53 +1008,52 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PresenceAcrossTheBorder_StillTakesTheDirectPath()
 
         /// <summary>
-        /// Nur Nachrichten nehmen den neuen Weg. Presence geht weiterhin
-        /// unmittelbar an die Resourcen.
+        /// Only messages take the new path. Presence still goes to the
+        /// resources directly.
         /// </summary>
         /// <remarks>
-        /// Die Weiche fragt nach dem Element und nicht nach der Herkunft. Fragte
-        /// sie falsch, liefe Presence durch die Zustellregeln für Nachrichten —
-        /// und die kennen kein <c>&lt;presence/&gt;</c>: Es hat kein <c>type</c>,
-        /// das sie deuten könnten, gälte damit als <c>normal</c> und landete in
-        /// der Ablage. Beim nächsten Anmelden käme es als Anwesenheit von
-        /// vorgestern heraus.
+        /// The switch asks after the element and not after the origin. Were it
+        /// to ask wrongly, presence would run through the delivery rules for
+        /// messages — and those know no <c>&lt;presence/&gt;</c>: It has no
+        /// <c>type</c> they could interpret, would thereby count as
+        /// <c>normal</c> and land in the store. At the next login it would come
+        /// out as a presence from the day before yesterday.
         ///
-        /// Die erste Hälfte prüft mit <b>abwesendem</b> Bob, und das ist der
-        /// Punkt: Solange er verbunden ist, kommt seine Presence auf beiden Wegen
-        /// an — die Nachrichtenstrecke stellt sie einer erreichbaren Resource
-        /// genauso zu. Sichtbar wird der falsche Weg erst dort, wo die
-        /// Zustellregeln etwas anderes tun als das Routing, und das ist die
-        /// Ablage.
+        /// The first half checks with an <b>absent</b> Bob, and that is the
+        /// point: As long as he is connected, his presence arrives on both
+        /// paths — the message route delivers it to a reachable resource just
+        /// the same. The wrong path becomes visible only where the delivery
+        /// rules do something other than the routing, and that is the store.
         /// </remarks>
         [Test]
         public async Task PresenceAcrossTheBorder_StillTakesTheDirectPath()
         {
 
-            var alice = Erzeuge(_links, "alice");
-            _rechts.AddAccount("bob");
+            var alice = Create(_left, "alice");
+            _right.AddAccount("bob");
 
-            _links.GetAccount(Alice)!.SetRosterEntry(new RosterEntry(Bob,   null, "both"));
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "both"));
+            _left.GetAccount(Alice)!.SetRosterEntry(new RosterEntry(Bob,   null, "both"));
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "both"));
 
-            // Bob ist nicht da. Alices Presence geht trotzdem über die Grenze -
-            // sein Server hat nur nichts, dem er sie geben könnte.
+            // Bob is not there. Alice's presence goes across the border
+            // nevertheless - his server only has nothing to give it to.
             await alice.ConnectAsync();
-            await alice.SetPresenceAsync("away", "Mittagspause");
+            await alice.SetPresenceAsync("away", "Lunch break");
 
-            await WarteGegen(() => AblageVonBob.Count > 0,
-                             "Presence in der Offline-Ablage");
+            await WaitAgainst(() => BobsStore.Count > 0,
+                              "presence in the offline store");
 
-            // Und die Gegenprobe: Sie kommt an, wenn jemand da ist.
-            var bob        = Erzeuge(_rechts, "bob");
-            var presenzen  = new ConcurrentQueue<String>();
+            // And the counter-check: It arrives when somebody is there.
+            var bob        = Create(_right, "bob");
+            var presences  = new ConcurrentQueue<String>();
 
-            bob.Connection.OnPresence += (from, show) => presenzen.Enqueue(from);
+            bob.Connection.OnPresence += (from, show) => presences.Enqueue(from);
 
             await bob.ConnectAsync();
-            await alice.SetPresenceAsync("dnd", "Bitte nicht stören");
+            await alice.SetPresenceAsync("dnd", "Please do not disturb");
 
-            await WarteAuf(() => presenzen.Any(f => f.StartsWith(Alice, StringComparison.Ordinal)),
-                           "die Presence über die Grenze");
+            await WaitFor(() => presences.Any(f => f.StartsWith(Alice, StringComparison.Ordinal)),
+                          "the presence across the border");
 
         }
 
@@ -1067,70 +1062,70 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqWithAnUnknownType_DoesNotCrossTheBorder()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 8.2.3, Regel 2: Eine IQ-Stanza mit einem
-        /// unbekannten <c>type</c> weist schon der eigene Server ab — „the
+        /// RFC 6120, section 8.2.3, rule 2: An IQ stanza with an unknown
+        /// <c>type</c> is turned away by one's own server already — "the
         /// recipient <b>or an intermediate router</b>".
         /// </summary>
         /// <remarks>
-        /// Der Absender des Fehlers ist hier die ganze Aussage. Käme er von
-        /// <c>right.example</c>, wäre die Stanza über die Grenze gegangen und
-        /// erst drüben abgewiesen worden — der Test bestünde, und die Regel für
-        /// den Router wäre trotzdem nicht umgesetzt. Nur <c>left.example</c>
-        /// beweist, dass sie den eigenen Server nicht verlassen hat.
+        /// The sender of the error is the whole statement here. Were it to come
+        /// from <c>right.example</c>, the stanza would have gone across the
+        /// border and been turned away only over there — the test would pass,
+        /// and the rule for the router would still not be implemented. Only
+        /// <c>left.example</c> proves that it did not leave its own server.
         ///
-        /// Warum ein Router überhaupt urteilen soll, statt weiterzureichen: Eine
-        /// Stanza, die weder Frage noch Antwort ist, kann am Ziel niemand
-        /// beantworten. Reicht jeder sie weiter, wandert sie durch das Netz, und
-        /// der Absender erfährt nie, was aus ihr wurde.
+        /// Why a router should pass judgement at all instead of handing on: A
+        /// stanza that is neither question nor answer nobody can answer at the
+        /// destination. If everyone hands it on, it wanders through the net,
+        /// and the sender never learns what became of it.
         /// </remarks>
         [Test]
         public async Task AnIqWithAnUnknownType_DoesNotCrossTheBorder()
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            var bob   = await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
 
-            var beiAlice = new ConcurrentQueue<String>();
-            var beiBob   = new ConcurrentQueue<String>();
+            var atAlice = new ConcurrentQueue<String>();
+            var atBob   = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='fremder-typ'", StringComparison.Ordinal))
+                    x.Contains("id='foreign-type'", StringComparison.Ordinal))
                 {
-                    beiAlice.Enqueue(x);
+                    atAlice.Enqueue(x);
                 }
             };
 
             bob.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='fremder-typ'", StringComparison.Ordinal))
+                    x.Contains("id='foreign-type'", StringComparison.Ordinal))
                 {
-                    beiBob.Enqueue(x);
+                    atBob.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync(
-                      $"<iq type='vielleicht' id='fremder-typ' to='{bob.FullJid}'>" +
+                      $"<iq type='maybe' id='foreign-type' to='{bob.FullJid}'>" +
                       "<ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WarteAuf(() => !beiAlice.IsEmpty, "die Ablehnung von Alices eigenem Server");
+            await WaitFor(() => !atAlice.IsEmpty, "the refusal from Alice's own server");
 
-            beiAlice.TryDequeue(out var abgelehnt);
+            atAlice.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt, Does.Contain("<bad-request "));
+                Assert.That(refused, Does.Contain("<bad-request "));
 
-                Assert.That(abgelehnt, Does.Contain($"from='{_links.Domain}'"),
-                            "Abgewiesen hat der eigene Server, nicht der der Gegenstelle.");
+                Assert.That(refused, Does.Contain($"from='{_left.Domain}'"),
+                            "The one that turned it away is one's own server, not the far end's.");
 
-                Assert.That(beiBob, Is.Empty,
-                            "Und angekommen ist sie nirgends.");
+                Assert.That(atBob, Is.Empty,
+                            "And it arrived nowhere.");
 
             });
 
@@ -1141,71 +1136,72 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqWithAnUnknownTypeFromAnotherServer_IsRefused()
 
         /// <summary>
-        /// Dieselbe Regel für die andere Rolle: als Empfänger einer Stanza von
-        /// der Gegenstelle.
+        /// The same rule for the other role: as the recipient of a stanza from
+        /// the far end.
         /// </summary>
         /// <remarks>
-        /// Eingespeist wird hier von Hand, und das ist kein Kunstgriff, sondern
-        /// die einzige Möglichkeit: Ein Client dieser Sammlung käme nie so weit,
-        /// weil sein eigener Server ihn schon abweist (siehe der Test darüber).
-        /// Der Fall ist trotzdem echt — eine fremde Serverimplementierung, die
-        /// Regel 2 nicht kennt, reicht genau das über die Grenze.
+        /// What is fed in here is fed in by hand, and that is no artifice but
+        /// the only possibility: A client of this collection would never get
+        /// this far, because its own server turns it away already (see the test
+        /// above). The case is real nevertheless — a foreign server
+        /// implementation not knowing rule 2 hands exactly that across the
+        /// border.
         ///
-        /// Bob ist angemeldet und lässt Alice seinen Zustand sehen. Ohne beides
-        /// wäre der Test wertlos: Die Stanza käme dann auch ohne jede Prüfung
-        /// nicht bei ihm an, und der Nachweis „erreicht keinen Client" bewiese
-        /// nur, dass niemand da war.
+        /// Bob is logged in and lets Alice see his state. Without both the test
+        /// would be worthless: The stanza would then not arrive at his end even
+        /// without any check, and the proof "reaches no client" would prove
+        /// only that nobody was there.
         /// </remarks>
         [Test]
         public async Task AnIqWithAnUnknownTypeFromAnotherServer_IsRefused()
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            var bob   = await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
 
-            var beiAlice = new ConcurrentQueue<String>();
-            var beiBob   = new ConcurrentQueue<String>();
+            var atAlice = new ConcurrentQueue<String>();
+            var atBob   = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='von-drueben'", StringComparison.Ordinal))
+                    x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
-                    beiAlice.Enqueue(x);
+                    atAlice.Enqueue(x);
                 }
             };
 
             bob.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='von-drueben'", StringComparison.Ordinal))
+                    x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
-                    beiBob.Enqueue(x);
+                    atBob.Enqueue(x);
                 }
             };
 
-            await _rechts.AcceptFromRemoteAsync(
-                      _links.Domain,
-                      $"<iq type='vielleicht' id='von-drueben' " +
+            await _right.AcceptFromRemoteAsync(
+                      _left.Domain,
+                      $"<iq type='maybe' id='from-over-there' " +
                       $"from='{alice.FullJid}' to='{bob.FullJid}'>" +
                       "<ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WarteAuf(() => !beiAlice.IsEmpty, "die Ablehnung über die Grenze zurück");
+            await WaitFor(() => !atAlice.IsEmpty, "the refusal back across the border");
 
-            beiAlice.TryDequeue(out var abgelehnt);
+            atAlice.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt, Does.Contain("<bad-request "));
+                Assert.That(refused, Does.Contain("<bad-request "));
 
-                Assert.That(abgelehnt, Does.Contain($"from='{_rechts.Domain}'"),
-                            "Abgewiesen hat der Server des Empfängers.");
+                Assert.That(refused, Does.Contain($"from='{_right.Domain}'"),
+                            "The one that turned it away is the server of the recipient.");
 
-                Assert.That(beiBob, Is.Empty,
-                            "Bob bekommt sie nicht zu sehen.");
+                Assert.That(atBob, Is.Empty,
+                            "Bob does not get to see it.");
 
             });
 
@@ -1216,81 +1212,81 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMalformedRecipientFromAnotherServer_IsRefusedAndAnswered()
 
         /// <summary>
-        /// Ein <c>to</c>, das kein JID ist, wird auch von einer Gegenstelle
-        /// nicht angenommen — und der Absender erfährt es.
+        /// A <c>to</c> that is no JID is not accepted from a far end either —
+        /// and the sender learns of it.
         /// </summary>
         /// <remarks>
-        /// D51 hat die Prüfung für Stanzas von Clients eingeführt; für den Weg
-        /// über die Grenze fehlte sie. Dort trifft sie den wahrscheinlicheren
-        /// Fall: Den eigenen Client schreibt dieselbe Bibliothek, die fremde
-        /// Implementierung nicht.
+        /// D51 introduced the check for stanzas from clients; for the path
+        /// across the border it was missing. There it meets the more likely
+        /// case: One's own client is written by the same library, the foreign
+        /// implementation is not.
         ///
-        /// <c>IsLocal</c> allein reicht nicht, weil es nur die Domain ansieht.
-        /// <c>b ob@right.example</c> gehört hierher und ist trotzdem keine
-        /// Adresse — die Stanza lief bis in die Zustellung und sah dort aus wie
-        /// eine an einen abwesenden Empfänger.
+        /// <c>IsLocal</c> alone is not enough, because it looks at the domain
+        /// only. <c>b ob@right.example</c> belongs here and is no address
+        /// nevertheless — the stanza ran all the way into the delivery and
+        /// looked there like one to an absent recipient.
         ///
-        /// Die zweite Adresse prüft die <b>Reihenfolge</b>: Bei
-        /// <c>bob@-right.example</c> ist schon die Domain keine, und
-        /// <c>IsLocal</c> würde sie deshalb für die einer dritten Partei
-        /// halten. Stünde die Prüfung dahinter, hiesse der Grund „fremder
-        /// Empfänger" — richtig abgewiesen, falsch begründet, und der Absender
-        /// suchte den Fehler an der falschen Stelle.
+        /// The second address checks the <b>order</b>: With
+        /// <c>bob@-right.example</c> the domain is not one already, and
+        /// <c>IsLocal</c> would therefore take it for that of a third party.
+        /// Were the check to stand behind it, the reason would read "foreign
+        /// recipient" — rightly turned away, wrongly reasoned, and the sender
+        /// would look for the error in the wrong place.
         /// </remarks>
-        [TestCase("b ob@",  TestName = "Leerzeichen im Localpart")]
-        [TestCase("bob@-",  TestName = "Bindestrich am Anfang der Domain")]
-        public async Task AMalformedRecipientFromAnotherServer_IsRefusedAndAnswered(String anfang)
+        [TestCase("b ob@",  TestName = "Space in the localpart")]
+        [TestCase("bob@-",  TestName = "Hyphen at the start of the domain")]
+        public async Task AMalformedRecipientFromAnotherServer_IsRefusedAndAnswered(String beginning)
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            var bob   = await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
 
-            var beiAlice = new ConcurrentQueue<String>();
-            var beiBob   = new ConcurrentQueue<String>();
+            var atAlice = new ConcurrentQueue<String>();
+            var atBob   = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='von-drueben'", StringComparison.Ordinal))
+                    x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
-                    beiAlice.Enqueue(x);
+                    atAlice.Enqueue(x);
                 }
             };
 
             bob.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='von-drueben'", StringComparison.Ordinal))
+                    x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
-                    beiBob.Enqueue(x);
+                    atBob.Enqueue(x);
                 }
             };
 
-            var urteil = await _rechts.AcceptFromRemoteAsync(
-                             _links.Domain,
-                             $"<message type='chat' id='von-drueben' " +
-                             $"from='{alice.FullJid}' to='{anfang}{_rechts.Domain}'>" +
-                             "<body>An eine Adresse, die keine ist</body></message>");
+            var verdict = await _right.AcceptFromRemoteAsync(
+                             _left.Domain,
+                             $"<message type='chat' id='from-over-there' " +
+                             $"from='{alice.FullJid}' to='{beginning}{_right.Domain}'>" +
+                             "<body>To an address that is none</body></message>");
 
-            await WarteAuf(() => !beiAlice.IsEmpty, "die Ablehnung über die Grenze zurück");
+            await WaitFor(() => !atAlice.IsEmpty, "the refusal back across the border");
 
-            beiAlice.TryDequeue(out var abgelehnt);
+            atAlice.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(urteil, Is.EqualTo(RemoteStanzaResult.MalformedRecipient),
-                            "Der Grund gehört genannt, sonst steht er als 'fremder Empfänger' da.");
+                Assert.That(verdict, Is.EqualTo(RemoteStanzaResult.MalformedRecipient),
+                            "The reason belongs named, otherwise it stands there as 'foreign recipient'.");
 
-                Assert.That(abgelehnt, Does.Contain("<jid-malformed "));
+                Assert.That(refused, Does.Contain("<jid-malformed "));
 
-                Assert.That(abgelehnt, Does.Contain($"from='{_rechts.Domain}'"),
-                            "Abgewiesen hat der Server des Empfängers, nicht der Empfänger.");
+                Assert.That(refused, Does.Contain($"from='{_right.Domain}'"),
+                            "The one that turned it away is the server of the recipient, not the recipient.");
 
-                Assert.That(beiBob, Is.Empty,
-                            "Bob bekommt sie nicht zu sehen.");
+                Assert.That(atBob, Is.Empty,
+                            "Bob does not get to see it.");
 
             });
 
@@ -1301,50 +1297,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMalformedSenderFromAnotherServer_IsRefusedWithoutAnAnswer()
 
         /// <summary>
-        /// Ein <c>from</c>, das kein JID ist, wird abgewiesen — und nicht
-        /// beantwortet.
+        /// A <c>from</c> that is no JID is turned away — and not answered.
         /// </summary>
         /// <remarks>
-        /// Es gäbe auch niemanden, an den eine Antwort ginge: Die Adresse des
-        /// Absenders ist keine. Dass die Prüfung <b>vor</b> der
-        /// Zuständigkeitsfrage steht, hat denselben Grund — <c>DomainOf</c> auf
-        /// eine Zeichenkette anzuwenden, die kein JID ist, vergleicht
-        /// Bruchstücke und nennt das Ergebnis dann „fremde Domain".
+        /// There would be nobody for an answer to go to either: The address of
+        /// the sender is none. That the check stands <b>before</b> the question
+        /// of responsibility has the same reason — applying <c>DomainOf</c> to
+        /// a string that is no JID compares fragments and then calls the result
+        /// a "foreign domain".
         ///
-        /// Für den Stream ist das nach RFC 6120, Abschnitt 8.1.1.1 derselbe
-        /// Fall wie ein <c>from</c>, für das die Gegenstelle nicht sprechen
-        /// darf: <c>&lt;invalid-from/&gt;</c>, und der Stream endet. Das prüft
-        /// <c>S2SStreamTests</c>.
+        /// For the stream this is the same case as a <c>from</c> the far end
+        /// may not speak for, according to RFC 6120, section 8.1.1.1:
+        /// <c>&lt;invalid-from/&gt;</c>, and the stream ends. That is what
+        /// <c>S2SStreamTests</c> checks.
         /// </remarks>
         [Test]
         public async Task AMalformedSenderFromAnotherServer_IsRefusedWithoutAnAnswer()
         {
 
-            await VerbindeAsync(_links,  "alice");
-            var bob = await VerbindeAsync(_rechts, "bob");
+            await ConnectAsync(_left,  "alice");
+            var bob = await ConnectAsync(_right, "bob");
 
-            _rechts.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
+            _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
 
-            var beiBob = new ConcurrentQueue<String>();
+            var atBob = new ConcurrentQueue<String>();
 
             bob.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='von-drueben'", StringComparison.Ordinal))
+                    x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
-                    beiBob.Enqueue(x);
+                    atBob.Enqueue(x);
                 }
             };
 
-            var urteil = await _rechts.AcceptFromRemoteAsync(
-                             _links.Domain,
-                             $"<message type='chat' id='von-drueben' " +
-                             $"from='al ice@{_links.Domain}' to='{bob.FullJid}'>" +
-                             "<body>Von einer Adresse, die keine ist</body></message>");
+            var verdict = await _right.AcceptFromRemoteAsync(
+                             _left.Domain,
+                             $"<message type='chat' id='from-over-there' " +
+                             $"from='al ice@{_left.Domain}' to='{bob.FullJid}'>" +
+                             "<body>From an address that is none</body></message>");
 
-            Assert.That(urteil, Is.EqualTo(RemoteStanzaResult.MalformedSender));
+            Assert.That(verdict, Is.EqualTo(RemoteStanzaResult.MalformedSender));
 
-            await WarteGegen(() => !beiBob.IsEmpty, "die Zustellung an Bob");
+            await WaitAgainst(() => !atBob.IsEmpty, "the delivery to Bob");
 
         }
 
@@ -1353,43 +1348,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMalformedRecipientInAnErrorStanza_IsNotAnswered()
 
         /// <summary>
-        /// Auf eine Fehler-Stanza folgt kein Fehler, auch nicht über die
-        /// Grenze (RFC 6120, Abschnitt 8.3.1).
+        /// An error stanza is not followed by an error, not across the border
+        /// either (RFC 6120, section 8.3.1).
         /// </summary>
         /// <remarks>
-        /// Über die Grenze wiegt die Regel schwerer als im eigenen Haus: Zwei
-        /// Server, die einander antworten, schieben sich die Meldung zu, bis
-        /// einer aufgibt — und keiner von beiden merkt, dass er in einer
-        /// Schleife steckt.
+        /// Across the border the rule weighs heavier than in one's own house:
+        /// Two servers answering each other push the notice back and forth
+        /// until one of them gives up — and neither of the two notices that it
+        /// is stuck in a loop.
         /// </remarks>
         [Test]
         public async Task AMalformedRecipientInAnErrorStanza_IsNotAnswered()
         {
 
-            var alice = await VerbindeAsync(_links,  "alice");
-            await VerbindeAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            await ConnectAsync(_right, "bob");
 
-            var beiAlice = new ConcurrentQueue<String>();
+            var atAlice = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("id='von-drueben'", StringComparison.Ordinal))
+                    x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
-                    beiAlice.Enqueue(x);
+                    atAlice.Enqueue(x);
                 }
             };
 
-            var urteil = await _rechts.AcceptFromRemoteAsync(
-                             _links.Domain,
-                             $"<message type='error' id='von-drueben' " +
-                             $"from='{alice.FullJid}' to='b ob@{_rechts.Domain}'>" +
+            var verdict = await _right.AcceptFromRemoteAsync(
+                             _left.Domain,
+                             $"<message type='error' id='from-over-there' " +
+                             $"from='{alice.FullJid}' to='b ob@{_right.Domain}'>" +
                              "<error type='cancel'><gone xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" +
                              "</message>");
 
-            Assert.That(urteil, Is.EqualTo(RemoteStanzaResult.MalformedRecipient));
+            Assert.That(verdict, Is.EqualTo(RemoteStanzaResult.MalformedRecipient));
 
-            await WarteGegen(() => !beiAlice.IsEmpty, "eine Antwort auf eine Fehler-Stanza");
+            await WaitAgainst(() => !atAlice.IsEmpty, "an answer to an error stanza");
 
         }
 
