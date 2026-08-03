@@ -29,13 +29,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// SCRAM gegen die offiziellen Testvektoren:
-    /// RFC 5802 Abschnitt 5 für SCRAM-SHA-1 und
-    /// RFC 7677 Abschnitt 3 für SCRAM-SHA-256.
+    /// SCRAM against the official test vectors:
+    /// RFC 5802 section 5 for SCRAM-SHA-1 and
+    /// RFC 7677 section 3 for SCRAM-SHA-256.
     ///
-    /// Beide Vektoren nutzen Benutzer "user" und Passwort "pencil". Der
-    /// Client-Nonce wird über <c>FixedClientNonce</c> festgenagelt, sonst
-    /// liessen sich AuthMessage und Proof nicht reproduzieren.
+    /// Both vectors use the user "user" and the password "pencil". The client
+    /// nonce is nailed down through <c>FixedClientNonce</c>, otherwise the
+    /// AuthMessage and the proof could not be reproduced.
     /// </summary>
     [TestFixture]
     public class SCRAMAuthenticatorTests
@@ -43,7 +43,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        // ----- RFC 5802, Abschnitt 5 (SCRAM-SHA-1) -----
+        // ----- RFC 5802, section 5 (SCRAM-SHA-1) -----
         private const String Sha1_ClientNonce      = "fyko+d2lbbFgONRv9qkxdawL";
         private const String Sha1_ClientFirst      = "n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL";
         private const String Sha1_ServerFirst      = "r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j," +
@@ -52,7 +52,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                                      "p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts=";
         private const String Sha1_ServerFinal      = "v=rmF9pqV8S7suAoZWja4dJRkFsKQ=";
 
-        // ----- RFC 7677, Abschnitt 3 (SCRAM-SHA-256) -----
+        // ----- RFC 7677, section 3 (SCRAM-SHA-256) -----
         private const String Sha256_ClientNonce    = "rOprNGfwEbeRWgbNEkqO";
         private const String Sha256_ClientFirst    = "n,,n=user,r=rOprNGfwEbeRWgbNEkqO";
         private const String Sha256_ServerFirst    = "r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0," +
@@ -63,7 +63,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private static SCRAMAuthenticator Authenticator(SCRAMMechanism mechanism, String clientNonce)
             => new("user", "pencil", mechanism) { FixedClientNonce = clientNonce };
@@ -80,7 +80,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc5802_Sha1_ClientFirstMessage_MatchesTestVector()
 
         /// <summary>
-        /// Die client-first-message muss dem Beispiel aus RFC 5802 entsprechen.
+        /// The client-first-message must match the example from RFC 5802.
         /// </summary>
         [Test]
         public void Rfc5802_Sha1_ClientFirstMessage_MatchesTestVector()
@@ -98,9 +98,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc5802_Sha1_ClientFinalMessage_MatchesTestVector()
 
         /// <summary>
-        /// Der ClientProof muss exakt dem Wert aus RFC 5802 entsprechen. Damit
-        /// sind Hi/PBKDF2, ClientKey, StoredKey, AuthMessage, ClientSignature
-        /// und die XOR-Verknüpfung gemeinsam abgedeckt.
+        /// The ClientProof must match the value from RFC 5802 exactly. That
+        /// covers Hi/PBKDF2, ClientKey, StoredKey, AuthMessage, ClientSignature
+        /// and the XOR all at once.
         /// </summary>
         [Test]
         public void Rfc5802_Sha1_ClientFinalMessage_MatchesTestVector()
@@ -120,7 +120,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc5802_Sha1_ServerSignature_IsAccepted()
 
         /// <summary>
-        /// Die Server-Signatur aus RFC 5802 muss akzeptiert werden.
+        /// The server signature from RFC 5802 must be accepted.
         /// </summary>
         [Test]
         public void Rfc5802_Sha1_ServerSignature_IsAccepted()
@@ -139,7 +139,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc7677_Sha256_ClientFirstMessage_MatchesTestVector()
 
         /// <summary>
-        /// Die client-first-message muss dem Beispiel aus RFC 7677 entsprechen.
+        /// The client-first-message must match the example from RFC 7677.
         /// </summary>
         [Test]
         public void Rfc7677_Sha256_ClientFirstMessage_MatchesTestVector()
@@ -157,7 +157,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc7677_Sha256_ClientFinalMessage_MatchesTestVector()
 
         /// <summary>
-        /// Der ClientProof muss exakt dem Wert aus RFC 7677 entsprechen.
+        /// The ClientProof must match the value from RFC 7677 exactly.
         /// </summary>
         [Test]
         public void Rfc7677_Sha256_ClientFinalMessage_MatchesTestVector()
@@ -177,7 +177,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc7677_Sha256_ServerSignature_IsAccepted()
 
         /// <summary>
-        /// Die Server-Signatur aus RFC 7677 muss akzeptiert werden.
+        /// The server signature from RFC 7677 must be accepted.
         /// </summary>
         [Test]
         public void Rfc7677_Sha256_ServerSignature_IsAccepted()
@@ -196,8 +196,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TamperedServerSignature_IsRejected()
 
         /// <summary>
-        /// Eine verfälschte Server-Signatur muss abgelehnt werden - sonst wäre
-        /// die gegenseitige Authentifizierung wertlos.
+        /// A falsified server signature must be rejected - otherwise the mutual
+        /// authentication would be worthless.
         /// </summary>
         [Test]
         public void TamperedServerSignature_IsRejected()
@@ -207,7 +207,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             scram.CreateClientFirstMessage();
             scram.ProcessServerFirstMessage(B64(Sha1_ServerFirst));
 
-            // Ein Bit in der Signatur kippen
+            // Flip one bit in the signature
             var signature     = Convert.FromBase64String("rmF9pqV8S7suAoZWja4dJRkFsKQ=");
             signature[0]     ^= 0x01;
             var tampered      = $"v={Convert.ToBase64String(signature)}";
@@ -221,8 +221,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ServerNonceWithoutClientNonce_IsRejected()
 
         /// <summary>
-        /// Enthält die kombinierte Nonce nicht den Client-Nonce als Präfix,
-        /// liegt ein möglicher MITM vor (RFC 5802, Abschnitt 5.1).
+        /// If the combined nonce does not carry the client nonce as its prefix,
+        /// a MITM is possible (RFC 5802, section 5.1).
         /// </summary>
         [Test]
         public void ServerNonceWithoutClientNonce_IsRejected()
@@ -243,7 +243,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ServerFinalWithError_ThrowsAuthenticationException()
 
         /// <summary>
-        /// Eine server-final-message mit e= ist ein Fehler und keine Signatur.
+        /// A server-final-message with e= is an error and not a signature.
         /// </summary>
         [Test]
         public void ServerFinalWithError_ThrowsAuthenticationException()
@@ -263,8 +263,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MechanismNames_MatchIanaRegistry()
 
         /// <summary>
-        /// Die Mechanismus-Namen müssen exakt den IANA-registrierten
-        /// Bezeichnungen entsprechen, sonst lehnt der Server die Auswahl ab.
+        /// The mechanism names must match the IANA-registered designations
+        /// exactly, otherwise the server refuses the choice.
         /// </summary>
         [Test]
         public void MechanismNames_MatchIanaRegistry()
@@ -286,13 +286,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region IterationCountFollowingNonceWithPadding_IsParsedCorrectly()
 
         /// <summary>
-        /// REGRESSIONSTEST - ExtractValue muss seine Suche am Anfang oder hinter
-        /// einem Komma verankern.
+        /// REGRESSION TEST - ExtractValue must anchor its search at the start or
+        /// behind a comma.
         ///
-        /// Mit dem früheren, unverankerten Muster <c>{key}=([^,]+)</c> traf die
-        /// Suche nach dem Iterationszähler ein 'i=' innerhalb der kombinierten
-        /// Nonce und lieferte "=", woraufhin Int32.Parse eine FormatException
-        /// statt einer sauberen AuthenticationException warf.
+        /// With the earlier, unanchored pattern <c>{key}=([^,]+)</c> the search
+        /// for the iteration count hit an 'i=' inside the combined nonce and
+        /// delivered "=", whereupon Int32.Parse threw a FormatException instead
+        /// of a clean AuthenticationException.
         /// </summary>
         [Test]
         public void IterationCountFollowingNonceWithPadding_IsParsedCorrectly()
@@ -301,8 +301,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var scram = Authenticator(SCRAMMechanism.ScramSha1, "cnonce");
             scram.CreateClientFirstMessage();
 
-            // Kombinierte Nonce endet auf "i==" - gueltig nach RFC 5802,
-            // denn erlaubt ist jedes druckbare Zeichen ausser dem Komma.
+            // The combined nonce ends in "i==" - valid under RFC 5802, since
+            // every printable character except the comma is allowed.
             var serverFirst = "r=cnonceZZi==,s=QSXCR+Q6sek8bf92,i=4096";
 
             Assert.That(() => scram.ProcessServerFirstMessage(B64(serverFirst)),

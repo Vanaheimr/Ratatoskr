@@ -27,21 +27,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6120, Abschnitt 8.2.3: Auf ein <c>iq</c> vom Typ <c>get</c> oder
-    /// <c>set</c> MUSS eine Antwort folgen - <c>result</c> oder <c>error</c>.
+    /// RFC 6120, section 8.2.3: an <c>iq</c> of type <c>get</c> or <c>set</c>
+    /// MUST be followed by a response - <c>result</c> or <c>error</c>.
     ///
-    /// Bleibt sie aus, wartet die Gegenstelle bis in ihren Timeout. Ein Server
-    /// wertet das je nach Implementierung als tote Sitzung.
+    /// If it stays away, the counterpart waits into its timeout. A server reads
+    /// that, depending on the implementation, as a dead session.
     /// </summary>
     [TestFixture]
     public class IqResponseTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Schickt eine Stanza an den Client und wartet auf eine Antwort mit
-        /// derselben id.
+        /// Sends a stanza to the client and waits for a reply carrying the same
+        /// id.
         /// </summary>
         private async Task<String> AskAsync(XMPPSession session, String id, String stanza)
         {
@@ -49,14 +49,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync(stanza);
 
             await WaitFor(() => session.Received.Any(f => f.Contains($"id='{id}'", StringComparison.Ordinal)),
-                          $"Antwort auf IQ '{id}'");
+                          $"the reply to IQ '{id}'");
 
             return session.Received.First(f => f.Contains($"id='{id}'", StringComparison.Ordinal));
 
         }
 
         /// <summary>
-        /// Prüft, dass innerhalb der Wartezeit keine Antwort mit dieser id kommt.
+        /// Checks that no reply with this id arrives within the waiting time.
         /// </summary>
         private async Task AssertNoAnswerAsync(XMPPSession session, String id)
         {
@@ -66,7 +66,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                TimeSpan.FromSeconds(1));
 
             Assert.That(answered, Is.False,
-                        $"Auf '{id}' hätte keine Antwort kommen dürfen.");
+                        $"'{id}' should not have been answered at all.");
 
         }
 
@@ -76,7 +76,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await ConnectClientAsync();
 
             await WaitFor(() => Server.Sessions.Any(s => s.FullJid is not null),
-                          "gebundene Sitzung");
+                          "the bound session");
 
             return Server.Sessions.First(s => s.FullJid is not null);
 
@@ -88,8 +88,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnknownIqGet_IsAnsweredWithServiceUnavailable()
 
         /// <summary>
-        /// Der Kern: ein <c>iq get</c>, für das es keinen Handler gibt, wurde
-        /// früher still verworfen. Jetzt muss ein Fehler zurückkommen.
+        /// The heart of it: an <c>iq get</c> for which there is no handler used
+        /// to be discarded in silence. Now an error has to come back.
         /// </summary>
         [Test]
         public async Task UnknownIqGet_IsAnsweredWithServiceUnavailable()
@@ -117,7 +117,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnknownIqSet_IsAnsweredWithServiceUnavailable()
 
         /// <summary>
-        /// Dasselbe für <c>set</c>.
+        /// The same for <c>set</c>.
         /// </summary>
         [Test]
         public async Task UnknownIqSet_IsAnsweredWithServiceUnavailable()
@@ -142,9 +142,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnknownIqWithoutFrom_IsAnsweredWithoutToAttribute()
 
         /// <summary>
-        /// Ohne 'from' kam die Anfrage vom eigenen Server (RFC 6120,
-        /// Abschnitt 8.1.1.1). Die Antwort muss trotzdem kommen, und zwar ohne
-        /// 'to' - sie wird dann implizit an den Server zugestellt.
+        /// Without a 'from' the request came from one's own server (RFC 6120,
+        /// section 8.1.1.1). The reply has to come all the same, and without a
+        /// 'to' - it is then delivered to the server implicitly.
         /// </summary>
         [Test]
         public async Task UnknownIqWithoutFrom_IsAnsweredWithoutToAttribute()
@@ -160,7 +160,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(reply, Does.Contain("type='error'"));
                 Assert.That(reply, Does.Not.Contain(" to='"),
-                            "Ohne 'from' darf die Antwort kein 'to' tragen.");
+                            "Without a 'from' the reply must not carry a 'to'.");
             });
 
         }
@@ -170,8 +170,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region IqResult_IsNotAnswered()
 
         /// <summary>
-        /// Auf <c>result</c> und <c>error</c> darf nie geantwortet werden -
-        /// sonst schaukeln sich zwei Gegenstellen endlos hoch.
+        /// A <c>result</c> and an <c>error</c> must never be answered -
+        /// otherwise two counterparts wind each other up without end.
         /// </summary>
         [Test]
         [TestCase("result", TestName = "IqResult_IsNotAnswered")]
@@ -193,9 +193,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region IqWithoutId_IsNotAnswered()
 
         /// <summary>
-        /// Ohne 'id' liesse sich die Antwort nicht zuordnen; das Attribut ist
-        /// nach Abschnitt 8.2.3 zwingend. Statt eine unzuordenbare Antwort zu
-        /// erzeugen, bleibt der Client still.
+        /// Without an 'id' the reply could not be assigned to anything; the
+        /// attribute is required by section 8.2.3. Rather than produce an
+        /// unassignable reply, the client stays silent.
         /// </summary>
         [Test]
         public async Task IqWithoutId_IsNotAnswered()
@@ -203,37 +203,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var session = await ConnectedSessionAsync();
 
-            // Das IQ, um das es geht: ohne 'id' und mit einem Namensraum, für
-            // den es keinen Handler gibt. Beantwortet werden dürfte es nur mit
-            // einem <service-unavailable/> - und genau das verbietet das
-            // fehlende Attribut.
+            // The IQ this is about: without an 'id' and with a namespace for
+            // which there is no handler. It could only be answered with a
+            // <service-unavailable/> - and that is exactly what the missing
+            // attribute forbids.
             await session.SendAsync(
                 $"<iq type='get' from='{Server.Domain}' to='{session.FullJid}'>" +
                 "<query xmlns='urn:example:does-not-exist'/></iq>");
 
-            // Und direkt danach eines, das beantwortet werden *muss*.
+            // And right after it one that *must* be answered.
             //
-            // Das ist der Kern der Sache: Auf einem Stream wird der Reihe nach
-            // verarbeitet. Ist die Antwort auf das zweite da, hat der Client
-            // das erste bereits in der Hand gehabt und sich entschieden. Damit
-            // braucht dieser Test keine Wartezeit mehr, innerhalb derer nichts
-            // passieren darf.
-            var antwort = await AskAsync(session, "probe-danach",
-                              "<iq type='get' id='probe-danach' " +
+            // That is the heart of the matter: on one stream things are worked
+            // through in order. Once the reply to the second is there, the
+            // client has already held the first in its hands and made up its
+            // mind. So this test no longer needs a waiting time during which
+            // nothing may happen.
+            var reply = await AskAsync(session, "probe-after",
+                              "<iq type='get' id='probe-after' " +
                               $"from='{Server.Domain}' to='{session.FullJid}'>" +
                               "<query xmlns='http://jabber.org/protocol/disco#info'/></iq>");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort, Does.Contain("type='result'"),
-                            "Vorbedingung: das zweite IQ muss beantwortet worden sein.");
+                Assert.That(reply, Does.Contain("type='result'"),
+                            "Precondition: the second IQ must have been answered.");
 
-                // Ein <service-unavailable/> hätte nur das erste auslösen
-                // können - das zweite ist beantwortbar und beantwortet.
+                // A <service-unavailable/> could only have come from the first -
+                // the second is answerable and answered.
                 Assert.That(session.Received.Any(f => f.Contains("type='error'", StringComparison.Ordinal)),
                             Is.False,
-                            "Ein IQ ohne 'id' ist nicht beantwortbar und darf keine Antwort auslösen.");
+                            "An IQ without an 'id' is not answerable and must not trigger a reply.");
 
             });
 
@@ -244,8 +244,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region KnownIqGet_IsAnsweredByItsHandlerNotWithAnError()
 
         /// <summary>
-        /// Der Fallback darf nicht vor die echten Handler geraten: ein Ping
-        /// muss weiterhin ein <c>result</c> bekommen und keinen Fehler.
+        /// The fallback must not get ahead of the real handlers: a ping has to
+        /// keep getting a <c>result</c> and not an error.
         /// </summary>
         [Test]
         public async Task KnownIqGet_IsAnsweredByItsHandlerNotWithAnError()
@@ -270,7 +270,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DiscoInfoRequest_IsAnsweredWithFeatures()
 
         /// <summary>
-        /// Auch disco#info muss vom eigenen Handler beantwortet werden.
+        /// disco#info too must be answered by its own handler.
         /// </summary>
         [Test]
         public async Task DiscoInfoRequest_IsAnsweredWithFeatures()
@@ -296,12 +296,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SpoofedRosterPush_IsNotAnswered()
 
         /// <summary>
-        /// Die eine erlaubte Ausnahme von Abschnitt 8.2.3: RFC 6121
-        /// Abschnitt 2.1.6 gestattet ausdrücklich, auf einen Roster-Push von
-        /// einem nicht autorisierten Absender gar nicht zu antworten - eine
-        /// Antwort würde bestätigen, dass das Konto online ist.
+        /// The one permitted exception to section 8.2.3: RFC 6121 section 2.1.6
+        /// expressly allows a roster push from an unauthorised sender not to be
+        /// answered at all - a reply would confirm that the account is online.
         ///
-        /// Der Fallback darf hier also nicht greifen.
+        /// So the fallback must not take hold here.
         /// </summary>
         [Test]
         public async Task SpoofedRosterPush_IsNotAnswered()
@@ -323,7 +322,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region LegitimateRosterPush_IsAnsweredWithResult()
 
         /// <summary>
-        /// Ein Roster-Push vom eigenen Konto wird dagegen normal bestätigt.
+        /// A roster push from one's own account, by contrast, is acknowledged
+        /// normally.
         /// </summary>
         [Test]
         public async Task LegitimateRosterPush_IsAnsweredWithResult()
@@ -345,34 +345,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqWithAnUnknownType_IsRefusedWithBadRequest()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 8.2.3, Regel 2: Ein <c>type</c>, der keiner der
-        /// vier vorgesehenen Werte ist, bekommt
-        /// <c>&lt;bad-request/&gt;</c> — von „the recipient", und das ist hier
-        /// der Client.
+        /// RFC 6120, section 8.2.3, rule 2: a <c>type</c> that is none of the
+        /// four intended values gets <c>&lt;bad-request/&gt;</c> — from "the
+        /// recipient", and that is the client here.
         /// </summary>
         /// <remarks>
-        /// Nicht dieselbe Prüfung wie im Server, sondern die zweite Rolle
-        /// derselben Regel. Der Server weist ab, was er weiterreichen soll; der
-        /// Client weist ab, was bei ihm ankommt. Beide werden gebraucht: Gegen
-        /// diesen Server käme eine solche Stanza nie beim Client an, gegen eine
-        /// fremde Implementierung ohne Regel 2 sehr wohl.
+        /// Not the same check as in the server, but the second role of the same
+        /// rule. The server refuses what it is meant to pass on; the client
+        /// refuses what arrives at its end. Both are needed: against this server
+        /// such a stanza would never reach the client, against a foreign
+        /// implementation without rule 2 it very much would.
         ///
-        /// Vorher fiel sie hier stillschweigend durch: Der Fallback am Ende von
-        /// <c>ProcessIq</c> fragt nach <c>get</c> oder <c>set</c>, und ein
-        /// fünfter Wert ist keins von beidem.
+        /// Before, it fell through here in silence: the fallback at the end of
+        /// <c>ProcessIq</c> asks for <c>get</c> or <c>set</c>, and a fifth value
+        /// is neither.
         /// </remarks>
         [Test]
-        [TestCase("vielleicht", TestName = "AnIqWithAnUnknownType_IsRefusedWithBadRequest")]
-        [TestCase(null,         TestName = "AnIqWithoutAType_IsRefusedWithBadRequest")]
+        [TestCase("maybe", TestName = "AnIqWithAnUnknownType_IsRefusedWithBadRequest")]
+        [TestCase(null,    TestName = "AnIqWithoutAType_IsRefusedWithBadRequest")]
         public async Task AnIqWithABrokenType_IsRefusedWithBadRequest(String? type)
         {
 
             var session = await ConnectedSessionAsync();
 
-            var reply = await AskAsync(session, "probe-typ",
+            var reply = await AskAsync(session, "probe-type",
                             "<iq" +
                             (type is not null ? $" type='{type}'" : "") +
-                            $" id='probe-typ' from='{Server.Domain}' to='{session.FullJid}'>" +
+                            $" id='probe-type' from='{Server.Domain}' to='{session.FullJid}'>" +
                             "<query xmlns='urn:example:does-not-exist'/></iq>");
 
             Assert.Multiple(() =>
@@ -382,8 +381,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(reply, Does.Contain("<bad-request "));
                 Assert.That(reply, Does.Contain("urn:ietf:params:xml:ns:xmpp-stanzas"));
 
-                // Abschnitt 8.3.3.1: modify und nicht cancel - der Absender
-                // kann es richtig gestellt noch einmal versuchen.
+                // Section 8.3.3.1: modify and not cancel - the sender can put it
+                // right and try again.
                 Assert.That(reply, Does.Contain("type='modify'"));
 
                 Assert.That(reply, Does.Contain($"to='{Server.Domain}'"));
@@ -397,23 +396,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRefusalComesEvenWithoutAnId()
 
         /// <summary>
-        /// Ohne <c>id</c> wird die Ablehnung trotzdem geschickt — anders als
-        /// bei einer unbehandelten, aber wohlgeformten Anfrage.
+        /// Without an <c>id</c> the refusal is sent all the same — unlike with
+        /// an unhandled but well-formed request.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied ist der Inhalt der Antwort. Ein
-        /// <c>&lt;service-unavailable/&gt;</c> beantwortet eine Frage, und eine
-        /// Antwort ohne <c>id</c> lässt sich keiner Frage zuordnen — sie nützt
-        /// niemandem, deshalb schweigt der Client dort (siehe
+        /// The difference lies in what the reply says. A
+        /// <c>&lt;service-unavailable/&gt;</c> answers a question, and a reply
+        /// without an <c>id</c> cannot be assigned to any question — it is of
+        /// use to nobody, which is why the client stays silent there (see
         /// <see cref="IqWithoutId_IsNotAnswered"/>).
         ///
-        /// <c>&lt;bad-request/&gt;</c> sagt etwas über die Stanza selbst: dass
-        /// ihre Form nicht stimmt. Das kann der Absender auch dann brauchen,
-        /// wenn er es keiner offenen Frage zuordnen kann — zumal die fehlende
-        /// <c>id</c> nach Regel 1 selbst zu dem gehört, was nicht stimmt.
+        /// <c>&lt;bad-request/&gt;</c> says something about the stanza itself:
+        /// that its form is wrong. The sender can put that to use even when they
+        /// cannot assign it to any open question — all the more so because the
+        /// missing <c>id</c> is itself, under rule 1, part of what is wrong.
         ///
-        /// Ein leeres <c>id=''</c> wäre der schlechteste Ausgang: Es gehört zu
-        /// keiner Frage und sieht aus, als gehörte es zu einer.
+        /// An empty <c>id=''</c> would be the worst outcome of all: it belongs
+        /// to no question and looks as though it belonged to one.
         /// </remarks>
         [Test]
         public async Task TheRefusalComesEvenWithoutAnId()
@@ -422,16 +421,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session = await ConnectedSessionAsync();
 
             await session.SendAsync(
-                      $"<iq type='vielleicht' from='{Server.Domain}' to='{session.FullJid}'>" +
+                      $"<iq type='maybe' from='{Server.Domain}' to='{session.FullJid}'>" +
                       "<query xmlns='urn:example:does-not-exist'/></iq>");
 
             await WaitFor(() => session.Received.Any(f => f.Contains("bad-request", StringComparison.Ordinal)),
-                          "die Ablehnung ohne id");
+                          "the refusal without an id");
 
             var reply = session.Received.First(f => f.Contains("bad-request", StringComparison.Ordinal));
 
             Assert.That(reply, Does.Not.Contain("id="),
-                        "Was keine id hatte, bekommt auch keine leere zurück.");
+                        "What had no id does not get an empty one back either.");
 
         }
 
@@ -440,13 +439,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRefusalWithoutASenderCarriesNoTo()
 
         /// <summary>
-        /// Ohne <c>from</c> kam die Stanza vom eigenen Server (RFC 6120,
-        /// Abschnitt 8.1.1.1) — die Ablehnung geht dann ohne <c>to</c> zurück.
+        /// Without a <c>from</c> the stanza came from one's own server (RFC
+        /// 6120, section 8.1.1.1) — the refusal then goes back without a
+        /// <c>to</c>.
         /// </summary>
         /// <remarks>
-        /// Und das ist der Regelfall, nicht die Ausnahme: Was ein Server seinem
-        /// eigenen Client schickt, trägt oft kein <c>from</c>. Ein <c>to=''</c>
-        /// wäre hier eine Adresse, die es nicht gibt.
+        /// And that is the rule, not the exception: what a server sends to its
+        /// own client often carries no <c>from</c>. A <c>to=''</c> would be an
+        /// address here that does not exist.
         /// </remarks>
         [Test]
         public async Task TheRefusalWithoutASenderCarriesNoTo()
@@ -454,8 +454,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var session = await ConnectedSessionAsync();
 
-            var reply = await AskAsync(session, "probe-ohne-absender",
-                            "<iq type='vielleicht' id='probe-ohne-absender'>" +
+            var reply = await AskAsync(session, "probe-without-sender",
+                            "<iq type='maybe' id='probe-without-sender'>" +
                             "<query xmlns='urn:example:does-not-exist'/></iq>");
 
             Assert.Multiple(() =>

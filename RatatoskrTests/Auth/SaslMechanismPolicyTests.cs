@@ -27,14 +27,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Rangfolge der SASL-Mechanismen und die beiden Untergrenzen darauf.
+    /// The ranking of the SASL mechanisms and the two lower bounds upon it.
     /// </summary>
     /// <remarks>
-    /// Für sich geprüft, weil die Verbindung von diesen Entscheidungen nur
-    /// diejenige zeigt, die der Testserver gerade anbietet - und der bietet
-    /// vom stärksten zum schwächsten an. Eine Auswahl, die in Wahrheit nur den
-    /// ersten Eintrag nimmt, sähe dort genauso aus wie eine, die die Rangfolge
-    /// liest.
+    /// Checked on its own, because of all these decisions the connection shows
+    /// only the one the test server happens to offer - and that one offers from
+    /// the strongest to the weakest. A choice that in truth only takes the first
+    /// entry would look exactly the same there as one that reads the ranking.
     /// </remarks>
     [TestFixture]
     public class SaslMechanismPolicyTests
@@ -43,13 +42,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Strongest_ReadsTheRankingAndNotTheOrder()
 
         /// <summary>
-        /// Gewählt wird nach Stärke, nicht nach der Reihenfolge der
-        /// Ankündigung.
+        /// The choice goes by strength, not by the order of the announcement.
         /// </summary>
         /// <remarks>
-        /// Die Reihenfolge bestimmt der Server, und der Server ist an dieser
-        /// Stelle gerade die Instanz, der nicht zu trauen ist: Wer den ersten
-        /// Eintrag nimmt, lässt sich das Downgrade schlicht hinschreiben.
+        /// The order is set by the server, and at this point the server is
+        /// precisely the party not to be trusted: whoever takes the first entry
+        /// lets the downgrade simply be written out for them.
         /// </remarks>
         [Test]
         public void Strongest_ReadsTheRankingAndNotTheOrder()
@@ -79,13 +77,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Strongest_IgnoresWhatItCannotSpeak()
 
         /// <summary>
-        /// Unbekannte Mechanismen zählen nicht mit - auch dann nicht, wenn sie
-        /// stärker klingen.
+        /// Unknown mechanisms do not count - not even when they sound stronger.
         /// </summary>
         /// <remarks>
-        /// EXTERNAL, ANONYMOUS und X-OAUTH2 kommen im Bestand vor; der Client
-        /// spricht keines davon. Sie zu wählen hiesse, mit einem Mechanismus
-        /// anzufangen, für den es kein Verfahren gibt.
+        /// EXTERNAL, ANONYMOUS and X-OAUTH2 do occur out there; the client
+        /// speaks none of them. To choose one of those would mean starting with
+        /// a mechanism for which there is no procedure.
         /// </remarks>
         [Test]
         public void Strongest_IgnoresWhatItCannotSpeak()
@@ -103,8 +100,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(SaslMechanismPolicy.Strongest([]),
                             Is.Null);
 
-                // Kleingeschrieben ist es nicht derselbe Name: SASL-Mechanismen
-                // sind nach RFC 4422, Abschnitt 3.1 Grossbuchstaben.
+                // In lower case it is not the same name: SASL mechanisms are
+                // upper case under RFC 4422, section 3.1.
                 Assert.That(SaslMechanismPolicy.Strongest(["scram-sha-256"]),
                             Is.Null);
 
@@ -117,14 +114,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Pinned_RefusesTheWeakerAndAllowsTheStronger()
 
         /// <summary>
-        /// Die angeheftete Untergrenze lässt gleich Starkes und Stärkeres durch
-        /// und weist nur nach unten ab.
+        /// The pinned lower bound lets through what is equally strong and
+        /// stronger, and refuses only downwards.
         /// </summary>
         /// <remarks>
-        /// Der Punkt ist die zweite Hälfte: Ein Server, der SCRAM-SHA-256
-        /// nachrüstet, darf nicht daran scheitern, dass beim letzten Mal
-        /// SCRAM-SHA-1 lief. Eine Anheftung, die auf Gleichheit prüft, wäre
-        /// bequemer zu schreiben und würde genau das tun.
+        /// The point is the second half: a server that adds SCRAM-SHA-256 must
+        /// not fail because SCRAM-SHA-1 was in use last time. A pinning that
+        /// checks for equality would be more convenient to write and would do
+        /// exactly that.
         /// </remarks>
         [Test]
         public void Pinned_RefusesTheWeakerAndAllowsTheStronger()
@@ -132,7 +129,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var policy = new SaslMechanismPolicy();
 
-            // Vor der ersten Anmeldung ist nichts angeheftet.
+            // Before the first login nothing is pinned.
             Assert.That(() => policy.EnsureAcceptable("PLAIN"), Throws.Nothing);
 
             policy.Remember("SCRAM-SHA-1");
@@ -157,8 +154,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Minimum_HoldsWithoutAnyPreviousLogin()
 
         /// <summary>
-        /// Die gesetzte Untergrenze wirkt sofort - sie ist das, was die
-        /// Anheftung beim allerersten Mal noch nicht sein kann.
+        /// The lower bound that was set takes effect at once - it is what the
+        /// pinning cannot yet be on the very first occasion.
         /// </summary>
         [Test]
         public void Minimum_HoldsWithoutAnyPreviousLogin()
@@ -172,7 +169,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(policy.Pinned, Is.Null, "Ohne Anmeldung darf nichts angeheftet sein.");
+                Assert.That(policy.Pinned, Is.Null, "Without a login nothing may be pinned.");
 
                 Assert.That(() => policy.EnsureAcceptable("SCRAM-SHA-256"), Throws.Nothing);
 
@@ -191,13 +188,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Minimum_RefusesAnUnknownName()
 
         /// <summary>
-        /// Ein Name, den die Rangfolge nicht kennt, wird beim Setzen abgewiesen.
+        /// A name the ranking does not know is refused when it is set.
         /// </summary>
         /// <remarks>
-        /// Sonst wäre ein Tippfehler die gefährlichste Eingabe überhaupt: Ein
-        /// unbekannter Name hat die Stärke 0, und eine Untergrenze von 0
-        /// verlangt gar nichts. Der Aufrufer bekäme lautlos das Gegenteil
-        /// dessen, was er hinschrieb.
+        /// Otherwise a typo would be the most dangerous input of all: an unknown
+        /// name has strength 0, and a lower bound of 0 demands nothing at all.
+        /// The caller would silently get the opposite of what they wrote down.
         /// </remarks>
         [Test]
         public void Minimum_RefusesAnUnknownName()
@@ -214,7 +210,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(() => policy.Minimum = "scram-sha-256",
                             Throws.TypeOf<ArgumentException>());
 
-                // Und null bleibt zulässig: es ist das Abschalten.
+                // And null stays admissible: it is the switching-off.
                 Assert.That(() => policy.Minimum = null, Throws.Nothing);
 
             });

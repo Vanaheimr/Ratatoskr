@@ -30,34 +30,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Welche Domains ein Zertifikat belegt - die Prüfung, auf der
-    /// SASL-EXTERNAL steht.
+    /// Which domains a certificate vouches for - the check that SASL-EXTERNAL
+    /// stands on.
     /// </summary>
     /// <remarks>
-    /// Hier steckt die gesamte Beweislast des Verfahrens. Dialback fragt bei
-    /// einer hinterlegten Adresse nach und merkt einen Fehler daran, dass die
-    /// Antwort ausbleibt; SASL-EXTERNAL merkt gar nichts, wenn diese Funktion
-    /// zu grosszügig ist - die Verbindung käme zustande und sähe von aussen
-    /// aus wie eine gelungene Prüfung.
+    /// The entire burden of proof of the procedure sits here. Dialback asks back
+    /// at a recorded address and notices a fault by the answer failing to come;
+    /// SASL-EXTERNAL notices nothing at all if this function is too generous -
+    /// the connection would come about and would look from the outside like a
+    /// check that had passed.
     /// </remarks>
     [TestFixture]
     public class CertificateIdentityTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Baut ein Zertifikat mit wählbarem Common Name und wählbaren
-        /// dNSName-Einträgen.
+        /// Builds a certificate with a chosen common name and chosen dNSName
+        /// entries.
         /// </summary>
-        /// <param name="dnsNamen">
-        /// null lässt die SAN-Erweiterung ganz weg; ein leeres Feld erzeugt
-        /// sie mit einem Eintrag, der keine Domain ist - beides sind
-        /// verschiedene Fälle.
+        /// <param name="dnsNames">
+        /// null leaves the SAN extension out altogether; an empty array creates
+        /// it with an entry that is not a domain - those are two different
+        /// cases.
         /// </param>
-        private static X509Certificate2 Zertifikat(String    commonName,
-                                                   String[]? dnsNamen = null,
-                                                   Boolean   nurIpSan = false)
+        private static X509Certificate2 MakeCertificate(String    commonName,
+                                                        String[]? dnsNames  = null,
+                                                        Boolean   ipSanOnly = false)
         {
 
             using var key = RSA.Create(2048);
@@ -67,25 +67,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                                  HashAlgorithmName.SHA256,
                                                  RSASignaturePadding.Pkcs1);
 
-            if (dnsNamen is not null || nurIpSan)
+            if (dnsNames is not null || ipSanOnly)
             {
 
                 var san = new SubjectAlternativeNameBuilder();
 
-                foreach (var name in dnsNamen ?? [])
+                foreach (var name in dnsNames ?? [])
                     san.AddDnsName(name);
 
-                if (nurIpSan)
+                if (ipSanOnly)
                     san.AddIpAddress(System.Net.IPAddress.Loopback);
 
                 request.CertificateExtensions.Add(san.Build());
 
             }
 
-            var erzeugt = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),
+            var created = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),
                                                    DateTimeOffset.UtcNow.AddYears(1));
 
-            return X509CertificateLoader.LoadPkcs12(erzeugt.Export(X509ContentType.Pfx), null);
+            return X509CertificateLoader.LoadPkcs12(created.Export(X509ContentType.Pfx), null);
 
         }
 
@@ -98,14 +98,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void TheSubjectAlternativeNamesAreTheIdentities()
         {
 
-            using var zert = Zertifikat("links.example", ["links.example", "im.links.example"]);
+            using var cert = MakeCertificate("links.example", ["links.example", "im.links.example"]);
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.DomainsOf(zert),
+                Assert.That(CertificateIdentity.DomainsOf(cert),
                             Is.EquivalentTo(new[] { "links.example", "im.links.example" }));
-                Assert.That(CertificateIdentity.Authorises(zert, "links.example"),     Is.True);
-                Assert.That(CertificateIdentity.Authorises(zert, "im.links.example"),  Is.True);
+                Assert.That(CertificateIdentity.Authorises(cert, "links.example"),     Is.True);
+                Assert.That(CertificateIdentity.Authorises(cert, "im.links.example"),  Is.True);
             });
 
         }
@@ -118,9 +118,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void AForeignDomain_IsNotAuthorised()
         {
 
-            using var zert = Zertifikat("links.example", ["links.example"]);
+            using var cert = MakeCertificate("links.example", ["links.example"]);
 
-            Assert.That(CertificateIdentity.Authorises(zert, "rechts.example"), Is.False);
+            Assert.That(CertificateIdentity.Authorises(cert, "rechts.example"), Is.False);
 
         }
 
@@ -129,15 +129,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheComparisonIgnoresCase()
 
         /// <summary>
-        /// Domainnamen unterscheiden sich nicht in der Schreibweise.
+        /// Domain names do not differ in their spelling.
         /// </summary>
         [Test]
         public void TheComparisonIgnoresCase()
         {
 
-            using var zert = Zertifikat("links.example", ["Links.EXAMPLE"]);
+            using var cert = MakeCertificate("links.example", ["Links.EXAMPLE"]);
 
-            Assert.That(CertificateIdentity.Authorises(zert, "links.example"), Is.True);
+            Assert.That(CertificateIdentity.Authorises(cert, "links.example"), Is.True);
 
         }
 
@@ -146,19 +146,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAnySan_TheCommonNameCounts()
 
         /// <summary>
-        /// Ein Zertifikat ganz ohne SAN-Erweiterung wird über den Common Name
-        /// gelesen.
+        /// A certificate with no SAN extension at all is read by way of the
+        /// common name.
         /// </summary>
         [Test]
         public void WithoutAnySan_TheCommonNameCounts()
         {
 
-            using var zert = Zertifikat("links.example");
+            using var cert = MakeCertificate("links.example");
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.DomainsOf(zert), Is.EquivalentTo(new[] { "links.example" }));
-                Assert.That(CertificateIdentity.Authorises(zert, "links.example"), Is.True);
+                Assert.That(CertificateIdentity.DomainsOf(cert), Is.EquivalentTo(new[] { "links.example" }));
+                Assert.That(CertificateIdentity.Authorises(cert, "links.example"), Is.True);
             });
 
         }
@@ -168,28 +168,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithASan_TheCommonNameNoLongerCounts()
 
         /// <summary>
-        /// Sobald es eine SAN-Erweiterung gibt, zählt der Common Name nicht
-        /// mehr (RFC 6125, Abschnitt 6.4.4).
+        /// As soon as there is a SAN extension, the common name no longer counts
+        /// (RFC 6125, section 6.4.4).
         /// </summary>
         /// <remarks>
-        /// Das ist die wichtigste Zeile dieser Datei. Zöge die Prüfung den
-        /// Common Name hilfsweise heran, genügte ein Zertifikat mit
-        /// <c>CN=opfer.example</c> und irgendeiner harmlosen SAN, um für
-        /// <c>opfer.example</c> zu sprechen - und ein solches Zertifikat
-        /// bekommt man von jeder CA, die den CN nicht prüft, weil er nach
-        /// heutigem Verständnis ohnehin nichts bedeutet.
+        /// That is the most important line of this file. Were the check to fall
+        /// back on the common name, a certificate with <c>CN=victim.example</c>
+        /// and any harmless SAN would be enough to speak for
+        /// <c>victim.example</c> - and such a certificate is to be had from any
+        /// CA that does not check the CN, because by today's understanding it
+        /// means nothing anyway.
         /// </remarks>
         [Test]
         public void WithASan_TheCommonNameNoLongerCounts()
         {
 
-            using var zert = Zertifikat("opfer.example", ["harmlos.example"]);
+            using var cert = MakeCertificate("victim.example", ["harmless.example"]);
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.Authorises(zert, "harmlos.example"), Is.True);
-                Assert.That(CertificateIdentity.Authorises(zert, "opfer.example"),   Is.False,
-                            "Bei vorhandener SAN darf der Common Name nicht mehr gelten.");
+                Assert.That(CertificateIdentity.Authorises(cert, "harmless.example"), Is.True);
+                Assert.That(CertificateIdentity.Authorises(cert, "victim.example"),   Is.False,
+                            "With a SAN present the common name must no longer hold.");
             });
 
         }
@@ -199,19 +199,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASanWithoutAnyDnsName_AuthorisesNothing()
 
         /// <summary>
-        /// Eine SAN-Erweiterung, die nur eine IP-Adresse nennt, belegt keine
-        /// Domain - auch nicht die aus dem Common Name.
+        /// A SAN extension that names only an IP address vouches for no domain -
+        /// not even the one from the common name.
         /// </summary>
         [Test]
         public void ASanWithoutAnyDnsName_AuthorisesNothing()
         {
 
-            using var zert = Zertifikat("opfer.example", nurIpSan: true);
+            using var cert = MakeCertificate("victim.example", ipSanOnly: true);
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.DomainsOf(zert), Is.Empty);
-                Assert.That(CertificateIdentity.Authorises(zert, "opfer.example"), Is.False);
+                Assert.That(CertificateIdentity.DomainsOf(cert), Is.Empty);
+                Assert.That(CertificateIdentity.Authorises(cert, "victim.example"), Is.False);
             });
 
         }
@@ -221,26 +221,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AWildcard_AuthorisesNothing()
 
         /// <summary>
-        /// Platzhalter gelten hier nicht - weder für die Unterdomain noch für
-        /// sich selbst.
+        /// Wildcards do not hold here - neither for the subdomain nor for
+        /// themselves.
         /// </summary>
         /// <remarks>
-        /// Bewusst so, und der Test hält es fest, damit die Entscheidung nicht
-        /// unbemerkt kippt. Wer Platzhalter zulässt, muss sich auf genau eine
-        /// Auslegung festlegen; die geläufigen Fehler dabei - der Platzhalter
-        /// deckt mehrere Labels, oder er deckt auch die nackte Domain - sind
-        /// beide zu grosszügig.
+        /// Deliberately so, and the test records it, so that the decision does
+        /// not tip over unnoticed. Whoever admits wildcards has to settle on
+        /// exactly one reading; the common mistakes in doing so - the wildcard
+        /// covers several labels, or it covers the bare domain as well - are
+        /// both too generous.
         /// </remarks>
         [Test]
         public void AWildcard_AuthorisesNothing()
         {
 
-            using var zert = Zertifikat("*.links.example", ["*.links.example"]);
+            using var cert = MakeCertificate("*.links.example", ["*.links.example"]);
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.Authorises(zert, "im.links.example"), Is.False);
-                Assert.That(CertificateIdentity.Authorises(zert, "links.example"),    Is.False);
+                Assert.That(CertificateIdentity.Authorises(cert, "im.links.example"), Is.False);
+                Assert.That(CertificateIdentity.Authorises(cert, "links.example"),    Is.False);
             });
 
         }
@@ -250,18 +250,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnEmptyDomain_AuthorisesNothing()
 
         /// <summary>
-        /// Nach nichts zu fragen ist keine bestandene Prüfung.
+        /// Asking after nothing is not a check that passed.
         /// </summary>
         [Test]
         public void AnEmptyDomain_AuthorisesNothing()
         {
 
-            using var zert = Zertifikat("links.example", ["links.example"]);
+            using var cert = MakeCertificate("links.example", ["links.example"]);
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.Authorises(zert, ""),    Is.False);
-                Assert.That(CertificateIdentity.Authorises(zert, "   "), Is.False);
+                Assert.That(CertificateIdentity.Authorises(cert, ""),    Is.False);
+                Assert.That(CertificateIdentity.Authorises(cert, "   "), Is.False);
             });
 
         }

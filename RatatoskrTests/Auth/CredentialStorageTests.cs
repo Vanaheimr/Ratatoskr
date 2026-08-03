@@ -31,16 +31,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Wie der Server Passwörter aufbewahrt (RFC 5802, Abschnitt 3).
+    /// How the server keeps passwords (RFC 5802, section 3).
     ///
-    /// Sie lagen im Klartext im Speicher der <c>XMPPServer</c>-Instanz. Das
-    /// war nicht nur unschön: sobald Konten die Instanz überleben sollen -
-    /// also mit S2 -, landete der Klartext auf der Platte.
+    /// They used to lie in the clear in the memory of the <c>XMPPServer</c>
+    /// instance. That was not merely unlovely: as soon as accounts were to
+    /// outlive the instance - so with S2 -, the plaintext landed on the disk.
     ///
-    /// Aufbewahrt wird jetzt, was RFC 5802 dafür vorsieht: Salt,
-    /// Iterationszahl und je Mechanismus <c>StoredKey</c> und
-    /// <c>ServerKey</c>. Aus keinem davon lässt sich das Passwort
-    /// zurückrechnen.
+    /// What is kept now is what RFC 5802 provides for: salt, iteration count
+    /// and, per mechanism, <c>StoredKey</c> and <c>ServerKey</c>. From none of
+    /// those can the password be computed back.
     /// </summary>
     [TestFixture]
     public class CredentialStorageTests
@@ -49,15 +48,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CorrectPassword_IsAccepted()
 
         /// <summary>
-        /// Das Naheliegende zuerst: das richtige Passwort wird angenommen.
+        /// The obvious thing first: the right password is accepted.
         /// </summary>
         [Test]
         public void CorrectPassword_IsAccepted()
         {
 
-            var credentials = XMPPCredentials.FromPassword("geheim");
+            var credentials = XMPPCredentials.FromPassword("secret");
 
-            Assert.That(credentials.Verify("geheim"), Is.True);
+            Assert.That(credentials.Verify("secret"), Is.True);
 
         }
 
@@ -66,20 +65,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WrongPassword_IsRejected()
 
         /// <summary>
-        /// Und die Gegenprobe, ohne die der vorige Test nichts aussagt.
+        /// And the counter-check, without which the previous test says nothing.
         /// </summary>
         [Test]
         public void WrongPassword_IsRejected()
         {
 
-            var credentials = XMPPCredentials.FromPassword("geheim");
+            var credentials = XMPPCredentials.FromPassword("secret");
 
             Assert.Multiple(() =>
             {
-                Assert.That(credentials.Verify("Geheim"),  Is.False, "Gross- und Kleinschreibung.");
-                Assert.That(credentials.Verify("geheim "), Is.False, "Angehängtes Leerzeichen.");
-                Assert.That(credentials.Verify(""),        Is.False, "Leeres Passwort.");
-                Assert.That(credentials.Verify("geheiM"),  Is.False, "Ein Zeichen anders.");
+                Assert.That(credentials.Verify("Secret"),  Is.False, "Upper and lower case.");
+                Assert.That(credentials.Verify("secret "), Is.False, "An appended blank.");
+                Assert.That(credentials.Verify(""),        Is.False, "An empty password.");
+                Assert.That(credentials.Verify("secreT"),  Is.False, "One character different.");
             });
 
         }
@@ -89,31 +88,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SamePassword_GetsDifferentKeys()
 
         /// <summary>
-        /// Zwei Konten mit demselben Passwort dürfen nicht dasselbe
-        /// Gespeicherte tragen - sonst verriete ein Blick in die Kontenliste,
-        /// wer dasselbe Passwort benutzt, und eine einmal berechnete
-        /// Regenbogentabelle träfe alle auf einmal.
+        /// Two accounts with the same password must not carry the same stored
+        /// material - otherwise a glance at the account list would give away who
+        /// uses the same password, and one rainbow table computed once would hit
+        /// them all at a stroke.
         /// </summary>
         [Test]
         public void SamePassword_GetsDifferentKeys()
         {
 
-            var eine    = XMPPCredentials.FromPassword("geheim");
-            var andere  = XMPPCredentials.FromPassword("geheim");
+            var one     = XMPPCredentials.FromPassword("secret");
+            var other   = XMPPCredentials.FromPassword("secret");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(eine.Salt, Is.Not.EqualTo(andere.Salt),
-                            "Jedes Konto braucht ein eigenes Salt.");
+                Assert.That(one.Salt, Is.Not.EqualTo(other.Salt),
+                            "Every account needs a salt of its own.");
 
-                Assert.That(eine.KeysOf(SCRAMMechanism.ScramSha256).StoredKey,
-                            Is.Not.EqualTo(andere.KeysOf(SCRAMMechanism.ScramSha256).StoredKey),
-                            "Gleiches Passwort, verschiedenes Salt, also verschiedene Schlüssel.");
+                Assert.That(one.KeysOf(SCRAMMechanism.ScramSha256).StoredKey,
+                            Is.Not.EqualTo(other.KeysOf(SCRAMMechanism.ScramSha256).StoredKey),
+                            "Same password, different salt, therefore different keys.");
 
-                // Beide müssen trotzdem funktionieren.
-                Assert.That(eine.Verify("geheim"),   Is.True);
-                Assert.That(andere.Verify("geheim"), Is.True);
+                // Both must work all the same.
+                Assert.That(one.Verify("secret"),   Is.True);
+                Assert.That(other.Verify("secret"), Is.True);
 
             });
 
@@ -124,15 +123,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Keys_DifferPerMechanism()
 
         /// <summary>
-        /// SCRAM-SHA-1 und SCRAM-SHA-256 leiten aus demselben Passwort
-        /// verschiedene Schlüssel ab; beide werden aufbewahrt, weil der Client
-        /// sich den Mechanismus aussucht.
+        /// SCRAM-SHA-1 and SCRAM-SHA-256 derive different keys from the same
+        /// password; both are kept, because the client picks the mechanism.
         /// </summary>
         [Test]
         public void Keys_DifferPerMechanism()
         {
 
-            var credentials = XMPPCredentials.FromPassword("geheim");
+            var credentials = XMPPCredentials.FromPassword("secret");
 
             var sha1    = credentials.KeysOf(SCRAMMechanism.ScramSha1);
             var sha256  = credentials.KeysOf(SCRAMMechanism.ScramSha256);
@@ -145,7 +143,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(sha256.ServerKey, Has.Length.EqualTo(32));
 
                 Assert.That(sha1.StoredKey, Is.Not.EqualTo(sha1.ServerKey),
-                            "StoredKey und ServerKey sind verschieden abgeleitet.");
+                            "StoredKey and ServerKey are derived differently.");
             });
 
         }
@@ -155,28 +153,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region StoredKey_IsTheHashOfTheClientKey()
 
         /// <summary>
-        /// Der Kern der Konstruktion, gegen RFC 5802, Abschnitt 3
-        /// nachgerechnet: der aufbewahrte Schlüssel ist der <b>Hash</b> des
-        /// ClientKey, nicht der ClientKey selbst.
+        /// The heart of the construction, recomputed against RFC 5802,
+        /// section 3: the key that is kept is the <b>hash</b> of the ClientKey,
+        /// not the ClientKey itself.
         /// </summary>
         /// <remarks>
-        /// Genau daran hängt der Sinn: wer den StoredKey erbeutet, kann damit
-        /// eine Anmeldung prüfen, aber keine durchführen. Würde der ClientKey
-        /// selbst gespeichert, wäre er ein Passwortersatz.
+        /// The whole point hangs on exactly that: whoever captures the StoredKey
+        /// can check a login with it, but cannot carry one out. Were the
+        /// ClientKey itself stored, it would be a password substitute.
         ///
-        /// Nachgerechnet wird hier unabhängig von der Ableitung, mit den
-        /// Formeln aus dem RFC.
+        /// The recomputation here is independent of the derivation, with the
+        /// formulas from the RFC.
         /// </remarks>
         [Test]
         public void StoredKey_IsTheHashOfTheClientKey()
         {
 
             var salt         = new Byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
-            var credentials  = XMPPCredentials.FromPassword("geheim", salt, 4096);
+            var credentials  = XMPPCredentials.FromPassword("secret", salt, 4096);
 
             // SaltedPassword := Hi(Normalize(password), salt, i)
             var saltedPassword = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
-                                     Encoding.UTF8.GetBytes("geheim"),
+                                     Encoding.UTF8.GetBytes("secret"),
                                      salt,
                                      4096,
                                      System.Security.Cryptography.HashAlgorithmName.SHA256,
@@ -194,7 +192,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(keys.ServerKey, Is.EqualTo(serverKey));
 
                 Assert.That(keys.StoredKey, Is.Not.EqualTo(clientKey),
-                            "Der ClientKey selbst darf nicht gespeichert sein.");
+                            "The ClientKey itself must not be stored.");
             });
 
         }
@@ -204,21 +202,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region GivenSalt_IsUsedUnchanged()
 
         /// <summary>
-        /// Ein vorgegebenes Salt wird übernommen - der Weg, auf dem ein
-        /// Kontenspeicher gespeicherte Zugangsdaten wieder einliest.
+        /// A salt that is handed in is taken over - the way on which an account
+        /// store reads stored credentials back in.
         /// </summary>
         [Test]
         public void GivenSalt_IsUsedUnchanged()
         {
 
             var salt         = new Byte[] { 42, 42, 42, 42, 42, 42, 42, 42 };
-            var credentials  = XMPPCredentials.FromPassword("geheim", salt, 1024);
+            var credentials  = XMPPCredentials.FromPassword("secret", salt, 1024);
 
             Assert.Multiple(() =>
             {
                 Assert.That(credentials.Salt,            Is.EqualTo(salt));
                 Assert.That(credentials.IterationCount,  Is.EqualTo(1024));
-                Assert.That(credentials.Verify("geheim"), Is.True);
+                Assert.That(credentials.Verify("secret"), Is.True);
             });
 
         }
@@ -228,23 +226,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Salt_CannotBeChangedFromOutside()
 
         /// <summary>
-        /// <c>Salt</c> gibt eine Kopie heraus. Gäbe es das innere Array
-        /// heraus, könnte ein Aufrufer es überschreiben und damit jede weitere
-        /// Prüfung dieses Kontos scheitern lassen.
+        /// <c>Salt</c> hands out a copy. Were it to hand out the inner array, a
+        /// caller could overwrite it and thereby make every further check of
+        /// this account fail.
         /// </summary>
         [Test]
         public void Salt_CannotBeChangedFromOutside()
         {
 
-            var credentials = XMPPCredentials.FromPassword("geheim");
+            var credentials = XMPPCredentials.FromPassword("secret");
 
-            var kopie = credentials.Salt;
-            Array.Clear(kopie);
+            var copy = credentials.Salt;
+            Array.Clear(copy);
 
             Assert.Multiple(() =>
             {
-                Assert.That(credentials.Salt,            Is.Not.EqualTo(kopie));
-                Assert.That(credentials.Verify("geheim"), Is.True);
+                Assert.That(credentials.Salt,            Is.Not.EqualTo(copy));
+                Assert.That(credentials.Verify("secret"), Is.True);
             });
 
         }
@@ -254,73 +252,73 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Account_KeepsNoPlaintextPassword()
 
         /// <summary>
-        /// Die eigentliche Zusage dieses Schritts: nach dem Anlegen eines
-        /// Kontos liegt das Klartextpasswort in keinem Feld mehr.
+        /// The actual promise of this step: after an account has been created,
+        /// the plaintext password no longer lies in any field.
         /// </summary>
         /// <remarks>
-        /// Über Reflection und damit grob - aber die Zusage ist eine über den
-        /// Zustand des Objekts, und nur so lässt sie sich prüfen, ohne sie auf
-        /// die Felder einzuschränken, an die ich gerade denke. Absichtlich
-        /// wird auch das <c>XMPPCredentials</c>-Objekt mit durchsucht.
+        /// By way of reflection and therefore coarse - but the promise is one
+        /// about the state of the object, and only this way can it be checked
+        /// without narrowing it down to the fields I happen to be thinking of.
+        /// The <c>XMPPCredentials</c> object is deliberately searched as well.
         /// </remarks>
         [Test]
         public void Account_KeepsNoPlaintextPassword()
         {
 
-            const String passwort = "ein-sehr-eigentuemliches-passwort";
+            const String password = "a-very-peculiar-password";
 
-            var account = new XMPPAccount("alice@localhost", passwort);
+            var account = new XMPPAccount("alice@localhost", password);
 
-            var gefunden = new List<String>();
+            var found = new List<String>();
 
-            SucheKlartext(account,       "XMPPAccount",     passwort, gefunden, 0);
-            SucheKlartext(account.Credentials, "Credentials", passwort, gefunden, 0);
+            SearchPlaintext(account,             "XMPPAccount", password, found, 0);
+            SearchPlaintext(account.Credentials, "Credentials", password, found, 0);
 
-            Assert.That(gefunden, Is.Empty,
-                        $"Das Klartextpasswort steckt noch in: {String.Join(", ", gefunden)}");
+            Assert.That(found, Is.Empty,
+                        $"The plaintext password still sits in: {String.Join(", ", found)}");
 
         }
 
         /// <summary>
-        /// Durchsucht die Felder eines Objekts flach nach dem Klartext -
-        /// Zeichenketten direkt, Byte-Arrays als UTF-8 gelesen.
+        /// Searches the fields of an object flat for the plaintext - strings
+        /// directly, byte arrays read as UTF-8.
         /// </summary>
-        private static void SucheKlartext(Object        ziel,
-                                          String        pfad,
-                                          String        passwort,
-                                          List<String>  gefunden,
-                                          Int32         tiefe)
+        private static void SearchPlaintext(Object        target,
+                                            String        path,
+                                            String        password,
+                                            List<String>  found,
+                                            Int32         depth)
         {
 
-            if (tiefe > 3)
+            if (depth > 3)
                 return;
 
-            foreach (var feld in ziel.GetType().GetFields(BindingFlags.Instance |
-                                                          BindingFlags.Public   |
-                                                          BindingFlags.NonPublic))
+            foreach (var field in target.GetType().GetFields(BindingFlags.Instance |
+                                                             BindingFlags.Public   |
+                                                             BindingFlags.NonPublic))
             {
 
-                var wert = feld.GetValue(ziel);
+                var value = field.GetValue(target);
 
-                switch (wert)
+                switch (value)
                 {
 
-                    case String text when text.Contains(passwort, StringComparison.Ordinal):
-                        gefunden.Add($"{pfad}.{feld.Name}");
+                    case String text when text.Contains(password, StringComparison.Ordinal):
+                        found.Add($"{path}.{field.Name}");
                         break;
 
-                    case Byte[] bytes when Encoding.UTF8.GetString(bytes).Contains(passwort, StringComparison.Ordinal):
-                        gefunden.Add($"{pfad}.{feld.Name}");
+                    case Byte[] bytes when Encoding.UTF8.GetString(bytes).Contains(password, StringComparison.Ordinal):
+                        found.Add($"{path}.{field.Name}");
                         break;
 
                     case SCRAMKeys keys:
-                        SucheKlartext(keys, $"{pfad}.{feld.Name}", passwort, gefunden, tiefe + 1);
+                        SearchPlaintext(keys, $"{path}.{field.Name}", password, found, depth + 1);
                         break;
 
-                    case System.Collections.IDictionary eintraege:
-                        foreach (var eintrag in eintraege.Values)
-                            if (eintrag is not null)
-                                SucheKlartext(eintrag, $"{pfad}.{feld.Name}[]", passwort, gefunden, tiefe + 1);
+                    case System.Collections.IDictionary entries:
+                        foreach (var entry in entries.Values)
+                            if (entry is not null)
+                                SearchPlaintext(entry, $"{path}.{field.Name}[]", password, found, depth + 1);
                         break;
 
                 }
