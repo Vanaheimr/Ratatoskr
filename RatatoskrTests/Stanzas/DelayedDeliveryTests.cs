@@ -29,23 +29,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0203: Der Stempel, der sagt, dass eine Nachricht nicht jetzt
-    /// entstanden ist.
+    /// XEP-0203: the stamp that says a message did not come into being just
+    /// now.
     /// </summary>
     /// <remarks>
-    /// Geprüft wird hier die Lesung an der Stanza; dass sie im Client ankommt
-    /// und die angezeigte Zeit bestimmt, steht in
+    /// What is checked here is the reading at the stanza; that it arrives in the
+    /// client and determines the time displayed stands in
     /// <c>OfflineMessageTests.AStoredMessage_KeepsTheTimeItWasWritten</c>.
     /// </remarks>
     [TestFixture]
     public class DelayedDeliveryTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private static XElement Nachricht(String inhalt)
+        private static XElement Message(String content)
             => XElement.Parse($"<message xmlns='jabber:client' from='bob@example' " +
-                              $"to='alice@example'>{inhalt}<body>Hallo</body></message>");
+                              $"to='alice@example'>{content}<body>Hello</body></message>");
 
         #endregion
 
@@ -53,27 +53,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStamp_IsRead()
 
         /// <summary>
-        /// Der gewöhnliche Fall: Zeitpunkt und Urheber.
+        /// The ordinary case: moment and originator.
         /// </summary>
         [Test]
         public void AStamp_IsRead()
         {
 
-            var gelesen = DelayedDelivery.TryRead(
-                              Nachricht("<delay xmlns='urn:xmpp:delay' from='example' " +
+            var read = DelayedDelivery.TryRead(
+                              Message("<delay xmlns='urn:xmpp:delay' from='example' " +
                                         "stamp='2026-07-31T20:14:05Z'>Offline Storage</delay>"),
-                              out var stempel,
-                              out var von);
+                              out var stamp,
+                              out var by);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen, Is.True);
+                Assert.That(read, Is.True);
 
-                Assert.That(stempel.UtcDateTime,
+                Assert.That(stamp.UtcDateTime,
                             Is.EqualTo(new DateTime(2026, 7, 31, 20, 14, 5, DateTimeKind.Utc)));
 
-                Assert.That(von, Is.EqualTo("example"));
+                Assert.That(by, Is.EqualTo("example"));
 
             });
 
@@ -84,29 +84,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStampKeepsItsZone()
 
         /// <summary>
-        /// Der Zeitzonenteil wird gelesen und nicht überschrieben.
+        /// The time zone part is read and not overwritten.
         /// </summary>
         /// <remarks>
-        /// XEP-0203, Abschnitt 3 verlangt UTC, aber die Lesung darf sich nicht
-        /// darauf verlassen: Ein Stempel mit Zonenangabe ist eindeutig, und wer
-        /// ihn in die Zeitzone <i>dieses</i> Rechners dreht, verschiebt eine
-        /// Nachricht aus einem anderen Land um Stunden. Was gemeint ist, steht
-        /// in der Zeichenkette und nicht in der Umgebung.
+        /// XEP-0203, section 3 demands UTC, but the reading must not rely on
+        /// that: a stamp with a zone specification is unambiguous, and whoever
+        /// turns it into the time zone of <i>this</i> machine shifts a message
+        /// from another country by hours. What is meant stands in the string and
+        /// not in the surroundings.
         /// </remarks>
         [Test]
         public void TheStampKeepsItsZone()
         {
 
-            var gelesen = DelayedDelivery.TryRead(
-                              Nachricht("<delay xmlns='urn:xmpp:delay' stamp='2026-07-31T22:14:05+02:00'/>"),
-                              out var stempel,
+            var read = DelayedDelivery.TryRead(
+                              Message("<delay xmlns='urn:xmpp:delay' stamp='2026-07-31T22:14:05+02:00'/>"),
+                              out var stamp,
                               out _);
 
             Assert.Multiple(() =>
             {
-                Assert.That(gelesen, Is.True);
-                Assert.That(stempel.Offset, Is.EqualTo(TimeSpan.FromHours(2)));
-                Assert.That(stempel.UtcDateTime.Hour, Is.EqualTo(20));
+                Assert.That(read, Is.True);
+                Assert.That(stamp.Offset, Is.EqualTo(TimeSpan.FromHours(2)));
+                Assert.That(stamp.UtcDateTime.Hour, Is.EqualTo(20));
             });
 
         }
@@ -115,11 +115,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region WithoutAStamp_NothingIsRead()
 
-        /// <summary>Eine gewöhnliche Nachricht trägt keinen.</summary>
+        /// <summary>An ordinary message carries none.</summary>
         [Test]
         public void WithoutAStamp_NothingIsRead()
         {
-            Assert.That(DelayedDelivery.TryRead(Nachricht(""), out _, out _),
+            Assert.That(DelayedDelivery.TryRead(Message(""), out _, out _),
                         Is.False);
         }
 
@@ -128,29 +128,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnreadableStamp_CountsAsNone()
 
         /// <summary>
-        /// Was sich nicht lesen lässt, gilt wie kein Stempel.
+        /// What cannot be read counts like no stamp.
         /// </summary>
         /// <remarks>
-        /// Er kommt von der Gegenstelle, und was von dort kommt, darf hier
-        /// nichts umwerfen. Die Nachricht ist dann eben so alt, wie sie
-        /// angekommen ist - das ist die schlechtere Auskunft, aber keine
-        /// falsche Uhrzeit und kein Absturz.
+        /// It comes from the counterpart, and what comes from there must
+        /// overturn nothing here. The message is then just as old as it arrived
+        /// - that is the poorer information, but no wrong time of day and no
+        /// crash.
         ///
-        /// Der letzte Fall kam durch eine überlebende Mutation dazu: Ein
-        /// Stempel <b>ohne Zonenangabe</b> verstösst gegen Abschnitt 3, liess
-        /// sich aber lesen - und wurde als hiesige Zeit gedeutet. Das ist die
-        /// schlechteste aller Auslegungen: Die Nachricht verschiebt sich um
-        /// genau den Zonenunterschied, sieht dabei aber vollkommen plausibel
-        /// aus.
+        /// The last case came along through a surviving mutation: a stamp
+        /// <b>without a zone specification</b> violates section 3 but could be
+        /// read - and was interpreted as local time. That is the worst of all
+        /// readings: the message shifts by exactly the zone difference, but
+        /// looks perfectly plausible in the process.
         /// </remarks>
-        [TestCase("<delay xmlns='urn:xmpp:delay' stamp='gestern abend'/>",  TestName = "Kein Zeitpunkt")]
-        [TestCase("<delay xmlns='urn:xmpp:delay' stamp=''/>",               TestName = "Leerer Stempel")]
-        [TestCase("<delay xmlns='urn:xmpp:delay'/>",                        TestName = "Ohne Attribut")]
+        [TestCase("<delay xmlns='urn:xmpp:delay' stamp='yesterday evening'/>",  TestName = "No moment")]
+        [TestCase("<delay xmlns='urn:xmpp:delay' stamp=''/>",               TestName = "Empty stamp")]
+        [TestCase("<delay xmlns='urn:xmpp:delay'/>",                        TestName = "Without the attribute")]
         [TestCase("<delay xmlns='urn:xmpp:delay' stamp='2026-07-31T20:14:05'/>",
-                  TestName = "Ohne Zonenangabe")]
+                  TestName = "Without a zone")]
         public void AnUnreadableStamp_CountsAsNone(String delay)
         {
-            Assert.That(DelayedDelivery.TryRead(Nachricht(delay), out _, out _),
+            Assert.That(DelayedDelivery.TryRead(Message(delay), out _, out _),
                         Is.False);
         }
 
@@ -159,20 +158,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStampFromAnotherNamespace_IsIgnored()
 
         /// <summary>
-        /// Das alte <c>jabber:x:delay</c> aus XEP-0091 wird nicht gelesen.
+        /// The old <c>jabber:x:delay</c> from XEP-0091 is not read.
         /// </summary>
         /// <remarks>
-        /// XEP-0091 ist von der XSF als <i>Obsolete</i> zurückgezogen, und sein
-        /// Zeitformat ist ein anderes (<c>CCYYMMDDThh:mm:ss</c>). Es hier
-        /// mitzulesen hiesse, ein zweites Format zu pflegen, das niemand mehr
-        /// schickt - und zwar an genau der Stelle, an der ein Fehler wieder
-        /// eine falsche Uhrzeit ergäbe.
+        /// XEP-0091 has been withdrawn by the XSF as <i>obsolete</i>, and its
+        /// time format is another one (<c>CCYYMMDDThh:mm:ss</c>). To read it
+        /// along here would mean maintaining a second format nobody sends any
+        /// more - and at precisely the place where an error would again yield a
+        /// wrong time of day.
         /// </remarks>
         [Test]
         public void AStampFromAnotherNamespace_IsIgnored()
         {
             Assert.That(DelayedDelivery.TryRead(
-                            Nachricht("<x xmlns='jabber:x:delay' stamp='20260731T20:14:05'/>"),
+                            Message("<x xmlns='jabber:x:delay' stamp='20260731T20:14:05'/>"),
                             out _, out _),
                         Is.False);
         }
@@ -182,30 +181,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStampInsideAForwardedMessage_IsNotTheOuterOne()
 
         /// <summary>
-        /// Der Stempel einer eingepackten Nachricht datiert nicht die
-        /// äussere.
+        /// The stamp of a packed message does not date the outer one.
         /// </summary>
         /// <remarks>
-        /// Der Fall, für den die Lesung nur direkte Kinder ansieht: Ein Carbon
-        /// (XEP-0280) und eine Weiterleitung (XEP-0297) bringen in ihrem
-        /// <c>&lt;forwarded/&gt;</c> die <i>innere</i> Nachricht samt deren
-        /// Stempel mit. Wer die ganze Stanza durchsucht, datiert die äussere
-        /// auf die Zeit der inneren - und liegt genau dann falsch, wenn es
-        /// darauf ankommt.
+        /// The case the reading looks only at direct children for: a carbon
+        /// (XEP-0280) and a forwarding (XEP-0297) bring the <i>inner</i> message
+        /// together with its stamp along in their <c>&lt;forwarded/&gt;</c>.
+        /// Whoever searches the whole stanza dates the outer one to the time of
+        /// the inner one - and is wrong precisely when it matters.
         /// </remarks>
         [Test]
         public void AStampInsideAForwardedMessage_IsNotTheOuterOne()
         {
 
-            var carbon = Nachricht(
+            var carbon = Message(
                              "<received xmlns='urn:xmpp:carbons:2'>" +
                              "<forwarded xmlns='urn:xmpp:forward:0'>" +
                              "<delay xmlns='urn:xmpp:delay' stamp='2020-01-01T00:00:00Z'/>" +
-                             "<message xmlns='jabber:client'><body>innen</body></message>" +
+                             "<message xmlns='jabber:client'><body>inside</body></message>" +
                              "</forwarded></received>");
 
             Assert.That(DelayedDelivery.TryRead(carbon, out _, out _), Is.False,
-                        "Der Stempel der inneren Nachricht wurde der äusseren zugeschrieben.");
+                        "The stamp of the inner message was ascribed to the outer one.");
 
         }
 

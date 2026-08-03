@@ -28,50 +28,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6120, Abschnitt 8.3.3.8: Steht im <c>to</c> kein JID, antwortet der
-    /// Server mit <c>&lt;jid-malformed/&gt;</c>.
+    /// RFC 6120, section 8.3.3.8: if no JID stands in the <c>to</c>, the server
+    /// answers with <c>&lt;jid-malformed/&gt;</c>.
     /// </summary>
     /// <remarks>
-    /// Die Prüfung selbst gibt es seit D42 bis D45 vollständig - RFC 7622 mit
-    /// PRECIS, IDNA2008, Bidi-Regel und den kontextabhängigen Regeln aus
-    /// Anhang A. <b>Der Server hat sie nie gefragt.</b> Was ankam, ging in die
-    /// Zustellung, und ein unmöglicher Empfänger sah dort aus wie ein
-    /// abwesender: Der Absender bekam Schweigen oder eine Ablage, aus der ihn
-    /// nie jemand abholt.
+    /// The check itself has existed in full since D42 through D45 - RFC 7622
+    /// with PRECIS, IDNA2008, the Bidi rule and the context-dependent rules from
+    /// appendix A. <b>The server never asked it.</b> What arrived went into the
+    /// delivery, and an impossible recipient looked there like an absent one:
+    /// the sender got silence or a storage nobody ever fetches for them.
     ///
-    /// Eine geprüfte Regel ohne Aufrufer ist keine halbe Regel, sondern keine.
-    /// Dieselbe Lücke stand in D43 (die IDNA-Prüfung war fertig und im JID
-    /// nicht verdrahtet) und in D45 - deshalb prüft hier jeder Test den Weg
-    /// über die Leitung und nicht die Funktion.
+    /// A checked rule without a caller is not half a rule but none. The same gap
+    /// stood in D43 (the IDNA check was finished and not wired into the JID) and
+    /// in D45 - which is why every test here checks the route over the wire and
+    /// not the function.
     /// </remarks>
     [TestFixture]
     public class MalformedRecipientTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Schickt eine Stanza und gibt die Antwort zurück, die der Server
-        /// darauf geschickt hat.
+        /// Sends a stanza and gives back the answer the server sent to it.
         /// </summary>
-        private async Task<String> AntwortAufAsync(XMPPClient client, String stanza)
+        private async Task<String> AnswerToAsync(XMPPClient client, String stanza)
         {
 
             var session = Server.SessionOf(client.FullJid)!;
-            var vorher  = session.Sent.Count;
+            var before  = session.Sent.Count;
 
             await client.SendRawAsync(stanza);
 
-            await WaitFor(() => Neu(session, vorher).Any(f => f.Contains("type='error'", StringComparison.Ordinal)),
-                          $"die Abweisung des Servers auf: {stanza}");
+            await WaitFor(() => SentSince(session, before).Any(f => f.Contains("type='error'", StringComparison.Ordinal)),
+                          $"the refusal by the server of: {stanza}");
 
-            return Neu(session, vorher).First(f => f.Contains("type='error'", StringComparison.Ordinal));
+            return SentSince(session, before).First(f => f.Contains("type='error'", StringComparison.Ordinal));
 
         }
 
-        /// <summary>Was der Server seit diesem Stand geschickt hat.</summary>
-        private static IEnumerable<String> Neu(XMPPSession session, Int32 stand)
-            => session.Sent.Skip(stand);
+        /// <summary>What the server has sent since this mark.</summary>
+        private static IEnumerable<String> SentSince(XMPPSession session, Int32 mark)
+            => session.Sent.Skip(mark);
 
         #endregion
 
@@ -79,48 +77,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessageToANonJid_IsRefused(...)
 
         /// <summary>
-        /// Fünf Adressen, die keine sind - und jede aus einem anderen Grund.
+        /// Five addresses that are none - and each for a different reason.
         /// </summary>
         /// <remarks>
-        /// Eine einzige unmögliche Adresse liesse offen, wie weit die Prüfung
-        /// reicht: <c>alice@</c> fällt schon einem Vergleich auf zwei leere
-        /// Zeichenketten auf, <c>alice@-localhost</c> erst der Labelregel aus
-        /// RFC 5891, und das Leerzeichen im Localpart nur der
-        /// PRECIS-IdentifierClass. Fünf Gründe, damit ein Test nicht bestehen
-        /// kann, indem er den einfachsten davon abdeckt.
+        /// A single impossible address would leave open how far the check
+        /// reaches: <c>alice@</c> is already noticed by a comparison against two
+        /// empty strings, <c>alice@-localhost</c> only by the label rule from
+        /// RFC 5891, and the space in the local part only by the PRECIS
+        /// IdentifierClass. Five reasons, so that a test cannot pass by covering
+        /// the simplest of them.
         /// </remarks>
-        [TestCase("@localhost",         TestName = "Ohne Localpart")]
-        [TestCase("alice@",             TestName = "Ohne Domainpart")]
-        [TestCase("alice@localhost/",   TestName = "Mit leerer Resource")]
-        [TestCase("al ice@localhost",   TestName = "Mit Leerzeichen im Localpart")]
-        [TestCase("alice@-localhost",   TestName = "Mit Bindestrich am Labelanfang")]
-        public async Task AMessageToANonJid_IsRefused(String empfaenger)
+        [TestCase("@localhost",         TestName = "Without a local part")]
+        [TestCase("alice@",             TestName = "Without a domain part")]
+        [TestCase("alice@localhost/",   TestName = "With an empty resource")]
+        [TestCase("al ice@localhost",   TestName = "With a space in the local part")]
+        [TestCase("alice@-localhost",   TestName = "With a hyphen at the start of a label")]
+        public async Task AMessageToANonJid_IsRefused(String recipient)
         {
 
             var alice = await ConnectClientAsync();
 
-            var antwort = await AntwortAufAsync(
+            var response = await AnswerToAsync(
                               alice,
-                              $"<message to='{empfaenger}' type='chat'><body>Hallo</body></message>");
+                              $"<message to='{recipient}' type='chat'><body>Hello</body></message>");
 
             Assert.Multiple(() =>
             {
 
-                // Auf eine Nachricht antwortet eine Nachricht. Zwischen
-                // Elementnamen und Typ steht der Namensraum: Jede Stanza an
-                // einen Client trägt jabber:client.
-                Assert.That(antwort, Does.StartWith("<message"));
-                Assert.That(antwort, Does.Contain("type='error'"));
+                // A message is answered by a message. Between the element name
+                // and the type stands the namespace: every stanza to a client
+                // carries jabber:client.
+                Assert.That(response, Does.StartWith("<message"));
+                Assert.That(response, Does.Contain("type='error'"));
 
-                Assert.That(antwort, Does.Contain("jid-malformed"));
+                Assert.That(response, Does.Contain("jid-malformed"));
 
-                Assert.That(antwort, Does.Contain("type='modify'"),
-                            "RFC 6120, Abschnitt 8.3.3.8: die Fehlerart ist 'modify'.");
+                Assert.That(response, Does.Contain("type='modify'"),
+                            "RFC 6120, section 8.3.3.8: the error type is 'modify'.");
 
-                // Nicht der gemeinte Empfänger, wie bei service-unavailable:
-                // Dort hat der Server für jemanden geantwortet, hier für
-                // niemanden - die Adresse ist keine.
-                Assert.That(antwort, Does.Contain($"from='{Server.Domain}'"));
+                // Not the intended recipient, as with service-unavailable: there
+                // the server answered for somebody, here for nobody - the
+                // address is none.
+                Assert.That(response, Does.Contain($"from='{Server.Domain}'"));
 
             });
 
@@ -131,8 +129,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToANonJid_KeepsItsId()
 
         /// <summary>
-        /// Die Ablehnung einer Anfrage trägt deren <c>id</c> - sonst weiss ein
-        /// Frager mit mehreren offenen Anfragen nur, dass eine gescheitert ist.
+        /// The refusal of a request carries its <c>id</c> - otherwise an asker
+        /// with several pending requests knows only that one has failed.
         /// </summary>
         [Test]
         public async Task AnIqToANonJid_KeepsItsId()
@@ -140,17 +138,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync();
 
-            var antwort = await AntwortAufAsync(
+            var response = await AnswerToAsync(
                               alice,
-                              "<iq type='get' id='frage-1' to='alice@@localhost'>" +
+                              "<iq type='get' id='question-1' to='alice@@localhost'>" +
                               "<query xmlns='jabber:iq:version'/></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.StartWith("<iq"));
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("id='frage-1'"));
-                Assert.That(antwort, Does.Contain("jid-malformed"));
+                Assert.That(response, Does.StartWith("<iq"));
+                Assert.That(response, Does.Contain("type='error'"));
+                Assert.That(response, Does.Contain("id='question-1'"));
+                Assert.That(response, Does.Contain("jid-malformed"));
             });
 
         }
@@ -160,12 +158,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APresenceToANonJid_IsRefusedAsWell()
 
         /// <summary>
-        /// Auch gerichtete Presence, und mit demselben Element.
+        /// Directed presence too, and with the same element.
         /// </summary>
         /// <remarks>
-        /// Ungerichtete Presence trägt kein <c>to</c> und darf davon nicht
-        /// getroffen werden - das prüft jeder andere Test der Sammlung
-        /// mit, denn ohne sie gilt keine Sitzung als verfügbar.
+        /// Undirected presence carries no <c>to</c> and must not be hit by this
+        /// - every other test of the collection checks that along, for without
+        /// it no session counts as available.
         /// </remarks>
         [Test]
         public async Task APresenceToANonJid_IsRefusedAsWell()
@@ -173,13 +171,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync();
 
-            var antwort = await AntwortAufAsync(alice, "<presence to='alice@localhost/'/>");
+            var response = await AnswerToAsync(alice, "<presence to='alice@localhost/'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.StartWith("<presence"));
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("jid-malformed"));
+                Assert.That(response, Does.StartWith("<presence"));
+                Assert.That(response, Does.Contain("type='error'"));
+                Assert.That(response, Does.Contain("jid-malformed"));
             });
 
         }
@@ -189,13 +187,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnErrorStanza_IsNotAnsweredWithAnError()
 
         /// <summary>
-        /// Auf eine Fehler-Stanza folgt kein Fehler - verworfen wird sie
-        /// trotzdem.
+        /// An error stanza is not followed by an error - it is discarded all the
+        /// same.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 8.3.1. Ohne diese Ausnahme könnten zwei Server
-        /// sich gegenseitig Meldungen zuschieben, bis einer aufgibt: Der eine
-        /// antwortet auf die unmögliche Adresse, der andere auf die Antwort.
+        /// RFC 6120, section 8.3.1. Without this exception two servers could
+        /// push notifications back and forth at each other until one gives up:
+        /// the one answers the impossible address, the other answers the answer.
         /// </remarks>
         [Test]
         public async Task AnErrorStanza_IsNotAnsweredWithAnError()
@@ -203,15 +201,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync();
             var session = Server.SessionOf(alice.FullJid)!;
-            var vorher  = session.Sent.Count;
+            var before  = session.Sent.Count;
 
             await alice.SendRawAsync(
                       "<message to='@localhost' type='error'>" +
                       "<error type='cancel'><gone xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" +
                       "</message>");
 
-            await WaitAgainst(() => Neu(session, vorher).Any(f => f.Contains("jid-malformed", StringComparison.Ordinal)),
-                              "eine Antwort auf eine Fehler-Stanza");
+            await WaitAgainst(() => SentSince(session, before).Any(f => f.Contains("jid-malformed", StringComparison.Ordinal)),
+                              "an answer to an error stanza");
 
         }
 
@@ -220,16 +218,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARefusedStanza_IsNotDeliveredAnyway()
 
         /// <summary>
-        /// Die abgewiesene Stanza endet auch wirklich - sie wird nicht
-        /// zusätzlich zugestellt.
+        /// The refused stanza really does end - it is not delivered in addition.
         /// </summary>
         /// <remarks>
-        /// Die Adresse ist mit Absicht so gewählt, dass ein Weiterreichen
-        /// auffiele: <c>bob@…/</c> ist kein JID (eine leere Resource gibt es
-        /// nicht), aber der Teil davor gehört einem angemeldeten Konto. Eine
-        /// Prüfung, die zwar antwortet und danach trotzdem zustellt, käme über
-        /// den Weg für Bare-JIDs bei Bob an - und ohne diesen Test wäre sie
-        /// von der richtigen nicht zu unterscheiden.
+        /// The address is chosen on purpose so that a passing-on would show:
+        /// <c>bob@…/</c> is no JID (an empty resource does not exist), but the
+        /// part before it belongs to a signed-on account. A check that answers
+        /// and then delivers all the same would arrive at Bob by the route for
+        /// bare JIDs - and without this test it would not be distinguishable
+        /// from the right one.
         /// </remarks>
         [Test]
         public async Task ARefusedStanza_IsNotDeliveredAnyway()
@@ -240,14 +237,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync();
             var bob   = await ConnectClientAsync("bob", createAccount: false);
 
-            var angekommen = new List<String>();
-            bob.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
             await alice.SendRawAsync(
-                      $"<message to='bob@{Server.Domain}/' type='chat'><body>Trotzdem</body></message>");
+                      $"<message to='bob@{Server.Domain}/' type='chat'><body>All the same</body></message>");
 
-            await WaitAgainst(() => { lock (angekommen) return angekommen.Contains("Trotzdem"); },
-                              "die Zustellung einer abgewiesenen Nachricht");
+            await WaitAgainst(() => { lock (arrived) return arrived.Contains("All the same"); },
+                              "the delivery of a refused message");
 
         }
 
@@ -256,15 +253,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnusualButValidJid_IsDelivered()
 
         /// <summary>
-        /// Ein JID, der ungewöhnlich aussieht und trotzdem einer ist, kommt
-        /// durch.
+        /// A JID that looks unusual and is one all the same comes through.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe, ohne die „lehne alles ab" eine bestandene Lösung
-        /// wäre. Sie prüft zugleich, dass hier wirklich RFC 7622 arbeitet und
-        /// nicht eine Handvoll Sonderzeichen: Der Localpart trägt Umlaute, die
-        /// Resource ein Leerzeichen - im Localpart wäre es verboten
-        /// (IdentifierClass), in der Resource erlaubt (FreeformClass).
+        /// The counter-check, without which "refuse everything" would be a
+        /// passing solution. It checks at the same time that RFC 7622 really
+        /// works here and not a handful of special characters: the local part
+        /// carries umlauts, the resource a space - in the local part it would be
+        /// forbidden (IdentifierClass), in the resource permitted
+        /// (FreeformClass).
         /// </remarks>
         [Test]
         public async Task AnUnusualButValidJid_IsDelivered()
@@ -277,27 +274,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("bäcker");
 
-            var angekommen = new List<String>();
-            bob.OnMessage += m => { lock (angekommen) angekommen.Add(m.Body); };
+            var arrived = new List<String>();
+            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
 
             var session = Server.SessionOf(alice.FullJid)!;
-            var vorher  = session.Sent.Count;
+            var before  = session.Sent.Count;
 
-            // Erst die ungewöhnliche Adresse: Sie darf nicht als unmöglich
-            // gelten. Zugestellt wird sie niemandem - es sitzt niemand dort -,
-            // und die Antwort darauf ist ein anderer Fehler als jid-malformed.
+            // First the unusual address: it must not count as impossible. It is
+            // delivered to nobody - nobody sits there -, and the answer to it is
+            // a different error from jid-malformed.
             await alice.SendRawAsync(
-                      $"<message to='bäcker@{Server.Domain}/Büro 1' type='chat'><body>Brötchen</body></message>");
+                      $"<message to='bäcker@{Server.Domain}/Büro 1' type='chat'><body>Rolls</body></message>");
 
-            // Und dann eine gewöhnliche, die ankommen muss.
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Und Kaffee");
+            // And then an ordinary one, which has to arrive.
+            await alice.SendMessageAsync($"bob@{Server.Domain}", "And coffee");
 
-            await WaitFor(() => { lock (angekommen) return angekommen.Contains("Und Kaffee"); },
-                          "die gewöhnliche Nachricht");
+            await WaitFor(() => { lock (arrived) return arrived.Contains("And coffee"); },
+                          "the ordinary message");
 
-            Assert.That(Neu(session, vorher).Any(f => f.Contains("jid-malformed", StringComparison.Ordinal)),
+            Assert.That(SentSince(session, before).Any(f => f.Contains("jid-malformed", StringComparison.Ordinal)),
                         Is.False,
-                        "Ein gültiger JID wurde als unmöglich abgewiesen.");
+                        "A valid JID was refused as impossible.");
 
         }
 
