@@ -29,9 +29,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Tests mit mehreren echten Clients am selben Testserver: Zustellung
-    /// zwischen Konten, mehrere Resourcen eines Kontos und die darauf
-    /// aufbauenden XEPs.
+    /// Tests with several real clients at the same test server: delivery
+    /// between accounts, several resources of one account and the XEPs built on
+    /// that.
     /// </summary>
     [TestFixture]
     public class MultiClientTests : AXMPPTests
@@ -40,8 +40,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoClients_ExchangeMessage()
 
         /// <summary>
-        /// Eine Nachricht von Alice muss bei Bob ankommen - mit korrektem
-        /// Absender und Inhalt.
+        /// A message from Alice has to arrive at Bob - with the right sender
+        /// and content.
         /// </summary>
         [Test]
         public async Task TwoClients_ExchangeMessage()
@@ -53,15 +53,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var inbox = new ConcurrentQueue<XMPPMessage>();
             bob.OnMessage += m => inbox.Enqueue(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo Bob!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello Bob!");
 
-            await WaitFor(() => !inbox.IsEmpty, "Zustellung der Nachricht bei Bob");
+            await WaitFor(() => !inbox.IsEmpty, "the delivery of the message at Bob");
 
             inbox.TryDequeue(out var received);
 
             Assert.Multiple(() =>
             {
-                Assert.That(received!.Body,        Is.EqualTo("Hallo Bob!"));
+                Assert.That(received!.Body,        Is.EqualTo("Hello Bob!"));
                 Assert.That(received.FromBareJid,  Is.EqualTo(alice.BareJid));
                 Assert.That(received.MessageId,    Is.Not.Null);
             });
@@ -73,21 +73,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoResourcesDifferingOnlyInCase_AreTwoDevices()
 
         /// <summary>
-        /// Zwei Resourcen desselben Kontos, die sich nur in der Schreibweise
-        /// unterscheiden, sind zwei Geräte — und eine Nachricht an das eine
-        /// darf nicht beim anderen landen.
+        /// Two resources of the same account differing only in their spelling
+        /// are two devices — and a message to the one must not land at the
+        /// other.
         /// </summary>
         /// <remarks>
-        /// RFC 7622, Abschnitt 3.4: Der Resourcepart ist von der Schreibweise
-        /// abhängig. Die Resource-Vergabe im Server hat das immer schon
-        /// beachtet — sonst wäre die zweite Anmeldung als Konflikt abgewiesen
-        /// worden. Das Nachschlagen einer Sitzung dagegen lief über
-        /// <c>OrdinalIgnoreCase</c> auf der ganzen Full-JID.
+        /// RFC 7622, section 3.4: the resourcepart depends on the spelling. The
+        /// handing out of resources in the server has always kept to that —
+        /// otherwise the second login would have been refused as a conflict.
+        /// Looking a session up, by contrast, ran over
+        /// <c>OrdinalIgnoreCase</c> on the whole full JID.
         ///
-        /// Beides zusammen ergibt genau den Fehler, den niemand bemerkt: Der
-        /// Server nimmt zwei Geräte an und stellt dann beiden den Verkehr
-        /// desselben zu. Die Nachricht landet auf dem falschen, und beim
-        /// Absender sieht alles nach Erfolg aus.
+        /// Both together give exactly the fault nobody notices: the server
+        /// accepts two devices and then delivers the traffic of the one to
+        /// both. The message lands on the wrong one, and at the sender
+        /// everything looks like success.
         /// </remarks>
         [Test]
         public async Task TwoResourcesDifferingOnlyInCase_AreTwoDevices()
@@ -97,41 +97,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            var grossClient = CreateClient("alice");
-            grossClient.Connection.Resource = "Handy";
-            await grossClient.ConnectAsync();
+            var upperClient = CreateClient("alice");
+            upperClient.Connection.Resource = "Mobile";
+            await upperClient.ConnectAsync();
 
-            var kleinClient = CreateClient("alice");
-            kleinClient.Connection.Resource = "handy";
-            await kleinClient.ConnectAsync();
+            var lowerClient = CreateClient("alice");
+            lowerClient.Connection.Resource = "mobile";
+            await lowerClient.ConnectAsync();
 
             Assert.Multiple(() =>
             {
-                Assert.That(grossClient.FullJid, Does.EndWith("/Handy"));
-                Assert.That(kleinClient.FullJid, Does.EndWith("/handy"),
-                            "Die zweite Anmeldung muss ihre eigene Resource bekommen.");
+                Assert.That(upperClient.FullJid, Does.EndWith("/Mobile"));
+                Assert.That(lowerClient.FullJid, Does.EndWith("/mobile"),
+                            "The second login has to get a resource of its own.");
             });
 
-            var beimGrossen = new ConcurrentQueue<XMPPMessage>();
-            var beimKleinen = new ConcurrentQueue<XMPPMessage>();
+            var atUpper = new ConcurrentQueue<XMPPMessage>();
+            var atLower = new ConcurrentQueue<XMPPMessage>();
 
-            grossClient.OnMessage += m => beimGrossen.Enqueue(m);
-            kleinClient.OnMessage += m => beimKleinen.Enqueue(m);
+            upperClient.OnMessage += m => atUpper.Enqueue(m);
+            lowerClient.OnMessage += m => atLower.Enqueue(m);
 
-            await bob.SendMessageAsync(kleinClient.FullJid, "Nur an das kleine Handy");
+            await bob.SendMessageAsync(lowerClient.FullJid, "Only to the lower-case mobile");
 
-            await WaitFor(() => !beimKleinen.IsEmpty, "Zustellung an alice/handy");
+            await WaitFor(() => !atLower.IsEmpty, "the delivery to alice/mobile");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(beimKleinen, Has.Count.EqualTo(1));
+                Assert.That(atLower, Has.Count.EqualTo(1));
 
-                Assert.That(beimGrossen, Is.Empty,
-                            "Die Nachricht an /handy darf /Handy nicht erreichen.");
+                Assert.That(atUpper, Is.Empty,
+                            "The message to /mobile must not reach /Mobile.");
 
-                Assert.That(Server.SessionOf(grossClient.FullJid)?.Resource, Is.EqualTo("Handy"));
-                Assert.That(Server.SessionOf(kleinClient.FullJid)?.Resource, Is.EqualTo("handy"));
+                Assert.That(Server.SessionOf(upperClient.FullJid)?.Resource, Is.EqualTo("Mobile"));
+                Assert.That(Server.SessionOf(lowerClient.FullJid)?.Resource, Is.EqualTo("mobile"));
 
             });
 
@@ -142,8 +142,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageDelivery_TriggersReceiptAndChatMarker()
 
         /// <summary>
-        /// Der Empfänger quittiert automatisch: XEP-0184 Zustellbestätigung
-        /// und XEP-0333 received-Marker müssen beim Absender ankommen.
+        /// The recipient acknowledges automatically: the XEP-0184 delivery
+        /// receipt and the XEP-0333 received marker have to arrive at the
+        /// sender.
         /// </summary>
         [Test]
         public async Task MessageDelivery_TriggersReceiptAndChatMarker()
@@ -158,10 +159,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             alice.OnReceiptReceived += (from, id) => receipts.Enqueue(id);
             alice.OnChatMarker      += m           => markers.Enqueue(m);
 
-            var messageId = await alice.SendMessageAsync(bob.BareJid, "Bitte bestätigen");
+            var messageId = await alice.SendMessageAsync(bob.BareJid, "Please confirm");
 
-            await WaitFor(() => !receipts.IsEmpty, "XEP-0184 Zustellbestätigung bei Alice");
-            await WaitFor(() => !markers.IsEmpty,  "XEP-0333 received-Marker bei Alice");
+            await WaitFor(() => !receipts.IsEmpty, "the XEP-0184 delivery receipt at Alice");
+            await WaitFor(() => !markers.IsEmpty,  "the XEP-0333 received marker at Alice");
 
             receipts.TryDequeue(out var receiptId);
             markers.TryDequeue(out var marker);
@@ -180,7 +181,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TypingIndicator_ReachesOtherClient()
 
         /// <summary>
-        /// XEP-0085: Der Tippstatus muss beim Gegenüber ankommen.
+        /// XEP-0085: the typing state has to arrive at the other end.
         /// </summary>
         [Test]
         public async Task TypingIndicator_ReachesOtherClient()
@@ -196,7 +197,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.SendChatStateAsync(ChatState.Composing);
 
             await WaitFor(() => states.Contains(ChatState.Composing),
-                          "Tippstatus bei Bob");
+                          "the typing state at Bob");
 
             Assert.Pass();
 
@@ -207,15 +208,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoResourcesOfSameAccount_GetDistinctFullJids()
 
         /// <summary>
-        /// Zwei Clients desselben Kontos müssen unterschiedliche Resourcen
-        /// bekommen.
+        /// Two clients of the same account have to get different resources.
         /// </summary>
         /// <remarks>
-        /// XMPPConnection fordert fest console-{ProcessId} als Resource an.
-        /// Laufen zwei Clients im selben Prozess, verlangen beide dieselbe
-        /// Resource; erst der Server vergibt eine abweichende. Gegen einen
-        /// Server, der stattdessen mit conflict antwortet, würde der zweite
-        /// Client scheitern - der Client behandelt Bind-Fehler nicht.
+        /// XMPPConnection asks fixedly for console-{ProcessId} as its resource.
+        /// If two clients run in the same process, both demand the same
+        /// resource; only the server hands out a differing one. Against a
+        /// server that answers with a conflict instead, the second client would
+        /// fail - the client does not handle bind errors.
         /// </remarks>
         [Test]
         public async Task TwoResourcesOfSameAccount_GetDistinctFullJids()
@@ -228,7 +228,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(first.BareJid, Is.EqualTo(second.BareJid));
                 Assert.That(first.FullJid, Is.Not.EqualTo(second.FullJid),
-                            "Beide Resourcen haben denselben Full-JID erhalten.");
+                            "Both resources were given the same full JID.");
                 Assert.That(Server.SessionsOf(first.BareJid), Has.Count.EqualTo(2));
             });
 
@@ -239,8 +239,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SecondResource_ReceivesSentCarbon()
 
         /// <summary>
-        /// XEP-0280: Sendet eine Resource eine Nachricht, bekommt die andere
-        /// Resource desselben Kontos eine sent-Kopie.
+        /// XEP-0280: if one resource sends a message, the other resource of the
+        /// same account gets a sent copy.
         /// </summary>
         [Test]
         public async Task SecondResource_ReceivesSentCarbon()
@@ -251,21 +251,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob      = await ConnectClientAsync("bob");
 
             await WaitFor(() => Server.SessionsOf(phone.BareJid).All(s => s.CarbonsEnabled),
-                          "Aktivierung der Carbons für beide Resourcen");
+                          "the switching on of carbons for both resources");
 
             var carbons = new ConcurrentQueue<CarbonMessage>();
             desktop.OnCarbonMessage += c => carbons.Enqueue(c);
 
-            await phone.SendMessageAsync(bob.BareJid, "Vom Telefon geschrieben");
+            await phone.SendMessageAsync(bob.BareJid, "Written from the phone");
 
-            await WaitFor(() => !carbons.IsEmpty, "sent-Carbon auf dem Desktop");
+            await WaitFor(() => !carbons.IsEmpty, "the sent carbon on the desktop");
 
             carbons.TryDequeue(out var carbon);
 
             Assert.Multiple(() =>
             {
-                Assert.That(carbon!.IsSent,   Is.True, "Der Carbon wurde nicht als 'gesendet' erkannt.");
-                Assert.That(carbon.Body,      Is.EqualTo("Vom Telefon geschrieben"));
+                Assert.That(carbon!.IsSent,   Is.True, "The carbon was not recognised as 'sent'.");
+                Assert.That(carbon.Body,      Is.EqualTo("Written from the phone"));
                 Assert.That(carbon.OriginalTo, Does.StartWith(bob.BareJid));
             });
 
@@ -276,16 +276,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PingBetweenClients_MeasuresRoundTrip()
 
         /// <summary>
-        /// XEP-0199: Ein Client kann einen anderen anpingen; die Gegenstelle
-        /// antwortet automatisch.
+        /// XEP-0199: a client can ping another; the other end answers
+        /// automatically.
         /// </summary>
         /// <remarks>
-        /// Die beiden müssen einander kennen. RFC 6121, Abschnitt 8.5.3.1 lässt
-        /// eine Anfrage an eine Resource nur durch, wenn der Fragende die
-        /// Presence des Empfängers sehen darf - sonst verrät schon die Antwort,
-        /// dass diese Resource gerade angemeldet ist. Ein Ping zwischen zwei
-        /// Fremden ist genau der Fall, den die Regel abweist; er stand hier nur,
-        /// weil der Server die Regel noch nicht kannte.
+        /// The two have to know each other. RFC 6121, section 8.5.3.1 lets a
+        /// request to a resource through only if the asker may see the
+        /// recipient's presence - otherwise the answer alone gives away that
+        /// this resource is logged in right now. A ping between two strangers
+        /// is exactly the case the rule turns away; it only stood here because
+        /// the server did not yet know the rule.
         /// </remarks>
         [Test]
         public async Task PingBetweenClients_MeasuresRoundTrip()
@@ -300,7 +300,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(rtt,        Is.Not.Null, "Bob hat den Ping nicht beantwortet.");
+                Assert.That(rtt,        Is.Not.Null, "Bob did not answer the ping.");
                 Assert.That(rtt!.Value, Is.GreaterThanOrEqualTo(TimeSpan.Zero));
             });
 
@@ -311,11 +311,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PresenceOfOtherClient_IsObserved()
 
         /// <summary>
-        /// Die Presence eines anderen Clients muss beim Gegenüber ankommen -
-        /// sofern er sie sehen darf. Die beidseitige Subscription ist seit der
-        /// Filterung nach RFC 6121, Abschnitt 4 Voraussetzung; wer sie
-        /// tatsächlich bekommt und wer nicht, prüfen die
-        /// <c>PresenceSubscriptionTests</c>.
+        /// The presence of another client has to arrive at the other end -
+        /// provided they may see it. The subscription on both sides has been a
+        /// precondition since the filtering under RFC 6121, section 4; who
+        /// actually gets it and who does not the
+        /// <c>PresenceSubscriptionTests</c> check.
         /// </summary>
         [Test]
         public async Task PresenceOfOtherClient_IsObserved()
@@ -329,10 +329,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             alice.OnPresenceChanged += (from, type) => presences.Enqueue($"{from}|{type}");
 
             var bob = await ConnectClientAsync("bob");
-            await bob.SetPresenceAsync("away", "Bin gleich zurück");
+            await bob.SetPresenceAsync("away", "Back in a moment");
 
             await WaitFor(() => presences.Any(p => p.StartsWith(bob.BareJid, StringComparison.OrdinalIgnoreCase)),
-                          "Presence von Bob bei Alice");
+                          "Bob's presence at Alice");
 
             Assert.Pass();
 

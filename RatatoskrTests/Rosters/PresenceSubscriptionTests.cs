@@ -30,22 +30,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 4: Presence ist keine Rundsendung.
+    /// RFC 6121, section 4: presence is no broadcast.
     ///
-    /// Wer sie bekommt, entscheidet der Subscription-Zustand im Roster des
-    /// Absenders: nur Kontakte mit <c>from</c> oder <c>both</c>, dazu die
-    /// eigenen weiteren Resourcen. Der Testserver hat sie bis hierher an alle
-    /// verteilt - jede Sitzung erfuhr damit, wer sonst noch online ist.
+    /// Who gets it is decided by the subscription state in the roster of the
+    /// sender: only contacts with <c>from</c> or <c>both</c>, plus one's own
+    /// further resources. The test server has distributed it to everyone up to
+    /// here - every session thereby learned who else is online.
     /// </summary>
     [TestFixture]
     public class PresenceSubscriptionTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Verbindet einen Client und sammelt ab sofort alle Presence-Meldungen
-        /// als <c>jid|typ</c>.
+        /// Connects a client and collects every presence announcement from now
+        /// on as <c>jid|type</c>.
         /// </summary>
         private async Task<(XMPPClient Client, ConcurrentQueue<String> Presences)> WatcherAsync(String localPart)
         {
@@ -68,7 +68,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Presence_ReachesAContactWithSubscriptionFrom()
 
         /// <summary>
-        /// Die Grundlage: wer <c>from</c> oder <c>both</c> hat, bekommt sie.
+        /// The ground of it: whoever has <c>from</c> or <c>both</c> gets it.
         /// </summary>
         [Test]
         public async Task Presence_ReachesAContactWithSubscriptionFrom()
@@ -79,9 +79,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice           = await ConnectClientAsync("alice");
             var (bob, atBobs)   = await WatcherAsync("bob");
 
-            await alice.SetPresenceAsync("away", "Bin gleich zurück");
+            await alice.SetPresenceAsync("away", "Back in a moment");
 
-            await WaitFor(() => Saw(atBobs, alice), "Presence von Alice bei Bob");
+            await WaitFor(() => Saw(atBobs, alice), "Alice's presence at Bob");
 
         }
 
@@ -90,10 +90,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Presence_DoesNotReachANonContact()
 
         /// <summary>
-        /// Der Kern: Carol steht in keinem Roster und darf nicht erfahren, dass
-        /// Alice online ist. Bisher bekam sie es mit, weil die Verteilung an
-        /// alle Sitzungen ging - eine Sitzung auf dem Server genügte, um die
-        /// Anwesenheit aller anderen mitzulesen.
+        /// The heart of it: Carol stands in no roster and must not learn that
+        /// Alice is online. She used to get it, because the distribution went
+        /// to all sessions - one session on the server sufficed to read along
+        /// with everyone else's presence.
         /// </summary>
         [Test]
         public async Task Presence_DoesNotReachANonContact()
@@ -106,7 +106,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.SetPresenceAsync("away");
 
-            await WaitAgainst(() => Saw(atCarols, alice), "Presence von Alice bei Carol");
+            await WaitAgainst(() => Saw(atCarols, alice), "Alice's presence at Carol");
 
         }
 
@@ -115,9 +115,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Presence_DoesNotReachAContactWithSubscriptionToOnly()
 
         /// <summary>
-        /// Subscriptions sind gerichtet. Steht Bob in Alices Roster nur mit
-        /// <c>to</c>, dann sieht <b>Alice</b> die Presence von Bob - nicht
-        /// umgekehrt.
+        /// Subscriptions are directed. If Bob stands in Alice's roster with
+        /// <c>to</c> only, then <b>Alice</b> sees Bob's presence - not the
+        /// other way round.
         /// </summary>
         [Test]
         public async Task Presence_DoesNotReachAContactWithSubscriptionToOnly()
@@ -131,7 +131,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.SetPresenceAsync("away");
 
-            await WaitAgainst(() => Saw(atBobs, alice), "Presence von Alice bei Bob");
+            await WaitAgainst(() => Saw(atBobs, alice), "Alice's presence at Bob");
 
         }
 
@@ -140,22 +140,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Presence_ReachesTheOwnOtherResources()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 4.4.2: die weiteren Resourcen des eigenen Kontos
-        /// bekommen sie immer, ganz ohne Roster-Eintrag.
+        /// RFC 6121, section 4.4.2: the further resources of one's own account
+        /// always get it, with no roster entry at all.
         ///
-        /// Das galt schon vorher - der Test steht als Regressionsschutz für die
-        /// Filterung, nicht als Beleg für einen behobenen Fehler.
+        /// That held before as well - the test stands as regression cover for
+        /// the filtering, not as proof of a fault that was fixed.
         /// </summary>
         [Test]
         public async Task Presence_ReachesTheOwnOtherResources()
         {
 
-            var erste           = await ConnectClientAsync("alice");
-            var (_, atZweiter)  = await WatcherAsync("alice");
+            var first           = await ConnectClientAsync("alice");
+            var (_, atSecond)  = await WatcherAsync("alice");
 
-            await erste.SetPresenceAsync("dnd");
+            await first.SetPresenceAsync("dnd");
 
-            await WaitFor(() => Saw(atZweiter, erste), "Presence der ersten Resource bei der zweiten");
+            await WaitFor(() => Saw(atSecond, first), "the first resource's presence at the second");
 
         }
 
@@ -164,11 +164,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NewlyOnlineClient_LearnsAboutContactsAlreadyOnline()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 4.3.1: Beim Anmelden fragt der Server für den
-        /// Client den Zustand seiner Kontakte ab. Ohne das erfährt ein Client
-        /// nur von Kontakten, die sich <b>nach</b> ihm anmelden - wer schon
-        /// online war, blieb für ihn unsichtbar, bis er von sich aus etwas
-        /// schickte.
+        /// RFC 6121, section 4.3.1: at the login the server asks after the
+        /// state of the client's contacts for it. Without that a client learns
+        /// only of contacts that log in <b>after</b> it - whoever was online
+        /// already stayed invisible to it until they sent something of their
+        /// own accord.
         /// </summary>
         [Test]
         public async Task NewlyOnlineClient_LearnsAboutContactsAlreadyOnline()
@@ -177,11 +177,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             MakeContacts("alice", "bob");
 
             var bob = await ConnectClientAsync("bob");
-            await bob.SetPresenceAsync("away", "Schon länger da");
+            await bob.SetPresenceAsync("away", "Here for a while");
 
             var (_, atAlices) = await WatcherAsync("alice");
 
-            await WaitFor(() => Saw(atAlices, bob), "Presence des bereits angemeldeten Bob bei Alice");
+            await WaitFor(() => Saw(atAlices, bob), "the presence of the already logged-in Bob at Alice");
 
         }
 
@@ -190,7 +190,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NewlyOnlineClient_LearnsNothingAboutNonContacts()
 
         /// <summary>
-        /// Die Gegenprobe: derselbe Weg darf keine Auskunft über Fremde geben.
+        /// The counter-check: the same way must give no information about
+        /// strangers.
         /// </summary>
         [Test]
         public async Task NewlyOnlineClient_LearnsNothingAboutNonContacts()
@@ -201,7 +202,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var (_, atCarols) = await WatcherAsync("carol");
 
-            await WaitAgainst(() => Saw(atCarols, bob), "Presence von Bob bei der fremden Carol");
+            await WaitAgainst(() => Saw(atCarols, bob), "Bob's presence at the unrelated Carol");
 
         }
 
@@ -210,20 +211,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NewlyOnlineClient_LearnsNothingAboutAnUnavailableResource()
 
         /// <summary>
-        /// Eine bereits abgemeldete Resource darf einem sich anmeldenden
-        /// Kontakt nicht nachgeliefert werden.
+        /// A resource that has already signed off must not be handed on to a
+        /// contact logging in.
         /// </summary>
         /// <remarks>
-        /// RFC 6121, Abschnitt 4.2.1: eine Resource, die sich abgemeldet hat,
-        /// hat keinen Zustand zu berichten. Der Server merkte sich die
-        /// Abmeldung aber als letzte Presence und lieferte sie jedem Kontakt
-        /// nach, der sich danach anmeldete.
+        /// RFC 6121, section 4.2.1: a resource that has signed off has no state
+        /// to report. But the server remembered the sign-off as the last
+        /// presence and handed it on to every contact that logged in
+        /// afterwards.
         ///
-        /// Das war zugleich die Ursache eines Fehlschlags, der etwa jeden
-        /// zweiten vollen Testlauf traf: verarbeitete der Server die erste
-        /// Presence eines Kontakts erst <b>nach</b> der Abmeldung, bekam
-        /// dieser Kontakt sie zweimal - einmal aus der Verteilung, einmal aus
-        /// dem Nachliefern. Welche Reihenfolge eintrat, hing an der Last.
+        /// That was at the same time the cause of a failure that hit about
+        /// every second full test run: if the server processed a contact's
+        /// first presence only <b>after</b> the sign-off, that contact got it
+        /// twice - once from the distribution, once from the handing on. Which
+        /// order came about hung on the load.
         /// </remarks>
         [Test]
         public async Task NewlyOnlineClient_LearnsNothingAboutAnUnavailableResource()
@@ -236,12 +237,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
             await WaitFor(() => Server.SessionOf(alice.FullJid)?.IsAvailable == false,
-                          "die Abmeldung von Alice auf dem Server");
+                          "Alice's sign-off on the server");
 
             var (_, atBobs) = await WatcherAsync("bob");
 
             await WaitAgainst(() => atBobs.Any(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
-                              "eine nachgelieferte Abmeldung der bereits abgemeldeten Alice");
+                              "a handed-on sign-off of the already signed-off Alice");
 
         }
 
@@ -250,9 +251,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Probe_FromASubscriber_IsAnswered()
 
         /// <summary>
-        /// Eine ausdrückliche Probe (RFC 6121, Abschnitt 4.3) beantwortet der
-        /// Server mit dem aktuellen Zustand - sofern der Fragende ihn sehen
-        /// darf.
+        /// An express probe (RFC 6121, section 4.3) the server answers with the
+        /// current state - provided the asker may see it.
         /// </summary>
         [Test]
         public async Task Probe_FromASubscriber_IsAnswered()
@@ -261,22 +261,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             MakeContacts("alice", "bob");
 
             var alice = await ConnectClientAsync("alice");
-            await alice.SetPresenceAsync("dnd", "Nicht stören");
+            await alice.SetPresenceAsync("dnd", "Do not disturb");
 
             var (bob, atBobs) = await WatcherAsync("bob");
 
-            // Erst abwarten, was die Anmeldung selbst mitbringt (Abschnitt
-            // 4.3.1), und *dann* leeren. Nur zu leeren ist ein Wettlauf: Kommt
-            // die Zustellung der Anmeldung erst danach an, zählt sie als Antwort
-            // auf die Probe — und der Test bestünde auch bei einem Server, der
-            // Proben überhaupt nicht beantwortet.
-            await WaitFor(() => Saw(atBobs, alice), "Alices Zustand nach der Anmeldung");
+            // Wait for what the login itself brings along first (section
+            // 4.3.1), and *then* clear. Merely clearing is a race: if the
+            // delivery from the login arrives only afterwards, it counts as the
+            // answer to the probe — and the test would pass even with a server
+            // that does not answer probes at all.
+            await WaitFor(() => Saw(atBobs, alice), "Alice's state after the login");
 
             atBobs.Clear();
 
             await bob.SendRawAsync($"<presence type='probe' to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Saw(atBobs, alice), "Antwort auf die Presence-Probe");
+            await WaitFor(() => Saw(atBobs, alice), "the answer to the presence probe");
 
         }
 
@@ -285,9 +285,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Probe_FromANonSubscriber_IsIgnored()
 
         /// <summary>
-        /// Ohne Berechtigung bleibt die Probe unbeantwortet. RFC 6121,
-        /// Abschnitt 4.3.2 stellt dem Server <c>&lt;unsubscribed/&gt;</c> und
-        /// Schweigen frei; Schweigen verrät nicht einmal, ob es das Konto gibt.
+        /// Without the permission the probe stays unanswered. RFC 6121,
+        /// section 4.3.2 leaves the server the choice between
+        /// <c>&lt;unsubscribed/&gt;</c> and silence; silence does not even give
+        /// away whether the account exists.
         /// </summary>
         [Test]
         public async Task Probe_FromANonSubscriber_IsIgnored()
@@ -302,7 +303,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await carol.SendRawAsync($"<presence type='probe' to='{alice.BareJid}'/>");
 
-            await WaitAgainst(() => Saw(atCarols, alice), "Antwort auf die unberechtigte Probe");
+            await WaitAgainst(() => Saw(atCarols, alice), "the answer to the unauthorised probe");
 
         }
 
@@ -311,10 +312,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Disconnect_MakesTheResourceUnavailable()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 4.5.2: Endet die Verbindung, ohne dass der
-        /// Client selbst <c>&lt;presence type='unavailable'/&gt;</c> geschickt
-        /// hat, erzeugt der Server sie in seinem Namen. Ohne das führen die
-        /// Kontakte die Resource für immer als online.
+        /// RFC 6121, section 4.5.2: if the connection ends without the client
+        /// having sent a <c>&lt;presence type='unavailable'/&gt;</c> itself,
+        /// the server produces one in its name. Without that the contacts keep
+        /// the resource as online for ever.
         /// </summary>
         [Test]
         public async Task Disconnect_MakesTheResourceUnavailable()
@@ -328,7 +329,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.DisconnectAsync();
 
             await WaitFor(() => atBobs.Any(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
-                          "unavailable für die getrennte Resource");
+                          "the unavailable for the disconnected resource");
 
         }
 
@@ -337,18 +338,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region LostConnection_MakesTheResourceUnavailable()
 
         /// <summary>
-        /// Derselbe Fall, aber unsanft: die Sitzung wird abgerissen, ohne dass
-        /// der Client etwas dazu sagen kann. Genau dafür gibt es die Regel.
+        /// The same case, but roughly: the session is torn down without the
+        /// client being able to say anything about it. That is exactly what the
+        /// rule is there for.
         /// </summary>
         /// <remarks>
-        /// Seit XEP-0198 Abschnitt 5 kommt die Abmeldung nicht mehr im selben
-        /// Atemzug: ein abgerissener Stream wird zunächst aufgehoben, weil
-        /// sein Client wiederkommen darf, und erst wenn er ausbleibt, wird die
-        /// Abmeldung nachgeholt. Die Regel aus RFC 6121 gilt unverändert - nur
-        /// nach Ablauf der Frist.
+        /// Since XEP-0198 section 5 the sign-off no longer comes in the same
+        /// breath: a torn stream is kept at first, because its client may come
+        /// back, and only when it fails to come is the sign-off made up for.
+        /// The rule from RFC 6121 holds unchanged - only after the deadline has
+        /// run out.
         ///
-        /// Deshalb hier eine kurze Frist. Die Vorgabe von einer Minute ist für
-        /// den Betrieb richtig und für einen Test unbrauchbar.
+        /// Hence a short deadline here. The default of one minute is right for
+        /// service and unusable for a test.
         /// </remarks>
         [Test]
         public async Task LostConnection_MakesTheResourceUnavailable()
@@ -364,7 +366,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.SessionOf(alice.FullJid)!.Kill();
 
             await WaitFor(() => atBobs.Any(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
-                          "unavailable für die abgerissene Resource",
+                          "the unavailable for the torn resource",
                           TimeSpan.FromSeconds(20));
 
         }
@@ -374,9 +376,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region LostConnection_TellsOnlyTheSubscribers()
 
         /// <summary>
-        /// Auch die Abmeldung ist eine Presence-Auskunft und darf Fremde nicht
-        /// erreichen - sonst verriete gerade das Ende einer Sitzung, was ihr
-        /// Beginn verschweigt.
+        /// The sign-off is a presence statement too and must not reach
+        /// strangers - otherwise the end of a session would give away exactly
+        /// what its beginning keeps quiet.
         /// </summary>
         [Test]
         public async Task LostConnection_TellsOnlyTheSubscribers()
@@ -390,7 +392,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.SessionOf(alice.FullJid)!.Kill();
 
             await WaitAgainst(() => atCarols.Any(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
-                              "unavailable bei der fremden Carol");
+                              "the unavailable at the unrelated Carol");
 
         }
 
@@ -399,9 +401,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OwnUnavailable_IsNotRepeatedByTheServer()
 
         /// <summary>
-        /// Hat der Client sich ordentlich abgemeldet, ist die Sache erledigt -
-        /// der Verbindungsabbau darf die Abmeldung nicht ein zweites Mal
-        /// verschicken.
+        /// If the client has signed off properly, the matter is settled - the
+        /// tearing down of the connection must not send the sign-off a second
+        /// time.
         /// </summary>
         [Test]
         public async Task OwnUnavailable_IsNotRepeatedByTheServer()
@@ -415,17 +417,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
             await WaitFor(() => atBobs.Any(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
-                          "eigene Abmeldung von Alice");
+                          "Alice's own sign-off");
 
             await alice.DisconnectAsync();
 
-            // Der Gegenprobe ihre Zeit lassen: eine zweite Abmeldung käme
-            // unmittelbar nach dem Verbindungsabbau.
+            // Give the counter-check its time: a second sign-off would come
+            // immediately after the tearing down of the connection.
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.That(atBobs.Count(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
                         Is.EqualTo(1),
-                        "Die Abmeldung darf genau einmal ankommen.");
+                        "The sign-off may arrive exactly once.");
 
         }
 
@@ -434,10 +436,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region IsPresenceSubscriber_ReadsTheSubscriptionState()
 
         /// <summary>
-        /// Die Richtung, um die es geht: <c>from</c> und <c>both</c> heissen
-        /// "der Kontakt sieht mich". Ein <c>to</c> heisst das Gegenteil, und
-        /// eine Verwechslung der beiden gäbe die Presence genau an die falsche
-        /// Hälfte des Rosters.
+        /// The direction at issue: <c>from</c> and <c>both</c> mean "the
+        /// contact sees me". A <c>to</c> means the opposite, and confusing the
+        /// two would give the presence to exactly the wrong half of the roster.
         /// </summary>
         [TestCase("both",   true)]
         [TestCase("from",   true)]
@@ -458,14 +459,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region IsPresenceSubscriber_IsFalseForAnUnknownContact()
 
-        /// <summary>Wer gar nicht im Roster steht, sieht nichts.</summary>
+        /// <summary>Whoever does not stand in the roster at all sees nothing.</summary>
         [Test]
         public void IsPresenceSubscriber_IsFalseForAnUnknownContact()
         {
 
             var account = new XMPPAccount("alice@localhost", "pw");
 
-            Assert.That(account.IsPresenceSubscriber("fremd@localhost"), Is.False);
+            Assert.That(account.IsPresenceSubscriber("foreign@localhost"), Is.False);
 
         }
 

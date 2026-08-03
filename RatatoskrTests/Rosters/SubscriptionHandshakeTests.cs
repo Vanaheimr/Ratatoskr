@@ -30,19 +30,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 3: der Subscription-Handshake.
+    /// RFC 6121, section 3: the subscription handshake.
     ///
-    /// Die Presence-Filterung wertet die Subscription-Zustände aus - bis
-    /// hierher konnte der Server sie aber nicht <b>herstellen</b>:
-    /// <c>subscribe</c> und <c>subscribed</c> wurden nur weitergereicht, ohne
-    /// die Roster zu ändern. Damit blieb der Weg, den der Client mit
-    /// <c>AcceptSubscriptionAsync</c> anbietet, folgenlos.
+    /// The presence filtering evaluates the subscription states - but up to
+    /// here the server could not <b>bring them about</b>: <c>subscribe</c> and
+    /// <c>subscribed</c> were merely passed on, without changing the rosters.
+    /// That left the way the client offers with
+    /// <c>AcceptSubscriptionAsync</c> without consequence.
     /// </summary>
     [TestFixture]
     public class SubscriptionHandshakeTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private String Alice => $"alice@{Server.Domain}";
         private String Bob   => $"bob@{Server.Domain}";
@@ -56,8 +56,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                      ?.Ask;
 
         /// <summary>
-        /// Verbindet einen Client und sammelt ab sofort alle Presence-Meldungen
-        /// als <c>jid|typ</c>.
+        /// Connects a client and collects every presence announcement from now
+        /// on as <c>jid|type</c>.
         /// </summary>
         private async Task<(XMPPClient Client, ConcurrentQueue<String> Presences)> WatcherAsync(String localPart)
         {
@@ -72,8 +72,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Alice fragt Bob an, Bob nimmt an - der vollständige Handshake über
-        /// die öffentliche Client-API.
+        /// Alice asks Bob, Bob accepts - the complete handshake over the public
+        /// client API.
         /// </summary>
         private async Task<(XMPPClient Alice, XMPPClient Bob)> HandshakeAsync()
         {
@@ -87,12 +87,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.AddContactAsync(Bob, "Bob");
 
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
-                          "Kontaktanfrage bei Bob");
+                          "the contact request at Bob");
 
             await bob.AcceptSubscriptionAsync(Alice);
 
             await WaitFor(() => SubscriptionOf(Bob, Alice) is "from" or "both",
-                          "Subscription-Zustand nach der Annahme");
+                          "the subscription state after the acceptance");
 
             return (alice, bob);
 
@@ -104,9 +104,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Subscribe_MarksThePendingRequestInTheRoster()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 3.1.2: Die Anfrage legt den Eintrag an - mit
-        /// <c>subscription='none'</c>, denn erlaubt ist noch nichts - und
-        /// vermerkt sie über <c>ask='subscribe'</c> als offen.
+        /// RFC 6121, section 3.1.2: the request creates the entry - with
+        /// <c>subscription='none'</c>, since nothing is allowed yet - and notes
+        /// it as open through <c>ask='subscribe'</c>.
         /// </summary>
         [Test]
         public async Task Subscribe_MarksThePendingRequestInTheRoster()
@@ -117,10 +117,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
 
-            await WaitFor(() => AskOf(Alice, Bob) == "subscribe", "offene Anfrage im Roster von Alice");
+            await WaitFor(() => AskOf(Alice, Bob) == "subscribe", "the open request in Alice's roster");
 
             Assert.That(SubscriptionOf(Alice, Bob), Is.EqualTo("none"),
-                        "Eine offene Anfrage erlaubt noch nichts.");
+                        "An open request allows nothing yet.");
 
         }
 
@@ -129,8 +129,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Subscribe_ReachesTheContact()
 
         /// <summary>
-        /// Die Anfrage muss beim Kontakt ankommen - das ging schon vorher, weil
-        /// gerichtete Presence weitergeleitet wurde. Bleibt als Gegenprobe.
+        /// The request has to arrive at the contact - that worked before
+        /// already, because directed presence was forwarded. Stays as a
+        /// counter-check.
         /// </summary>
         [Test]
         public async Task Subscribe_ReachesTheContact()
@@ -145,7 +146,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.AddContactAsync(Bob, "Bob");
 
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
-                          "Kontaktanfrage bei Bob");
+                          "the contact request at Bob");
 
         }
 
@@ -154,10 +155,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Approval_SetsBothSidesOfTheRoster()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 3.1.5 und 3.1.6: Die Annahme trägt in <b>beide</b>
-        /// Roster ein, jeweils in die passende Richtung. Bobs Eintrag für Alice
-        /// bekommt <c>from</c> ("Alice sieht mich"), Alices Eintrag für Bob
-        /// <c>to</c> ("ich sehe Bob"), und die offene Anfrage ist erledigt.
+        /// RFC 6121, sections 3.1.5 and 3.1.6: the acceptance writes into
+        /// <b>both</b> rosters, each in the fitting direction. Bob's entry for
+        /// Alice gets <c>from</c> ("Alice sees me"), Alice's entry for Bob
+        /// <c>to</c> ("I see Bob"), and the open request is settled.
         /// </summary>
         [Test]
         public async Task Approval_SetsBothSidesOfTheRoster()
@@ -166,12 +167,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await HandshakeAsync();
 
             await WaitFor(() => SubscriptionOf(Alice, Bob) is "to" or "both",
-                          "Subscription-Zustand bei Alice");
+                          "the subscription state at Alice");
 
             Assert.Multiple(() =>
             {
                 Assert.That(SubscriptionOf(Bob, Alice), Is.AnyOf("from", "both"));
-                Assert.That(AskOf(Alice, Bob), Is.Null, "Die Anfrage ist beantwortet.");
+                Assert.That(AskOf(Alice, Bob), Is.Null, "The request is answered.");
             });
 
         }
@@ -181,9 +182,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Approval_MakesThePresenceFlow()
 
         /// <summary>
-        /// Der eigentliche Zweck: nach der Annahme sieht Alice die Presence von
-        /// Bob. Ohne die Zustandsänderung filterte sie der Server weg, weil in
-        /// keinem Roster etwas stand.
+        /// The real purpose: after the acceptance Alice sees Bob's presence.
+        /// Without the change of state the server filtered it away, because
+        /// nothing stood in either roster.
         /// </summary>
         [Test]
         public async Task Approval_MakesThePresenceFlow()
@@ -194,13 +195,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atAlices = new ConcurrentQueue<String>();
             alice.OnPresenceChanged += (from, type) => atAlices.Enqueue($"{from}|{type}");
 
-            await bob.SetPresenceAsync("away", "Später");
+            await bob.SetPresenceAsync("away", "Later");
 
-            // Auf 'available' bestehen: ein <presence type='subscribed'/> läuft
-            // durch dasselbe Ereignis und wäre sonst schon die halbe Antwort.
+            // Insist on 'available': a <presence type='subscribed'/> runs
+            // through the same event and would otherwise be half the answer
+            // already.
             await WaitFor(() => atAlices.Any(p => p.StartsWith(Bob, StringComparison.OrdinalIgnoreCase) &&
                                                   p.EndsWith("|available", StringComparison.Ordinal)),
-                          "Presence von Bob bei Alice");
+                          "Bob's presence at Alice");
 
         }
 
@@ -209,10 +211,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Approval_DeliversTheCurrentPresenceAtOnce()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 3.1.5: "The contact's server MUST then also send
+        /// RFC 6121, section 3.1.5: "The contact's server MUST then also send
         /// current presence to the user from each of the contact's available
-        /// resources." Der Antragsteller soll nicht warten müssen, bis der
-        /// Kontakt das nächste Mal von sich aus etwas schickt.
+        /// resources." The applicant should not have to wait until the contact
+        /// next sends something of their own accord.
         /// </summary>
         [Test]
         public async Task Approval_DeliversTheCurrentPresenceAtOnce()
@@ -229,17 +231,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
-                          "Kontaktanfrage bei Bob");
+                          "the contact request at Bob");
 
             await bob.AcceptSubscriptionAsync(Alice);
 
-            // Bob schickt bewusst nichts nach - die Presence muss der Server
-            // von sich aus nachreichen. Auf 'available' bestehen: das
-            // <presence type='subscribed'/> selbst läuft durch dasselbe
-            // Ereignis und wäre sonst schon die halbe Antwort.
+            // Bob deliberately sends nothing after: the server has to hand the
+            // presence on of its own accord. Insist on 'available': the
+            // <presence type='subscribed'/> itself runs through the same event
+            // and would otherwise be half the answer already.
             await WaitFor(() => atAlices.Any(p => p.StartsWith(Bob, StringComparison.OrdinalIgnoreCase) &&
                                                   p.EndsWith("|available", StringComparison.Ordinal)),
-                          "nachgereichte Presence von Bob");
+                          "Bob's presence handed on");
 
         }
 
@@ -248,7 +250,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Denial_GrantsNothing()
 
         /// <summary>
-        /// Eine Ablehnung schliesst die Anfrage ab, ohne etwas zu erlauben.
+        /// A refusal closes the request without allowing anything.
         /// </summary>
         [Test]
         public async Task Denial_GrantsNothing()
@@ -262,17 +264,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
-                          "Kontaktanfrage bei Bob");
+                          "the contact request at Bob");
 
             await bob.DenySubscriptionAsync(Alice);
 
-            await WaitFor(() => AskOf(Alice, Bob) is null, "erledigte Anfrage bei Alice");
+            await WaitFor(() => AskOf(Alice, Bob) is null, "the request settled at Alice");
 
             Assert.Multiple(() =>
             {
                 Assert.That(SubscriptionOf(Alice, Bob), Is.EqualTo("none"));
                 Assert.That(Server.GetAccount(Bob)!.IsPresenceSubscriber(Alice), Is.False,
-                            "Eine Ablehnung darf keine Sichtbarkeit herstellen.");
+                            "A refusal must not bring about any visibility.");
             });
 
         }
@@ -282,10 +284,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Cancellation_SendsUnavailable()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 3.2.2: "the contact's server MUST send a presence
+        /// RFC 6121, section 3.2.2: "the contact's server MUST send a presence
         /// stanza of type 'unavailable' from all of the contact's online
-        /// resources". Sonst behielte Alice den letzten bekannten Zustand von
-        /// Bob für immer - obwohl sie ihn gerade nicht mehr sehen darf.
+        /// resources". Otherwise Alice would keep Bob's last known state for
+        /// ever - although she may no longer see him.
         /// </summary>
         [Test]
         public async Task Cancellation_SendsUnavailable()
@@ -300,7 +302,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => atAlices.Any(p => p.StartsWith(Bob, StringComparison.OrdinalIgnoreCase) &&
                                                   p.EndsWith("|unavailable", StringComparison.Ordinal)),
-                          "unavailable nach dem Entzug");
+                          "the unavailable after the withdrawal");
 
         }
 
@@ -309,16 +311,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribe_EndsTheOwnSubscription()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 3.3: Alice kündigt selbst. Danach sieht sie Bob
-        /// nicht mehr - und Bobs Eintrag für sie verliert das <c>from</c>.
+        /// RFC 6121, section 3.3: Alice cancels of her own accord. Afterwards
+        /// she no longer sees Bob - and Bob's entry for her loses the
+        /// <c>from</c>.
         /// </summary>
         /// <remarks>
-        /// Gekündigt wird über <c>CancelSubscriptionAsync</c> und nicht mehr
-        /// über eine von Hand geschriebene Presence. Der Unterschied ist nicht
-        /// kosmetisch: Bis D57 war das der einzige der vier Übergänge aus
-        /// Abschnitt 3, den der Client <b>nicht</b> anbot — der Baustein dafür
-        /// stand ungenutzt herum, und dieser Test hat die Lücke unbemerkt
-        /// überbrückt, indem er die Stanza selbst schrieb.
+        /// The cancelling runs over <c>CancelSubscriptionAsync</c> and no
+        /// longer over a presence written by hand. The difference is not
+        /// cosmetic: until D57 that was the only one of the four transitions
+        /// from section 3 the client did <b>not</b> offer — the building block
+        /// for it stood there unused, and this test bridged the gap unnoticed
+        /// by writing the stanza itself.
         /// </remarks>
         [Test]
         public async Task Unsubscribe_EndsTheOwnSubscription()
@@ -328,14 +331,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.CancelSubscriptionAsync(Bob);
 
-            // Auf Bobs Seite warten, nicht auf Alices: der Server ändert erst
-            // den Roster des Absenders und dann den der Gegenseite. Wer auf den
-            // ersten wartet, prüft den zweiten womöglich, bevor es ihn gibt.
+            // Wait on Bob's side, not on Alice's: the server changes the roster
+            // of the sender first and then that of the other side. Whoever
+            // waits for the first may check the second before it exists.
             await WaitFor(() => !Server.GetAccount(Bob)!.IsPresenceSubscriber(Alice),
-                          "entzogene Sichtbarkeit in Bobs Roster");
+                          "the visibility withdrawn in Bob's roster");
 
             Assert.That(SubscriptionOf(Alice, Bob), Is.AnyOf("none", "from"),
-                        "Alice hat ihre eigene Subscription gekündigt.");
+                        "Alice has cancelled her own subscription.");
 
         }
 
@@ -344,11 +347,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterSet_DoesNotResetTheSubscription()
 
         /// <summary>
-        /// RFC 6121, Abschnitt 2.3: Ein Roster-Set ändert Name und Gruppen, aber
-        /// <b>nicht</b> den Subscription-Zustand. Der Server übernahm bisher das
-        /// fehlende Attribut als <c>none</c> - ein blosses Umbenennen eines
-        /// Kontakts hätte damit die gerade erst erteilte Berechtigung wieder
-        /// gelöscht.
+        /// RFC 6121, section 2.3: a roster set changes name and groups, but
+        /// <b>not</b> the subscription state. The server used to take the
+        /// missing attribute as <c>none</c> - merely renaming a contact would
+        /// thereby have deleted the permission just granted.
         /// </summary>
         [Test]
         public async Task RosterSet_DoesNotResetTheSubscription()
@@ -356,9 +358,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var (alice, _) = await HandshakeAsync();
 
-            await WaitFor(() => SubscriptionOf(Alice, Bob) is "to" or "both", "Subscription vor dem Umbenennen");
+            await WaitFor(() => SubscriptionOf(Alice, Bob) is "to" or "both", "the subscription before the renaming");
 
-            var vorher = SubscriptionOf(Alice, Bob);
+            var before = SubscriptionOf(Alice, Bob);
 
             await alice.SendRawAsync(
                 "<iq type='set' id='rename-1'><query xmlns='jabber:iq:roster'>" +
@@ -367,10 +369,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => Server.GetAccount(Alice)!.Roster
                                       .Any(e => e.Jid.Equals(Bob, StringComparison.OrdinalIgnoreCase) &&
                                                 e.Name == "Bobby"),
-                          "umbenannter Kontakt");
+                          "the renamed contact");
 
-            Assert.That(SubscriptionOf(Alice, Bob), Is.EqualTo(vorher),
-                        "Ein Roster-Set darf den Subscription-Zustand nicht anfassen.");
+            Assert.That(SubscriptionOf(Alice, Bob), Is.EqualTo(before),
+                        "A roster set must not touch the subscription state.");
 
         }
 
@@ -379,25 +381,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region GrantAndRevoke_ChangeOnlyTheirOwnHalf()
 
         /// <summary>
-        /// Die vier Übergänge einzeln. Wer sie als eine Skala von none bis both
-        /// begreift, verliert genau die Gegenrichtung: aus <c>both</c> würde
-        /// beim Entzug <c>none</c> statt der verbleibenden Hälfte.
+        /// The four transitions one by one. Whoever takes them for a scale from
+        /// none to both loses exactly the other direction: out of <c>both</c> a
+        /// withdrawal would make <c>none</c> instead of the remaining half.
         /// </summary>
         [TestCase("none", "from", "none", "to")]
         [TestCase("to",   "both", "to",   "to")]
         [TestCase("from", "from", "none", "both")]
         [TestCase("both", "both", "to",   "both")]
         public void GrantAndRevoke_ChangeOnlyTheirOwnHalf(String start,
-                                                          String nachGrantFrom,
-                                                          String nachRevokeFrom,
-                                                          String nachGrantTo)
+                                                          String afterGrantFrom,
+                                                          String afterRevokeFrom,
+                                                          String afterGrantTo)
         {
 
             Assert.Multiple(() =>
             {
-                Assert.That(XMPPServer.GrantFrom(start),  Is.EqualTo(nachGrantFrom),  "GrantFrom");
-                Assert.That(XMPPServer.RevokeFrom(start), Is.EqualTo(nachRevokeFrom), "RevokeFrom");
-                Assert.That(XMPPServer.GrantTo(start),    Is.EqualTo(nachGrantTo),    "GrantTo");
+                Assert.That(XMPPServer.GrantFrom(start),  Is.EqualTo(afterGrantFrom),  "GrantFrom");
+                Assert.That(XMPPServer.RevokeFrom(start), Is.EqualTo(afterRevokeFrom), "RevokeFrom");
+                Assert.That(XMPPServer.GrantTo(start),    Is.EqualTo(afterGrantTo),    "GrantTo");
             });
 
         }
@@ -406,14 +408,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region RevokeTo_KeepsTheOtherDirection()
 
-        /// <summary>Die Gegenrichtung zu <c>RevokeFrom</c>.</summary>
+        /// <summary>The other direction to <c>RevokeFrom</c>.</summary>
         [TestCase("none", "none")]
         [TestCase("to",   "none")]
         [TestCase("from", "from")]
         [TestCase("both", "from")]
-        public void RevokeTo_KeepsTheOtherDirection(String start, String erwartet)
+        public void RevokeTo_KeepsTheOtherDirection(String start, String expected)
         {
-            Assert.That(XMPPServer.RevokeTo(start), Is.EqualTo(erwartet));
+            Assert.That(XMPPServer.RevokeTo(start), Is.EqualTo(expected));
         }
 
         #endregion

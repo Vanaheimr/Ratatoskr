@@ -29,14 +29,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Art einer Nachricht (RFC 6121, Abschnitt 5.2.2).
+    /// The kind of a message (RFC 6121, section 5.2.2).
     /// </summary>
     /// <remarks>
-    /// Bis hierher kam alles gleich an: Der Empfänger konnte den Zuruf einer
-    /// Nachrichtenquelle nicht von der Zeile eines Bekannten unterscheiden, und
-    /// die Zeile aus einem Raum nicht von einer an ihn allein gerichteten. Wo
-    /// das nicht bloss die Anzeige betrifft, sondern das Verhalten, wird es
-    /// heikel — der Client quittierte jede Nachricht, auch die aus einem Raum.
+    /// Up to here everything arrived alike: the recipient could not tell the
+    /// shout of a news source from the line of an acquaintance, and the line
+    /// from a room not from one addressed to them alone. Where that concerns
+    /// not merely the display but the behaviour, it gets delicate — the client
+    /// acknowledged every message, including the ones from a room.
     /// </remarks>
     [TestFixture]
     public class MessageTypeTests : AXMPPTests
@@ -45,14 +45,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDefaultIsNormal()
 
         /// <summary>
-        /// Fehlt das Attribut oder ist sein Wert unbekannt, gilt die Nachricht
-        /// als <c>normal</c>.
+        /// If the attribute is missing or its value unknown, the message counts
+        /// as <c>normal</c>.
         /// </summary>
         /// <remarks>
-        /// RFC 6121, Abschnitt 5.2.2 ist hier ungewöhnlich deutlich und sagt
-        /// MUSS. Der Grund liegt in der Zukunft: Eine spätere Erweiterung soll
-        /// bei alten Empfängern als gewöhnliche Nachricht ankommen und nicht
-        /// verschwinden.
+        /// RFC 6121, section 5.2.2 is unusually plain here and says MUST. The
+        /// reason lies in the future: a later extension is meant to arrive at
+        /// old recipients as an ordinary message and not to disappear.
         /// </remarks>
         [Test]
         public void TheDefaultIsNormal()
@@ -65,11 +64,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(MessageTypeExtensions.Parse(""),          Is.EqualTo(MessageType.Normal));
                 Assert.That(MessageTypeExtensions.Parse("normal"),    Is.EqualTo(MessageType.Normal));
 
-                // Unbekannt - und trotzdem keine Ablehnung.
+                // Unknown - and no refusal all the same.
                 Assert.That(MessageTypeExtensions.Parse("shout"),     Is.EqualTo(MessageType.Normal));
 
-                // Gross geschrieben ist es nicht derselbe Wert; XML-Attribute
-                // dieser Art sind in RFC 6121 kleingeschrieben festgelegt.
+                // Written in upper case it is not the same value; XML
+                // attributes of this kind are laid down in lower case in RFC
+                // 6121.
                 Assert.That(MessageTypeExtensions.Parse("Chat"),      Is.EqualTo(MessageType.Normal));
 
                 Assert.That(MessageTypeExtensions.Parse("chat"),      Is.EqualTo(MessageType.Chat));
@@ -86,7 +86,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDefaultIsNotWrittenOut()
 
         /// <summary>
-        /// <c>normal</c> ist der Vorgabewert und wird nicht geschrieben.
+        /// <c>normal</c> is the default and is not written out.
         /// </summary>
         [Test]
         public void TheDefaultIsNotWrittenOut()
@@ -102,10 +102,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(MessageType.Headline.AsAttribute(),  Is.EqualTo("headline"));
                 Assert.That(MessageType.Error.AsAttribute(),     Is.EqualTo("error"));
 
-                // Und wieder zurück: was geschrieben wird, wird auch gelesen.
-                foreach (var typ in Enum.GetValues<MessageType>())
-                    Assert.That(MessageTypeExtensions.Parse(typ.AsAttribute()), Is.EqualTo(typ),
-                                $"Hin und zurück verloren: {typ}");
+                // And back again: what is written is also read.
+                foreach (var type in Enum.GetValues<MessageType>())
+                    Assert.That(MessageTypeExtensions.Parse(type.AsAttribute()), Is.EqualTo(type),
+                                $"Lost there and back: {type}");
 
             });
 
@@ -116,7 +116,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheTypeReachesTheApplication()
 
         /// <summary>
-        /// Die Art kommt beim Empfänger an — sonst hätte sie niemand.
+        /// The kind arrives at the recipient — otherwise nobody would have it.
         /// </summary>
         [Test]
         public async Task TheTypeReachesTheApplication()
@@ -125,19 +125,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            bob.OnMessage += m => inbox.Enqueue(m);
 
-            await alice.SendMessageAsync(bob.FullJid!, "Aus dem Raum", MessageType.GroupChat);
+            await alice.SendMessageAsync(bob.FullJid!, "From the room", MessageType.GroupChat);
 
-            await WaitFor(() => !eingang.IsEmpty, "die Zustellung");
+            await WaitFor(() => !inbox.IsEmpty, "the delivery");
 
-            eingang.TryDequeue(out var empfangen);
+            inbox.TryDequeue(out var received);
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen!.Type, Is.EqualTo(MessageType.GroupChat));
-                Assert.That(empfangen.Body,  Is.EqualTo("Aus dem Raum"));
+                Assert.That(received!.Type, Is.EqualTo(MessageType.GroupChat));
+                Assert.That(received.Body,  Is.EqualTo("From the room"));
             });
 
         }
@@ -147,20 +147,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGroupchatMessage_IsNotAcknowledged()
 
         /// <summary>
-        /// Der Kern: Auf eine Nachricht aus einem Raum wird nicht von selbst
-        /// geantwortet.
+        /// The heart of it: a message from a room is not answered of its own
+        /// accord.
         /// </summary>
         /// <remarks>
-        /// Der Absender ist dort der Raum und nicht ein Mensch. Eine
-        /// Empfangsbestätigung ginge an den Raum, und der reicht sie an alle
-        /// darin weiter — aus einer stillen Quittung würde eine Wortmeldung vor
-        /// Publikum, und zwar von jedem Anwesenden für jede Nachricht. Bei
-        /// zwanzig Leuten im Raum sind das vierhundert Quittungen für zwanzig
-        /// Zeilen.
+        /// The sender there is the room and not a person. A delivery receipt
+        /// would go to the room, and that passes it on to everyone in it — out
+        /// of a quiet acknowledgement would come a contribution before an
+        /// audience, and from every person present for every message. With
+        /// twenty people in the room that is four hundred acknowledgements for
+        /// twenty lines.
         ///
-        /// Geprüft wird über die Gegenprobe im selben Test: Dieselbe Nachricht
-        /// als <c>chat</c> wird quittiert. Ohne sie bestünde der Test auch
-        /// dann, wenn gar nichts mehr quittiert würde.
+        /// Checked through the counter-check in the same test: the same message
+        /// as <c>chat</c> is acknowledged. Without it the test would pass even
+        /// if nothing were acknowledged any more at all.
         /// </remarks>
         [Test]
         public async Task AGroupchatMessage_IsNotAcknowledged()
@@ -168,43 +168,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice      = await ConnectClientAsync("alice");
             var bob        = await ConnectClientAsync("bob");
-            var bobSitzung = Server.SessionOf(bob.FullJid!)!;
+            var bobSession = Server.SessionOf(bob.FullJid!)!;
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            bob.OnMessage += m => inbox.Enqueue(m);
 
-            // Von Hand, weil SendMessageAsync für einen Raum von sich aus keine
-            // Bestätigung mehr anfordert - hier soll gerade der Empfänger
-            // entscheiden.
+            // By hand, because SendMessageAsync asks for no acknowledgement of
+            // its own accord for a room - here the recipient is precisely the
+            // one who is to decide.
             await alice.SendRawAsync(
-                      $"<message to='{bob.FullJid}' type='groupchat' id='raum-1'>" +
-                      "<body>Aus dem Raum</body>" +
+                      $"<message to='{bob.FullJid}' type='groupchat' id='room-1'>" +
+                      "<body>From the room</body>" +
                       "<request xmlns='urn:xmpp:receipts'/>" +
                       "<markable xmlns='urn:xmpp:chat-markers:0'/>" +
                       "</message>");
 
-            await WaitFor(() => eingang.Any(m => m.MessageId == "raum-1"),
-                          "die Zustellung der Raum-Nachricht");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "room-1"),
+                          "the delivery of the room message");
 
-            // Und nun dieselbe Nachricht als Gespräch unter vier Augen.
+            // And now the same message as a conversation face to face.
             await alice.SendRawAsync(
-                      $"<message to='{bob.BareJid}' type='chat' id='direkt-1'>" +
-                      "<body>Nur an dich</body>" +
+                      $"<message to='{bob.BareJid}' type='chat' id='direct-1'>" +
+                      "<body>Only to you</body>" +
                       "<request xmlns='urn:xmpp:receipts'/>" +
                       "</message>");
 
-            // Beobachtet wird, was Bob hinausschickt - nicht, was bei Alice
-            // ankommt: Alices Quittungsverfolgung kennt nur Nachrichten, die
-            // sie selbst über SendMessageAsync abgeschickt hat, und meldete
-            // eine Quittung auf eine rohe Stanza als Fälschungsversuch.
-            await WaitFor(() => bobSitzung.Received.Any(f => f.Contains("id='direkt-1'",
+            // What is observed is what Bob sends out - not what arrives at
+            // Alice: Alice's receipt tracking knows only messages she sent off
+            // through SendMessageAsync herself, and reported an acknowledgement
+            // to a raw stanza as an attempt at forgery.
+            await WaitFor(() => bobSession.Received.Any(f => f.Contains("id='direct-1'",
                                                                         StringComparison.Ordinal)),
-                          "die Quittung für die direkte Nachricht");
+                          "the acknowledgement for the direct message");
 
-            Assert.That(bobSitzung.Received.Any(f => f.Contains("id='raum-1'",
+            Assert.That(bobSession.Received.Any(f => f.Contains("id='room-1'",
                                                                 StringComparison.Ordinal)),
                         Is.False,
-                        "Auf eine Nachricht aus einem Raum darf weder Quittung noch Marker folgen.");
+                        "A message from a room deserves neither acknowledgement nor marker.");
 
         }
 
@@ -213,8 +213,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AHeadline_IsNotAcknowledged()
 
         /// <summary>
-        /// Und ein Zuruf ebenso wenig — RFC 6121, Abschnitt 5.2.2: „no reply
-        /// is expected".
+        /// And a shout just as little — RFC 6121, section 5.2.2: "no reply is
+        /// expected".
         /// </summary>
         [Test]
         public async Task AHeadline_IsNotAcknowledged()
@@ -222,39 +222,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice      = await ConnectClientAsync("alice");
             var bob        = await ConnectClientAsync("bob");
-            var bobSitzung = Server.SessionOf(bob.FullJid!)!;
+            var bobSession = Server.SessionOf(bob.FullJid!)!;
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            bob.OnMessage += m => inbox.Enqueue(m);
 
             await alice.SendRawAsync(
-                      $"<message to='{bob.FullJid}' type='headline' id='zuruf-1'>" +
-                      "<body>Kurs gefallen</body>" +
+                      $"<message to='{bob.FullJid}' type='headline' id='shout-1'>" +
+                      "<body>Price fell</body>" +
                       "<request xmlns='urn:xmpp:receipts'/>" +
                       "</message>");
 
-            await WaitFor(() => eingang.Any(m => m.MessageId == "zuruf-1"),
-                          "die Zustellung des Zurufs");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "shout-1"),
+                          "the delivery of the shout");
 
             await alice.SendRawAsync(
-                      $"<message to='{bob.BareJid}' type='chat' id='direkt-2'>" +
-                      "<body>Nur an dich</body>" +
+                      $"<message to='{bob.BareJid}' type='chat' id='direct-2'>" +
+                      "<body>Only to you</body>" +
                       "<request xmlns='urn:xmpp:receipts'/>" +
                       "</message>");
 
-            await WaitFor(() => bobSitzung.Received.Any(f => f.Contains("id='direkt-2'",
+            await WaitFor(() => bobSession.Received.Any(f => f.Contains("id='direct-2'",
                                                                         StringComparison.Ordinal)),
-                          "die Quittung für die direkte Nachricht");
+                          "the acknowledgement for the direct message");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bobSitzung.Received.Any(f => f.Contains("id='zuruf-1'",
+                Assert.That(bobSession.Received.Any(f => f.Contains("id='shout-1'",
                                                                     StringComparison.Ordinal)),
                             Is.False,
-                            "Ein Zuruf erwartet keine Antwort.");
+                            "A shout expects no answer.");
 
-                Assert.That(eingang.First(m => m.MessageId == "zuruf-1").Type,
+                Assert.That(inbox.First(m => m.MessageId == "shout-1").Type,
                             Is.EqualTo(MessageType.Headline));
 
             });
@@ -266,40 +266,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARoomMessage_RequestsNoReceipt()
 
         /// <summary>
-        /// Und die andere Richtung: Wer in einen Raum schreibt, fordert keine
-        /// Bestätigung an.
+        /// And the other direction: whoever writes into a room asks for no
+        /// acknowledgement.
         /// </summary>
         /// <remarks>
-        /// XEP-0184, Abschnitt 5.3 rät dem Absender ausdrücklich davon ab. Der
-        /// Grund ist derselbe wie beim Empfänger, nur eine Ebene früher: Was
-        /// nicht angefordert wird, muss auch niemand übergehen.
+        /// XEP-0184, section 5.3 expressly advises the sender against it. The
+        /// reason is the same as at the recipient, only one level earlier: what
+        /// is not asked for nobody has to pass over.
         /// </remarks>
         [Test]
         public async Task ARoomMessage_RequestsNoReceipt()
         {
 
             var alice   = await ConnectClientAsync("alice");
-            var sitzung = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!)!;
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "In den Raum",
+            await alice.SendMessageAsync($"bob@{Server.Domain}", "Into the room",
                                          MessageType.GroupChat);
 
-            await WaitFor(() => sitzung.Received.Any(f => f.Contains("In den Raum",
+            await WaitFor(() => session.Received.Any(f => f.Contains("Into the room",
                                                                      StringComparison.Ordinal)),
-                          "die abgeschickte Nachricht");
+                          "the message sent off");
 
-            var hinaus = sitzung.Received.First(f => f.Contains("In den Raum", StringComparison.Ordinal));
+            var outgoing = session.Received.First(f => f.Contains("Into the room", StringComparison.Ordinal));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(hinaus, Does.Contain("type='groupchat'"));
+                Assert.That(outgoing, Does.Contain("type='groupchat'"));
 
-                Assert.That(hinaus, Does.Not.Contain("urn:xmpp:receipts"),
-                            "In einen Raum wird keine Bestätigung angefordert.");
+                Assert.That(outgoing, Does.Not.Contain("urn:xmpp:receipts"),
+                            "Into a room no acknowledgement is asked for.");
 
-                Assert.That(hinaus, Does.Not.Contain("urn:xmpp:chat-markers"),
-                            "Und kein Marker.");
+                Assert.That(outgoing, Does.Not.Contain("urn:xmpp:chat-markers"),
+                            "And no marker.");
 
             });
 

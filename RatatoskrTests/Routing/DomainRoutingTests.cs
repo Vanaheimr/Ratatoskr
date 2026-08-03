@@ -28,16 +28,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Was mit einer Stanza geschieht, die an eine fremde Domain geht.
+    /// What happens to a stanza that goes to a foreign domain.
     ///
-    /// Bisher: nichts. Der Server suchte eine Sitzung zum Empfänger, fand
-    /// keine, und liess die Stanza fallen. Für einen Absender sieht das aus
-    /// wie eine zugestellte Nachricht - er erfährt nie, dass sie nirgends
-    /// angekommen ist.
+    /// Up to now: nothing. The server looked for a session to the recipient,
+    /// found none, and dropped the stanza. To a sender that looks like a
+    /// delivered message - they never learn that it arrived nowhere.
     ///
-    /// RFC 6120, Abschnitt 10.4.3 verlangt in diesem Fall einen Stanza-Fehler.
-    /// Die Bedingung <c>&lt;remote-server-not-found/&gt;</c> steht in
-    /// Abschnitt 8.3.3.
+    /// RFC 6120, section 10.4.3 demands a stanza error in this case. The
+    /// condition <c>&lt;remote-server-not-found/&gt;</c> stands in section
+    /// 8.3.3.
     /// </summary>
     [TestFixture]
     public class DomainRoutingTests : AXMPPTests
@@ -46,27 +45,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageToForeignDomain_IsAnsweredWithAnError()
 
         /// <summary>
-        /// Der Kern: eine Nachricht an eine unerreichbare Domain kommt als
-        /// Fehler zurück, statt spurlos zu verschwinden.
+        /// The heart of it: a message to an unreachable domain comes back as an
+        /// error instead of disappearing without a trace.
         /// </summary>
         [Test]
         public async Task MessageToForeignDomain_IsAnsweredWithAnError()
         {
 
             var client  = await ConnectClientAsync();
-            var fehler  = new List<(String? From, StanzaError Error)>();
+            var errors  = new List<(String? From, StanzaError Error)>();
 
-            client.OnStanzaError += (from, error) => fehler.Add((from, error));
+            client.OnStanzaError += (from, error) => errors.Add((from, error));
 
-            await client.SendMessageAsync("bob@anderswo.example", "Hallo?");
+            await client.SendMessageAsync("bob@elsewhere.example", "Hello?");
 
-            await WaitFor(() => fehler.Count > 0, "Fehlermeldung zur fremden Domain");
+            await WaitFor(() => errors.Count > 0, "the error report about the foreign domain");
 
             Assert.Multiple(() =>
             {
-                Assert.That(fehler[0].Error.Condition, Is.EqualTo("remote-server-not-found"));
-                Assert.That(fehler[0].From,            Is.EqualTo("bob@anderswo.example"),
-                            "Der Fehler muss vom ursprünglichen Empfänger zu kommen scheinen.");
+                Assert.That(errors[0].Error.Condition, Is.EqualTo("remote-server-not-found"));
+                Assert.That(errors[0].From,            Is.EqualTo("bob@elsewhere.example"),
+                            "The error has to appear to come from the original recipient.");
             });
 
         }
@@ -76,8 +75,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region IqToForeignDomain_IsAnsweredWithAnError()
 
         /// <summary>
-        /// Dasselbe für ein <c>iq</c> - dort wiegt es schwerer, weil der
-        /// Absender nach RFC 6120, Abschnitt 8.2.3 auf eine Antwort wartet.
+        /// The same for an <c>iq</c> - there it weighs more, because the sender
+        /// waits for an answer under RFC 6120, section 8.2.3.
         /// </summary>
         [Test]
         public async Task IqToForeignDomain_IsAnsweredWithAnError()
@@ -87,18 +86,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session  = Server.SessionOf(client.FullJid)!;
 
             await client.SendRawAsync(
-                "<iq type='get' id='fremd-1' to='bob@anderswo.example'>" +
+                "<iq type='get' id='foreign-1' to='bob@elsewhere.example'>" +
                 "<query xmlns='http://jabber.org/protocol/disco#info'/></iq>");
 
-            await WaitFor(() => session.Sent.Any(f => f.Contains("id='fremd-1'", StringComparison.Ordinal)),
-                          "Antwort auf das iq an die fremde Domain");
+            await WaitFor(() => session.Sent.Any(f => f.Contains("id='foreign-1'", StringComparison.Ordinal)),
+                          "the answer to the iq to the foreign domain");
 
-            var antwort = session.Sent.First(f => f.Contains("id='fremd-1'", StringComparison.Ordinal));
+            var reply = session.Sent.First(f => f.Contains("id='foreign-1'", StringComparison.Ordinal));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("remote-server-not-found"));
+                Assert.That(reply, Does.Contain("type='error'"));
+                Assert.That(reply, Does.Contain("remote-server-not-found"));
             });
 
         }
@@ -108,13 +107,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ErrorStanza_IsNotAnsweredAgain()
 
         /// <summary>
-        /// Eine Fehler-Stanza an eine fremde Domain darf keinen weiteren
-        /// Fehler auslösen.
+        /// An error stanza to a foreign domain must not trigger a further
+        /// error.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 8.3.1: auf einen Fehler folgt nie ein Fehler.
-        /// Täte er es, könnten zwei Server sich gegenseitig Fehlermeldungen
-        /// zuschieben, bis einer aufgibt.
+        /// RFC 6120, section 8.3.1: an error is never followed by an error. If
+        /// it were, two servers could push error reports back and forth at each
+        /// other until one gives up.
         /// </remarks>
         [Test]
         public async Task ErrorStanza_IsNotAnsweredAgain()
@@ -123,15 +122,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client   = await ConnectClientAsync();
             var session  = Server.SessionOf(client.FullJid)!;
 
-            var vorher = session.Sent.Count;
+            var before = session.Sent.Count;
 
             await client.SendRawAsync(
-                "<message type='error' to='bob@anderswo.example' id='schon-fehler'>" +
+                "<message type='error' to='bob@elsewhere.example' id='already-an-error'>" +
                 "<error type='cancel'><service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" +
                 "</message>");
 
-            await WaitAgainst(() => session.Sent.Skip(vorher).Any(f => f.Contains("schon-fehler", StringComparison.Ordinal)),
-                              "eine Antwort auf eine Fehler-Stanza");
+            await WaitAgainst(() => session.Sent.Skip(before).Any(f => f.Contains("already-an-error", StringComparison.Ordinal)),
+                              "an answer to an error stanza");
 
         }
 
@@ -140,8 +139,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region LocalDelivery_IsUnaffected()
 
         /// <summary>
-        /// Die Gegenprobe: an die eigene Domain wird weiterhin zugestellt und
-        /// eben kein Fehler erzeugt.
+        /// The counter-check: to one's own domain delivery goes on as before
+        /// and no error is produced.
         /// </summary>
         [Test]
         public async Task LocalDelivery_IsUnaffected()
@@ -150,17 +149,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var empfangen  = new List<String>();
-            var fehler     = new List<StanzaError>();
+            var received  = new List<String>();
+            var errors     = new List<StanzaError>();
 
-            bob.OnMessage       += m => empfangen.Add(m.Body);
-            alice.OnStanzaError += (_, e) => fehler.Add(e);
+            bob.OnMessage       += m => received.Add(m.Body);
+            alice.OnStanzaError += (_, e) => errors.Add(e);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo Bob!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello Bob!");
 
-            await WaitFor(() => empfangen.Count > 0, "die lokal zugestellte Nachricht");
+            await WaitFor(() => received.Count > 0, "the message delivered locally");
 
-            Assert.That(fehler, Is.Empty, "Eine lokale Zustellung darf keinen Fehler erzeugen.");
+            Assert.That(errors, Is.Empty, "A local delivery must not produce an error.");
 
         }
 
@@ -169,28 +168,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnknownLocalAccount_IsStillDroppedSilently()
 
         /// <summary>
-        /// Ein unbekanntes Konto auf der <b>eigenen</b> Domain bleibt
-        /// unbeantwortet - das ist eine andere Frage als eine unerreichbare
-        /// Domain und wird hier nicht mitverändert.
+        /// An unknown account on one's <b>own</b> domain stays unanswered -
+        /// that is another question than an unreachable domain and is not
+        /// changed along here.
         /// </summary>
         /// <remarks>
-        /// RFC 6121, Abschnitt 8.1 verlangte hier <c>&lt;service-unavailable/&gt;</c>.
-        /// Der Test hält den heutigen Stand fest, damit die Domain-Weiche ihn
-        /// nicht unbemerkt mitverschiebt; die Lücke selbst steht im
-        /// Arbeitsplan.
+        /// RFC 6121, section 8.1 demanded a <c>&lt;service-unavailable/&gt;</c>
+        /// here. The test records today's state, so that the domain switch does
+        /// not shift it along unnoticed; the gap itself stands in the work
+        /// plan.
         /// </remarks>
         [Test]
         public async Task UnknownLocalAccount_IsStillDroppedSilently()
         {
 
             var client  = await ConnectClientAsync();
-            var fehler  = new List<StanzaError>();
+            var errors  = new List<StanzaError>();
 
-            client.OnStanzaError += (_, e) => fehler.Add(e);
+            client.OnStanzaError += (_, e) => errors.Add(e);
 
-            await client.SendMessageAsync($"niemand@{Server.Domain}", "Hallo?");
+            await client.SendMessageAsync($"nobody@{Server.Domain}", "Hello?");
 
-            await WaitAgainst(() => fehler.Count > 0, "ein Fehler für ein lokales Konto");
+            await WaitAgainst(() => errors.Count > 0, "an error for a local account");
 
         }
 
