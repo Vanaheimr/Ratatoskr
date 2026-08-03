@@ -29,48 +29,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 4.6.3, Regel 2: Wird eine Resource unverfügbar, geht
-    /// die Abmeldung auch an die Empfänger ihrer gerichteten Presence.
+    /// RFC 6121, section 4.6.3, rule 2: When a resource becomes unavailable,
+    /// the sign-off goes to the recipients of its directed presence as well.
     /// </summary>
     /// <remarks>
-    /// Die Regel schliesst eine Lücke, die sonst niemandem auffällt. Wer einem
-    /// Fremden seine Anwesenheit zeigt, steht deswegen nicht in dessen Roster —
-    /// und bekäme ohne diesen Weg nie ein Ende. Der Fremde führte die Resource
-    /// für immer als anwesend.
+    /// The rule closes a gap nobody notices otherwise. Whoever shows a stranger
+    /// their presence does not thereby stand in that stranger's roster — and
+    /// would never get an ending without this path. The stranger would keep the
+    /// resource as present forever.
     ///
-    /// Der Fall ist der Regelfall und nicht die Ausnahme: Ein Gespräch mit
-    /// jemandem, der nicht im Roster steht, beginnt nach Abschnitt 5.1 genau
-    /// damit, dass man ihm gerichtete Presence schickt. Seit D17 hängt daran
-    /// ausserdem, wer diese Resource überhaupt etwas fragen darf
-    /// (Abschnitt 8.5.3.1) — eine Zusage, die nie endet, wäre damit doppelt
-    /// unangenehm.
+    /// The case is the normal one and not the exception: A conversation with
+    /// somebody who is not in the roster begins according to section 5.1 with
+    /// exactly that, sending them directed presence. Since D17 who may ask this
+    /// resource anything at all hangs on it too (section 8.5.3.1) — a promise
+    /// that never ends would thereby be doubly unpleasant.
     ///
-    /// Zwei Wege führen in die Unverfügbarkeit, und beide stehen hier: die
-    /// eigene Abmeldung des Clients und der Verbindungsabriss, bei dem der
-    /// Server sie in seinem Namen erzeugt (Abschnitt 4.5.2).
+    /// Two paths lead into unavailability, and both stand here: the client's
+    /// own sign-off and the torn connection, where the server creates it in
+    /// their name (section 4.5.2).
     /// </remarks>
     [TestFixture]
     public class DirectedPresenceTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Sammelt die Presence-Meldungen eines Clients.
+        /// Collects the presence notices of a client.
         /// </summary>
-        private static ConcurrentQueue<(String From, String? Type)> Presenzkorb(XMPPClient client)
+        private static ConcurrentQueue<(String From, String? Type)> PresenceBasket(XMPPClient client)
         {
 
-            var korb = new ConcurrentQueue<(String, String?)>();
-            client.Connection.OnPresence += (from, type) => korb.Enqueue((from, type));
+            var basket = new ConcurrentQueue<(String, String?)>();
+            client.Connection.OnPresence += (from, type) => basket.Enqueue((from, type));
 
-            return korb;
+            return basket;
 
         }
 
-        /// <summary>Nur die Abmeldungen daraus.</summary>
-        private static Int32 Abmeldungen(ConcurrentQueue<(String From, String? Type)> korb)
-            => korb.Count(p => p.Type == "unavailable");
+        /// <summary>Only the sign-offs out of it.</summary>
+        private static Int32 SignOffs(ConcurrentQueue<(String From, String? Type)> basket)
+            => basket.Count(p => p.Type == "unavailable");
 
         #endregion
 
@@ -78,14 +77,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region GoingUnavailable_TellsTheDirectedTarget()
 
         /// <summary>
-        /// Der Kern: Bob zeigt Alice seine Anwesenheit, meldet sich ab — und
-        /// Alice erfährt es, obwohl sie in keinem Roster steht.
+        /// The core: Bob shows Alice his presence, signs off — and Alice learns
+        /// of it although she stands in no roster.
         /// </summary>
         /// <remarks>
-        /// Die erste Hälfte belegt, dass Alice überhaupt nur wegen der
-        /// gerichteten Presence etwas hört. Ohne sie wäre jede Presence zwischen
-        /// den beiden eine unter Fremden, und die darf es nicht geben — der Test
-        /// bestünde dann auch bei einem Server, der Presence an alle verteilt.
+        /// The first half establishes that Alice hears anything at all only
+        /// because of the directed presence. Without it every presence between
+        /// the two would be one among strangers, and that must not exist — the
+        /// test would then pass with a server distributing presence to everyone
+        /// as well.
         /// </remarks>
         [Test]
         public async Task GoingUnavailable_TellsTheDirectedTarget()
@@ -94,21 +94,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var beiAlice = Presenzkorb(alice);
+            var atAlice = PresenceBasket(alice);
 
-            // Bob zeigt Alice seine Anwesenheit - und nur ihr.
+            // Bob shows Alice his presence - and only her.
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => beiAlice.Any(p => p.Type != "unavailable"),
-                          "die gerichtete Presence bei Alice");
+            await WaitFor(() => atAlice.Any(p => p.Type != "unavailable"),
+                          "the directed presence at Alice");
 
-            // Und nun meldet er sich ab.
+            // And now he signs off.
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => Abmeldungen(beiAlice) > 0, "die Abmeldung bei Alice");
+            await WaitFor(() => SignOffs(atAlice) > 0, "the sign-off at Alice");
 
             Assert.That(Server.SessionOf(bob.FullJid!)!.DirectedPresenceTargets, Is.Empty,
-                        "Und die Zusage ist damit erledigt (Abschnitt 4.6.1).");
+                        "And the promise is thereby settled (section 4.6.1).");
 
         }
 
@@ -117,18 +117,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ATornConnection_AlsoTellsTheDirectedTarget()
 
         /// <summary>
-        /// Dasselbe, wenn die Verbindung abreisst statt sich abzumelden.
+        /// The same, when the connection tears instead of signing off.
         /// </summary>
         /// <remarks>
-        /// Der wichtigere der beiden Wege, weil er der häufigere ist: Ein Client
-        /// verschwindet meist, ohne sich zu verabschieden. Die Abmeldung erzeugt
-        /// dann der Server in seinem Namen (Abschnitt 4.5.2) — und ginge sie nur
-        /// an den Roster, bliebe der Fremde mit einer Anwesenheit zurück, die
-        /// nie endet.
+        /// The more important of the two paths, because it is the more frequent
+        /// one: A client mostly disappears without saying goodbye. The sign-off
+        /// is then created by the server in their name (section 4.5.2) — and
+        /// were it to go to the roster only, the stranger would be left behind
+        /// with a presence that never ends.
         ///
-        /// Ohne Stream Management, denn ein Stream mit zugesagter Wiederaufnahme
-        /// wird aufgehoben und nicht abgemeldet (XEP-0198, Abschnitt 5). Dann
-        /// gibt es zu Recht keine Abmeldung, und der Test prüfte nichts.
+        /// Without stream management, because a stream with a promised
+        /// resumption is suspended and not signed off (XEP-0198, section 5).
+        /// Then there is rightly no sign-off, and the test would check nothing.
         /// </remarks>
         [Test]
         public async Task ATornConnection_AlsoTellsTheDirectedTarget()
@@ -141,17 +141,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = CreateClient("bob", streamManagement: false);
             await bob.ConnectAsync();
 
-            var beiAlice = Presenzkorb(alice);
+            var atAlice = PresenceBasket(alice);
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => beiAlice.Any(p => p.Type != "unavailable"),
-                          "die gerichtete Presence bei Alice");
+            await WaitFor(() => atAlice.Any(p => p.Type != "unavailable"),
+                          "the directed presence at Alice");
 
             Server.KillSessionsOf(bob.BareJid);
 
-            await WaitFor(() => Abmeldungen(beiAlice) > 0,
-                          "die Abmeldung bei Alice nach dem Abriss");
+            await WaitFor(() => SignOffs(atAlice) > 0,
+                          "the sign-off at Alice after the tear");
 
             Assert.Pass();
 
@@ -162,24 +162,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStatusChange_DoesNotEndTheDirectedPromise()
 
         /// <summary>
-        /// Eine Statusänderung mitten in der Sitzung beendet die Zusage nicht.
+        /// A status change in the middle of the session does not end the
+        /// promise.
         /// </summary>
         /// <remarks>
-        /// Regel 2 gilt „after having sent initial presence and before sending
+        /// Rule 2 holds "after having sent initial presence and before sending
         /// unavailable presence broadcast (i.e., during the user's presence
-        /// session)". Eine gewöhnliche Presence — „abwesend", „beschäftigt" —
-        /// beendet diese Sitzung nicht; nur die Abmeldung tut das.
+        /// session)". An ordinary presence — "away", "busy" — does not end this
+        /// session; only the sign-off does that.
         ///
-        /// Im Betrieb ist das der häufigste Zwischenfall überhaupt: Ein Client
-        /// schickt bei jedem Wechsel eine neue Presence, und wer die Liste dabei
-        /// leert, nimmt dem Gegenüber zweierlei — die Abmeldung am Ende und, seit
-        /// D17, das Recht, überhaupt etwas zu fragen (Abschnitt 8.5.3.1). Beides
-        /// mitten im Gespräch und ohne dass jemand es merkt.
+        /// In operation this is the most frequent incident of all: A client
+        /// sends a new presence at every change, and whoever clears the list
+        /// while doing so takes two things from the counterpart — the sign-off
+        /// at the end and, since D17, the right to ask anything at all
+        /// (section 8.5.3.1). Both in the middle of the conversation and
+        /// without anyone noticing.
         ///
-        /// Der Test hat eine Mutation aufgedeckt, die jeder andere überlebt hat:
-        /// die Liste bei <b>jeder</b> Presence abzuholen statt nur bei der
-        /// Abmeldung. Kein anderer Test schickte nach der gerichteten Presence
-        /// noch eine gewöhnliche — die Reihenfolge, die im Betrieb die Regel ist.
+        /// The test uncovered a mutation that survived every other one: to
+        /// fetch the list at <b>every</b> presence instead of at the sign-off
+        /// only. No other test sent an ordinary presence after the directed
+        /// one — the order that is the rule in operation.
         /// </remarks>
         [Test]
         public async Task AStatusChange_DoesNotEndTheDirectedPromise()
@@ -188,26 +190,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var beiAlice = Presenzkorb(alice);
+            var atAlice = PresenceBasket(alice);
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            // Bob wechselt auf "abwesend" - die Anwesenheitssitzung läuft weiter.
-            await bob.SetPresenceAsync("away", "Mittagspause");
+            // Bob changes to "away" - the presence session carries on.
+            await bob.SetPresenceAsync("away", "Lunch break");
 
             Assert.That(Server.SessionOf(bob.FullJid!)!.HasDirectedPresenceTo(alice.BareJid),
                         Is.True,
-                        "Eine Statusänderung beendet die Anwesenheitssitzung nicht.");
+                        "A status change does not end the presence session.");
 
-            // Und die Abmeldung findet Alice weiterhin.
+            // And the sign-off still finds Alice.
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => Abmeldungen(beiAlice) > 0,
-                          "die Abmeldung bei Alice nach der Statusänderung");
+            await WaitFor(() => SignOffs(atAlice) > 0,
+                          "the sign-off at Alice after the status change");
 
         }
 
@@ -216,21 +218,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARosterContact_IsNotToldTwice()
 
         /// <summary>
-        /// Wer im Roster mit <c>from</c> steht, bekommt die Abmeldung
-        /// <b>einmal</b> — nicht zusätzlich über den gerichteten Weg.
+        /// Whoever stands in the roster with <c>from</c> gets the sign-off
+        /// <b>once</b> — not additionally over the directed path.
         /// </summary>
         /// <remarks>
-        /// Der RFC grenzt Regel 2 ausdrücklich auf Entitäten ein, die
-        /// <b>nicht</b> mit <c>from</c> oder <c>both</c> im Roster stehen, und
-        /// das ist keine Formsache: Ein Kontakt bekommt die Abmeldung schon über
-        /// die gewöhnliche Verteilung. Käme sie zweimal, käme ein Client
-        /// durcheinander, der Presence zählt statt sie zu ersetzen.
+        /// The RFC expressly limits rule 2 to entities that do <b>not</b> stand
+        /// in the roster with <c>from</c> or <c>both</c>, and that is no
+        /// formality: A contact gets the sign-off over the ordinary
+        /// distribution already. Were it to come twice, a client counting
+        /// presence instead of replacing it would get confused.
         ///
-        /// Der Aufbau ist der heikle Teil: Bob schickt die gerichtete Presence,
-        /// <i>bevor</i> Alice seinen Zustand sehen darf. Danach steht sie in
-        /// beiden Töpfen, und nur die Einschränkung im Server verhindert die
-        /// zweite Zustellung. Andersherum — Roster zuerst — wäre der Vermerk
-        /// nach Regel 1 gar nicht nötig, und der Test prüfte den falschen Fall.
+        /// The setup is the delicate part: Bob sends the directed presence
+        /// <i>before</i> Alice may see his state. Afterwards she stands in both
+        /// pots, and only the limitation in the server prevents the second
+        /// delivery. The other way round — the roster first — the note would
+        /// not be needed at all under rule 1, and the test would check the
+        /// wrong case.
         /// </remarks>
         [Test]
         public async Task ARosterContact_IsNotToldTwice()
@@ -239,27 +242,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var beiAlice = Presenzkorb(alice);
+            var atAlice = PresenceBasket(alice);
 
-            // Erst die gerichtete Presence ...
+            // First the directed presence ...
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            // ... und erst danach der Roster-Eintrag: Alice darf Bobs Zustand sehen.
+            // ... and only afterwards the roster entry: Alice may see Bob's state.
             SetServerRoster("bob", "alice", "from");
 
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => Abmeldungen(beiAlice) > 0, "die Abmeldung");
+            await WaitFor(() => SignOffs(atAlice) > 0, "the sign-off");
 
-            // Eine zweite hätte inzwischen ankommen können.
+            // A second one could have arrived by now.
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            Assert.That(Abmeldungen(beiAlice), Is.EqualTo(1),
-                        "Ein Kontakt bekommt die Abmeldung einmal, nicht zweimal.");
+            Assert.That(SignOffs(atAlice), Is.EqualTo(1),
+                        "A contact gets the sign-off once, not twice.");
 
         }
 
@@ -268,17 +271,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AWithdrawnDirectedPresence_GetsNoSecondUnavailable()
 
         /// <summary>
-        /// Der Klammerzusatz der Regel: „if the user has not yet sent directed
+        /// The parenthesis of the rule: "if the user has not yet sent directed
         /// unavailable presence to that entity".
         /// </summary>
         /// <remarks>
-        /// Wer seine Anwesenheit gegenüber einem Fremden schon ausdrücklich
-        /// zurückgenommen hat, bekommt beim Abmelden keine zweite Abmeldung.
+        /// Whoever has already expressly withdrawn their presence towards a
+        /// stranger gets no second sign-off when signing off.
         ///
-        /// Die Klammer fällt mit der Liste zusammen: Eine gerichtete Abmeldung
-        /// nimmt den Empfänger heraus (Abschnitt 4.6.1), und was nicht darin
-        /// steht, wird auch nicht benachrichtigt. Zwei Vorschriften, eine
-        /// Umsetzung — und deshalb ein Test, der beide zugleich hält.
+        /// The parenthesis coincides with the list: A directed sign-off takes
+        /// the recipient out (section 4.6.1), and what does not stand in it is
+        /// not notified either. Two provisions, one implementation — and hence
+        /// one test holding both at once.
         /// </remarks>
         [Test]
         public async Task AWithdrawnDirectedPresence_GetsNoSecondUnavailable()
@@ -287,26 +290,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var beiAlice = Presenzkorb(alice);
+            var atAlice = PresenceBasket(alice);
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            // Bob nimmt seine Anwesenheit gegenüber Alice zurück.
+            // Bob withdraws his presence towards Alice.
             await bob.SendRawAsync($"<presence to='{alice.BareJid}' type='unavailable'/>");
 
-            await WaitFor(() => Abmeldungen(beiAlice) > 0, "die gerichtete Abmeldung");
+            await WaitFor(() => SignOffs(atAlice) > 0, "the directed sign-off");
 
-            // Und meldet sich danach ganz ab.
+            // And signs off entirely afterwards.
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            Assert.That(Abmeldungen(beiAlice), Is.EqualTo(1),
-                        "Die zurückgenommene Zusage bringt keine zweite Abmeldung.");
+            Assert.That(SignOffs(atAlice), Is.EqualTo(1),
+                        "The withdrawn promise brings no second sign-off.");
 
         }
 
@@ -315,26 +318,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhoLeaves_LosesTheirPlaceInTheList()
 
         /// <summary>
-        /// Abschnitt 4.6.1, SOLL-Teil: Wer dem Nutzer eine Abmeldung schickt,
-        /// verschwindet aus dessen Liste gerichteter Presence.
+        /// Section 4.6.1, SHOULD part: Whoever sends the user a sign-off
+        /// disappears from their list of directed presence.
         /// </summary>
         /// <remarks>
-        /// Die beiden Hälften des Satzes sehen ähnlich aus und meinen
-        /// Gegenteiliges. Das MUSS betrifft den <b>eigenen</b> Widerruf — „any
-        /// entity to which the user sends directed unavailable presence" —, das
-        /// SOLL die Gegenrichtung: „any entity that <i>sends</i> unavailable
-        /// presence <i>to</i> the user". Der andere geht, und damit ist die
-        /// vorübergehende Beziehung ebenfalls zu Ende.
+        /// The two halves of the sentence look alike and mean the opposite. The
+        /// MUST concerns one's <b>own</b> withdrawal — "any entity to which the
+        /// user sends directed unavailable presence" —, the SHOULD the reverse
+        /// direction: "any entity that <i>sends</i> unavailable presence
+        /// <i>to</i> the user". The other one leaves, and with that the
+        /// temporary relation is over as well.
         ///
-        /// Sichtbar wird das erst über Abschnitt 8.5.3.1: Solange Alice in Bobs
-        /// Liste steht, darf sie seine Resource befragen. Geht sie und kommt
-        /// wieder, hätte sie ihr Fragerecht behalten, obwohl Bob ihr nichts mehr
-        /// gezeigt hat — eine Erlaubnis, die den Anlass überlebt.
+        /// That becomes visible only over section 8.5.3.1: As long as Alice
+        /// stands in Bob's list she may query his resource. Were she to leave
+        /// and come back, she would have kept her right to ask although Bob has
+        /// shown her nothing any more — a permission outliving its occasion.
         ///
-        /// Kein Roster-Eintrag zwischen den beiden, und das ist der Kern des
-        /// Aufbaus: Wäre Alice Bobs Kontakt, käme ihr Fragerecht über den Roster
-        /// und die Liste wäre gleichgültig. Der Fall ist nur ohne Roster
-        /// beobachtbar.
+        /// No roster entry between the two, and that is the core of the setup:
+        /// Were Alice Bob's contact, her right to ask would come over the
+        /// roster and the list would be immaterial. The case is observable only
+        /// without a roster.
         /// </remarks>
         [Test]
         public async Task WhoLeaves_LosesTheirPlaceInTheList()
@@ -343,34 +346,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            // Bob zeigt Alice seine Anwesenheit - sie darf ihn jetzt fragen.
+            // Bob shows Alice his presence - she may ask him now.
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            // Alice meldet sich bei Bob ab.
+            // Alice signs off at Bob's.
             await alice.SendRawAsync($"<presence to='{bob.BareJid}' type='unavailable'/>");
 
             await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
                                        .HasDirectedPresenceTo(alice.BareJid),
-                          "das Vergessen des Absenders");
+                          "the forgetting of the sender");
 
-            // Und damit ist ihr Fragerecht erloschen.
-            var fehler = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            // And with that her right to ask has expired.
+            var errors = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
 
             await alice.SendRawAsync(
-                      $"<iq type='get' id='nach-der-abmeldung' to='{bob.FullJid}'>" +
+                      $"<iq type='get' id='after-the-sign-off' to='{bob.FullJid}'>" +
                       "<ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WaitFor(() => !fehler.IsEmpty,
-                          "die Abweisung der Anfrage nach der Abmeldung");
+            await WaitFor(() => !errors.IsEmpty,
+                          "the turning away of the query after the sign-off");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+            Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
         }
 
@@ -379,14 +382,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAvailablePresence_DoesNotRemoveTheSender()
 
         /// <summary>
-        /// Die Gegenprobe: Nur eine <b>Abmeldung</b> nimmt den Absender heraus,
-        /// keine gewöhnliche Presence.
+        /// The counter-check: Only a <b>sign-off</b> takes the sender out, no
+        /// ordinary presence.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn jede eingehende
-        /// Presence die Liste leerte — und dann wäre die Zusage schon beim ersten
-        /// Lebenszeichen des Gegenübers dahin. Alice zeigt Bob ihre Anwesenheit,
-        /// und genau das darf ihr Fragerecht nicht kosten.
+        /// Without it the collection would pass even if every incoming presence
+        /// cleared the list — and then the promise would be gone at the first
+        /// sign of life of the counterpart. Alice shows Bob her presence, and
+        /// that is exactly what must not cost her the right to ask.
         /// </remarks>
         [Test]
         public async Task AnAvailablePresence_DoesNotRemoveTheSender()
@@ -399,14 +402,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            // Alice zeigt Bob ihre Anwesenheit - keine Abmeldung.
+            // Alice shows Bob her presence - no sign-off.
             await alice.SendRawAsync($"<presence to='{bob.BareJid}'/>");
 
             await WaitAgainst(() => !Server.SessionOf(bob.FullJid!)!
                                           .HasDirectedPresenceTo(alice.BareJid),
-                              "das Vergessen bei einer gewöhnlichen Presence");
+                              "the forgetting at an ordinary presence");
 
         }
 
@@ -415,19 +418,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheTwoRulesCompose_ALeavingTargetIsForgottenThroughRule2()
 
         /// <summary>
-        /// Die beiden Regeln greifen ineinander: Alices Abmeldung erreicht Bob
-        /// über Regel 2 — und ebendarum vergisst er sie.
+        /// The two rules mesh: Alice's sign-off reaches Bob over rule 2 — and
+        /// for that very reason he forgets her.
         /// </summary>
         /// <remarks>
-        /// Ohne Roster hört Bob von Alices Abmeldung nur, wenn <b>er</b> in
-        /// <i>ihrer</i> Liste steht. Genau das stellt Abschnitt 4.6.3, Regel 2
-        /// her (D20). Und weil die Abmeldung dann bei ihm ankommt, greift der
-        /// SOLL-Teil aus 4.6.1 — ohne dass eine der beiden Regeln von der anderen
-        /// wüsste.
+        /// Without a roster Bob hears of Alice's sign-off only if <b>he</b>
+        /// stands in <i>her</i> list. That is exactly what section 4.6.3,
+        /// rule 2 establishes (D20). And because the sign-off then arrives at
+        /// his end, the SHOULD part from 4.6.1 takes hold — without either of
+        /// the two rules knowing of the other.
         ///
-        /// Der Test hält diese Verzahnung fest, weil sie leicht zerbricht: Wer
-        /// eine der beiden Regeln auf „nur an Kontakte" einschränkt, macht die
-        /// andere unerreichbar, und beide bestünden weiterhin für sich.
+        /// The test holds this meshing fast, because it breaks easily: Whoever
+        /// limits one of the two rules to "contacts only" makes the other one
+        /// unreachable, and both would still pass on their own.
         /// </remarks>
         [Test]
         public async Task TheTwoRulesCompose_ALeavingTargetIsForgottenThroughRule2()
@@ -436,7 +439,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            // Beide zeigen einander ihre Anwesenheit - kein Roster im Spiel.
+            // Both show each other their presence - no roster involved.
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
             await alice.SendRawAsync($"<presence to='{bob.BareJid}'/>");
 
@@ -444,14 +447,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                       .HasDirectedPresenceTo(alice.BareJid) &&
                                 Server.SessionOf(alice.FullJid!)!
                                       .HasDirectedPresenceTo(bob.BareJid),
-                          "die Vermerke auf beiden Seiten");
+                          "the notes on both sides");
 
-            // Alice meldet sich ganz ab - nicht gerichtet an Bob.
+            // Alice signs off entirely - not directed at Bob.
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
             await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
                                        .HasDirectedPresenceTo(alice.BareJid),
-                          "das Vergessen über den Weg aus Regel 2");
+                          "the forgetting over the path from rule 2");
 
         }
 
@@ -460,31 +463,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AOneSidedRoster_StillForgetsTheLeavingSender()
 
         /// <summary>
-        /// Auch über den Broadcast-Weg wird vergessen — und dort ist es
-        /// beobachtbar, obwohl es zuerst nicht so aussieht.
+        /// The forgetting happens over the broadcast path as well — and there
+        /// it is observable, although it does not look so at first.
         /// </summary>
         /// <remarks>
-        /// Die beiden Roster-Hälften sind hier leicht zu verwechseln, und die
-        /// Verwechslung führt zu genau dem falschen Schluss, dieser Weg sei
-        /// gleichgültig:
+        /// The two roster halves are easy to mistake for one another here, and
+        /// the mistake leads to exactly the wrong conclusion, that this path
+        /// were immaterial:
         ///
         /// <list type="bullet">
         ///   <item>
-        ///     Dass Alices Abmeldung Bob über die gewöhnliche Verteilung
-        ///     erreicht, entscheidet <b>Alices</b> Roster: Dort steht Bob mit
-        ///     <c>from</c> — er darf sie sehen.
+        ///     That Alice's sign-off reaches Bob over the ordinary distribution
+        ///     is decided by <b>Alice's</b> roster: Bob stands in it with
+        ///     <c>from</c> — he may see it.
         ///   </item>
         ///   <item>
-        ///     Ob Alice Bob etwas fragen darf, entscheidet <b>Bobs</b> Roster.
-        ///     Der ist hier leer, und damit hängt ihr Fragerecht allein an der
-        ///     Liste gerichteter Presence.
+        ///     Whether Alice may ask Bob anything is decided by <b>Bob's</b>
+        ///     roster. That one is empty here, and thereby her right to ask
+        ///     hangs on the list of directed presence alone.
         ///   </item>
         /// </list>
         ///
-        /// Beides zusammen macht den Fall aus: Die Abmeldung kommt an, ohne dass
-        /// Bob Alice im Roster hätte — und ohne das Vergessen behielte sie ihr
-        /// Fragerecht über ihre eigene Abmeldung hinaus. Ein Mutant, der diese
-        /// Zeile entfernt, überlebte jeden anderen Test dieser Sammlung.
+        /// Both together make up the case: The sign-off arrives without Bob
+        /// having Alice in the roster — and without the forgetting she would
+        /// keep her right to ask beyond her own sign-off. A mutant removing
+        /// this line would survive every other test of this collection.
         /// </remarks>
         [Test]
         public async Task AOneSidedRoster_StillForgetsTheLeavingSender()
@@ -493,22 +496,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            // Nur Alices Hälfte: Bob darf ihren Zustand sehen. Bobs Roster
-            // bleibt leer.
+            // Only Alice's half: Bob may see her state. Bob's roster stays
+            // empty.
             SetServerRoster("alice", "bob", "from");
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            // Alices Abmeldung geht über die gewöhnliche Verteilung an Bob.
+            // Alice's sign-off goes to Bob over the ordinary distribution.
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
             await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
                                        .HasDirectedPresenceTo(alice.BareJid),
-                          "das Vergessen über den Broadcast-Weg");
+                          "the forgetting over the broadcast path");
 
         }
 
@@ -517,16 +520,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AOneSidedRoster_ForgetsAlsoAfterATornConnection()
 
         /// <summary>
-        /// Dasselbe, wenn Alices Verbindung abreisst statt sich abzumelden.
+        /// The same, when Alice's connection tears instead of signing off.
         /// </summary>
         /// <remarks>
-        /// Der zweite Broadcast-Weg: Die Abmeldung erzeugt dann der Server in
-        /// Alices Namen (Abschnitt 4.5.2). Er ist eine eigene Stelle im Code und
-        /// braucht deshalb einen eigenen Test — ohne ihn behielte Alice ihr
-        /// Fragerecht ausgerechnet in dem Fall, der im Betrieb der häufigere ist.
+        /// The second broadcast path: The sign-off is then created by the
+        /// server in Alice's name (section 4.5.2). It is a place of its own in
+        /// the code and therefore needs a test of its own — without it Alice
+        /// would keep her right to ask in precisely the case that is the more
+        /// frequent one in operation.
         ///
-        /// Ohne Stream Management, denn ein aufgehobener Stream wird nicht
-        /// abgemeldet (XEP-0198, Abschnitt 5).
+        /// Without stream management, because a suspended stream is not signed
+        /// off (XEP-0198, section 5).
         /// </remarks>
         [Test]
         public async Task AOneSidedRoster_ForgetsAlsoAfterATornConnection()
@@ -545,13 +549,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
             Server.KillSessionsOf(alice.BareJid);
 
             await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
                                        .HasDirectedPresenceTo(alice.BareJid),
-                          "das Vergessen nach dem Abriss");
+                          "the forgetting after the tear");
 
         }
 
@@ -560,15 +564,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStranger_HearsNothing()
 
         /// <summary>
-        /// Die Gegenprobe: Ohne gerichtete Presence und ohne Roster-Eintrag
-        /// erfährt niemand etwas.
+        /// The counter-check: Without directed presence and without a roster
+        /// entry nobody learns anything.
         /// </summary>
         /// <remarks>
-        /// Sie ist die Grenze der ganzen Regel. Ohne sie bestünde die Sammlung
-        /// auch dann, wenn der Server die Abmeldung an jede angemeldete Sitzung
-        /// schickte — und das wäre kein Nachreichen, sondern ein Presence-Leck:
-        /// Wer nie gefragt und nie etwas gezeigt bekommen hat, hat kein Recht zu
-        /// erfahren, wann jemand geht.
+        /// It is the boundary of the whole rule. Without it the collection
+        /// would pass even if the server sent the sign-off to every logged-in
+        /// session — and that would be no handing over but a presence leak:
+        /// Whoever has never asked and never been shown anything has no right
+        /// to learn when somebody leaves.
         /// </remarks>
         [Test]
         public async Task AStranger_HearsNothing()
@@ -577,12 +581,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var beiAlice = Presenzkorb(alice);
+            var atAlice = PresenceBasket(alice);
 
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitAgainst(() => Abmeldungen(beiAlice) > 0,
-                              "eine Abmeldung an jemanden, der nichts von Bob weiss");
+            await WaitAgainst(() => SignOffs(atAlice) > 0,
+                              "a sign-off to somebody who knows nothing of Bob");
 
         }
 

@@ -27,60 +27,59 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Aufbewahrte Subscription-Anfragen nach RFC 6121, Abschnitt 3.1.3,
-    /// Regel 4: wer gerade nicht verbunden ist, soll seine Anfragen trotzdem
-    /// bekommen.
+    /// Stored subscription requests according to RFC 6121, section 3.1.3,
+    /// rule 4: whoever is not connected right now shall get their requests
+    /// nevertheless.
     /// </summary>
     /// <remarks>
-    /// Ohne das Aufbewahren geht eine Anfrage an ein abgemeldetes Konto
-    /// ersatzlos verloren - und zwar unbemerkt auf beiden Seiten. Der
-    /// Antragsteller sieht ein <c>ask='subscribe'</c> in seinem Roster und
-    /// wartet auf eine Antwort; der Kontakt hat nie erfahren, dass er gefragt
-    /// wurde. Genau das war hier bis zuletzt der Fall.
+    /// Without the storing a request to a logged-out account is lost for good -
+    /// and unnoticed on both sides at that. The applicant sees an
+    /// <c>ask='subscribe'</c> in their roster and waits for an answer; the
+    /// contact never learned that they were asked. That was exactly the case
+    /// here until recently.
     ///
-    /// Der Abschnitt verlangt mehr als einmaliges Nachreichen: aufbewahrt wird
-    /// die <b>vollständige</b> Stanza, und zugestellt wird sie bei
-    /// <b>jeder</b> neu verfügbaren Resource, bis der Kontakt zustimmt oder
-    /// ablehnt.
+    /// The section demands more than handing the request over once: what is
+    /// stored is the <b>complete</b> stanza, and it is delivered at
+    /// <b>every</b> newly available resource, until the contact approves or
+    /// denies.
     /// </remarks>
     [TestFixture]
     public class OfflineSubscriptionRequestTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private String Alice => $"alice@{Server.Domain}";
         private String Bob   => $"bob@{Server.Domain}";
 
         /// <summary>
-        /// Ein noch nicht verbundener Client mit angehängtem Zähler für
-        /// eingehende Anfragen.
+        /// A not yet connected client with an attached counter for incoming
+        /// requests.
         /// </summary>
         /// <remarks>
-        /// Der Zähler wird <b>vor</b> dem Verbinden angehängt, nicht danach:
-        /// eine nachgereichte Anfrage kommt unmittelbar nach der ersten
-        /// Presence, und ein erst danach angemeldeter Empfänger verpasst sie
-        /// je nach Zeitverlauf. Ein Test, der so scheitert, sieht aus wie ein
-        /// Fehler im Server.
+        /// The counter is attached <b>before</b> connecting, not afterwards: a
+        /// handed-over request comes immediately after the first presence, and
+        /// a recipient that logs in only afterwards misses it depending on the
+        /// timing. A test failing that way looks like an error in the server.
         /// </remarks>
-        private (XMPPClient, List<(String From, String? Status)>) VorbereiteterClient(String localPart)
+        private (XMPPClient, List<(String From, String? Status)>) PreparedClient(String localPart)
         {
 
-            var client     = CreateClient(localPart);
-            var eingegangen = new List<(String, String?)>();
+            var client  = CreateClient(localPart);
+            var arrived = new List<(String, String?)>();
 
-            client.OnSubscriptionRequest += (from, status) => eingegangen.Add((from, status));
+            client.OnSubscriptionRequest += (from, status) => arrived.Add((from, status));
 
-            return (client, eingegangen);
+            return (client, arrived);
 
         }
 
-        /// <summary>Meldet einen Client ab und wartet, bis der Server das sieht.</summary>
-        private async Task AbmeldenAsync(XMPPClient client, String bareJid)
+        /// <summary>Logs a client out and waits until the server sees it.</summary>
+        private async Task DisconnectAndWaitAsync(XMPPClient client, String bareJid)
         {
             await client.DisconnectAsync();
             await WaitFor(() => Server.SessionsOf(bareJid).Count == 0,
-                          $"das Ende der Sitzung von {bareJid}");
+                          $"the end of the session of {bareJid}");
         }
 
         #endregion
@@ -89,8 +88,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARequestToAnOfflineAccount_ArrivesAtTheNextLogin()
 
         /// <summary>
-        /// Der Kern von Regel 4: Bob ist nicht da, als Alice fragt - und
-        /// erfährt es beim nächsten Anmelden.
+        /// The core of rule 4: Bob is not there when Alice asks - and learns of
+        /// it at the next login.
         /// </summary>
         [Test]
         public async Task ARequestToAnOfflineAccount_ArrivesAtTheNextLogin()
@@ -101,13 +100,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
 
-            // Erst jetzt kommt Bob - die Anfrage liegt schon eine Weile.
-            var (bob, anfragen) = VorbereiteterClient("bob");
+            // Only now does Bob come - the request has been lying for a while.
+            var (bob, requests) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => anfragen.Count > 0, "die nachgereichte Anfrage");
+            await WaitFor(() => requests.Count > 0, "the handed-over request");
 
-            Assert.That(anfragen[0].From, Is.EqualTo(Alice));
+            Assert.That(requests[0].From, Is.EqualTo(Alice));
 
         }
 
@@ -116,15 +115,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NothingIsAddedToTheRosterBeforeApproval()
 
         /// <summary>
-        /// Abschnitt 3.1.3, Security Warning: "the contact's server MUST NOT
-        /// add an item for the user to the contact's roster" - solange nicht
-        /// zugestimmt wurde.
+        /// Section 3.1.3, Security Warning: "the contact's server MUST NOT
+        /// add an item for the user to the contact's roster" - as long as
+        /// nothing has been approved.
         /// </summary>
         /// <remarks>
-        /// Die Warnung hat einen handfesten Grund: ein Eintrag im Roster ist
-        /// für den Kontakt sichtbar und überdauert die Anfrage. Wer beliebige
-        /// Fremde in fremde Roster schreiben kann, kann sie vollschreiben.
-        /// Aufbewahrt wird die Anfrage deshalb neben dem Roster, nicht darin.
+        /// The warning has a solid reason: an entry in the roster is visible to
+        /// the contact and outlives the request. Whoever can write arbitrary
+        /// strangers into foreign rosters can fill them up. The request is
+        /// therefore stored next to the roster, not within it.
         /// </remarks>
         [Test]
         public async Task NothingIsAddedToTheRosterBeforeApproval()
@@ -135,13 +134,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
 
-            var (bob, anfragen) = VorbereiteterClient("bob");
+            var (bob, requests) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => anfragen.Count > 0, "die nachgereichte Anfrage");
+            await WaitFor(() => requests.Count > 0, "the handed-over request");
 
             Assert.That(Server.GetAccount(Bob)!.Roster, Is.Empty,
-                        "Vor der Zustimmung gehört der Antragsteller nicht in Bobs Roster.");
+                        "Before the approval the applicant does not belong into Bob's roster.");
 
         }
 
@@ -150,14 +149,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheCompleteStanzaIsKept()
 
         /// <summary>
-        /// Regel 4 verlangt die vollständige Stanza, "including any extended
+        /// Rule 4 demands the complete stanza, "including any extended
         /// content contained therein".
         /// </summary>
         /// <remarks>
-        /// Der erweiterte Inhalt ist hier keine Formalie: das
-        /// <c>&lt;status/&gt;</c> einer Anfrage ist die Begründung, mit der ein
-        /// Mensch entscheidet, ob er zustimmt. Eine Anfrage ohne sie ist eine
-        /// andere Anfrage.
+        /// The extended content is no formality here: the
+        /// <c>&lt;status/&gt;</c> of a request is the reason a human being
+        /// decides on whether to approve. A request without it is a different
+        /// request.
         /// </remarks>
         [Test]
         public async Task TheCompleteStanzaIsKept()
@@ -167,14 +166,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             await alice.Connection.SendRawAsync(
-                      $"<presence to='{Bob}' type='subscribe'><status>Wir kennen uns vom Bahnsteig</status></presence>");
+                      $"<presence to='{Bob}' type='subscribe'><status>We know each other from the platform</status></presence>");
 
-            var (bob, anfragen) = VorbereiteterClient("bob");
+            var (bob, requests) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => anfragen.Count > 0, "die nachgereichte Anfrage");
+            await WaitFor(() => requests.Count > 0, "the handed-over request");
 
-            Assert.That(anfragen[0].Status, Is.EqualTo("Wir kennen uns vom Bahnsteig"));
+            Assert.That(requests[0].Status, Is.EqualTo("We know each other from the platform"));
 
         }
 
@@ -188,10 +187,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// the contact either approves or denies the request."
         /// </summary>
         /// <remarks>
-        /// Einmaliges Nachreichen genügt nicht. Wer sich anmeldet, die Anfrage
-        /// übersieht und sich wieder abmeldet, hätte sie sonst für immer
-        /// verloren - und der Antragsteller wartete auf eine Antwort, die
-        /// niemand mehr geben kann.
+        /// Handing it over once is not enough. Whoever logs in, overlooks the
+        /// request and logs out again would otherwise have lost it forever -
+        /// and the applicant waited for an answer nobody can give any more.
         /// </remarks>
         [Test]
         public async Task TheRequestIsRepeatedUntilItIsAnswered()
@@ -202,19 +200,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
 
-            var (ersteAnmeldung, ersteAnfragen) = VorbereiteterClient("bob");
-            await ersteAnmeldung.ConnectAsync();
-            await WaitFor(() => ersteAnfragen.Count > 0, "die Anfrage bei der ersten Anmeldung");
+            var (firstLogin, firstRequests) = PreparedClient("bob");
+            await firstLogin.ConnectAsync();
+            await WaitFor(() => firstRequests.Count > 0, "the request at the first login");
 
-            // Ohne zu antworten wieder weg.
-            await AbmeldenAsync(ersteAnmeldung, Bob);
+            // Away again without answering.
+            await DisconnectAndWaitAsync(firstLogin, Bob);
 
-            var (zweiteAnmeldung, zweiteAnfragen) = VorbereiteterClient("bob");
-            await zweiteAnmeldung.ConnectAsync();
+            var (secondLogin, secondRequests) = PreparedClient("bob");
+            await secondLogin.ConnectAsync();
 
-            await WaitFor(() => zweiteAnfragen.Count > 0, "die Anfrage bei der zweiten Anmeldung");
+            await WaitFor(() => secondRequests.Count > 0, "the request at the second login");
 
-            Assert.That(zweiteAnfragen[0].From, Is.EqualTo(Alice));
+            Assert.That(secondRequests[0].From, Is.EqualTo(Alice));
 
         }
 
@@ -224,7 +222,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         /// <summary>
         /// "... until the contact either approves or denies the request."
-        /// Zustimmung beendet das Nachreichen.
+        /// An approval ends the handing over.
         /// </summary>
         [Test]
         public async Task AnApprovedRequest_IsNotRepeated()
@@ -235,21 +233,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
 
-            var (ersteAnmeldung, ersteAnfragen) = VorbereiteterClient("bob");
-            await ersteAnmeldung.ConnectAsync();
-            await WaitFor(() => ersteAnfragen.Count > 0, "die Anfrage bei der ersten Anmeldung");
+            var (firstLogin, firstRequests) = PreparedClient("bob");
+            await firstLogin.ConnectAsync();
+            await WaitFor(() => firstRequests.Count > 0, "the request at the first login");
 
-            await ersteAnmeldung.AcceptSubscriptionAsync(Alice);
+            await firstLogin.AcceptSubscriptionAsync(Alice);
             await WaitFor(() => Server.GetAccount(Bob)?.SubscriptionOf(Alice) == "from",
-                          "die Zustimmung");
+                          "the approval");
 
-            await AbmeldenAsync(ersteAnmeldung, Bob);
+            await DisconnectAndWaitAsync(firstLogin, Bob);
 
-            var (zweiteAnmeldung, zweiteAnfragen) = VorbereiteterClient("bob");
-            await zweiteAnmeldung.ConnectAsync();
+            var (secondLogin, secondRequests) = PreparedClient("bob");
+            await secondLogin.ConnectAsync();
 
-            await WaitAgainst(() => zweiteAnfragen.Count > 0,
-                              "eine bereits beantwortete Anfrage noch einmal");
+            await WaitAgainst(() => secondRequests.Count > 0,
+                              "an already answered request once more");
 
         }
 
@@ -258,8 +256,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADeniedRequest_IsNotRepeated()
 
         /// <summary>
-        /// Ablehnung ebenso - sonst käme dieselbe Anfrage bei jeder Anmeldung
-        /// wieder, und Ablehnen wäre wirkungslos.
+        /// A denial likewise - otherwise the same request would come again at
+        /// every login, and denying would be without effect.
         /// </summary>
         [Test]
         public async Task ADeniedRequest_IsNotRepeated()
@@ -270,21 +268,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
 
-            var (ersteAnmeldung, ersteAnfragen) = VorbereiteterClient("bob");
-            await ersteAnmeldung.ConnectAsync();
-            await WaitFor(() => ersteAnfragen.Count > 0, "die Anfrage bei der ersten Anmeldung");
+            var (firstLogin, firstRequests) = PreparedClient("bob");
+            await firstLogin.ConnectAsync();
+            await WaitFor(() => firstRequests.Count > 0, "the request at the first login");
 
-            await ersteAnmeldung.DenySubscriptionAsync(Alice);
+            await firstLogin.DenySubscriptionAsync(Alice);
             await WaitFor(() => Server.GetAccount(Alice)?.SubscriptionOf(Bob) is null or "none",
-                          "die Ablehnung");
+                          "the denial");
 
-            await AbmeldenAsync(ersteAnmeldung, Bob);
+            await DisconnectAndWaitAsync(firstLogin, Bob);
 
-            var (zweiteAnmeldung, zweiteAnfragen) = VorbereiteterClient("bob");
-            await zweiteAnmeldung.ConnectAsync();
+            var (secondLogin, secondRequests) = PreparedClient("bob");
+            await secondLogin.ConnectAsync();
 
-            await WaitAgainst(() => zweiteAnfragen.Count > 0,
-                              "eine bereits abgelehnte Anfrage noch einmal");
+            await WaitAgainst(() => secondRequests.Count > 0,
+                              "an already denied request once more");
 
         }
 
@@ -293,14 +291,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RepeatedRequests_AreStoredOnlyOnce()
 
         /// <summary>
-        /// Regel 4: "MUST deliver only one of the requests when the contact
+        /// Rule 4: "MUST deliver only one of the requests when the contact
         /// next has an available resource; ... this helps to prevent
         /// 'subscription request spam'".
         /// </summary>
         /// <remarks>
-        /// Ohne diese Grenze wäre das Aufbewahren selbst die Schwachstelle:
-        /// wer eine Anfrage hundertmal schickt, während der Kontakt weg ist,
-        /// überschüttete ihn beim Anmelden mit hundert Anfragen.
+        /// Without this limit the storing would itself be the weak spot:
+        /// whoever sends a request a hundred times while the contact is away
+        /// would deluge them with a hundred requests at the login.
         /// </remarks>
         [Test]
         public async Task RepeatedRequests_AreStoredOnlyOnce()
@@ -312,15 +310,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             for (var i = 0; i < 5; i++)
                 await alice.Connection.SendRawAsync($"<presence to='{Bob}' type='subscribe'/>");
 
-            var (bob, anfragen) = VorbereiteterClient("bob");
+            var (bob, requests) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => anfragen.Count > 0, "die nachgereichte Anfrage");
+            await WaitFor(() => requests.Count > 0, "the handed-over request");
 
-            // Die weiteren hätten inzwischen ankommen können.
+            // The further ones could have arrived by now.
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            Assert.That(anfragen, Has.Count.EqualTo(1));
+            Assert.That(requests, Has.Count.EqualTo(1));
 
         }
 
@@ -329,22 +327,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFurtherRequest_IsNotDeliveredAgain()
 
         /// <summary>
-        /// Anhang A, Tabelle 6: liegt bereits eine Anfrage vor, <i>soll</i> ein
-        /// weiteres <c>subscribe</c> desselben Absenders nicht noch einmal
-        /// zugestellt werden.
+        /// Appendix A, table 6: if a request is already there, a further
+        /// <c>subscribe</c> of the same sender <i>should</i> not be delivered
+        /// once more.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zu <see cref="RepeatedRequests_AreStoredOnlyOnce"/>,
-        /// und die schärfere: dort ist der Kontakt abgemeldet, und ob eine
-        /// wiederholte Anfrage abgewiesen wird oder die aufbewahrte ersetzt,
-        /// sieht am Ende gleich aus - einmal zugestellt. Hier ist er verbunden,
-        /// und der Unterschied wird sichtbar, weil jede angenommene Anfrage
-        /// sofort hinausgeht.
+        /// The counter-check to <see cref="RepeatedRequests_AreStoredOnlyOnce"/>,
+        /// and the sharper one: there the contact is logged out, and whether a
+        /// repeated request is turned away or replaces the stored one looks the
+        /// same in the end - delivered once. Here they are connected, and the
+        /// difference becomes visible, because every accepted request goes out
+        /// right away.
         ///
-        /// Geprüft wird deshalb auch der Inhalt: aufbewahrt und zugestellt
-        /// bleibt die <b>erste</b>. Bestimmte die letzte, könnte jemand die
-        /// Begründung, mit der er einmal gefragt hat, beliebig oft gegen eine
-        /// andere austauschen.
+        /// What is checked is therefore the content as well: what is stored and
+        /// delivered stays the <b>first</b> one. Were the last one to decide,
+        /// somebody could exchange the reason they once asked with for another
+        /// one arbitrarily often.
         /// </remarks>
         [Test]
         public async Task AFurtherRequest_IsNotDeliveredAgain()
@@ -352,24 +350,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var (bob, anfragen) = VorbereiteterClient("bob");
+            var (bob, requests) = PreparedClient("bob");
             Server.AddAccount("bob");
             await bob.ConnectAsync();
 
             await alice.Connection.SendRawAsync(
-                      $"<presence to='{Bob}' type='subscribe'><status>erste</status></presence>");
-            await WaitFor(() => anfragen.Count > 0, "die erste Anfrage");
+                      $"<presence to='{Bob}' type='subscribe'><status>first</status></presence>");
+            await WaitFor(() => requests.Count > 0, "the first request");
 
             await alice.Connection.SendRawAsync(
-                      $"<presence to='{Bob}' type='subscribe'><status>zweite</status></presence>");
+                      $"<presence to='{Bob}' type='subscribe'><status>second</status></presence>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(anfragen, Has.Count.EqualTo(1));
-                Assert.That(anfragen[0].Status, Is.EqualTo("erste"),
-                            "Aufbewahrt bleibt die zuerst gestellte Anfrage.");
+                Assert.That(requests, Has.Count.EqualTo(1));
+                Assert.That(requests[0].Status, Is.EqualTo("first"),
+                            "What stays stored is the request asked first.");
             });
 
         }
@@ -379,15 +377,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStatusChange_DoesNotRepeatTheRequest()
 
         /// <summary>
-        /// Nachgereicht wird beim Verfügbar<i>werden</i>, nicht bei jeder
-        /// Presence.
+        /// The handing over happens at the <i>becoming</i> available, not at
+        /// every presence.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied ist leicht zu übersehen und im Betrieb sofort
-        /// spürbar: ein Client schickt bei jedem Wechsel auf "abwesend" oder
-        /// "beschäftigt" eine neue Presence. Hinge das Nachreichen daran,
-        /// bekäme der Nutzer dieselbe unbeantwortete Anfrage jedes Mal wieder
-        /// vorgelegt.
+        /// The difference is easy to overlook and noticeable at once in
+        /// operation: a client sends a new presence at every change to "away"
+        /// or "busy". Were the handing over to hang on that, the user would be
+        /// presented with the same unanswered request over and over.
         /// </remarks>
         [Test]
         public async Task AStatusChange_DoesNotRepeatTheRequest()
@@ -395,20 +392,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var (bob, anfragen) = VorbereiteterClient("bob");
+            var (bob, requests) = PreparedClient("bob");
             Server.AddAccount("bob");
             await bob.ConnectAsync();
 
             await alice.AddContactAsync(Bob, "Bob");
-            await WaitFor(() => anfragen.Count > 0, "die Anfrage");
+            await WaitFor(() => requests.Count > 0, "the request");
 
-            // Dieselbe Sitzung, neue Presence - die Anfrage ist weiterhin
-            // unbeantwortet und liegt weiterhin aufbewahrt.
-            await bob.SetPresenceAsync("away", "Mittagspause");
+            // The same session, a new presence - the request is still
+            // unanswered and still lies stored.
+            await bob.SetPresenceAsync("away", "Lunch break");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            Assert.That(anfragen, Has.Count.EqualTo(1));
+            Assert.That(requests, Has.Count.EqualTo(1));
 
         }
 
@@ -417,15 +414,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheLimit_DropsFurtherRequestsInsteadOfTheStoredOnes()
 
         /// <summary>
-        /// Security Warning zu Abschnitt 3.1.3: wer Anfragen aufhebt, hebt
-        /// auf, was Fremde schicken - deshalb eine Obergrenze.
+        /// Security Warning to section 3.1.3: whoever keeps requests keeps what
+        /// strangers send - hence an upper limit.
         /// </summary>
         /// <remarks>
-        /// Geprüft wird nicht nur, <i>dass</i> die Grenze greift, sondern in
-        /// welche Richtung: die neue Anfrage wird verworfen, die bereits
-        /// aufbewahrte bleibt. Andersherum könnte ein Angreifer die echte
-        /// Anfrage eines Bekannten gezielt hinausdrängen - eine Grenze, die
-        /// verdrängt statt abzuweisen, wäre selbst der Angriff.
+        /// What is checked is not only <i>that</i> the limit takes hold, but in
+        /// which direction: the new request is discarded, the already stored
+        /// one stays. The other way round an attacker could push out the real
+        /// request of an acquaintance on purpose - a limit that displaces
+        /// instead of turning away would itself be the attack.
         /// </remarks>
         [Test]
         public async Task TheLimit_DropsFurtherRequestsInsteadOfTheStoredOnes()
@@ -439,21 +436,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.AddContactAsync(Bob, "Bob");
             await WaitFor(() => Server.GetAccount(Bob)!.PendingSubscriptionRequests.Count == 1,
-                          "Alices aufbewahrte Anfrage");
+                          "Alice's stored request");
 
             await carol.AddContactAsync(Bob, "Bob");
 
-            var (bob, anfragen) = VorbereiteterClient("bob");
+            var (bob, requests) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => anfragen.Count > 0, "die nachgereichte Anfrage");
+            await WaitFor(() => requests.Count > 0, "the handed-over request");
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(anfragen, Has.Count.EqualTo(1));
-                Assert.That(anfragen[0].From, Is.EqualTo(Alice),
-                            "Die zuerst aufbewahrte Anfrage bleibt stehen.");
+                Assert.That(requests, Has.Count.EqualTo(1));
+                Assert.That(requests[0].From, Is.EqualTo(Alice),
+                            "The request stored first stays.");
             });
 
         }
@@ -463,14 +460,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASecondResource_AlsoGetsTheRequest()
 
         /// <summary>
-        /// "... whenever the contact creates an available resource": auch eine
-        /// zweite Resource neben einer bereits angemeldeten.
+        /// "... whenever the contact creates an available resource": a second
+        /// resource next to an already logged-in one as well.
         /// </summary>
         /// <remarks>
-        /// Der Fall sieht künstlich aus, ist aber der Regelfall: Telefon und
-        /// Rechner gleichzeitig. Beantwortet wird die Anfrage dort, wo der
-        /// Mensch gerade sitzt - und das ist nicht notwendig die Resource, die
-        /// zuerst da war.
+        /// The case looks artificial but is the normal one: phone and desktop
+        /// at the same time. The request is answered where the human being is
+        /// sitting right now - and that is not necessarily the resource that
+        /// was there first.
         /// </remarks>
         [Test]
         public async Task ASecondResource_AlsoGetsTheRequest()
@@ -479,18 +476,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var (erste, ersteAnfragen) = VorbereiteterClient("bob");
-            await erste.ConnectAsync();
+            var (first, firstRequests) = PreparedClient("bob");
+            await first.ConnectAsync();
 
             await alice.AddContactAsync(Bob, "Bob");
-            await WaitFor(() => ersteAnfragen.Count > 0, "die Anfrage bei der ersten Resource");
+            await WaitFor(() => firstRequests.Count > 0, "the request at the first resource");
 
-            var (zweite, zweiteAnfragen) = VorbereiteterClient("bob");
-            await zweite.ConnectAsync();
+            var (second, secondRequests) = PreparedClient("bob");
+            await second.ConnectAsync();
 
-            await WaitFor(() => zweiteAnfragen.Count > 0, "die Anfrage bei der zweiten Resource");
+            await WaitFor(() => secondRequests.Count > 0, "the request at the second resource");
 
-            Assert.That(zweiteAnfragen[0].From, Is.EqualTo(Alice));
+            Assert.That(secondRequests[0].From, Is.EqualTo(Alice));
 
         }
 

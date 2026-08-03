@@ -30,24 +30,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 8.5: Wohin eine Nachricht geht, hängt an ihrer Art
-    /// <b>und</b> an der Form der Adresse.
+    /// RFC 6121, section 8.5: Where a message goes depends on its kind
+    /// <b>and</b> on the shape of the address.
     /// </summary>
     /// <remarks>
-    /// Der Server stellte bis hierher alles gleich zu. Die Unterscheidung ist
-    /// keine Formsache — zwei der Regeln sind MUSS-Regeln, und beide verhindern
-    /// etwas, das der Absender nicht will:
+    /// Up to here the server delivered everything alike. The distinction is no
+    /// formality — two of the rules are MUST rules, and both prevent something
+    /// the sender does not want:
     ///
     /// <list type="bullet">
     ///   <item>
-    ///     Ein <c>groupchat</c> an ein Konto ist nie zustellbar. Er gehört in
-    ///     einen Raum; an einen Bare-JID gerichtet, wüsste keine Resource, was
-    ///     sie damit anfangen soll.
+    ///     A <c>groupchat</c> to an account is never deliverable. It belongs
+    ///     into a room; addressed to a bare JID, no resource would know what to
+    ///     do with it.
     ///   </item>
     ///   <item>
-    ///     Eine Resource mit negativer Priorität bekommt nichts, was bloss an
-    ///     das Konto ging. Genau dafür setzt ein Client sie — das Gerät bleibt
-    ///     gerichtet ansprechbar und hält sich aus dem Übrigen heraus.
+    ///     A resource with a negative priority gets nothing that only went to
+    ///     the account. That is precisely what a client sets it for — the
+    ///     device stays addressable directly and keeps out of the rest.
     ///   </item>
     /// </list>
     /// </remarks>
@@ -55,11 +55,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     public class MessageDeliveryRulesTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Meldet einen zweiten Client desselben Kontos an und setzt seine
-        /// Priorität.
+        /// Logs a second client of the same account in and sets its priority.
         /// </summary>
         private async Task<XMPPClient> ResourceAsync(String localPart, String resource, Int32 priority)
         {
@@ -75,7 +74,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.SendRawAsync($"<presence><priority>{priority}</priority></presence>");
 
             await WaitFor(() => Server.SessionOf(client.FullJid!)?.PresencePriority == priority,
-                          $"die Priorität {priority} für {resource}");
+                          $"the priority {priority} for {resource}");
 
             return client;
 
@@ -87,18 +86,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGroupchatToAnAccount_IsRefused()
 
         /// <summary>
-        /// Ein <c>groupchat</c> an einen Bare-JID wird nicht zugestellt,
-        /// sondern abgelehnt (Abschnitt 8.5.2.1.1).
+        /// A <c>groupchat</c> to a bare JID is not delivered but refused
+        /// (section 8.5.2.1.1).
         /// </summary>
         /// <remarks>
-        /// Geprüft wird auch, an <b>wen</b> die Ablehnung adressiert ist. Das
-        /// klingt nach Formsache und ist keine: Eine Stanza an einen Client muss
-        /// an ihn adressiert sein (RFC 6120, Abschnitt 8.1.1), und ein Client,
-        /// der das prüft, verwürfe eine Ablehnung mit fremdem <c>to</c>
-        /// stillschweigend. Dass sie im richtigen Stream ankommt, ist die eine
-        /// Hälfte; dass sie den richtigen Empfänger nennt, die andere - und die
-        /// beiden lassen sich verwechseln, weil die Zustellung schon dann
-        /// funktioniert, wenn nur die erste stimmt.
+        /// What is checked as well is <b>whom</b> the refusal is addressed to.
+        /// That sounds like a formality and is none: A stanza to a client must
+        /// be addressed to it (RFC 6120, section 8.1.1), and a client checking
+        /// that would discard a refusal carrying someone else's <c>to</c>
+        /// silently. That it arrives in the right stream is the one half; that
+        /// it names the right recipient the other - and the two are easy to
+        /// mistake for one another, because delivery already works when only
+        /// the first one holds.
         /// </remarks>
         [Test]
         public async Task AGroupchatToAnAccount_IsRefused()
@@ -107,42 +106,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            bob.OnMessage += m => inbox.Enqueue(m);
 
-            var fehler = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            var errors = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
 
-            var rohe = new ConcurrentQueue<String>();
+            var rawFrames = new ConcurrentQueue<String>();
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("an-das-konto", StringComparison.Ordinal))
+                    x.Contains("to-the-account", StringComparison.Ordinal))
                 {
-                    rohe.Enqueue(x);
+                    rawFrames.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync(
-                      $"<message to='{bob.BareJid}' type='groupchat' id='an-das-konto'>" +
-                      "<body>Gehört in einen Raum</body></message>");
+                      $"<message to='{bob.BareJid}' type='groupchat' id='to-the-account'>" +
+                      "<body>Belongs into a room</body></message>");
 
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung beim Absender");
+            await WaitFor(() => !errors.IsEmpty, "the refusal at the sender");
 
-            fehler.TryDequeue(out var abgelehnt);
-            rohe.TryDequeue(out var stanza);
+            errors.TryDequeue(out var refused);
+            rawFrames.TryDequeue(out var stanza);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+                Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
                 Assert.That(stanza, Does.Contain($"to='{alice.FullJid}'"),
-                            "Die Ablehnung muss an den Absender adressiert sein, " +
-                            "nicht an die Adresse, an die es nicht ging.");
+                            "The refusal must be addressed to the sender, " +
+                            "not to the address it did not go to.");
 
-                Assert.That(eingang, Is.Empty,
-                            "Ein groupchat an ein Konto darf keine Resource erreichen.");
+                Assert.That(inbox, Is.Empty,
+                            "A groupchat to an account must not reach a resource.");
 
             });
 
@@ -153,14 +152,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGroupchatToAResource_IsDelivered()
 
         /// <summary>
-        /// Die Gegenprobe: An eine passende Resource gerichtet wird derselbe
-        /// <c>groupchat</c> zugestellt (Abschnitt 8.5.3.1).
+        /// The counter-check: addressed to a matching resource the same
+        /// <c>groupchat</c> is delivered (section 8.5.3.1).
         /// </summary>
         /// <remarks>
-        /// Genau so liefert ein Raum aus - er schickt an
-        /// <c>nutzer@server/resource</c>, nicht an das Konto. Ohne diese
-        /// Gegenprobe bestünde die Sammlung auch dann, wenn <c>groupchat</c>
-        /// überhaupt nicht mehr ankäme, und die Raumfunktion wäre unbenutzbar.
+        /// That is exactly how a room delivers - it sends to
+        /// <c>user@server/resource</c>, not to the account. Without this
+        /// counter-check the collection would pass even if <c>groupchat</c> did
+        /// not arrive at all any more, and the room feature would be unusable.
         /// </remarks>
         [Test]
         public async Task AGroupchatToAResource_IsDelivered()
@@ -169,18 +168,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            bob.OnMessage += m => inbox.Enqueue(m);
 
             await alice.SendRawAsync(
-                      $"<message to='{bob.FullJid}' type='groupchat' id='an-die-resource'>" +
-                      "<body>Aus dem Raum</body></message>");
+                      $"<message to='{bob.FullJid}' type='groupchat' id='to-the-resource'>" +
+                      "<body>From the room</body></message>");
 
-            await WaitFor(() => !eingang.IsEmpty, "die Zustellung an die Resource");
+            await WaitFor(() => !inbox.IsEmpty, "the delivery to the resource");
 
-            eingang.TryDequeue(out var empfangen);
+            inbox.TryDequeue(out var received);
 
-            Assert.That(empfangen!.Type, Is.EqualTo(MessageType.GroupChat));
+            Assert.That(received!.Type, Is.EqualTo(MessageType.GroupChat));
 
         }
 
@@ -189,49 +188,50 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AHeadlineReachesEveryResource()
 
         /// <summary>
-        /// Ein <c>headline</c> an den Bare-JID geht an <b>alle</b> Resourcen
-        /// mit nicht-negativer Priorität (Abschnitt 8.5.2.1.1).
+        /// A <c>headline</c> to the bare JID goes to <b>all</b> resources with
+        /// a non-negative priority (section 8.5.2.1.1).
         /// </summary>
         /// <remarks>
-        /// Er ist eine Meldung an den Menschen und nicht an ein Gerät — welches
-        /// davon er gerade ansieht, weiss niemand. Eine gewöhnliche Nachricht
-        /// geht dagegen an eine Resource; die Gegenprobe steht im selben Test,
-        /// sonst bestünde er auch dann, wenn schlicht alles an alle ginge.
+        /// It is a notice to the human being and not to a device — which one of
+        /// them they are looking at right now nobody knows. An ordinary message
+        /// goes to one resource instead; the counter-check stands in the same
+        /// test, because otherwise it would pass even if simply everything went
+        /// to everyone.
         /// </remarks>
         [Test]
         public async Task AHeadlineReachesEveryResource()
         {
 
             var alice   = await ConnectClientAsync("alice");
-            var handy   = await ResourceAsync("bob", "Handy",  1);
-            var rechner = await ResourceAsync("bob", "Rechner", 1);
+            var mobile  = await ResourceAsync("bob", "Mobile",  1);
+            var desktop = await ResourceAsync("bob", "Desktop", 1);
 
-            var amHandy   = new ConcurrentQueue<XMPPMessage>();
-            var amRechner = new ConcurrentQueue<XMPPMessage>();
+            var atTheMobile  = new ConcurrentQueue<XMPPMessage>();
+            var atTheDesktop = new ConcurrentQueue<XMPPMessage>();
 
-            handy.OnMessage   += m => amHandy.Enqueue(m);
-            rechner.OnMessage += m => amRechner.Enqueue(m);
+            mobile.OnMessage  += m => atTheMobile.Enqueue(m);
+            desktop.OnMessage += m => atTheDesktop.Enqueue(m);
 
             await alice.SendRawAsync(
-                      $"<message to='{handy.BareJid}' type='headline' id='meldung'>" +
-                      "<body>Kurs gefallen</body></message>");
+                      $"<message to='{mobile.BareJid}' type='headline' id='notice'>" +
+                      "<body>Price has fallen</body></message>");
 
-            await WaitFor(() => !amHandy.IsEmpty && !amRechner.IsEmpty,
-                          "die Meldung auf beiden Geräten");
+            await WaitFor(() => !atTheMobile.IsEmpty && !atTheDesktop.IsEmpty,
+                          "the notice on both devices");
 
-            // Und nun eine gewöhnliche Nachricht - die geht an eine Resource.
+            // And now an ordinary message - that one goes to one resource.
             await alice.SendRawAsync(
-                      $"<message to='{handy.BareJid}' type='chat' id='an-einen'>" +
-                      "<body>Nur an dich</body></message>");
+                      $"<message to='{mobile.BareJid}' type='chat' id='to-one'>" +
+                      "<body>Only to you</body></message>");
 
-            await WaitFor(() => amHandy.Any(m => m.MessageId == "an-einen") ||
-                                amRechner.Any(m => m.MessageId == "an-einen"),
-                          "die gewöhnliche Nachricht");
+            await WaitFor(() => atTheMobile.Any(m => m.MessageId == "to-one") ||
+                                atTheDesktop.Any(m => m.MessageId == "to-one"),
+                          "the ordinary message");
 
-            Assert.That(amHandy.Count(m => m.MessageId == "an-einen") +
-                        amRechner.Count(m => m.MessageId == "an-einen"),
+            Assert.That(atTheMobile.Count(m => m.MessageId == "to-one") +
+                        atTheDesktop.Count(m => m.MessageId == "to-one"),
                         Is.EqualTo(1),
-                        "Eine gewöhnliche Nachricht geht an eine Resource, nicht an alle.");
+                        "An ordinary message goes to one resource, not to all of them.");
 
         }
 
@@ -240,40 +240,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ANegativePriority_ReceivesNothingFromTheAccount()
 
         /// <summary>
-        /// Eine Resource mit negativer Priorität bekommt nichts, was an den
-        /// Bare-JID ging — bleibt aber gerichtet ansprechbar
-        /// (Abschnitte 8.5.2.1.1 und 8.5.3.1).
+        /// A resource with a negative priority gets nothing that went to the
+        /// bare JID — but stays addressable directly
+        /// (sections 8.5.2.1.1 and 8.5.3.1).
         /// </summary>
         /// <remarks>
-        /// Beide Hälften gehören zusammen. Ohne die zweite wäre die negative
-        /// Priorität ein Abmelden, und das ist sie gerade nicht: Das Gerät
-        /// bleibt erreichbar, es hält sich nur aus dem Verkehr heraus, der an
-        /// das Konto gerichtet ist.
+        /// Both halves belong together. Without the second one the negative
+        /// priority would be a logging out, and that is precisely what it is
+        /// not: The device stays reachable, it only keeps out of the traffic
+        /// that is addressed to the account.
         /// </remarks>
         [Test]
         public async Task ANegativePriority_ReceivesNothingFromTheAccount()
         {
 
-            var alice     = await ConnectClientAsync("alice");
-            var zweitgeraet = await ResourceAsync("bob", "Zweitgerät", -1);
+            var alice        = await ConnectClientAsync("alice");
+            var secondDevice = await ResourceAsync("bob", "SecondDevice", -1);
 
-            var eingang = new ConcurrentQueue<XMPPMessage>();
-            zweitgeraet.OnMessage += m => eingang.Enqueue(m);
+            var inbox = new ConcurrentQueue<XMPPMessage>();
+            secondDevice.OnMessage += m => inbox.Enqueue(m);
 
             await alice.SendRawAsync(
-                      $"<message to='{zweitgeraet.BareJid}' type='chat' id='an-das-konto'>" +
-                      "<body>An das Konto</body></message>");
+                      $"<message to='{secondDevice.BareJid}' type='chat' id='to-the-account'>" +
+                      "<body>To the account</body></message>");
 
-            // Gerichtet an dieselbe Resource - das muss ankommen.
+            // Addressed to the same resource - that must arrive.
             await alice.SendRawAsync(
-                      $"<message to='{zweitgeraet.FullJid}' type='chat' id='an-die-resource'>" +
-                      "<body>An die Resource</body></message>");
+                      $"<message to='{secondDevice.FullJid}' type='chat' id='to-the-resource'>" +
+                      "<body>To the resource</body></message>");
 
-            await WaitFor(() => eingang.Any(m => m.MessageId == "an-die-resource"),
-                          "die gerichtete Nachricht");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "to-the-resource"),
+                          "the directed message");
 
-            Assert.That(eingang.Any(m => m.MessageId == "an-das-konto"), Is.False,
-                        "Was an das Konto ging, darf eine negative Priorität nicht erreichen.");
+            Assert.That(inbox.Any(m => m.MessageId == "to-the-account"), Is.False,
+                        "What went to the account must not reach a negative priority.");
 
         }
 
@@ -282,14 +282,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnErrorToAnAccount_IsSilentlyIgnored()
 
         /// <summary>
-        /// Eine Fehler-Nachricht an den Bare-JID wird stillschweigend
-        /// übergangen (Abschnitt 8.5.2.1.1).
+        /// An error message to the bare JID is silently passed over
+        /// (section 8.5.2.1.1).
         /// </summary>
         /// <remarks>
-        /// Auf einen Fehler mit einem Fehler zu antworten, wäre der Anfang
-        /// einer Schleife. An eine passende Resource gerichtet muss er dagegen
-        /// zugestellt werden — er ist ja die Antwort auf etwas, das genau diese
-        /// Resource geschickt hat.
+        /// Answering an error with an error would be the beginning of a loop.
+        /// Addressed to a matching resource it must be delivered though — it is
+        /// after all the answer to something that this very resource sent.
         /// </remarks>
         [Test]
         public async Task AnErrorToAnAccount_IsSilentlyIgnored()
@@ -298,32 +297,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var beiBob = new ConcurrentQueue<StanzaError>();
-            bob.Connection.OnStanzaError += (from, e) => beiBob.Enqueue(e);
+            var atBob = new ConcurrentQueue<StanzaError>();
+            bob.Connection.OnStanzaError += (from, e) => atBob.Enqueue(e);
 
-            var beiAlice = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => beiAlice.Enqueue(e);
+            var atAlice = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => atAlice.Enqueue(e);
 
-            const String fehlerRumpf = "<error type='cancel'>" +
-                                       "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
-                                       "</error>";
-
-            await alice.SendRawAsync(
-                      $"<message to='{bob.BareJid}' type='error' id='an-das-konto'>{fehlerRumpf}</message>");
+            const String errorBody = "<error type='cancel'>" +
+                                     "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
+                                     "</error>";
 
             await alice.SendRawAsync(
-                      $"<message to='{bob.FullJid}' type='error' id='an-die-resource'>{fehlerRumpf}</message>");
+                      $"<message to='{bob.BareJid}' type='error' id='to-the-account'>{errorBody}</message>");
 
-            await WaitFor(() => !beiBob.IsEmpty, "den gerichteten Fehler");
+            await alice.SendRawAsync(
+                      $"<message to='{bob.FullJid}' type='error' id='to-the-resource'>{errorBody}</message>");
+
+            await WaitFor(() => !atBob.IsEmpty, "the directed error");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(beiBob, Has.Count.EqualTo(1),
-                            "Nur der gerichtete Fehler darf ankommen.");
+                Assert.That(atBob, Has.Count.EqualTo(1),
+                            "Only the directed error may arrive.");
 
-                Assert.That(beiAlice, Is.Empty,
-                            "Und auf einen Fehler folgt kein Fehler.");
+                Assert.That(atAlice, Is.Empty,
+                            "And an error is not followed by an error.");
 
             });
 
@@ -334,13 +333,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePriorityIsReadFromThePresence()
 
         /// <summary>
-        /// Die Priorität wird aus der Presence gelesen; fehlt sie oder ist sie
-        /// unbrauchbar, gilt 0.
+        /// The priority is read from the presence; if it is missing or
+        /// unusable, 0 applies.
         /// </summary>
         /// <remarks>
-        /// Eine unlesbare Zahl darf keine Zustellung verhindern - sie ist ein
-        /// Wunsch des Clients und kein Vertrag. Der Bereich ist nach RFC 6121,
-        /// Abschnitt 4.7.2.3 auf -128 bis +127 begrenzt.
+        /// An unreadable number must not prevent a delivery - it is a wish of
+        /// the client and no contract. The range is limited to -128 to +127 by
+        /// RFC 6121, section 4.7.2.3.
         /// </remarks>
         [Test]
         public void ThePriorityIsReadFromThePresence()
@@ -357,13 +356,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(XMPPSession.ReadPriority("<presence><priority>-1</priority></presence>"),
                             Is.EqualTo(-1));
 
-                Assert.That(XMPPSession.ReadPriority("<presence><priority>viel</priority></presence>"),
+                Assert.That(XMPPSession.ReadPriority("<presence><priority>lots</priority></presence>"),
                             Is.EqualTo(0),
-                            "Unbrauchbares gilt als 0 und nicht als Fehler.");
+                            "Something unusable counts as 0 and not as an error.");
 
                 Assert.That(XMPPSession.ReadPriority("<presence><priority>9999</priority></presence>"),
                             Is.EqualTo(127),
-                            "Der Bereich endet bei +127.");
+                            "The range ends at +127.");
 
             });
 
