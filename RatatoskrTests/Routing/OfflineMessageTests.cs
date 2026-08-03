@@ -30,67 +30,67 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Offline-Ablage nach RFC 6121, Abschnitt 8.5.2.2.1 und XEP-0160:
-    /// Wer gerade keine erreichbare Resource hat, verliert seine Nachrichten
-    /// nicht.
+    /// The offline store according to RFC 6121, section 8.5.2.2.1 and
+    /// XEP-0160: Whoever has no reachable resource right now does not lose
+    /// their messages.
     /// </summary>
     /// <remarks>
-    /// Der Abschnitt lässt dem Server zwei Wege und verbietet den dritten: Er
-    /// darf die Nachricht ablegen oder dem Absender
-    /// <c>&lt;service-unavailable/&gt;</c> antworten - stillschweigend
-    /// verwerfen darf er sie nicht. Genau das tat dieser Server bis hierher,
-    /// und es ist der schlechteste denkbare Ausgang: Der Absender hält seine
-    /// Nachricht für zugestellt, der Empfänger hat nie erfahren, dass es sie
-    /// gab, und niemand kann den Verlust bemerken.
+    /// The section leaves the server two paths and forbids the third: It may
+    /// store the message or answer the sender with
+    /// <c>&lt;service-unavailable/&gt;</c> - discard it silently it may not.
+    /// That is precisely what this server did up to here, and it is the worst
+    /// conceivable outcome: The sender considers their message delivered, the
+    /// recipient never learned that it existed, and nobody can notice the loss.
     ///
-    /// Beide erlaubten Wege sind hier umgesetzt, weil sie sich gegenseitig
-    /// begrenzen: Ohne die Ablage wäre die Ablehnung der Regelfall, und ohne
-    /// die Ablehnung hätte eine voll gelaufene Ablage keinen Ausweg mehr.
+    /// Both permitted paths are implemented here, because they limit each
+    /// other: Without the store the refusal would be the normal case, and
+    /// without the refusal a store that has run full would have no way out any
+    /// more.
     /// </remarks>
     [TestFixture]
     public class OfflineMessageTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private String Alice => $"alice@{Server.Domain}";
         private String Bob   => $"bob@{Server.Domain}";
 
         /// <summary>
-        /// Ein noch nicht verbundener Client mit angehängtem Eingangskorb.
+        /// A not yet connected client with an attached inbox.
         /// </summary>
         /// <remarks>
-        /// Der Korb wird <b>vor</b> dem Verbinden angehängt: Eine nachgereichte
-        /// Nachricht kommt unmittelbar nach der ersten Presence, und ein erst
-        /// danach angemeldeter Empfänger verpasst sie je nach Zeitverlauf. Ein
-        /// Test, der so scheitert, sieht aus wie ein Fehler im Server.
+        /// The inbox is attached <b>before</b> connecting: A handed-over
+        /// message comes immediately after the first presence, and a recipient
+        /// that logs in only afterwards misses it depending on the timing. A
+        /// test failing that way looks like an error in the server.
         /// </remarks>
-        private (XMPPClient, ConcurrentQueue<XMPPMessage>) VorbereiteterClient(String   localPart,
-                                                                              Int32?   priority = null)
+        private (XMPPClient, ConcurrentQueue<XMPPMessage>) PreparedClient(String   localPart,
+                                                                          Int32?   priority = null)
         {
 
             var client   = CreateClient(localPart);
-            var eingang  = new ConcurrentQueue<XMPPMessage>();
+            var inbox    = new ConcurrentQueue<XMPPMessage>();
 
             client.Connection.PresencePriority  = priority;
-            client.OnMessage                   += m => eingang.Enqueue(m);
+            client.OnMessage                   += m => inbox.Enqueue(m);
 
-            return (client, eingang);
+            return (client, inbox);
 
         }
 
-        /// <summary>Meldet einen Client ab und wartet, bis der Server das sieht.</summary>
-        private async Task AbmeldenAsync(XMPPClient client, String bareJid)
+        /// <summary>Logs a client out and waits until the server sees it.</summary>
+        private async Task DisconnectAndWaitAsync(XMPPClient client, String bareJid)
         {
             await client.DisconnectAsync();
             await WaitFor(() => Server.SessionsOf(bareJid).Count == 0,
-                          $"das Ende der Sitzung von {bareJid}");
+                          $"the end of the session of {bareJid}");
         }
 
-        /// <summary>Wartet, bis so viele Nachrichten für ein Konto abgelegt sind.</summary>
-        private async Task WarteAufAblage(String bareJid, Int32 count)
+        /// <summary>Waits until this many messages are stored for an account.</summary>
+        private async Task WaitForTheStore(String bareJid, Int32 count)
             => await WaitFor(() => Server.GetAccount(bareJid)?.OfflineMessages.Count == count,
-                             $"{count} abgelegte Nachricht(en) für {bareJid}");
+                             $"{count} stored message(s) for {bareJid}");
 
         #endregion
 
@@ -98,14 +98,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatToAnOfflineAccount_ArrivesAtTheNextLogin()
 
         /// <summary>
-        /// Der Kern: Bob ist nicht da, als Alice schreibt - und liest es beim
-        /// nächsten Anmelden, in der Reihenfolge des Eingangs.
+        /// The core: Bob is not there when Alice writes - and reads it at the
+        /// next login, in the order of arrival.
         /// </summary>
         /// <remarks>
-        /// Zwei Nachrichten und nicht eine, weil die Reihenfolge zur Sache
-        /// gehört. Ein Gespräch, das verdreht nachgereicht wird, ist schwerer
-        /// zu lesen als eines, das ganz fehlt: Der Leser hält die Antwort für
-        /// die Frage.
+        /// Two messages and not one, because the order is part of the matter. A
+        /// conversation handed over the wrong way round is harder to read than
+        /// one missing entirely: The reader takes the answer for the question.
         /// </remarks>
         [Test]
         public async Task AChatToAnOfflineAccount_ArrivesAtTheNextLogin()
@@ -114,29 +113,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Erste");
-            await alice.SendMessageAsync(Bob, "Zweite");
+            await alice.SendMessageAsync(Bob, "First");
+            await alice.SendMessageAsync(Bob, "Second");
 
-            await WarteAufAblage(Bob, 2);
+            await WaitForTheStore(Bob, 2);
 
-            // Erst jetzt kommt Bob - die Nachrichten liegen schon eine Weile.
-            var (bob, eingang) = VorbereiteterClient("bob");
+            // Only now does Bob come - the messages have been lying for a while.
+            var (bob, inbox) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => eingang.Count == 2, "die nachgereichten Nachrichten");
+            await WaitFor(() => inbox.Count == 2, "the handed-over messages");
 
-            var gelesen = eingang.ToArray();
+            var loaded = inbox.ToArray();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen[0].Body,        Is.EqualTo("Erste"));
-                Assert.That(gelesen[1].Body,        Is.EqualTo("Zweite"));
-                Assert.That(gelesen[0].FromBareJid, Is.EqualTo(Alice),
-                            "Nachgereicht wird mit dem ursprünglichen Absender.");
+                Assert.That(loaded[0].Body,        Is.EqualTo("First"));
+                Assert.That(loaded[1].Body,        Is.EqualTo("Second"));
+                Assert.That(loaded[0].FromBareJid, Is.EqualTo(Alice),
+                            "The handing over happens with the original sender.");
 
                 Assert.That(Server.GetAccount(Bob)!.OfflineMessages, Is.Empty,
-                            "Zugestellt ist erledigt - die Ablage bleibt nicht stehen.");
+                            "Delivered is settled - the store does not stay.");
 
             });
 
@@ -147,14 +146,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessageWithoutAType_IsAlsoStored()
 
         /// <summary>
-        /// Abschnitt 8.5.2.2.1 nennt <c>normal</c> und <c>chat</c> - und eine
-        /// Nachricht ohne <c>type</c> ist nach Abschnitt 5.2.2 eine
-        /// <c>normal</c>.
+        /// Section 8.5.2.2.1 names <c>normal</c> and <c>chat</c> - and a
+        /// message without a <c>type</c> is a <c>normal</c> according to
+        /// section 5.2.2.
         /// </summary>
         /// <remarks>
-        /// Der Fall ist nicht ausgedacht: Eine Nachricht ohne <c>type</c> ist
-        /// das, was ein Absender schickt, der kein Gespräch führt, sondern
-        /// etwas hinterlässt - genau die Art, für die eine Ablage gemacht ist.
+        /// The case is not made up: A message without a <c>type</c> is what a
+        /// sender sends who is not holding a conversation but leaving something
+        /// behind - exactly the kind a store is made for.
         /// </remarks>
         [Test]
         public async Task AMessageWithoutAType_IsAlsoStored()
@@ -163,18 +162,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendRawAsync($"<message to='{Bob}' id='ohne-art'><body>Hinterlassen</body></message>");
+            await alice.SendRawAsync($"<message to='{Bob}' id='without-a-type'><body>Left behind</body></message>");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
-            var (bob, eingang) = VorbereiteterClient("bob");
+            var (bob, inbox) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => !eingang.IsEmpty, "die nachgereichte Nachricht");
+            await WaitFor(() => !inbox.IsEmpty, "the handed-over message");
 
-            eingang.TryDequeue(out var nachricht);
+            inbox.TryDequeue(out var message);
 
-            Assert.That(nachricht!.Type, Is.EqualTo(MessageType.Normal));
+            Assert.That(message!.Type, Is.EqualTo(MessageType.Normal));
 
         }
 
@@ -183,17 +182,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AHeadlineToAnOfflineAccount_IsNotStored()
 
         /// <summary>
-        /// Die Gegenprobe: <c>headline</c> wird nicht abgelegt, sondern
-        /// stillschweigend verworfen.
+        /// The counter-check: a <c>headline</c> is not stored but discarded
+        /// silently.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 8.5.2.2.1 verlangt das ausdrücklich, und XEP-0160 nennt
-        /// den Grund: Eine Meldung ist zeitgebunden. Der Kurs von gestern beim
-        /// Anmelden nachgereicht zu bekommen, ist nicht besser als ihn zu
-        /// verpassen, sondern schlechter - er sieht aus wie der von heute.
+        /// Section 8.5.2.2.1 demands that expressly, and XEP-0160 names the
+        /// reason: A notice is bound to its time. Getting yesterday's price
+        /// handed over at the login is not better than missing it but worse -
+        /// it looks like today's one.
         ///
-        /// Ohne diese Gegenprobe bestünde die Sammlung auch dann, wenn schlicht
-        /// alles abgelegt würde, was nicht zustellbar war.
+        /// Without this counter-check the collection would pass even if simply
+        /// everything that was not deliverable were stored.
         /// </remarks>
         [Test]
         public async Task AHeadlineToAnOfflineAccount_IsNotStored()
@@ -203,16 +202,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='headline' id='meldung'><body>Kurs gefallen</body></message>");
+                      $"<message to='{Bob}' type='headline' id='notice'><body>Price has fallen</body></message>");
 
-            // Und danach eine, die abgelegt werden muss - sie ist der Beweis,
-            // dass die Ablage überhaupt lief, während die Meldung durchfiel.
-            await alice.SendMessageAsync(Bob, "Und das bleibt liegen");
+            // And afterwards one that has to be stored - it is the proof that
+            // the store ran at all while the notice fell through.
+            await alice.SendMessageAsync(Bob, "And this one stays lying");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
-                        Does.Contain("Und das bleibt liegen"));
+                        Does.Contain("And this one stays lying"));
 
         }
 
@@ -221,22 +220,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatStateOnly_IsNotStored()
 
         /// <summary>
-        /// XEP-0160, Abschnitt 3: Ein <c>chat</c>, der nur einen Tippstatus
-        /// trägt, wird nicht abgelegt - „such messages SHOULD NOT be stored
-        /// offline".
+        /// XEP-0160, section 3: A <c>chat</c> carrying nothing but a chat state
+        /// is not stored - "such messages SHOULD NOT be stored offline".
         /// </summary>
         /// <remarks>
-        /// Ein Tippstatus ist eine Aussage über <i>jetzt</i>. Beim Anmelden
-        /// nachgereicht sagt er, jemand tippe gerade - und das stimmt dann
-        /// nicht mehr. Zehn davon in der Ablage verdrängen ausserdem die
-        /// Nachrichten, für die sie gedacht ist.
+        /// A chat state is a statement about <i>now</i>. Handed over at the
+        /// login it says somebody is typing right now - and that is not true
+        /// any more by then. Ten of them in the store also push out the
+        /// messages it is meant for.
         ///
-        /// <b>Und der Absender bekommt hier keinen Fehler</b>, obwohl D14 das
-        /// stillschweigende Verwerfen sonst ausdrücklich ausschliesst. Der
-        /// Unterschied liegt in der Erwartung: Wer eine Nachricht schickt, will
-        /// wissen, ob sie ankam; wer einen Tippstatus schickt, hat nichts
-        /// verloren, wenn er verfällt. Ein Fehler dafür wäre Lärm - und einer,
-        /// der bei jedem Tastendruck neu käme.
+        /// <b>And the sender gets no error here</b>, although D14 otherwise
+        /// expressly rules out the silent discarding. The difference lies in
+        /// the expectation: Whoever sends a message wants to know whether it
+        /// arrived; whoever sends a chat state has lost nothing when it
+        /// expires. An error for that would be noise - and one coming anew at
+        /// every keystroke.
         /// </remarks>
         [Test]
         public async Task AChatStateOnly_IsNotStored()
@@ -245,27 +243,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            var errors = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='chat' id='tippt'>" +
+                      $"<message to='{Bob}' type='chat' id='typing'>" +
                       "<composing xmlns='http://jabber.org/protocol/chatstates'/></message>");
 
-            // Danach eine, die abgelegt werden muss - sie ist der Beweis, dass
-            // die Ablage lief, während der Tippstatus durchfiel.
-            await alice.SendMessageAsync(Bob, "Und das bleibt liegen");
+            // Afterwards one that has to be stored - it is the proof that the
+            // store ran while the chat state fell through.
+            await alice.SendMessageAsync(Bob, "And this one stays lying");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
-                            Does.Contain("Und das bleibt liegen"));
+                            Does.Contain("And this one stays lying"));
 
-                Assert.That(fehler, Is.Empty,
-                            "Ein verfallener Tippstatus ist kein Fehler.");
+                Assert.That(errors, Is.Empty,
+                            "An expired chat state is no error.");
 
             });
 
@@ -276,15 +274,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatStateWithABody_IsStored()
 
         /// <summary>
-        /// Die Gegenprobe: Trägt dieselbe Nachricht auch einen Text, wird sie
-        /// abgelegt.
+        /// The counter-check: If the same message carries a text as well, it is
+        /// stored.
         /// </summary>
         /// <remarks>
-        /// XEP-0085, Abschnitt 5.3 lässt den Tippstatus ausdrücklich an einer
-        /// gewöhnlichen Nachricht mitreisen. Die Ausnahme aus XEP-0160 gilt
-        /// nur, wenn <b>nichts anderes</b> darin steht - ohne diese Gegenprobe
-        /// wäre „alles wegwerfen, was einen Tippstatus enthält" eine bestandene
-        /// Lösung, und sie verlöre echte Nachrichten.
+        /// XEP-0085, section 5.3 expressly lets the chat state travel along on
+        /// an ordinary message. The exception from XEP-0160 holds only if
+        /// <b>nothing else</b> stands in it - without this counter-check
+        /// "discard everything containing a chat state" would be a passing
+        /// solution, and it would lose real messages.
         /// </remarks>
         [Test]
         public async Task AChatStateWithABody_IsStored()
@@ -294,14 +292,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='chat' id='mit-text'>" +
-                      "<body>Bin gleich da</body>" +
+                      $"<message to='{Bob}' type='chat' id='with-text'>" +
+                      "<body>Be right there</body>" +
                       "<active xmlns='http://jabber.org/protocol/chatstates'/></message>");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
-                        Does.Contain("Bin gleich da"));
+                        Does.Contain("Be right there"));
 
         }
 
@@ -310,15 +308,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhatIsNotAChatState_IsStored()
 
         /// <summary>
-        /// Die zweite Gegenprobe: Eine Nachricht ohne Text ist deshalb noch
-        /// lange kein Tippstatus.
+        /// The second counter-check: A message without a text is far from being
+        /// a chat state for that reason.
         /// </summary>
         /// <remarks>
-        /// Die naheliegende Abkürzung wäre „ohne <c>&lt;body/&gt;</c> nicht
-        /// ablegen". Sie wäre falsch: Eine Empfangsbestätigung (XEP-0184) und
-        /// ein Lesevermerk (XEP-0333) haben keinen Text und sollen den Empfänger
-        /// trotzdem erreichen. Auch ein <c>thread</c> allein macht aus einer
-        /// Nachricht keinen Tippstatus.
+        /// The obvious shortcut would be "do not store without a
+        /// <c>&lt;body/&gt;</c>". It would be wrong: A delivery receipt
+        /// (XEP-0184) and a read marker (XEP-0333) have no text and shall reach
+        /// the recipient nevertheless. A <c>thread</c> alone does not make a
+        /// chat state out of a message either.
         /// </remarks>
         [Test]
         public async Task WhatIsNotAChatState_IsStored()
@@ -328,10 +326,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='chat' id='quittung'>" +
-                      "<received xmlns='urn:xmpp:receipts' id='vorher'/></message>");
+                      $"<message to='{Bob}' type='chat' id='receipt'>" +
+                      "<received xmlns='urn:xmpp:receipts' id='before'/></message>");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
                         Does.Contain("urn:xmpp:receipts"));
@@ -343,13 +341,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatStateWithAThread_IsAlsoNotStored()
 
         /// <summary>
-        /// Ein <c>thread</c> neben dem Tippstatus ändert nichts: Er ist eine
-        /// Kennung, kein Inhalt.
+        /// A <c>thread</c> next to the chat state changes nothing: It is an
+        /// identifier, no content.
         /// </summary>
         /// <remarks>
-        /// XEP-0085, Abschnitt 5.3 führt genau diese Form vor. Wer den Thread
-        /// als Inhalt zählte, legte den Tippstatus doch ab - und zwar in genau
-        /// der Schreibweise, die das XEP empfiehlt.
+        /// XEP-0085, section 5.3 demonstrates precisely this form. Whoever
+        /// counted the thread as content would store the chat state after all -
+        /// and that in exactly the spelling the XEP recommends.
         /// </remarks>
         [Test]
         public async Task AChatStateWithAThread_IsAlsoNotStored()
@@ -359,16 +357,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='chat' id='tippt-im-faden'>" +
+                      $"<message to='{Bob}' type='chat' id='typing-in-the-thread'>" +
                       "<composing xmlns='http://jabber.org/protocol/chatstates'/>" +
                       "<thread>abcd</thread></message>");
 
-            await alice.SendMessageAsync(Bob, "Und das bleibt liegen");
+            await alice.SendMessageAsync(Bob, "And this one stays lying");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
-                        Does.Contain("Und das bleibt liegen"));
+                        Does.Contain("And this one stays lying"));
 
         }
 
@@ -377,14 +375,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ANormalMessageWithOnlyAChatState_IsStored()
 
         /// <summary>
-        /// Die Ausnahme steht bei <c>chat</c> und nirgends sonst - ein
-        /// <c>normal</c> mit demselben Inhalt wird abgelegt.
+        /// The exception stands at <c>chat</c> and nowhere else - a
+        /// <c>normal</c> with the same content is stored.
         /// </summary>
         /// <remarks>
-        /// Das ist der Buchstabe von XEP-0160, Abschnitt 3: Für <c>normal</c>
-        /// steht dort „SHOULD be stored offline" ohne jede Einschränkung, für
-        /// <c>chat</c> mit. Die Regel weiter zu ziehen als geschrieben hiesse,
-        /// eine eigene Vorschrift zu erfinden und sie fremd zu nennen.
+        /// That is the letter of XEP-0160, section 3: For <c>normal</c> it says
+        /// "SHOULD be stored offline" without any restriction, for <c>chat</c>
+        /// with one. To draw the rule further than it is written would mean
+        /// inventing a provision of one's own and calling it someone else's.
         /// </remarks>
         [Test]
         public async Task ANormalMessageWithOnlyAChatState_IsStored()
@@ -394,10 +392,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='normal' id='normal-tippt'>" +
+                      $"<message to='{Bob}' type='normal' id='normal-typing'>" +
                       "<composing xmlns='http://jabber.org/protocol/chatstates'/></message>");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
                         Does.Contain("chatstates"));
@@ -409,51 +407,51 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhatCountsAsAChatStateOnlyMessage()
 
         /// <summary>
-        /// Die Regel selbst, ohne Netz - samt der beiden Fälle, die über die
-        /// Ablage nicht erreichbar sind.
+        /// The rule itself, without a net - together with the two cases that
+        /// are unreachable over the store.
         /// </summary>
         /// <remarks>
-        /// Eine Nachricht ohne Kinder und eine, die sich nicht lesen lässt,
-        /// kommen im laufenden Betrieb nicht bis hierher - die Rahmung siebt sie
-        /// vorher aus. Die Regel muss trotzdem für sich stimmen: Sie
-        /// entscheidet, ob eine Nachricht verworfen wird, und wer sie in eine
-        /// andere Umgebung trägt, bringt die Siebe nicht mit.
+        /// A message without children and one that cannot be read do not get
+        /// this far in running operation - the framing sieves them out
+        /// beforehand. The rule has to hold on its own nevertheless: It decides
+        /// whether a message is discarded, and whoever carries it into another
+        /// environment does not bring the sieves along.
         ///
-        /// <b>Im Zweifel gilt „ist eine Nachricht":</b> Was sich nicht als
-        /// Tippstatus nachweisen lässt, wird abgelegt. Der umgekehrte Irrtum
-        /// verlöre eine Nachricht.
+        /// <b>In case of doubt "it is a message" holds:</b> What cannot be
+        /// established as a chat state is stored. The reverse error would lose
+        /// a message.
         /// </remarks>
         [Test]
         public void WhatCountsAsAChatStateOnlyMessage()
         {
 
-            const String Tippstatus = "<composing xmlns='http://jabber.org/protocol/chatstates'/>";
+            const String ChatState = "<composing xmlns='http://jabber.org/protocol/chatstates'/>";
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(XMPPServer.IsChatStateOnly($"<message>{Tippstatus}</message>"),
+                Assert.That(XMPPServer.IsChatStateOnly($"<message>{ChatState}</message>"),
                             Is.True);
 
-                Assert.That(XMPPServer.IsChatStateOnly($"<message>{Tippstatus}<thread>a</thread></message>"),
+                Assert.That(XMPPServer.IsChatStateOnly($"<message>{ChatState}<thread>a</thread></message>"),
                             Is.True);
 
-                // Nicht nur <composing/>: XEP-0085 kennt fünf Zustände, und der
-                // Namensraum entscheidet, nicht der Name.
+                // Not only <composing/>: XEP-0085 knows five states, and the
+                // namespace decides, not the name.
                 Assert.That(XMPPServer.IsChatStateOnly("<message><active xmlns='http://jabber.org/protocol/chatstates'/></message>"),
                             Is.True);
 
                 Assert.That(XMPPServer.IsChatStateOnly("<message><thread>a</thread></message>"),
-                            Is.False, "Ein thread allein ist kein Tippstatus.");
+                            Is.False, "A thread alone is no chat state.");
 
                 Assert.That(XMPPServer.IsChatStateOnly("<message/>"),
-                            Is.False, "Eine Nachricht ohne Kinder auch nicht.");
+                            Is.False, "A message without children neither.");
 
                 Assert.That(XMPPServer.IsChatStateOnly("<message><composing/></message>"),
-                            Is.False, "Ohne den Namensraum ist es irgendein Element.");
+                            Is.False, "Without the namespace it is just some element.");
 
                 Assert.That(XMPPServer.IsChatStateOnly("<message><composing"),
-                            Is.False, "Und was sich nicht lesen lässt, ist eine Nachricht.");
+                            Is.False, "And what cannot be read is a message.");
 
             });
 
@@ -464,14 +462,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStoredMessage_IsDeliveredOnlyOnce()
 
         /// <summary>
-        /// Nachgereicht wird einmal. Danach ist die Ablage leer.
+        /// The handing over happens once. Afterwards the store is empty.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied zur aufbewahrten Subscription-Anfrage, die bei
-        /// <i>jeder</i> Anmeldung wieder vorgelegt wird, bis sie beantwortet
-        /// ist. Bei einer Nachricht gibt es kein Beantworten, an dem sich das
-        /// Ende festmachen liesse - wer sie bei jeder Anmeldung erneut bekäme,
-        /// könnte sie nie loswerden.
+        /// The difference to the stored subscription request, which is
+        /// presented again at <i>every</i> login until it is answered. With a
+        /// message there is no answering to fix the end on - whoever got it
+        /// anew at every login could never get rid of it.
         /// </remarks>
         [Test]
         public async Task AStoredMessage_IsDeliveredOnlyOnce()
@@ -480,20 +477,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Einmal");
-            await WarteAufAblage(Bob, 1);
+            await alice.SendMessageAsync(Bob, "Once");
+            await WaitForTheStore(Bob, 1);
 
-            var (erste, ersterEingang) = VorbereiteterClient("bob");
-            await erste.ConnectAsync();
-            await WaitFor(() => !ersterEingang.IsEmpty, "die Nachricht bei der ersten Anmeldung");
+            var (first, firstInbox) = PreparedClient("bob");
+            await first.ConnectAsync();
+            await WaitFor(() => !firstInbox.IsEmpty, "the message at the first login");
 
-            await AbmeldenAsync(erste, Bob);
+            await DisconnectAndWaitAsync(first, Bob);
 
-            var (zweite, zweiterEingang) = VorbereiteterClient("bob");
-            await zweite.ConnectAsync();
+            var (second, secondInbox) = PreparedClient("bob");
+            await second.ConnectAsync();
 
-            await WaitAgainst(() => !zweiterEingang.IsEmpty,
-                              "eine bereits zugestellte Nachricht noch einmal");
+            await WaitAgainst(() => !secondInbox.IsEmpty,
+                              "an already delivered message once more");
 
         }
 
@@ -502,24 +499,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ANegativePriority_DoesNotEmptyTheStore()
 
         /// <summary>
-        /// XEP-0160: Nachgereicht wird, sobald der Empfänger
-        /// „non-negative available presence" schickt - eine Resource mit
-        /// negativer Priorität leert die Ablage nicht.
+        /// XEP-0160: The handing over happens as soon as the recipient sends
+        /// "non-negative available presence" - a resource with a negative
+        /// priority does not empty the store.
         /// </summary>
         /// <remarks>
-        /// Sie ist derselbe Wunsch, den Abschnitt 8.5 für den laufenden Betrieb
-        /// achtet: Dieses Gerät soll nichts abbekommen, was bloss an das Konto
-        /// ging. Eine Ablage, die sich beim ersten Lebenszeichen irgendeiner
-        /// Resource entleert, hebelte ihn aus - und zwar an der empfindlichsten
-        /// Stelle, weil die Nachrichten dann auf einem Gerät liegen, das der
-        /// Nutzer gerade nicht ansieht.
+        /// It is the same wish that section 8.5 respects for running operation:
+        /// This device shall get nothing that only went to the account. A store
+        /// emptying itself at the first sign of life of any resource would
+        /// defeat it - and that at the most sensitive place, because the
+        /// messages then lie on a device the user is not looking at right now.
         ///
-        /// Die zweite Hälfte gehört dazu und prüft mehr als die Umkehrung:
-        /// Dieselbe Resource hebt ihre Priorität, ohne sich neu anzumelden.
-        /// Nachgereicht wird also bei jeder nicht-negativen verfügbaren
-        /// Presence und nicht nur beim Verfügbar<i>werden</i> - sonst bliebe
-        /// die Ablage bis zur nächsten Anmeldung liegen, obwohl der Nutzer
-        /// gerade eben gesagt hat, dass er wieder hinsieht.
+        /// The second half belongs to it and checks more than the inversion:
+        /// The same resource raises its priority without logging in anew. The
+        /// handing over therefore happens at every non-negative available
+        /// presence and not only at the <i>becoming</i> available - otherwise
+        /// the store would lie until the next login although the user has just
+        /// said that they are looking again.
         /// </remarks>
         [Test]
         public async Task ANegativePriority_DoesNotEmptyTheStore()
@@ -528,27 +524,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Für den Menschen, nicht für das Gerät");
-            await WarteAufAblage(Bob, 1);
+            await alice.SendMessageAsync(Bob, "For the human being, not for the device");
+            await WaitForTheStore(Bob, 1);
 
-            var (bob, eingang) = VorbereiteterClient("bob", priority: -1);
+            var (bob, inbox) = PreparedClient("bob", priority: -1);
             await bob.ConnectAsync();
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)?.PresencePriority == -1,
-                          "die negative Priorität am Server");
+                          "the negative priority at the server");
 
-            await WaitAgainst(() => !eingang.IsEmpty,
-                              "die Ablage auf einem Gerät, das sie nicht will");
+            await WaitAgainst(() => !inbox.IsEmpty,
+                              "the store on a device that does not want it");
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages, Has.Count.EqualTo(1),
-                        "Die Nachricht muss weiterhin liegen.");
+                        "The message has to keep lying.");
 
-            // Nun sieht der Nutzer doch hin - dieselbe Resource, neue Priorität.
+            // Now the user is looking after all - the same resource, a new priority.
             bob.Connection.PresencePriority = 0;
             await bob.Connection.SendPresenceAsync();
 
-            await WaitFor(() => !eingang.IsEmpty,
-                          "die Ablage, sobald die Resource sie wieder annimmt");
+            await WaitFor(() => !inbox.IsEmpty,
+                          "the store as soon as the resource accepts it again");
 
         }
 
@@ -557,20 +553,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnavailablePresence_DoesNotEmptyTheStore()
 
         /// <summary>
-        /// Nachgereicht wird an eine <i>verfügbare</i> Resource - eine
-        /// Abmeldung ist keine.
+        /// The handing over happens to an <i>available</i> resource - a
+        /// sign-off is none.
         /// </summary>
         /// <remarks>
-        /// Der Fall ist unscheinbar und die Falle scharf: Eine Abmeldung setzt
-        /// die Priorität der Sitzung auf 0 zurück, denn eine abgemeldete
-        /// Resource hat keinen Zustand zu berichten. Wer nur nach der Priorität
-        /// fragt, sieht in genau diesem Moment eine 0 und leert die Ablage in
-        /// einen Stream, der sich gerade verabschiedet - die Nachrichten sind
-        /// dann weg, ohne jemals gelesen worden zu sein.
+        /// The case is inconspicuous and the trap sharp: A sign-off resets the
+        /// priority of the session to 0, because a signed-off resource has no
+        /// state to report. Whoever only asks for the priority sees a 0 at
+        /// precisely this moment and empties the store into a stream that is
+        /// just saying goodbye - the messages are gone then, without ever
+        /// having been read.
         ///
-        /// Der Zustand davor ist absichtlich negativ: Mit der üblichen 0 wäre
-        /// die Ablage bereits beim Anmelden geleert, und der Test prüfte nichts
-        /// mehr.
+        /// The state before is negative on purpose: With the usual 0 the store
+        /// would already be emptied at the login, and the test would check
+        /// nothing any more.
         /// </remarks>
         [Test]
         public async Task AnUnavailablePresence_DoesNotEmptyTheStore()
@@ -579,24 +575,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Bleibt liegen");
-            await WarteAufAblage(Bob, 1);
+            await alice.SendMessageAsync(Bob, "Stays lying");
+            await WaitForTheStore(Bob, 1);
 
-            var (bob, eingang) = VorbereiteterClient("bob", priority: -1);
+            var (bob, inbox) = PreparedClient("bob", priority: -1);
             await bob.ConnectAsync();
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)?.PresencePriority == -1,
-                          "die negative Priorität am Server");
+                          "the negative priority at the server");
 
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)?.IsAvailable == false,
-                          "die Abmeldung am Server");
+                          "the sign-off at the server");
 
             await WaitAgainst(() => Server.GetAccount(Bob)!.OfflineMessages.Count == 0,
-                              "eine Ablage, die sich in eine Abmeldung entleert");
+                              "a store emptying itself into a sign-off");
 
-            Assert.That(eingang, Is.Empty);
+            Assert.That(inbox, Is.Empty);
 
         }
 
@@ -605,15 +601,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutPresenceBroadcast_TheStoreIsStillDelivered()
 
         /// <summary>
-        /// Das Nachreichen hängt nicht am Verteilen von Presence.
+        /// The handing over does not hang on the distributing of presence.
         /// </summary>
         /// <remarks>
-        /// Die beiden haben nichts miteinander zu tun, stehen aber am selben
-        /// Ort: Beide beginnen mit der ersten Presence einer Resource. Wer das
-        /// Verteilen abschaltet - etwa um einen Test auf einen Aspekt zu
-        /// verengen -, will damit nicht die Post des Nutzers stillegen. Und der
-        /// Verlust wäre still: Die Nachricht bleibt in der Ablage und käme erst
-        /// bei einer Anmeldung heraus, die man wieder eingeschaltet hat.
+        /// The two have nothing to do with each other but stand at the same
+        /// place: Both begin with the first presence of a resource. Whoever
+        /// switches the distributing off - to narrow a test down to one aspect,
+        /// say - does not thereby want to shut down the user's mail. And the
+        /// loss would be silent: The message stays in the store and would come
+        /// out only at a login one has switched it back on for.
         /// </remarks>
         [Test]
         public async Task WithoutPresenceBroadcast_TheStoreIsStillDelivered()
@@ -624,13 +620,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Trotzdem");
-            await WarteAufAblage(Bob, 1);
+            await alice.SendMessageAsync(Bob, "Nevertheless");
+            await WaitForTheStore(Bob, 1);
 
-            var (bob, eingang) = VorbereiteterClient("bob");
+            var (bob, inbox) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => !eingang.IsEmpty, "die nachgereichte Nachricht");
+            await WaitFor(() => !inbox.IsEmpty, "the handed-over message");
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages, Is.Empty);
 
@@ -641,22 +637,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStoredMessage_KeepsTheTimeItWasWritten()
 
         /// <summary>
-        /// Der Empfänger zeigt die Zeit, zu der die Nachricht geschrieben
-        /// wurde - nicht die, zu der sie ihn erreicht.
+        /// The recipient shows the time at which the message was written - not
+        /// the one at which it reaches them.
         /// </summary>
         /// <remarks>
-        /// Die andere Hälfte von <see cref="AStoredMessage_CarriesADelayStamp"/>.
-        /// Der Server hat den Stempel seit jeher geschrieben und der Client ihn
-        /// nie gelesen: <c>XMPPMessage.Timestamp</c> war der Zeitpunkt des
-        /// Empfangs, und eine Nachricht von gestern Abend erschien nach dem
-        /// Anmelden mit der Uhrzeit von jetzt. <b>Eine Uhrzeit, die dasteht und
-        /// nicht stimmt, ist schlimmer als keine</b> - sie lädt dazu ein, auf
-        /// eine Frage zu antworten, die sich längst erledigt hat.
+        /// The other half of <see cref="AStoredMessage_CarriesADelayStamp"/>.
+        /// The server has written the stamp all along and the client never read
+        /// it: <c>XMPPMessage.Timestamp</c> was the moment of reception, and a
+        /// message from yesterday evening appeared after the login with the
+        /// time of now. <b>A time that stands there and is not right is worse
+        /// than none</b> - it invites answering a question that has long
+        /// settled itself.
         ///
-        /// Geprüft wird gegen ein Zeitfenster um das Senden herum. Die genaue
-        /// Zahl kennt der Test nicht - sie kommt vom Server -, wohl aber die
-        /// Grenzen: vor dem Senden kann sie nicht liegen und nach dem
-        /// Wiederanmelden auch nicht.
+        /// What is checked is a time window around the sending. The exact
+        /// number the test does not know - it comes from the server -, but the
+        /// bounds it does: before the sending it cannot lie and after the
+        /// logging in again neither.
         /// </remarks>
         [Test]
         public async Task AStoredMessage_KeepsTheTimeItWasWritten()
@@ -665,35 +661,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var vorDemSenden = DateTime.Now.AddSeconds(-1);
+            var beforeSending = DateTime.Now.AddSeconds(-1);
 
-            await alice.SendMessageAsync(Bob, "Von gestern");
+            await alice.SendMessageAsync(Bob, "From yesterday");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
-            var nachDemSenden = DateTime.Now.AddSeconds(1);
+            var afterSending = DateTime.Now.AddSeconds(1);
 
-            var (bob, eingang) = VorbereiteterClient("bob");
+            var (bob, inbox) = PreparedClient("bob");
             await bob.ConnectAsync();
 
-            await WaitFor(() => !eingang.IsEmpty, "die nachgereichte Nachricht");
+            await WaitFor(() => !inbox.IsEmpty, "the handed-over message");
 
-            eingang.TryDequeue(out var nachricht);
+            inbox.TryDequeue(out var message);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(nachricht!.IsDelayed, Is.True,
-                            "Eine nachgereichte Nachricht muss als solche erkennbar sein.");
+                Assert.That(message!.IsDelayed, Is.True,
+                            "A handed-over message has to be recognisable as such.");
 
-                Assert.That(nachricht.Timestamp, Is.InRange(vorDemSenden, nachDemSenden),
-                            "Angezeigt wird die Zeit des Empfangs statt der des Schreibens.");
+                Assert.That(message.Timestamp, Is.InRange(beforeSending, afterSending),
+                            "What is shown is the time of reception instead of the one of writing.");
 
-                Assert.That(nachricht.ReceivedAt, Is.GreaterThanOrEqualTo(nachricht.Timestamp),
-                            "Angekommen ist sie nach dem Schreiben, nicht davor.");
+                Assert.That(message.ReceivedAt, Is.GreaterThanOrEqualTo(message.Timestamp),
+                            "It arrived after the writing, not before it.");
 
-                Assert.That(nachricht.DelayedBy, Is.EqualTo(Server.Domain),
-                            "XEP-0203, Abschnitt 4: aufgehoben hat sie der Server.");
+                Assert.That(message.DelayedBy, Is.EqualTo(Server.Domain),
+                            "XEP-0203, section 4: the server is what kept it.");
 
             });
 
@@ -704,14 +700,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ALiveMessage_IsNotDelayed()
 
         /// <summary>
-        /// Die Gegenprobe: Eine Nachricht an einen anwesenden Empfänger gilt
-        /// nicht als nachgereicht.
+        /// The counter-check: A message to a present recipient does not count
+        /// as handed over.
         /// </summary>
         /// <remarks>
-        /// Ohne sie wäre „immer nachgereicht" eine bestandene Lösung, und jede
-        /// laufende Unterhaltung trüge den Vermerk. Zugleich hält der Test
-        /// fest, dass die angezeigte Zeit im Normalfall weiterhin die des
-        /// Empfangs ist - für alles Laufende sind die beiden dasselbe.
+        /// Without it "always handed over" would be a passing solution, and
+        /// every running conversation would carry the note. At the same time
+        /// the test holds fast that the shown time is still the one of
+        /// reception in the normal case - for everything running the two are
+        /// the same.
         /// </remarks>
         [Test]
         public async Task ALiveMessage_IsNotDelayed()
@@ -720,26 +717,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var (bob, eingang) = VorbereiteterClient("bob");
+            var (bob, inbox) = PreparedClient("bob");
 
             await bob.ConnectAsync();
 
-            var vorher = DateTime.Now.AddSeconds(-1);
+            var before = DateTime.Now.AddSeconds(-1);
 
-            await alice.SendMessageAsync(Bob, "Jetzt gerade");
+            await alice.SendMessageAsync(Bob, "Right now");
 
-            await WaitFor(() => !eingang.IsEmpty, "die zugestellte Nachricht");
+            await WaitFor(() => !inbox.IsEmpty, "the delivered message");
 
-            eingang.TryDequeue(out var nachricht);
+            inbox.TryDequeue(out var message);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(nachricht!.IsDelayed, Is.False);
+                Assert.That(message!.IsDelayed, Is.False);
 
-                Assert.That(nachricht.Timestamp,  Is.InRange(vorher, DateTime.Now.AddSeconds(1)));
+                Assert.That(message.Timestamp,  Is.InRange(before, DateTime.Now.AddSeconds(1)));
 
-                Assert.That(nachricht.DelayedBy,  Is.Null);
+                Assert.That(message.DelayedBy,  Is.Null);
 
             });
 
@@ -750,15 +747,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStoredMessage_CarriesADelayStamp()
 
         /// <summary>
-        /// XEP-0160 und XEP-0203: Eine nachgereichte Nachricht trägt ein
-        /// <c>&lt;delay/&gt;</c> mit dem Zeitpunkt des Eingangs.
+        /// XEP-0160 and XEP-0203: A handed-over message carries a
+        /// <c>&lt;delay/&gt;</c> with the moment of arrival.
         /// </summary>
         /// <remarks>
-        /// Ohne den Stempel behauptet eine Nachricht von gestern, sie sei von
-        /// jetzt - der Empfänger kann den Unterschied nicht sehen und antwortet
-        /// auf eine Frage, die sich längst erledigt hat. Der Stempel ist damit
-        /// nicht Zierde, sondern der einzige Weg, den Verzug überhaupt
-        /// mitzuteilen.
+        /// Without the stamp a message from yesterday claims to be from now -
+        /// the recipient cannot see the difference and answers a question that
+        /// has long settled itself. The stamp is thereby no ornament but the
+        /// only way to communicate the delay at all.
         /// </remarks>
         [Test]
         public async Task AStoredMessage_CarriesADelayStamp()
@@ -768,36 +764,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             await alice.SendRawAsync(
-                      $"<message to='{Bob}' type='chat' id='mit-stempel'><body>Von gestern</body></message>");
+                      $"<message to='{Bob}' type='chat' id='with-stamp'><body>From yesterday</body></message>");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
-            var eingegangen  = new ConcurrentQueue<String>();
+            var arrived      = new ConcurrentQueue<String>();
             var bob          = CreateClient("bob");
 
             bob.Connection.OnRawXml += xml =>
             {
-                if (xml.Contains("mit-stempel", StringComparison.Ordinal))
-                    eingegangen.Enqueue(xml);
+                if (xml.Contains("with-stamp", StringComparison.Ordinal))
+                    arrived.Enqueue(xml);
             };
 
             await bob.ConnectAsync();
 
-            await WaitFor(() => !eingegangen.IsEmpty, "die nachgereichte Nachricht auf dem Draht");
+            await WaitFor(() => !arrived.IsEmpty, "the handed-over message on the wire");
 
-            eingegangen.TryDequeue(out var stanza);
+            arrived.TryDequeue(out var stanza);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(stanza, Does.Contain("urn:xmpp:delay"),
-                            "Eine nachgereichte Nachricht muss ihren Verzug mitteilen.");
+                            "A handed-over message has to communicate its delay.");
 
                 Assert.That(stanza, Does.Contain($"from='{Server.Domain}'"),
-                            "XEP-0203: Den Stempel setzt der Server, nicht der Absender.");
+                            "XEP-0203: The server sets the stamp, not the sender.");
 
                 Assert.That(stanza, Does.Match(@"stamp='\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z'"),
-                            "XEP-0082 verlangt eine UTC-Zeitangabe.");
+                            "XEP-0082 demands a UTC time.");
 
             });
 
@@ -808,15 +804,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheStore_TheSenderIsTold()
 
         /// <summary>
-        /// Der zweite von Abschnitt 8.5.2.2.1 erlaubte Weg: kein Ablegen,
-        /// sondern <c>&lt;service-unavailable/&gt;</c> an den Absender.
+        /// The second path permitted by section 8.5.2.2.1: no storing, but
+        /// <c>&lt;service-unavailable/&gt;</c> to the sender.
         /// </summary>
         /// <remarks>
-        /// Er ist nicht der schlechtere - er ist nur unbequemer. Was der
-        /// Abschnitt beiden gemeinsam abverlangt, ist die Ehrlichkeit: Der
-        /// Absender erfährt in jedem Fall, woran er ist. Ohne diesen Test wäre
-        /// nur der bequeme Weg belegt, und ein Server ohne Ablage fiele
-        /// stillschweigend auf das Verwerfen zurück.
+        /// It is not the worse one - it is only the less convenient one. What
+        /// the section demands of both is the honesty: The sender learns in
+        /// every case where they stand. Without this test only the convenient
+        /// path would be established, and a server without a store would fall
+        /// back on the discarding silently.
         /// </remarks>
         [Test]
         public async Task WithoutTheStore_TheSenderIsTold()
@@ -827,22 +823,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            var errors = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
 
-            await alice.SendMessageAsync(Bob, "Kommt nicht an");
+            await alice.SendMessageAsync(Bob, "Does not arrive");
 
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung beim Absender");
+            await WaitFor(() => !errors.IsEmpty, "the refusal at the sender");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+                Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
                 Assert.That(Server.GetAccount(Bob)!.OfflineMessages, Is.Empty,
-                            "Ohne Ablage wird nichts abgelegt.");
+                            "Without a store nothing is stored.");
 
             });
 
@@ -853,17 +849,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheLimit_RefusesTheNewMessageAndKeepsTheStoredOnes()
 
         /// <summary>
-        /// Ist die Ablage voll, wird die neue Nachricht abgewiesen - und keine
-        /// bereits abgelegte verdrängt.
+        /// If the store is full, the new message is turned away - and no
+        /// already stored one is displaced.
         /// </summary>
         /// <remarks>
-        /// Geprüft wird nicht nur, <i>dass</i> die Grenze greift, sondern in
-        /// welche Richtung. Beide Richtungen verlieren eine Nachricht, aber nur
-        /// eine davon sagt es jemandem: Wer abweist, antwortet dem Absender;
-        /// wer verdrängt, wirft eine Nachricht weg, von der der Absender
-        /// annimmt, sie liege bereit, und der Empfänger nie erfährt, dass es
-        /// sie gab. Eine Grenze, die verdrängt, wäre ausserdem selbst der
-        /// Angriff - wer die Ablage vollschreibt, löschte damit fremde Post.
+        /// What is checked is not only <i>that</i> the limit takes hold, but in
+        /// which direction. Both directions lose a message, but only one of
+        /// them tells anybody: Whoever turns away answers the sender; whoever
+        /// displaces discards a message the sender assumes to be lying ready
+        /// and the recipient never learns existed. A limit that displaces would
+        /// also be the attack itself - whoever fills the store up would thereby
+        /// delete other people's mail.
         /// </remarks>
         [Test]
         public async Task TheLimit_RefusesTheNewMessageAndKeepsTheStoredOnes()
@@ -874,14 +870,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => fehler.Enqueue(e);
+            var errors = new ConcurrentQueue<StanzaError>();
+            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
 
-            await alice.SendMessageAsync(Bob, "Die erste");
-            await WarteAufAblage(Bob, 1);
+            await alice.SendMessageAsync(Bob, "The first one");
+            await WaitForTheStore(Bob, 1);
 
-            await alice.SendMessageAsync(Bob, "Die zweite");
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung der zweiten");
+            await alice.SendMessageAsync(Bob, "The second one");
+            await WaitFor(() => !errors.IsEmpty, "the refusal of the second one");
 
             Assert.Multiple(() =>
             {
@@ -889,8 +885,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(Server.GetAccount(Bob)!.OfflineMessages, Has.Count.EqualTo(1));
 
                 Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
-                            Does.Contain("Die erste"),
-                            "Die zuerst abgelegte Nachricht bleibt stehen.");
+                            Does.Contain("The first one"),
+                            "The message stored first stays.");
 
             });
 
@@ -901,49 +897,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAbsentRecipient_DoesNotSuppressTheSentCarbon()
 
         /// <summary>
-        /// XEP-0280: Die anderen Geräte des <i>Absenders</i> bekommen ihre
-        /// sent-Kopie auch dann, wenn die Nachricht in der Ablage landet.
+        /// XEP-0280: The other devices of the <i>sender</i> get their sent copy
+        /// even when the message lands in the store.
         /// </summary>
         /// <remarks>
-        /// Der Carbon sagt nichts über die Zustellung, sondern über das
-        /// Schreiben: „Das hast du geschickt." Das bleibt wahr, ob der
-        /// Empfänger da war oder nicht. Bliebe er hier aus, hätte der Nutzer
-        /// eine Gesprächsspur, in der seine eigenen Nachrichten an Abwesende
-        /// fehlen - und zwar genau die, deren Verbleib ihn interessiert.
+        /// The carbon says nothing about the delivery but about the writing:
+        /// "That is what you sent." That stays true whether the recipient was
+        /// there or not. Were it to fail here, the user would have a
+        /// conversation trace in which their own messages to absent people are
+        /// missing - and precisely the ones whose whereabouts interest them.
         ///
-        /// Der Test hält eine Zeile fest, die vorher unbemerkt mitlief: Bis
-        /// hierher fiel dieser Fall durch denselben Code wie die gelungene
-        /// Zustellung, weil nichts ihn davor abfing. Nun tut es der
-        /// Offline-Zweig, und was er nicht ausdrücklich mitnimmt, ginge
-        /// stillschweigend verloren.
+        /// The test holds fast a line that ran along unnoticed before: Up to
+        /// here this case fell through the same code as the successful
+        /// delivery, because nothing caught it beforehand. Now the offline
+        /// branch does, and what it does not expressly take along would be lost
+        /// silently.
         /// </remarks>
         [Test]
         public async Task AnAbsentRecipient_DoesNotSuppressTheSentCarbon()
         {
 
-            var handy    = await ConnectClientAsync("alice");
-            var rechner  = await ConnectClientAsync("alice");
+            var mobile   = await ConnectClientAsync("alice");
+            var desktop  = await ConnectClientAsync("alice");
 
             Server.AddAccount("bob");
 
-            await WaitFor(() => Server.SessionsOf(handy.BareJid).All(s => s.CarbonsEnabled),
-                          "die Carbons auf beiden Resourcen");
+            await WaitFor(() => Server.SessionsOf(mobile.BareJid).All(s => s.CarbonsEnabled),
+                          "the carbons on both resources");
 
             var carbons = new ConcurrentQueue<CarbonMessage>();
-            rechner.OnCarbonMessage += c => carbons.Enqueue(c);
+            desktop.OnCarbonMessage += c => carbons.Enqueue(c);
 
-            await handy.SendMessageAsync(Bob, "Für später");
+            await mobile.SendMessageAsync(Bob, "For later");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
-            await WaitFor(() => !carbons.IsEmpty, "die sent-Kopie auf dem anderen Gerät");
+            await WaitFor(() => !carbons.IsEmpty, "the sent copy on the other device");
 
             carbons.TryDequeue(out var carbon);
 
             Assert.Multiple(() =>
             {
                 Assert.That(carbon!.IsSent, Is.True);
-                Assert.That(carbon.Body,    Is.EqualTo("Für später"));
+                Assert.That(carbon.Body,    Is.EqualTo("For later"));
             });
 
         }
@@ -953,21 +949,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatToAnUnknownResource_IsHandledLikeTheAccount()
 
         /// <summary>
-        /// Abschnitt 8.5.3.2.1: Ein <c>chat</c> an eine Resource, die es nicht
-        /// gibt, wird behandelt, als wäre er an das Konto gegangen - abgelegt,
-        /// wenn niemand da ist, und zugestellt, wenn doch.
+        /// Section 8.5.3.2.1: A <c>chat</c> to a resource that does not exist
+        /// is handled as if it had gone to the account - stored when nobody is
+        /// there, and delivered when somebody is.
         /// </summary>
         /// <remarks>
-        /// Beide Hälften gehören in denselben Test. Nur die Ablage umzusetzen
-        /// wäre schlimmer als der bisherige Zustand: Die Nachricht landete in
-        /// der Ablage, während der Empfänger mit einer anderen Resource
-        /// daneben sitzt und wartet.
+        /// Both halves belong into the same test. To implement only the storing
+        /// would be worse than the state so far: The message would land in the
+        /// store while the recipient sits next to it with another resource and
+        /// waits.
         ///
-        /// Der Fall ist alltäglich. Ein Client antwortet auf die Full-JID, die
-        /// er zuletzt gesehen hat; wechselt der Gesprächspartner in der
-        /// Zwischenzeit das Gerät, ist diese Resource weg. Genau deshalb macht
-        /// der Abschnitt für <c>chat</c> eine Ausnahme von der Regel, dass eine
-        /// nicht passende Resource das Ende ist.
+        /// The case is an everyday one. A client answers to the full JID it saw
+        /// last; if the conversation partner switches the device in the
+        /// meantime, that resource is gone. That is precisely why the section
+        /// makes an exception for <c>chat</c> from the rule that a resource
+        /// that does not match is the end.
         /// </remarks>
         [Test]
         public async Task AChatToAnUnknownResource_IsHandledLikeTheAccount()
@@ -976,29 +972,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var verschwunden = $"{Bob}/gibtsnichtmehr";
+            var vanished = $"{Bob}/gone-already";
 
             await alice.SendRawAsync(
-                      $"<message to='{verschwunden}' type='chat' id='abgelegt'><body>Bist du weg?</body></message>");
+                      $"<message to='{vanished}' type='chat' id='stored'><body>Are you gone?</body></message>");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
-            // Zweite Hälfte: Bob ist da, nur unter einem anderen Namen.
-            var (bob, eingang) = VorbereiteterClient("bob");
-            bob.Connection.Resource = "Neu";
+            // Second half: Bob is there, only under a different name.
+            var (bob, inbox) = PreparedClient("bob");
+            bob.Connection.Resource = "New";
             await bob.ConnectAsync();
 
-            await WaitFor(() => eingang.Any(m => m.MessageId == "abgelegt"),
-                          "die nachgereichte Nachricht");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "stored"),
+                          "the handed-over message");
 
             await alice.SendRawAsync(
-                      $"<message to='{verschwunden}' type='chat' id='zugestellt'><body>Doch nicht</body></message>");
+                      $"<message to='{vanished}' type='chat' id='delivered'><body>Not after all</body></message>");
 
-            await WaitFor(() => eingang.Any(m => m.MessageId == "zugestellt"),
-                          "die Zustellung an die erreichbare Resource");
+            await WaitFor(() => inbox.Any(m => m.MessageId == "delivered"),
+                          "the delivery to the reachable resource");
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages, Is.Empty,
-                        "Solange eine Resource erreichbar ist, wird nichts abgelegt.");
+                        "As long as a resource is reachable, nothing is stored.");
 
         }
 
@@ -1007,19 +1003,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownResource_StoresNothingForTheOtherTypes()
 
         /// <summary>
-        /// Die Ausnahme gilt nur für <c>chat</c>. Ein <c>normal</c> an eine
-        /// Resource, die es nicht gibt, wird nach Abschnitt 8.5.3.2.1
-        /// stillschweigend verworfen.
+        /// The exception holds only for <c>chat</c>. A <c>normal</c> to a
+        /// resource that does not exist is discarded silently according to
+        /// section 8.5.3.2.1.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied sieht schrullig aus und hat einen Grund: Wer eine
-        /// Full-JID anschreibt, meint diese Resource. Bei einem Gespräch ist
-        /// das eine Abkürzung für „mein Gegenüber", bei allem anderen eine
-        /// Angabe, die der Absender so gewollt hat.
+        /// The difference looks quirky and has a reason: Whoever writes to a
+        /// full JID means this resource. With a conversation that is a
+        /// shorthand for "my counterpart", with everything else a statement the
+        /// sender wanted that way.
         ///
-        /// Ohne diesen Test bestünde die Sammlung auch dann, wenn die Ausnahme
-        /// für jede Art gälte - und die Ablage füllte sich mit Nachrichten an
-        /// Adressen, die es nie gab.
+        /// Without this test the collection would pass even if the exception
+        /// held for every kind - and the store would fill up with messages to
+        /// addresses that never existed.
         /// </remarks>
         [Test]
         public async Task AnUnknownResource_StoresNothingForTheOtherTypes()
@@ -1028,23 +1024,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var verschwunden = $"{Bob}/gibtsnichtmehr";
+            var vanished = $"{Bob}/gone-already";
 
             await alice.SendRawAsync(
-                      $"<message to='{verschwunden}' id='ohne-art'><body>An genau diese Resource</body></message>");
+                      $"<message to='{vanished}' id='without-a-type'><body>To exactly this resource</body></message>");
 
             await alice.SendRawAsync(
-                      $"<message to='{verschwunden}' type='headline' id='meldung'><body>Kurs gefallen</body></message>");
+                      $"<message to='{vanished}' type='headline' id='notice'><body>Price has fallen</body></message>");
 
-            // Danach ein chat - er muss abgelegt werden und belegt damit, dass
-            // die Ablage lief, während die beiden anderen durchfielen.
+            // Afterwards a chat - it has to be stored and thereby establishes
+            // that the store ran while the two others fell through.
             await alice.SendRawAsync(
-                      $"<message to='{verschwunden}' type='chat' id='gespraech'><body>Bist du weg?</body></message>");
+                      $"<message to='{vanished}' type='chat' id='conversation'><body>Are you gone?</body></message>");
 
-            await WarteAufAblage(Bob, 1);
+            await WaitForTheStore(Bob, 1);
 
             Assert.That(Server.GetAccount(Bob)!.OfflineMessages[0].Stanza,
-                        Does.Contain("gespraech"));
+                        Does.Contain("conversation"));
 
         }
 
@@ -1053,46 +1049,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDelayStampIsAppendedToBothFormsOfAMessage()
 
         /// <summary>
-        /// Der Stempel wird angehängt, und zwar auch dann, wenn die Nachricht
-        /// als leeres Element daherkommt.
+        /// The stamp is appended, and that also when the message comes along as
+        /// an empty element.
         /// </summary>
         /// <remarks>
-        /// <c>&lt;message .../&gt;</c> ist kein ausgedachter Fall: Ein Client
-        /// darf eine Nachricht ohne Kindelemente schicken, sie ist ein
-        /// <c>chat</c> wie jeder andere und wird deshalb abgelegt. Ohne das
-        /// Auflösen des leeren Elements landete der Stempel hinter dem Ende der
-        /// Stanza - und wäre damit kein Teil der Nachricht mehr.
+        /// <c>&lt;message .../&gt;</c> is no made-up case: A client may send a
+        /// message without child elements, it is a <c>chat</c> like any other
+        /// and is therefore stored. Without resolving the empty element the
+        /// stamp would land behind the end of the stanza - and would thereby be
+        /// no part of the message any more.
         ///
-        /// Der Zeitpunkt trägt absichtlich einen Versatz gegen UTC. Mit
-        /// <c>TimeSpan.Zero</c> wäre die Ortszeit dieselbe Zahl wie die
-        /// Weltzeit, und ein Stempel in Ortszeit - den XEP-0082 nicht zulässt -
-        /// fiele nicht auf.
+        /// The moment carries an offset against UTC on purpose. With
+        /// <c>TimeSpan.Zero</c> the local time would be the same number as the
+        /// world time, and a stamp in local time - which XEP-0082 does not
+        /// permit - would not stand out.
         /// </remarks>
         [Test]
         public void TheDelayStampIsAppendedToBothFormsOfAMessage()
         {
 
-            var zeitpunkt = new DateTimeOffset(2026, 7, 29, 16, 5, 9, TimeSpan.FromHours(2));
+            var arrivedAt = new DateTimeOffset(2026, 7, 29, 16, 5, 9, TimeSpan.FromHours(2));
 
-            var mitInhalt = XMPPServer.WithDelay(
-                                new OfflineMessage("<message to='bob@localhost'><body>Hallo</body></message>",
-                                                   zeitpunkt),
+            var withContent = XMPPServer.WithDelay(
+                                new OfflineMessage("<message to='bob@localhost'><body>Hello</body></message>",
+                                                   arrivedAt),
                                 "localhost");
 
-            var leer      = XMPPServer.WithDelay(
+            var empty     = XMPPServer.WithDelay(
                                 new OfflineMessage("<message to='bob@localhost' type='chat'/>",
-                                                   zeitpunkt),
+                                                   arrivedAt),
                                 "localhost");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(mitInhalt,
-                            Is.EqualTo("<message to='bob@localhost'><body>Hallo</body>" +
+                Assert.That(withContent,
+                            Is.EqualTo("<message to='bob@localhost'><body>Hello</body>" +
                                        "<delay xmlns='urn:xmpp:delay' from='localhost' " +
                                        "stamp='2026-07-29T14:05:09Z'>Offline Storage</delay></message>"));
 
-                Assert.That(leer,
+                Assert.That(empty,
                             Is.EqualTo("<message to='bob@localhost' type='chat'>" +
                                        "<delay xmlns='urn:xmpp:delay' from='localhost' " +
                                        "stamp='2026-07-29T14:05:09Z'>Offline Storage</delay></message>"));
@@ -1106,46 +1102,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStoreIsAnnouncedInDiscoInfo()
 
         /// <summary>
-        /// XEP-0160, Abschnitt 4: Ein Server mit Offline-Ablage kündigt
-        /// <c>msgoffline</c> in disco#info an.
+        /// XEP-0160, section 4: A server with an offline store announces
+        /// <c>msgoffline</c> in disco#info.
         /// </summary>
         /// <remarks>
-        /// Für den Client ist das der Unterschied zwischen „liegt bereit" und
-        /// „ist weg": Ohne die Ankündigung müsste er aus dem Ausbleiben eines
-        /// Fehlers schliessen, dass abgelegt wurde - und ein Fehler kann sich
-        /// verspäten.
+        /// For the client that is the difference between "lies ready" and "is
+        /// gone": Without the announcement it would have to conclude from the
+        /// absence of an error that something was stored - and an error can be
+        /// late.
         ///
-        /// Geprüft wird auch die Gegenprobe. Eine Ankündigung, die immer da
-        /// ist, sagt nichts; sie wäre dann sogar falsch, denn ein Server ohne
-        /// Ablage verspräche etwas, das er nicht tut.
+        /// The counter-check is made as well. An announcement that is always
+        /// there says nothing; it would then even be wrong, because a server
+        /// without a store would promise something it does not do.
         /// </remarks>
         [Test]
         public async Task TheStoreIsAnnouncedInDiscoInfo()
         {
 
-            var mitAblage  = await FrageDiscoInfoAsync(true);
-            var ohneAblage = await FrageDiscoInfoAsync(false);
+            var withStore    = await AskDiscoInfoAsync(true);
+            var withoutStore = await AskDiscoInfoAsync(false);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(mitAblage,  Does.Contain("msgoffline"));
+                Assert.That(withStore,    Does.Contain("msgoffline"));
 
-                Assert.That(ohneAblage, Does.Not.Contain("msgoffline"),
-                            "Ohne Ablage darf der Server sie nicht ankündigen.");
+                Assert.That(withoutStore, Does.Not.Contain("msgoffline"),
+                            "Without a store the server must not announce it.");
 
             });
 
         }
 
-        /// <summary>Fragt den Server nach seinen Merkmalen.</summary>
-        private async Task<String> FrageDiscoInfoAsync(Boolean storeOfflineMessages)
+        /// <summary>Asks the server for its features.</summary>
+        private async Task<String> AskDiscoInfoAsync(Boolean storeOfflineMessages)
         {
 
             Server.StoreOfflineMessages = storeOfflineMessages;
 
             var client    = await ConnectClientAsync("alice");
-            var antworten = new ConcurrentQueue<String>();
+            var replies   = new ConcurrentQueue<String>();
             var id        = $"disco-{storeOfflineMessages}";
 
             client.Connection.OnRawXml += xml =>
@@ -1153,7 +1149,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 if (xml.Contains("<<<", StringComparison.Ordinal) &&
                     xml.Contains(id,    StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(xml);
+                    replies.Enqueue(xml);
                 }
             };
 
@@ -1161,13 +1157,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                       $"<iq type='get' id='{id}' to='{Server.Domain}'>" +
                       "<query xmlns='http://jabber.org/protocol/disco#info'/></iq>");
 
-            await WaitFor(() => !antworten.IsEmpty, "die disco#info-Antwort des Servers");
+            await WaitFor(() => !replies.IsEmpty, "the disco#info reply of the server");
 
-            antworten.TryDequeue(out var antwort);
+            replies.TryDequeue(out var reply);
 
             await client.DisconnectAsync();
 
-            return antwort!;
+            return reply!;
 
         }
 

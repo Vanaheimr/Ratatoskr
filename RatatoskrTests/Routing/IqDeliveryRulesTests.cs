@@ -29,43 +29,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6121, Abschnitt 8.5.2.1.3: Eine IQ-Anfrage an einen Bare-JID wird
-    /// nicht zugestellt, sondern vom Server selbst beantwortet.
+    /// RFC 6121, section 8.5.2.1.3: An IQ request to a bare JID is not
+    /// delivered but answered by the server itself.
     /// </summary>
     /// <remarks>
-    /// Der Abschnitt sagt es doppelt — „the server itself MUST reply on behalf
-    /// of the user" <b>und</b> „MUST NOT deliver the IQ stanza to any of the
-    /// user's available resources". Diese Verdopplung hat einen Grund, und er
-    /// liegt in der Natur von IQ.
+    /// The section says it twice — "the server itself MUST reply on behalf of
+    /// the user" <b>and</b> "MUST NOT deliver the IQ stanza to any of the
+    /// user's available resources". This doubling has a reason, and it lies in
+    /// the nature of IQ.
     ///
-    /// IQ ist ein Frage-Antwort-Paar, über die <c>id</c> zusammengehalten, und
-    /// jede empfangene Anfrage <b>muss</b> beantwortet werden (RFC 6120,
-    /// Abschnitt 8.2.3, Regel 3). Wer eine Anfrage an alle Resourcen verteilt,
-    /// bekommt von allen eine Antwort: Der Fragende hält drei Antworten auf eine
-    /// <c>id</c> in der Hand und kann nicht entscheiden, welche gilt. Bei einer
-    /// Nachricht wäre mehrfache Zustellung höchstens lästig; hier bricht sie das
-    /// Verfahren.
+    /// IQ is a question-answer pair held together by the <c>id</c>, and every
+    /// received request <b>must</b> be answered (RFC 6120, section 8.2.3,
+    /// rule 3). Whoever distributes a request to all resources gets a reply
+    /// from all of them: The asker holds three replies to one <c>id</c> in
+    /// their hand and cannot decide which one counts. With a message a multiple
+    /// delivery would be a nuisance at worst; here it breaks the procedure.
     ///
-    /// Genau das tat dieser Server: Er reichte jede IQ-Anfrage an eine fremde
-    /// Adresse ins Routing, und das verteilte an einen Bare-JID an jede Sitzung,
-    /// die es fand.
+    /// That is precisely what this server did: It handed every IQ request to a
+    /// foreign address into the routing, and that distributed to a bare JID to
+    /// every session it found.
     /// </remarks>
     [TestFixture]
     public class IqDeliveryRulesTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private String Bob => $"bob@{Server.Domain}";
 
-        /// <summary>Eine Ping-Anfrage (XEP-0199) an eine beliebige Adresse.</summary>
-        private static String Anfrage(String to, String id)
+        /// <summary>A ping request (XEP-0199) to an arbitrary address.</summary>
+        private static String Request(String to, String id)
             => $"<iq type='get' id='{id}' to='{to}'>" +
                "<ping xmlns='urn:xmpp:ping'/></iq>";
 
         /// <summary>
-        /// Meldet einen weiteren Client desselben Kontos an und zählt, was für
-        /// ihn hereinkommt.
+        /// Logs a further client of the same account in and counts what comes
+        /// in for it.
         /// </summary>
         private async Task<(XMPPClient, ConcurrentQueue<String>)> ResourceAsync(String localPart,
                                                                                String resource)
@@ -74,8 +73,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             if (Server.GetAccount($"{localPart}@{Server.Domain}") is null)
                 Server.AddAccount(localPart);
 
-            var client   = CreateClient(localPart);
-            var eingang  = new ConcurrentQueue<String>();
+            var client = CreateClient(localPart);
+            var inbox  = new ConcurrentQueue<String>();
 
             client.Connection.Resource  = resource;
             client.Connection.OnRawXml += x =>
@@ -83,32 +82,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("urn:xmpp:ping", StringComparison.Ordinal))
                 {
-                    eingang.Enqueue(x);
+                    inbox.Enqueue(x);
                 }
             };
 
             await client.ConnectAsync();
 
-            return (client, eingang);
+            return (client, inbox);
 
         }
 
-        /// <summary>Sammelt die Stanza-Fehler eines Clients.</summary>
-        private static ConcurrentQueue<StanzaError> Fehlerkorb(XMPPClient client)
+        /// <summary>Collects the stanza errors of a client.</summary>
+        private static ConcurrentQueue<StanzaError> ErrorBasket(XMPPClient client)
         {
 
-            var korb = new ConcurrentQueue<StanzaError>();
-            client.Connection.OnStanzaError += (from, e) => korb.Enqueue(e);
+            var basket = new ConcurrentQueue<StanzaError>();
+            client.Connection.OnStanzaError += (from, e) => basket.Enqueue(e);
 
-            return korb;
+            return basket;
 
         }
 
-        /// <summary>Zählt die eingehenden IQ-Stanzas mit dieser Id.</summary>
-        private static ConcurrentQueue<String> AntwortKorb(XMPPClient client, String id)
+        /// <summary>Counts the incoming IQ stanzas carrying this id.</summary>
+        private static ConcurrentQueue<String> ReplyBasket(XMPPClient client, String id)
         {
 
-            var korb = new ConcurrentQueue<String>();
+            var basket = new ConcurrentQueue<String>();
 
             client.Connection.OnRawXml += x =>
             {
@@ -116,11 +115,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                     x.Contains("<iq",          StringComparison.Ordinal) &&
                     x.Contains($"id='{id}'",   StringComparison.Ordinal))
                 {
-                    korb.Enqueue(x);
+                    basket.Enqueue(x);
                 }
             };
 
-            return korb;
+            return basket;
 
         }
 
@@ -130,19 +129,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToAnAccount_IsAnsweredOnceAndReachesNoResource()
 
         /// <summary>
-        /// Der Kern: Eine Anfrage an den Bare-JID erreicht <b>keine</b> Resource
-        /// und wird <b>einmal</b> beantwortet.
+        /// The core: A request to the bare JID reaches <b>no</b> resource and
+        /// is answered <b>once</b>.
         /// </summary>
         /// <remarks>
-        /// Beide Hälften in einem Test, weil sie zusammen die Aussage ergeben.
-        /// „Erreicht keine Resource" allein wäre auch erfüllt, wenn die Anfrage
-        /// stillschweigend verschwände — und das verstösst gegen die
-        /// Antwortpflicht. „Wird beantwortet" allein wäre auch erfüllt, wenn
-        /// zusätzlich alle Resourcen antworten.
+        /// Both halves in one test, because together they make up the
+        /// statement. "Reaches no resource" alone would be fulfilled by a
+        /// request vanishing silently as well — and that violates the duty to
+        /// answer. "Is answered" alone would be fulfilled if all resources
+        /// answered on top.
         ///
-        /// Zwei Resourcen und nicht eine: Mit nur einer sähe eine Antwort vom
-        /// Server genauso aus wie eine von der Resource, und der eigentliche
-        /// Schaden — mehrere Antworten auf eine <c>id</c> — wäre unsichtbar.
+        /// Two resources and not one: With only one a reply from the server
+        /// would look exactly like one from the resource, and the actual damage
+        /// — several replies to one <c>id</c> — would be invisible.
         /// </remarks>
         [Test]
         public async Task AnIqToAnAccount_IsAnsweredOnceAndReachesNoResource()
@@ -150,35 +149,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var (handy,   amHandy)   = await ResourceAsync("bob", "Handy");
-            var (rechner, amRechner) = await ResourceAsync("bob", "Rechner");
+            var (mobile,  atTheMobile)  = await ResourceAsync("bob", "Mobile");
+            var (desktop, atTheDesktop) = await ResourceAsync("bob", "Desktop");
 
-            var antworten = AntwortKorb(alice, "an-das-konto");
-            var fehler    = Fehlerkorb(alice);
+            var replies = ReplyBasket(alice, "to-the-account");
+            var errors  = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage(Bob, "an-das-konto"));
+            await alice.SendRawAsync(Request(Bob, "to-the-account"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Antwort des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the reply of the server");
 
-            // Den beiden Resourcen Zeit geben, die Anfrage doch zu bekommen.
+            // Give the two resources time to get the request after all.
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+                Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
-                Assert.That(antworten, Has.Count.EqualTo(1),
-                            "Genau eine Antwort auf eine id - sonst weiss der " +
-                            "Fragende nicht, welche gilt.");
+                Assert.That(replies, Has.Count.EqualTo(1),
+                            "Exactly one reply to one id - otherwise the asker " +
+                            "does not know which one counts.");
 
-                Assert.That(amHandy,   Is.Empty, "Die Anfrage darf keine Resource erreichen.");
-                Assert.That(amRechner, Is.Empty, "Auch nicht die zweite.");
+                Assert.That(atTheMobile,  Is.Empty, "The request must reach no resource.");
+                Assert.That(atTheDesktop, Is.Empty, "The second one neither.");
 
-                Assert.That(handy.FullJid,   Is.Not.EqualTo(rechner.FullJid),
-                            "Der Aufbau taugt nur mit zwei verschiedenen Resourcen.");
+                Assert.That(mobile.FullJid,  Is.Not.EqualTo(desktop.FullJid),
+                            "The setup is only good for anything with two different resources.");
 
             });
 
@@ -189,15 +188,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToAnAbsentAccount_IsAnsweredToo()
 
         /// <summary>
-        /// Abschnitt 8.5.2.2.3 verlangt wörtlich dasselbe wie 8.5.2.1.3: Ob
-        /// jemand angemeldet ist, ändert die Antwort nicht.
+        /// Section 8.5.2.2.3 demands literally the same as 8.5.2.1.3: Whether
+        /// somebody is logged in does not change the reply.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied zur Nachricht ist bemerkenswert: Dort hängt an genau
-        /// dieser Frage die Offline-Ablage. Bei IQ gibt es nichts aufzubewahren —
-        /// eine Frage, deren Antwort erst morgen käme, hat der Fragende längst
-        /// aufgegeben. Deshalb fragt der Zustellweg gar nicht erst, ob eine
-        /// Resource da ist, und dieser Test hält fest, dass das richtig ist.
+        /// The difference to the message is remarkable: There the offline store
+        /// hangs on precisely this question. With IQ there is nothing to store —
+        /// a question whose answer would arrive only tomorrow the asker has
+        /// long given up on. That is why the delivery path does not even ask
+        /// whether a resource is there, and this test holds fast that that is
+        /// right.
         /// </remarks>
         [Test]
         public async Task AnIqToAnAbsentAccount_IsAnsweredToo()
@@ -206,15 +206,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage(Bob, "an-den-abwesenden"));
+            await alice.SendRawAsync(Request(Bob, "to-the-absent-one"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Antwort des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the reply of the server");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+            Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
         }
 
@@ -223,21 +223,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToAnUnknownAccount_IsAnswered()
 
         /// <summary>
-        /// Abschnitt 8.5.1: Für ein Konto, das es nicht gibt, <b>muss</b> eine
-        /// IQ-Anfrage beantwortet werden — anders als eine Nachricht.
+        /// Section 8.5.1: For an account that does not exist an IQ request
+        /// <b>must</b> be answered — unlike a message.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied ist kein Versehen des RFC, sondern die Folge der
-        /// Antwortpflicht: Bei einer Nachricht darf der Server schweigen und
-        /// verrät damit nicht, welche Konten es gibt; bei einer Anfrage muss er
-        /// antworten, und die Antwort ist dieselbe wie für ein vorhandenes
-        /// Konto ohne erreichbare Resource. Genau deshalb ist sie ungefährlich —
-        /// <c>&lt;service-unavailable/&gt;</c> unterscheidet die beiden Fälle
-        /// nicht.
+        /// The difference is no oversight of the RFC but the consequence of the
+        /// duty to answer: With a message the server may keep silent and
+        /// thereby does not give away which accounts exist; with a request it
+        /// has to answer, and the answer is the same as for an existing account
+        /// without a reachable resource. That is precisely why it is harmless —
+        /// <c>&lt;service-unavailable/&gt;</c> does not tell the two cases
+        /// apart.
         ///
-        /// Das ist der zweite Teil der Aussage und der Grund, warum dieser Test
-        /// neben dem vorigen steht: Wären die Antworten verschieden, hätte der
-        /// Server ein Verzeichnis seiner Konten preisgegeben.
+        /// That is the second part of the statement and the reason why this
+        /// test stands next to the previous one: Were the replies different,
+        /// the server would have given away a directory of its accounts.
         /// </remarks>
         [Test]
         public async Task AnIqToAnUnknownAccount_IsAnswered()
@@ -245,17 +245,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage($"gibtsnicht@{Server.Domain}", "an-niemanden"));
+            await alice.SendRawAsync(Request($"doesnotexist@{Server.Domain}", "to-nobody"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Antwort des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the reply of the server");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"),
-                        "Ein unbekanntes Konto muss dieselbe Antwort geben wie ein " +
-                        "bekanntes ohne erreichbare Resource.");
+            Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"),
+                        "An unknown account must give the same reply as a known " +
+                        "one without a reachable resource.");
 
         }
 
@@ -264,33 +264,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToAResource_IsDelivered()
 
         /// <summary>
-        /// Die Gegenprobe: An eine passende Resource gerichtet wird die Anfrage
-        /// zugestellt (Abschnitt 8.5.3.1).
+        /// The counter-check: addressed to a matching resource the request is
+        /// delivered (section 8.5.3.1).
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn der Server jede
-        /// IQ-Anfrage an einen anderen Nutzer abwiese — und damit wäre jede
-        /// Verständigung zwischen zwei Clients unmöglich. Ein Ping zwischen
-        /// zwei Menschen, eine Versionsabfrage, eine Dateiübertragung: alles
-        /// geht an eine Full-JID.
+        /// Without it the collection would pass even if the server turned away
+        /// every IQ request to another user — and thereby every understanding
+        /// between two clients would be impossible. A ping between two human
+        /// beings, a version query, a file transfer: everything goes to a full
+        /// JID.
         ///
-        /// Die beiden sind Kontakte, und das ist nicht Beiwerk: Abschnitt
-        /// 8.5.3.1 lässt die Anfrage nur durch, wenn der Fragende die Presence
-        /// des Empfängers sehen darf. Der Gegenprobe zu dieser Gegenprobe steht
-        /// weiter unten.
+        /// The two are contacts, and that is no accessory: Section 8.5.3.1 lets
+        /// the request through only if the asker may see the presence of the
+        /// recipient. The counter-check to this counter-check stands further
+        /// below.
         /// </remarks>
         [Test]
         public async Task AnIqToAResource_IsDelivered()
         {
 
             var alice = await ConnectClientAsync("alice");
-            var (bob, beiBob) = await ResourceAsync("bob", "Handy");
+            var (bob, atBob) = await ResourceAsync("bob", "Mobile");
 
             MakeContacts("alice", "bob");
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "an-die-resource"));
+            await alice.SendRawAsync(Request(bob.FullJid!, "to-the-resource"));
 
-            await WaitFor(() => !beiBob.IsEmpty, "die Anfrage bei der Resource");
+            await WaitFor(() => !atBob.IsEmpty, "the request at the resource");
 
             Assert.Pass();
 
@@ -301,54 +301,54 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqFromAStranger_IsRefusedEvenThoughTheResourceExists()
 
         /// <summary>
-        /// Abschnitt 8.5.3.1: Wer die Presence des Empfängers nicht sehen darf,
-        /// bekommt die Anfrage nicht zugestellt — auch wenn die Resource da ist.
+        /// Section 8.5.3.1: Whoever may not see the presence of the recipient
+        /// does not get the request delivered — even if the resource is there.
         /// </summary>
         /// <remarks>
-        /// Der Grund steht in Abschnitt 11 und ist feiner, als er zuerst
-        /// aussieht: <b>Schon die Antwort ist eine Auskunft.</b> Wer eine
-        /// Full-JID anfragt und ein Ergebnis bekommt, weiss, dass genau diese
-        /// Resource in diesem Augenblick angemeldet ist. Ohne diese Prüfung
-        /// liesse sich die Anwesenheit eines Menschen abfragen, ohne ihn je um
-        /// Erlaubnis gefragt zu haben — und Resourcenamen liessen sich
-        /// durchprobieren, bis einer antwortet.
+        /// The reason stands in section 11 and is finer than it looks at first:
+        /// <b>The reply alone is already a piece of information.</b> Whoever
+        /// asks a full JID and gets a result knows that this very resource is
+        /// logged in at this moment. Without this check the presence of a human
+        /// being could be queried without ever having asked them for permission
+        /// — and resource names could be tried out one by one until one
+        /// answers.
         ///
-        /// Geprüft wird deshalb auch, dass die Antwort <b>dieselbe</b> ist wie
-        /// für eine Resource, die es nicht gibt. Wären die beiden verschieden,
-        /// wäre die Prüfung wirkungslos: Der Fragende läse aus der Art der
-        /// Ablehnung heraus, was sie ihm verschweigen soll.
+        /// What is checked is therefore also that the reply is <b>the same</b>
+        /// as for a resource that does not exist. Were the two different, the
+        /// check would be without effect: The asker would read out of the kind
+        /// of refusal what it is meant to keep from them.
         /// </remarks>
         [Test]
         public async Task AnIqFromAStranger_IsRefusedEvenThoughTheResourceExists()
         {
 
             var alice = await ConnectClientAsync("alice");
-            var (bob, beiBob) = await ResourceAsync("bob", "Handy");
+            var (bob, atBob) = await ResourceAsync("bob", "Mobile");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "von-einem-fremden"));
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung");
+            await alice.SendRawAsync(Request(bob.FullJid!, "from-a-stranger"));
+            await WaitFor(() => !errors.IsEmpty, "the refusal");
 
-            fehler.TryDequeue(out var anDieVorhandene);
+            errors.TryDequeue(out var toTheExistingOne);
 
-            // Und dieselbe Frage an eine Resource, die es nicht gibt.
-            await alice.SendRawAsync(Anfrage($"{Bob}/gibtsnichtmehr", "an-die-erfundene"));
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung für die erfundene Resource");
+            // And the same question to a resource that does not exist.
+            await alice.SendRawAsync(Request($"{Bob}/gone-already", "to-the-invented-one"));
+            await WaitFor(() => !errors.IsEmpty, "the refusal for the invented resource");
 
-            fehler.TryDequeue(out var anDieErfundene);
+            errors.TryDequeue(out var toTheInventedOne);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(anDieVorhandene!.Condition, Is.EqualTo("service-unavailable"));
+                Assert.That(toTheExistingOne!.Condition, Is.EqualTo("service-unavailable"));
 
-                Assert.That(anDieErfundene!.Condition, Is.EqualTo(anDieVorhandene.Condition),
-                            "Eine vorhandene und eine erfundene Resource müssen dieselbe " +
-                            "Antwort geben - sonst verrät die Ablehnung, was sie verschweigt.");
+                Assert.That(toTheInventedOne!.Condition, Is.EqualTo(toTheExistingOne.Condition),
+                            "An existing and an invented resource must give the same " +
+                            "reply - otherwise the refusal betrays what it keeps quiet.");
 
-                Assert.That(beiBob, Is.Empty,
-                            "Die Anfrage darf die Resource nicht erreichen.");
+                Assert.That(atBob, Is.Empty,
+                            "The request must not reach the resource.");
 
             });
 
@@ -359,49 +359,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRosterHalfThatCountsIsTheRecipients()
 
         /// <summary>
-        /// Gefragt wird der Roster des <b>Empfängers</b> nach <c>from</c> oder
-        /// <c>both</c> — „der darf mich sehen".
+        /// What is asked is the roster of the <b>recipient</b> for <c>from</c>
+        /// or <c>both</c> — "that one may see me".
         /// </summary>
         /// <remarks>
-        /// Die Richtung ist leicht zu verwechseln, und <c>both</c> verdeckt die
-        /// Verwechslung vollständig: Dort stimmen beide Hälften, und eine
-        /// Umsetzung, die die falsche liest, fällt nicht auf. Deshalb steht hier
-        /// ein einseitiger Zustand.
+        /// The direction is easy to mistake, and <c>both</c> covers the mistake
+        /// up entirely: There both halves hold, and an implementation reading
+        /// the wrong one does not stand out. That is why a one-sided state
+        /// stands here.
         ///
-        /// <c>to</c> in Bobs Roster heisst: <b>Bob</b> sieht Alices Presence,
-        /// Alice aber nicht die von Bob. Wer diese Hälfte liest, gibt die
-        /// Auskunft an genau die falsche Seite — an jeden, den der Empfänger
-        /// beobachtet, statt an jeden, der ihn beobachten darf. Das ist keine
-        /// halbe Prüfung, sondern die Umkehrung der gemeinten.
+        /// <c>to</c> in Bob's roster means: <b>Bob</b> sees Alice's presence,
+        /// Alice however not Bob's. Whoever reads this half gives the
+        /// information to exactly the wrong side — to everyone the recipient
+        /// watches instead of to everyone who may watch them. That is no half
+        /// check but the inversion of the intended one.
         /// </remarks>
         [Test]
         public async Task TheRosterHalfThatCountsIsTheRecipients()
         {
 
             var alice = await ConnectClientAsync("alice");
-            var (bob, beiBob) = await ResourceAsync("bob", "Handy");
+            var (bob, atBob) = await ResourceAsync("bob", "Mobile");
 
-            // Bob sieht Alice - Alice sieht Bob nicht.
+            // Bob sees Alice - Alice does not see Bob.
             SetServerRoster("bob", "alice", "to");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "falsche-haelfte"));
+            await alice.SendRawAsync(Request(bob.FullJid!, "wrong-half"));
 
-            await WaitFor(() => !fehler.IsEmpty,
-                          "die Abweisung trotz Roster-Eintrags");
+            await WaitFor(() => !errors.IsEmpty,
+                          "the turning away despite the roster entry");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            // Und nun die Hälfte, die zählt.
+            // And now the half that counts.
             SetServerRoster("bob", "alice", "from");
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "richtige-haelfte"));
+            await alice.SendRawAsync(Request(bob.FullJid!, "right-half"));
 
-            await WaitFor(() => !beiBob.IsEmpty,
-                          "die Anfrage nach dem richtigen Roster-Zustand");
+            await WaitFor(() => !atBob.IsEmpty,
+                          "the request after the right roster state");
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+            Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
         }
 
@@ -410,50 +410,51 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DirectedPresence_OpensTheDoorForAStranger()
 
         /// <summary>
-        /// Der zweite Weg aus Abschnitt 8.5.3.1: gerichtete Presence
-        /// (Abschnitt 4.6) statt eines Roster-Eintrags.
+        /// The second path out of section 8.5.3.1: directed presence
+        /// (section 4.6) instead of a roster entry.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Weg wäre die Prüfung zu streng, und zwar für den
-        /// häufigsten Fall überhaupt: Ein Gespräch mit jemandem, der nicht im
-        /// Roster steht, beginnt damit, dass man ihm seine Anwesenheit zeigt
-        /// (Abschnitt 5.1). Wer seine Presence von selbst gezeigt hat, kann
-        /// durch eine Antwort nichts mehr verlieren — der Fragende weiss schon,
-        /// dass die Resource da ist.
+        /// Without this path the check would be too strict, and that for the
+        /// most frequent case of all: A conversation with somebody who is not
+        /// in the roster begins with showing them one's presence
+        /// (section 5.1). Whoever has shown their presence of their own accord
+        /// can lose nothing any more through a reply — the asker knows already
+        /// that the resource is there.
         ///
-        /// Beide Hälften stehen im Test: erst die Abweisung ohne gerichtete
-        /// Presence, dann die Zustellung mit. Ohne die erste bewiese die zweite
-        /// nichts, weil die Anfrage auch bei ausgeschalteter Prüfung ankäme.
+        /// Both halves stand in the test: first the turning away without
+        /// directed presence, then the delivery with it. Without the first the
+        /// second would prove nothing, because the request would arrive with
+        /// the check switched off as well.
         ///
-        /// Bob schreibt Alices <b>Full-JID</b> an, und das ist der übliche Fall:
-        /// Ein Gespräch beginnt mit der Resource, von der man gerade gehört hat.
-        /// Vermerkt werden muss trotzdem der Bare-JID — sonst zählte die Zusage
-        /// nur für dieses eine Gerät, und Alices Anfrage von derselben Resource
-        /// wäre reiner Zufall.
+        /// Bob writes to Alice's <b>full JID</b>, and that is the usual case: A
+        /// conversation begins with the resource one has just heard from. What
+        /// has to be noted down is the bare JID nevertheless — otherwise the
+        /// promise would count only for this one device, and Alice's request
+        /// from the same resource would be sheer coincidence.
         /// </remarks>
         [Test]
         public async Task DirectedPresence_OpensTheDoorForAStranger()
         {
 
             var alice = await ConnectClientAsync("alice");
-            var (bob, beiBob) = await ResourceAsync("bob", "Handy");
+            var (bob, atBob) = await ResourceAsync("bob", "Mobile");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "vorher"));
-            await WaitFor(() => !fehler.IsEmpty, "die Abweisung ohne gerichtete Presence");
+            await alice.SendRawAsync(Request(bob.FullJid!, "before"));
+            await WaitFor(() => !errors.IsEmpty, "the turning away without directed presence");
 
-            // Bob zeigt Alice seine Anwesenheit - an ihre Full-JID.
+            // Bob shows Alice his presence - to her full JID.
             await bob.SendRawAsync($"<presence to='{alice.FullJid}'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "nachher"));
+            await alice.SendRawAsync(Request(bob.FullJid!, "after"));
 
-            await WaitFor(() => !beiBob.IsEmpty,
-                          "die Anfrage nach der gerichteten Presence");
+            await WaitFor(() => !atBob.IsEmpty,
+                          "the request after the directed presence");
 
         }
 
@@ -462,44 +463,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DirectedUnavailablePresence_ClosesTheDoorAgain()
 
         /// <summary>
-        /// Abschnitt 4.6.1: „The server MUST remove from the directed presence
+        /// Section 4.6.1: "The server MUST remove from the directed presence
         /// list ... any entity to which the user sends directed unavailable
         /// presence."
         /// </summary>
         /// <remarks>
-        /// Ein MUSS, und der Grund ist genau die Prüfung aus 8.5.3.1: Bliebe der
-        /// Vermerk stehen, dürfte der Fremde weiter fragen, nachdem der Nutzer
-        /// seine Zusage ausdrücklich widerrufen hat. Eine Erlaubnis, die man
-        /// nicht zurücknehmen kann, ist keine.
+        /// A MUST, and the reason is exactly the check from 8.5.3.1: Were the
+        /// note to stay, the stranger could go on asking after the user has
+        /// expressly revoked their promise. A permission one cannot take back
+        /// is none.
         /// </remarks>
         [Test]
         public async Task DirectedUnavailablePresence_ClosesTheDoorAgain()
         {
 
             var alice = await ConnectClientAsync("alice");
-            var (bob, beiBob) = await ResourceAsync("bob", "Handy");
+            var (bob, atBob) = await ResourceAsync("bob", "Mobile");
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "waehrend"));
-            await WaitFor(() => !beiBob.IsEmpty, "die Anfrage bei offener Tür");
+            await alice.SendRawAsync(Request(bob.FullJid!, "during"));
+            await WaitFor(() => !atBob.IsEmpty, "the request at an open door");
 
-            // Bob nimmt seine Anwesenheit gegenüber Alice zurück.
+            // Bob withdraws his presence towards Alice.
             await bob.SendRawAsync($"<presence to='{alice.BareJid}' type='unavailable'/>");
 
             await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
                                        .HasDirectedPresenceTo(alice.BareJid),
-                          "das Zurücknehmen des Vermerks");
+                          "the taking back of the note");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage(bob.FullJid!, "danach"));
+            await alice.SendRawAsync(Request(bob.FullJid!, "afterwards"));
 
-            await WaitFor(() => !fehler.IsEmpty,
-                          "die Abweisung nach dem Widerruf");
+            await WaitFor(() => !errors.IsEmpty,
+                          "the turning away after the revocation");
 
         }
 
@@ -508,37 +509,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region GoingUnavailable_ClearsTheDirectedPresenceList()
 
         /// <summary>
-        /// Abschnitt 4.6.1: „...then clearing the list when the user goes
+        /// Section 4.6.1: "...then clearing the list when the user goes
         /// offline".
         /// </summary>
         /// <remarks>
-        /// Gerichtete Presence ist eine Zusage für die Dauer der Anwesenheit.
-        /// Bliebe sie über die Abmeldung hinaus stehen, dürfte ein Fremder eine
-        /// abgemeldete Resource weiter befragen — und aus der Antwort schliessen,
-        /// dass sie noch verbunden ist, obwohl sie sich abgemeldet hat. Das ist
-        /// genau die Auskunft, die Abschnitt 8.5.3.1 verhindern soll.
+        /// Directed presence is a promise for the duration of the presence.
+        /// Were it to stay beyond the sign-off, a stranger could go on querying
+        /// a signed-off resource — and conclude from the reply that it is still
+        /// connected although it has signed off. That is precisely the
+        /// information section 8.5.3.1 is meant to prevent.
         /// </remarks>
         [Test]
         public async Task GoingUnavailable_ClearsTheDirectedPresenceList()
         {
 
             var alice = await ConnectClientAsync("alice");
-            var (bob, _) = await ResourceAsync("bob", "Handy");
+            var (bob, _) = await ResourceAsync("bob", "Mobile");
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
             await WaitFor(() => Server.SessionOf(bob.FullJid!)!
                                       .HasDirectedPresenceTo(alice.BareJid),
-                          "den Vermerk der gerichteten Presence");
+                          "the note of the directed presence");
 
-            // Nicht gerichtet an Alice, sondern die eigene Abmeldung.
+            // Not directed at Alice, but the sign-off of one's own.
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
             await WaitFor(() => Server.SessionOf(bob.FullJid!)?.IsAvailable == false,
-                          "die Abmeldung am Server");
+                          "the sign-off at the server");
 
             Assert.That(Server.SessionOf(bob.FullJid!)!.DirectedPresenceTargets,
                         Is.Empty,
-                        "Die Abmeldung nimmt jede gerichtete Presence mit zurück.");
+                        "The sign-off takes every directed presence back with it.");
 
         }
 
@@ -547,8 +548,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToAVanishedResource_IsAnswered()
 
         /// <summary>
-        /// Abschnitt 8.5.3.2.3: Keine passende Resource, also
-        /// <c>&lt;service-unavailable/&gt;</c> — hier ohne Ausnahme für die Art.
+        /// Section 8.5.3.2.3: No matching resource, hence
+        /// <c>&lt;service-unavailable/&gt;</c> — here without an exception for
+        /// the kind.
         /// </summary>
         [Test]
         public async Task AnIqToAVanishedResource_IsAnswered()
@@ -557,15 +559,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Anfrage($"{Bob}/gibtsnichtmehr", "an-die-verschwundene"));
+            await alice.SendRawAsync(Request($"{Bob}/gone-already", "to-the-vanished-one"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Antwort des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the reply of the server");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("service-unavailable"));
+            Assert.That(refused!.Condition, Is.EqualTo("service-unavailable"));
 
         }
 
@@ -574,21 +576,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AResultToAVanishedResource_IsNotAnswered()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 8.2.3, Regel 4: Eine Antwort wird nie
-        /// beantwortet.
+        /// RFC 6120, section 8.2.3, rule 4: A reply is never answered.
         /// </summary>
         /// <remarks>
-        /// Hier stehen zwei Vorschriften gegeneinander, und das ist der Grund
-        /// für diesen Test. Abschnitt 8.5.3.2.3 verlangt für „eine IQ-Stanza"
-        /// ohne passende Resource einen Fehler und unterscheidet die Art nicht;
-        /// Regel 4 verbietet, eine Antwort zu beantworten. Regel 4 gewinnt: Ein
-        /// Fehler auf ein <c>result</c> ginge an jemanden, der nichts gefragt
-        /// hat, und trüge die <c>id</c> einer Frage, die er selbst beantwortet
-        /// hat. Er kann damit nichts anfangen — und wenn er den Fehler seinerseits
-        /// beantwortete, wäre es eine Schleife.
+        /// Here two provisions stand against each other, and that is the reason
+        /// for this test. Section 8.5.3.2.3 demands an error for "an IQ stanza"
+        /// without a matching resource and does not tell the kinds apart;
+        /// rule 4 forbids answering a reply. Rule 4 wins: An error on a
+        /// <c>result</c> would go to somebody who has not asked anything, and
+        /// would carry the <c>id</c> of a question they answered themselves.
+        /// They can do nothing with it — and if they answered the error in
+        /// turn, it would be a loop.
         ///
-        /// Geprüft werden beide Arten von Antwort, denn nur für <c>error</c>
-        /// ist das Verbot offensichtlich.
+        /// Both kinds of reply are checked, because the ban is obvious only for
+        /// <c>error</c>.
         /// </remarks>
         [Test]
         public async Task AResultToAVanishedResource_IsNotAnswered()
@@ -597,20 +598,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler     = Fehlerkorb(alice);
-            var antworten  = AntwortKorb(alice, "keine-frage");
+            var errors  = ErrorBasket(alice);
+            var replies = ReplyBasket(alice, "no-question");
 
             await alice.SendRawAsync(
-                      $"<iq type='result' id='keine-frage' to='{Bob}/gibtsnichtmehr'/>");
+                      $"<iq type='result' id='no-question' to='{Bob}/gone-already'/>");
 
             await alice.SendRawAsync(
-                      $"<iq type='error' id='auch-keine' to='{Bob}/gibtsnichtmehr'>" +
+                      $"<iq type='error' id='also-none' to='{Bob}/gone-already'>" +
                       "<error type='cancel'>" +
                       "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
                       "</error></iq>");
 
-            await WaitAgainst(() => !fehler.IsEmpty || !antworten.IsEmpty,
-                              "eine Antwort auf eine Antwort");
+            await WaitAgainst(() => !errors.IsEmpty || !replies.IsEmpty,
+                              "a reply to a reply");
 
         }
 
@@ -619,15 +620,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AResultToAnAccount_ReachesNoResource()
 
         /// <summary>
-        /// Eine Antwort an den Bare-JID gehört niemandem: Sie wird nicht
-        /// verteilt und nicht beantwortet.
+        /// A reply to the bare JID belongs to nobody: It is neither distributed
+        /// nor answered.
         /// </summary>
         /// <remarks>
-        /// Eine Antwort gehört genau der Resource, die gefragt hat — und ein
-        /// Bare-JID benennt keine. Sie an alle zu verteilen wäre schlimmer als
-        /// sie zu verwerfen: Jede Resource sähe eine Antwort auf eine Frage, die
-        /// sie nie gestellt hat, und hielte womöglich ihre eigene offene
-        /// <c>id</c> für erledigt.
+        /// A reply belongs to exactly the resource that asked — and a bare JID
+        /// names none. Distributing it to all of them would be worse than
+        /// discarding it: Every resource would see a reply to a question it
+        /// never put, and might consider its own open <c>id</c> settled.
         /// </remarks>
         [Test]
         public async Task AResultToAnAccount_ReachesNoResource()
@@ -635,22 +635,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var (handy,   amHandy)   = await ResourceAsync("bob", "Handy");
-            var (rechner, amRechner) = await ResourceAsync("bob", "Rechner");
+            var (mobile,  atTheMobile)  = await ResourceAsync("bob", "Mobile");
+            var (desktop, atTheDesktop) = await ResourceAsync("bob", "Desktop");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
             await alice.SendRawAsync(
-                      $"<iq type='result' id='an-alle' to='{Bob}'>" +
+                      $"<iq type='result' id='to-everyone' to='{Bob}'>" +
                       "<ping xmlns='urn:xmpp:ping'/></iq>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(amHandy,   Is.Empty);
-                Assert.That(amRechner, Is.Empty);
-                Assert.That(fehler,    Is.Empty, "Und beantwortet wird sie auch nicht.");
+                Assert.That(atTheMobile,  Is.Empty);
+                Assert.That(atTheDesktop, Is.Empty);
+                Assert.That(errors,       Is.Empty, "And it is not answered either.");
             });
 
         }
@@ -660,17 +660,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAnswerCarriesTheRequestedAddressAsSender()
 
         /// <summary>
-        /// Die Antwort kommt von der Adresse, an die gefragt wurde, und trägt
-        /// die <c>id</c> der Frage.
+        /// The reply comes from the address that was asked and carries the
+        /// <c>id</c> of the question.
         /// </summary>
         /// <remarks>
-        /// Beides ist die Voraussetzung dafür, dass der Fragende sie überhaupt
-        /// zuordnen kann. Die <c>id</c> hält das Paar zusammen (RFC 6120,
-        /// Abschnitt 8.2.3, Regel 3: „The response MUST preserve the 'id'
-        /// attribute of the request"), und der Absender beantwortet die Frage
-        /// „was ist aus meiner Anfrage an Bob geworden". Käme sie vom Server,
-        /// wäre es die Antwort auf eine andere Frage — und ein Client, der
-        /// Antworten dem Gefragten zuordnet, fände keine Zuordnung.
+        /// Both are the precondition for the asker being able to relate it at
+        /// all. The <c>id</c> holds the pair together (RFC 6120,
+        /// section 8.2.3, rule 3: "The response MUST preserve the 'id'
+        /// attribute of the request"), and the sender answers the question
+        /// "what has become of my request to Bob". Were it to come from the
+        /// server, it would be the reply to a different question — and a client
+        /// relating replies to the one asked would find no relation.
         /// </remarks>
         [Test]
         public async Task TheAnswerCarriesTheRequestedAddressAsSender()
@@ -679,33 +679,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var rohe = new ConcurrentQueue<String>();
+            var rawFrames = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
-                    x.Contains("mit-absender", StringComparison.Ordinal))
+                    x.Contains("with-sender", StringComparison.Ordinal))
                 {
-                    rohe.Enqueue(x);
+                    rawFrames.Enqueue(x);
                 }
             };
 
-            await alice.SendRawAsync(Anfrage(Bob, "mit-absender"));
+            await alice.SendRawAsync(Request(Bob, "with-sender"));
 
-            await WaitFor(() => !rohe.IsEmpty, "die Antwort auf dem Draht");
+            await WaitFor(() => !rawFrames.IsEmpty, "the reply on the wire");
 
-            rohe.TryDequeue(out var stanza);
+            rawFrames.TryDequeue(out var stanza);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(stanza, Does.Contain($"from='{Bob}'"),
-                            "Die Antwort kommt von der Adresse, an die gefragt wurde.");
+                            "The reply comes from the address that was asked.");
 
                 Assert.That(stanza, Does.Contain($"to='{alice.FullJid}'"),
-                            "Und geht an die Resource, die gefragt hat.");
+                            "And goes to the resource that asked.");
 
-                Assert.That(stanza, Does.Contain("id='mit-absender'"));
+                Assert.That(stanza, Does.Contain("id='with-sender'"));
 
             });
 
