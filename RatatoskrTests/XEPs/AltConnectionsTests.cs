@@ -27,28 +27,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0156: den WebSocket-Endpunkt einer Domain aus ihrem
-    /// <c>host-meta</c> lesen - ohne Netz, mit eingesetztem Abrufer.
+    /// XEP-0156: reading the WebSocket endpoint of a domain out of its
+    /// <c>host-meta</c> - without a net, with an inserted fetcher.
     /// </summary>
     /// <remarks>
-    /// Zwei Regeln des XEPs sind Sicherheitsregeln und stehen deshalb im
-    /// Mittelpunkt: „host-meta files MUST be fetched only over HTTPS, and MUST
-    /// only use connection URLs starting with 'https://' or 'wss://'."
+    /// Two rules of the XEP are security rules and therefore stand at the
+    /// centre: "host-meta files MUST be fetched only over HTTPS, and MUST only
+    /// use connection URLs starting with 'https://' or 'wss://'."
     ///
-    /// Beides ist derselbe Gedanke. Wer die Auskunft im Klartext holt, lässt
-    /// jeden Zwischenmann bestimmen, wohin sich der Client anmeldet; wer einer
-    /// so geholten Auskunft ein <c>ws://</c> abnimmt, gibt hinterher Benutzer
-    /// und Passwort dorthin. Das eine ist ohne das andere wertlos.
+    /// Both are the same thought. Whoever fetches the information in plaintext
+    /// lets every man in the middle determine where the client logs in;
+    /// whoever accepts a <c>ws://</c> from information fetched that way sends
+    /// user and password there afterwards. The one is worthless without the
+    /// other.
     ///
-    /// Der DNS-Weg über <c>_xmppconnect</c>-TXT-Einträge, den frühere Fassungen
-    /// des XEPs kannten, ist deshalb gar nicht erst umgesetzt: Er wurde aus dem
-    /// Dokument entfernt - „this was insecure and has been removed".
+    /// The DNS path over <c>_xmppconnect</c> TXT records, which earlier
+    /// versions of the XEP knew, is therefore not implemented at all: it was
+    /// removed from the document - "this was insecure and has been removed".
     /// </remarks>
     [TestFixture]
     public class AltConnectionsTests
     {
 
-        #region Beispiele aus dem XEP
+        #region Examples from the XEP
 
         private const String Xrd =
             "<?xml version='1.0' encoding='utf-8'?>" +
@@ -65,19 +66,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein Abrufer, der die angefragten Adressen mitschreibt und je nach
-        /// Adresse eine hinterlegte Antwort gibt.
+        /// A fetcher that writes the requested addresses down and gives a
+        /// deposited answer depending on the address.
         /// </summary>
-        private static AltConnectionsResolver Resolver(List<String>                 abgefragt,
-                                                       IDictionary<String, String>  antworten)
+        private static AltConnectionsResolver Resolver(List<String>                 queried,
+                                                       IDictionary<String, String>  replies)
 
             => new ((uri, ct) =>
                {
-                   abgefragt.Add(uri);
-                   return Task.FromResult(antworten.TryGetValue(uri, out var antwort) ? antwort : null);
+                   queried.Add(uri);
+                   return Task.FromResult(replies.TryGetValue(uri, out var reply) ? reply : null);
                });
 
         #endregion
@@ -86,19 +87,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheWebsocketLinkIsTakenFromTheXrd()
 
         /// <summary>
-        /// Das XRD-Beispiel aus dem XEP: Der websocket-Link wird gefunden, der
-        /// BOSH-Link nicht mitgenommen.
+        /// The XRD example from the XEP: the websocket link is found, the BOSH
+        /// link is not taken along.
         /// </summary>
         [Test]
         public void TheWebsocketLinkIsTakenFromTheXrd()
         {
 
-            var endpunkte = AltConnectionsResolver.WebSocketEndpointsFromXrd(Xrd);
+            var endpoints = AltConnectionsResolver.WebSocketEndpointsFromXrd(Xrd);
 
             Assert.Multiple(() =>
             {
-                Assert.That(endpunkte, Has.Count.EqualTo(1), $"Gefunden: {String.Join(", ", endpunkte)}");
-                Assert.That(endpunkte[0], Is.EqualTo("wss://web.example.com:443/ws"));
+                Assert.That(endpoints, Has.Count.EqualTo(1), $"Found: {String.Join(", ", endpoints)}");
+                Assert.That(endpoints[0], Is.EqualTo("wss://web.example.com:443/ws"));
             });
 
         }
@@ -107,17 +108,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TheWebsocketLinkIsTakenFromTheJrd()
 
-        /// <summary>Dasselbe für die JSON-Fassung.</summary>
+        /// <summary>The same for the JSON version.</summary>
         [Test]
         public void TheWebsocketLinkIsTakenFromTheJrd()
         {
 
-            var endpunkte = AltConnectionsResolver.WebSocketEndpointsFromJrd(Jrd);
+            var endpoints = AltConnectionsResolver.WebSocketEndpointsFromJrd(Jrd);
 
             Assert.Multiple(() =>
             {
-                Assert.That(endpunkte, Has.Count.EqualTo(1), $"Gefunden: {String.Join(", ", endpunkte)}");
-                Assert.That(endpunkte[0], Is.EqualTo("wss://web.example.com:443/ws"));
+                Assert.That(endpoints, Has.Count.EqualTo(1), $"Found: {String.Join(", ", endpoints)}");
+                Assert.That(endpoints[0], Is.EqualTo("wss://web.example.com:443/ws"));
             });
 
         }
@@ -127,12 +128,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APlaintextEndpoint_IsRejected()
 
         /// <summary>
-        /// Ein <c>ws://</c>-Endpunkt wird nicht genommen - in beiden Formaten.
+        /// A <c>ws://</c> endpoint is not taken - in both formats.
         /// </summary>
         /// <remarks>
-        /// Das ist keine Formsache: Der Endpunkt bestimmt, wohin gleich Benutzer
-        /// und Passwort gehen. Eine Auskunft, die über TLS kommt und dann ins
-        /// Klartext-Netz zeigt, hebt die Absicherung wieder auf.
+        /// That is no formality: The endpoint determines where user and
+        /// password go in a moment. Information that comes over TLS and then
+        /// points into the plaintext net lifts the protection again.
         /// </remarks>
         [Test]
         public void APlaintextEndpoint_IsRejected()
@@ -158,14 +159,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnotherRelation_IsNotAnEndpoint()
 
         /// <summary>
-        /// Der Link-Typ entscheidet, nicht das Schema: Ein <c>wss://</c> unter
-        /// einem anderen <c>rel</c> ist kein WebSocket-Endpunkt.
+        /// The link type decides, not the scheme: a <c>wss://</c> under another
+        /// <c>rel</c> is no WebSocket endpoint.
         /// </summary>
         /// <remarks>
-        /// Ein <c>host-meta</c> ist nicht für XMPP gemacht - dort stehen
-        /// <c>lrdd</c>, <c>webfinger</c> und was der Betreiber sonst
-        /// veröffentlicht. Wer nur auf das Schema sieht, nimmt den erstbesten
-        /// Eintrag, der zufällig verschlüsselt ist.
+        /// A <c>host-meta</c> is not made for XMPP - there stand <c>lrdd</c>,
+        /// <c>webfinger</c> and whatever else the operator publishes. Whoever
+        /// looks only at the scheme takes the first entry to hand that happens
+        /// to be encrypted.
         /// </remarks>
         [Test]
         public void AnotherRelation_IsNotAnEndpoint()
@@ -191,16 +192,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFirstEndpointWins()
 
         /// <summary>
-        /// Nennt eine Domain mehrere Endpunkte, gilt der erste - und die
-        /// Reihenfolge des Dokuments bleibt erhalten.
+        /// If a domain names several endpoints, the first one holds - and the
+        /// order of the document is preserved.
         /// </summary>
         [Test]
         public async Task TheFirstEndpointWins()
         {
 
             var jrd = "{ \"links\": [" +
-                      "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://erst.example/ws\" }," +
-                      "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://dann.example/ws\" }" +
+                      "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://first.example/ws\" }," +
+                      "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://then.example/ws\" }" +
                       "] }";
 
             var resolver = Resolver([],
@@ -212,10 +213,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(AltConnectionsResolver.WebSocketEndpointsFromJrd(jrd),
-                            Is.EqualTo(new[] { "wss://erst.example/ws", "wss://dann.example/ws" }));
+                            Is.EqualTo(new[] { "wss://first.example/ws", "wss://then.example/ws" }));
 
                 Assert.That(await resolver.DiscoverWebSocketAsync("example.test"),
-                            Is.EqualTo("wss://erst.example/ws"));
+                            Is.EqualTo("wss://first.example/ws"));
 
             });
 
@@ -226,14 +227,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Garbage_IsNotAnException()
 
         /// <summary>
-        /// Was keine gültige Datei ist, ergibt keine Endpunkte - und keinen
-        /// Fehler.
+        /// What is no valid file yields no endpoints - and no error.
         /// </summary>
         /// <remarks>
-        /// Der Inhalt kommt von einem fremden Webserver, der irgendetwas
-        /// ausliefern kann: eine Fehlerseite, eine Weiterleitung als HTML, eine
-        /// halbe Datei. Fliegt hier eine Ausnahme, scheitert der
-        /// Verbindungsaufbau an der Discovery statt ohne sie weiterzugehen.
+        /// The content comes from a foreign web server that can deliver
+        /// anything: an error page, a redirect as HTML, half a file. If an
+        /// exception flies here, the connection setup fails at the discovery
+        /// instead of carrying on without it.
         /// </remarks>
         [Test]
         public void Garbage_IsNotAnException()
@@ -254,28 +254,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheJsonFormIsTriedFirst()
 
         /// <summary>
-        /// Gefragt wird über HTTPS nach <c>/.well-known/host-meta.json</c>;
-        /// findet sich dort ein Endpunkt, bleibt es bei dieser einen Abfrage.
+        /// The question goes over HTTPS after
+        /// <c>/.well-known/host-meta.json</c>; if an endpoint is found there,
+        /// it stays with this one query.
         /// </summary>
         [Test]
         public async Task TheJsonFormIsTriedFirst()
         {
 
-            var abgefragt = new List<String>();
+            var queried = new List<String>();
 
-            var resolver = Resolver(abgefragt,
+            var resolver = Resolver(queried,
                                new Dictionary<String, String> {
                                    ["https://example.test/.well-known/host-meta.json"] = Jrd,
                                    ["https://example.test/.well-known/host-meta"]      = Xrd
                                });
 
-            var endpunkt = await resolver.DiscoverWebSocketAsync("example.test");
+            var endpoint = await resolver.DiscoverWebSocketAsync("example.test");
 
             Assert.Multiple(() =>
             {
-                Assert.That(endpunkt, Is.EqualTo("wss://web.example.com:443/ws"));
-                Assert.That(abgefragt, Is.EqualTo(new[] { "https://example.test/.well-known/host-meta.json" }),
-                            $"Abgefragt wurde: {String.Join(", ", abgefragt)}");
+                Assert.That(endpoint, Is.EqualTo("wss://web.example.com:443/ws"));
+                Assert.That(queried, Is.EqualTo(new[] { "https://example.test/.well-known/host-meta.json" }),
+                            $"What was queried: {String.Join(", ", queried)}");
             });
 
         }
@@ -285,29 +286,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheJsonForm_TheXrdIsUsed()
 
         /// <summary>
-        /// Liefert die JSON-Fassung nichts, wird die XML-Fassung nachgefragt.
+        /// If the JSON version delivers nothing, the XML version is queried
+        /// afterwards.
         /// </summary>
         [Test]
         public async Task WithoutTheJsonForm_TheXrdIsUsed()
         {
 
-            var abgefragt = new List<String>();
+            var queried = new List<String>();
 
-            var resolver = Resolver(abgefragt,
+            var resolver = Resolver(queried,
                                new Dictionary<String, String> {
                                    ["https://example.test/.well-known/host-meta"] = Xrd
                                });
 
-            var endpunkt = await resolver.DiscoverWebSocketAsync("example.test");
+            var endpoint = await resolver.DiscoverWebSocketAsync("example.test");
 
             Assert.Multiple(() =>
             {
-                Assert.That(endpunkt, Is.EqualTo("wss://web.example.com:443/ws"));
-                Assert.That(abgefragt, Is.EqualTo(new[] {
-                                "https://example.test/.well-known/host-meta.json",
+                Assert.That(endpoint, Is.EqualTo("wss://web.example.com:443/ws"));
+                Assert.That(queried, Is.EqualTo(new[] {
+                              "https://example.test/.well-known/host-meta.json",
                                 "https://example.test/.well-known/host-meta"
                             }),
-                            $"Abgefragt wurde: {String.Join(", ", abgefragt)}");
+                            $"What was queried: {String.Join(", ", queried)}");
             });
 
         }
@@ -317,19 +319,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAnyHostMeta_NothingIsDiscovered()
 
         /// <summary>
-        /// Eine Domain ohne <c>host-meta</c> ergibt keinen Endpunkt - und keinen
-        /// Fehler. Der Aufrufer bleibt dann bei seiner Vorgabe.
+        /// A domain without a <c>host-meta</c> yields no endpoint - and no
+        /// error. The caller then stays with their default.
         /// </summary>
         [Test]
         public async Task WithoutAnyHostMeta_NothingIsDiscovered()
         {
 
-            var abgefragt = new List<String>();
-            var resolver  = Resolver(abgefragt, new Dictionary<String, String>());
+            var queried  = new List<String>();
+            var resolver = Resolver(queried, new Dictionary<String, String>());
 
-            var endpunkt  = await resolver.DiscoverWebSocketAsync("example.test");
+            var endpoint  = await resolver.DiscoverWebSocketAsync("example.test");
 
-            Assert.That(endpunkt, Is.Null);
+            Assert.That(endpoint, Is.Null);
 
         }
 

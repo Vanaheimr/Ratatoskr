@@ -28,56 +28,56 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0030, Abschnitt 4: disco#items - die Untereinheiten einer Entity.
+    /// XEP-0030, section 4: disco#items - the sub-units of an entity.
     /// </summary>
     /// <remarks>
-    /// Der Anlass ist kein fehlendes Merkmal, sondern ein falsches Versprechen.
-    /// <c>LocalFeatures</c> führt <c>http://jabber.org/protocol/disco#items</c>
-    /// seit jeher, beantwortet wurde eine items-Abfrage nie: Sie fiel bis zum
-    /// <c>&lt;service-unavailable/&gt;</c> durch. Angekündigt und dann
-    /// verweigert ist die einzige Kombination, die es nicht geben darf - eine
-    /// Gegenstelle, die den Merkmalen glaubt, bekommt einen Fehler auf eine
-    /// Frage, zu der sie eingeladen wurde.
+    /// The occasion is not a missing feature but a false promise.
+    /// <c>LocalFeatures</c> has carried
+    /// <c>http://jabber.org/protocol/disco#items</c> all along, an items query
+    /// was never answered: it fell through to the
+    /// <c>&lt;service-unavailable/&gt;</c>. Announced and then refused is the
+    /// one combination that must not exist - a far end believing the features
+    /// gets an error on a question it was invited to put.
     ///
-    /// Die Antwort ist eine <b>leere</b> Liste, und das ist keine Notlösung:
-    /// Ein Client hat keine Untereinheiten. „Ich habe keine" und „frag mich
-    /// nicht" sind verschiedene Auskünfte, und nur die erste stimmt hier.
+    /// The answer is an <b>empty</b> list, and that is no makeshift: A client
+    /// has no sub-units. "I have none" and "do not ask me" are different
+    /// pieces of information, and only the first one is true here.
     /// </remarks>
     [TestFixture]
     public class DiscoItemsTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Fragt den Client über seine Serversitzung ab und gibt seine Antwort
-        /// roh zurück.
+        /// Queries the client over its server session and returns its answer
+        /// raw.
         /// </summary>
-        private async Task<String> FrageClientAsync(XMPPSession  session,
-                                                    String       id,
-                                                    String       ns,
-                                                    String?      node = null)
+        private async Task<String> AskTheClientAsync(XMPPSession  session,
+                                                     String       id,
+                                                     String       ns,
+                                                     String?      node = null)
         {
 
-            var nodeAttribut = node is not null ? $" node='{node}'" : "";
+            var nodeAttribute = node is not null ? $" node='{node}'" : "";
 
             await session.SendAsync(
                       $"<iq type='get' id='{id}' from='{Server.Domain}' to='{session.FullJid}'>" +
-                      $"<query xmlns='{ns}'{nodeAttribut}/></iq>");
+                      $"<query xmlns='{ns}'{nodeAttribute}/></iq>");
 
             await WaitFor(() => session.Received.Any(f => f.Contains($"id='{id}'", StringComparison.Ordinal)),
-                          $"die Antwort auf '{id}'");
+                          $"the answer to '{id}'");
 
             return session.Received.First(f => f.Contains($"id='{id}'", StringComparison.Ordinal));
 
         }
 
-        /// <summary>Die gebundene Sitzung des angemeldeten Clients.</summary>
-        private async Task<XMPPSession> SitzungAsync(XMPPClient client)
+        /// <summary>The bound session of the logged-in client.</summary>
+        private async Task<XMPPSession> SessionAsync(XMPPClient client)
         {
 
             await WaitFor(() => Server.Sessions.Any(s => s.FullJid == client.Connection.FullJid),
-                          "die gebundene Sitzung des Clients");
+                          "the bound session of the client");
 
             return Server.Sessions.First(s => s.FullJid == client.Connection.FullJid);
 
@@ -89,34 +89,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAnnouncedFeature_IsActuallyAnswered()
 
         /// <summary>
-        /// Der Kern: Was in der Merkmalsliste steht, muss auch beantwortet
-        /// werden. Beides in einem Test, weil erst der Widerspruch der Fehler
-        /// ist.
+        /// The core: what stands in the feature list has to be answered as
+        /// well. Both in one test, because only the contradiction is the error.
         /// </summary>
         [Test]
         public async Task TheAnnouncedFeature_IsActuallyAnswered()
         {
 
             var client   = await ConnectClientAsync("alice");
-            var session  = await SitzungAsync(client);
+            var session  = await SessionAsync(client);
 
-            var merkmale = await FrageClientAsync(session, "merkmale",
-                                                  "http://jabber.org/protocol/disco#info");
+            var features = await AskTheClientAsync(session, "features",
+                                                   "http://jabber.org/protocol/disco#info");
 
-            var einheiten = await FrageClientAsync(session, "einheiten",
-                                                   "http://jabber.org/protocol/disco#items");
+            var items = await AskTheClientAsync(session, "items",
+                                                "http://jabber.org/protocol/disco#items");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(merkmale, Does.Contain("var='http://jabber.org/protocol/disco#items'"),
-                            "Ohne die Ankündigung gäbe es hier nichts zu prüfen.");
+                Assert.That(features, Does.Contain("var='http://jabber.org/protocol/disco#items'"),
+                            "Without the announcement there would be nothing to check here.");
 
-                Assert.That(einheiten, Does.Contain("type='result'"),
-                            $"Angekündigt und dann verweigert: {einheiten}");
+                Assert.That(items, Does.Contain("type='result'"),
+                            $"Announced and then refused: {items}");
 
-                Assert.That(einheiten, Does.Contain("xmlns='http://jabber.org/protocol/disco#items'"),
-                            $"Die Antwort gehört zu der Frage, die gestellt wurde: {einheiten}");
+                Assert.That(items, Does.Contain("xmlns='http://jabber.org/protocol/disco#items'"),
+                            $"The answer belongs to the question that was put: {items}");
 
             });
 
@@ -127,41 +126,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutItems_TheListIsEmptyAndNotTheInfoAnswer()
 
         /// <summary>
-        /// Ein Client ohne Untereinheiten antwortet mit einer leeren Liste -
-        /// und nicht mit seiner Merkmalsliste.
+        /// A client without sub-units answers with an empty list - and not with
+        /// its feature list.
         /// </summary>
         /// <remarks>
-        /// Die zweite Hälfte ist die Gegenprobe gegen die naheliegendste
-        /// Abkürzung: die items-Abfrage einfach an die info-Antwort zu hängen.
-        /// Sie wäre grün für „es kommt etwas zurück" und falsch in allem
-        /// anderen.
+        /// The second half is the counter-check against the most obvious
+        /// shortcut: to hang the items query onto the info answer. It would be
+        /// green for "something comes back" and wrong in everything else.
         /// </remarks>
         [Test]
         public async Task WithoutItems_TheListIsEmptyAndNotTheInfoAnswer()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
-            var antwort = await FrageClientAsync(session, "leer",
-                                                 "http://jabber.org/protocol/disco#items");
+            var reply = await AskTheClientAsync(session, "empty",
+                                                "http://jabber.org/protocol/disco#items");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort, Does.Contain("type='result'"));
+                Assert.That(reply, Does.Contain("type='result'"));
 
-                Assert.That(antwort, Does.Not.Contain("<item "),
-                            $"Dieser Client hat keine Untereinheiten: {antwort}");
+                Assert.That(reply, Does.Not.Contain("<item "),
+                            $"This client has no sub-units: {reply}");
 
-                Assert.That(antwort, Does.Not.Contain("<identity"),
-                            $"Das ist die Antwort auf disco#info, nicht auf disco#items: {antwort}");
+                Assert.That(reply, Does.Not.Contain("<identity"),
+                            $"That is the answer to disco#info, not to disco#items: {reply}");
 
-                Assert.That(antwort, Does.Not.Contain("<feature"),
-                            $"Das ist die Antwort auf disco#info, nicht auf disco#items: {antwort}");
+                Assert.That(reply, Does.Not.Contain("<feature"),
+                            $"That is the answer to disco#info, not to disco#items: {reply}");
 
-                Assert.That(antwort, Does.Not.Contain("node="),
-                            $"Ohne node in der Frage keines in der Antwort: {antwort}");
+                Assert.That(reply, Does.Not.Contain("node="),
+                            $"Without a node in the question none in the answer: {reply}");
 
             });
 
@@ -172,31 +170,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConfiguredItems_AreListed()
 
         /// <summary>
-        /// Was in <c>LocalItems</c> steht, steht auch in der Antwort - mit
-        /// <c>jid</c>, <c>node</c> und <c>name</c>.
+        /// What stands in <c>LocalItems</c> stands in the answer as well - with
+        /// <c>jid</c>, <c>node</c> and <c>name</c>.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test wäre „immer eine leere Liste" eine bestandene
-        /// Lösung, und die Liste bliebe eine Zierde.
+        /// Without this test "always an empty list" would be a passing
+        /// solution, and the list would stay an ornament.
         /// </remarks>
         [Test]
         public async Task ConfiguredItems_AreListed()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
             client.Connection.Disco!.LocalItems.Add(
-                new DiscoItem("dienst.example.test", "urn:example:zweig", "Ein Dienst"));
+                new DiscoItem("service.example.test", "urn:example:branch", "A service"));
 
-            var antwort = await FrageClientAsync(session, "mit-inhalt",
-                                                 "http://jabber.org/protocol/disco#items");
+            var reply = await AskTheClientAsync(session, "with-content",
+                                                "http://jabber.org/protocol/disco#items");
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("jid='dienst.example.test'"));
-                Assert.That(antwort, Does.Contain("node='urn:example:zweig'"));
-                Assert.That(antwort, Does.Contain("name='Ein Dienst'"));
+                Assert.That(reply, Does.Contain("jid='service.example.test'"));
+                Assert.That(reply, Does.Contain("node='urn:example:branch'"));
+                Assert.That(reply, Does.Contain("name='A service'"));
             });
 
         }
@@ -206,40 +204,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnItemsRequestWithNode_IsRefused()
 
         /// <summary>
-        /// Ein Zweig, den es hier nicht gibt, bekommt
-        /// <c>&lt;item-not-found/&gt;</c> - dieselbe Regel wie bei disco#info
-        /// (siehe D39).
+        /// A branch that does not exist here gets
+        /// <c>&lt;item-not-found/&gt;</c> - the same rule as with disco#info
+        /// (see D39).
         /// </summary>
         /// <remarks>
-        /// Für disco#items ist ein <c>node</c> ein Ast im Baum der
-        /// Untereinheiten, nicht der Caps-Node aus XEP-0115. Dieser Client hat
-        /// keinen einzigen. Eine leere Liste wäre hier die falsche Antwort: Sie
-        /// hiesse „diesen Zweig gibt es, er ist leer" statt „diesen Zweig gibt
-        /// es nicht".
+        /// For disco#items a <c>node</c> is a branch in the tree of sub-units,
+        /// not the caps node from XEP-0115. This client has not a single one.
+        /// An empty list would be the wrong answer here: It would mean "this
+        /// branch exists, it is empty" instead of "this branch does not exist".
         /// </remarks>
         [Test]
         public async Task AnItemsRequestWithNode_IsRefused()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
-            var antwort = await FrageClientAsync(session, "zweig",
-                                                 "http://jabber.org/protocol/disco#items",
-                                                 "urn:example:kein-zweig");
+            var reply = await AskTheClientAsync(session, "branch",
+                                                "http://jabber.org/protocol/disco#items",
+                                                 "urn:example:no-branch");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("<item-not-found"));
+                Assert.That(reply, Does.Contain("type='error'"));
+                Assert.That(reply, Does.Contain("<item-not-found"));
 
-                Assert.That(antwort, Does.Contain("node='urn:example:kein-zweig'"),
-                            "Auch der Fehler nennt die Frage, auf die er antwortet " +
-                            $"(RFC 6120, Abschnitt 8.3.1): {antwort}");
+                Assert.That(reply, Does.Contain("node='urn:example:no-branch'"),
+                            "The error names the question it answers as well " +
+                            $"(RFC 6120, section 8.3.1): {reply}");
 
-                Assert.That(antwort, Does.Contain("xmlns='http://jabber.org/protocol/disco#items'"),
-                            $"Der Fehler nimmt die items-Anfrage zurück, nicht irgendeine: {antwort}");
+                Assert.That(reply, Does.Contain("xmlns='http://jabber.org/protocol/disco#items'"),
+                            $"The error takes the items request back, not just any: {reply}");
 
             });
 

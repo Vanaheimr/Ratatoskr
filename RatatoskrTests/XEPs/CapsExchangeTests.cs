@@ -27,25 +27,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0115 zwischen zwei echten Clients: Ankündigung in der Presence,
-    /// disco#info-Abfrage, Prüfung, Cache.
+    /// XEP-0115 between two real clients: announcement in the presence,
+    /// disco#info query, check, cache.
     /// </summary>
     /// <remarks>
-    /// Die Prüfung selbst ist in <see cref="CapsVerificationTests"/> für sich
-    /// belegt — dort mit Antworten, die ein ehrlicher Client gar nicht geben
-    /// könnte. Hier geht es um die andere Hälfte: dass der ganze Weg unter
-    /// echten Bedingungen bis in den Cache führt.
+    /// The check itself is established on its own in
+    /// <see cref="CapsVerificationTests"/> — there with answers an honest
+    /// client could not give at all. Here it is about the other half: that the
+    /// whole path leads into the cache under real conditions.
     ///
-    /// Das ist keine Formsache. Der <c>hash</c>-Wert wird an genau einer Stelle
-    /// aus der Presence herausgelesen und weitergereicht; fiele er dort weg,
-    /// wäre jede Antwort unprüfbar und der Cache damit dauerhaft leer. Kein
-    /// Test der Prüfung selbst würde das bemerken — die Aushandlung liefe
-    /// weiter, nur eben ohne den Nutzen, für den es XEP-0115 gibt.
+    /// That is no formality. The <c>hash</c> value is read out of the presence
+    /// and handed on at exactly one place; were it to fall away there, every
+    /// answer would be uncheckable and the cache would thereby stay empty for
+    /// good. No test of the check itself would notice — the negotiation would
+    /// carry on, only without the use XEP-0115 exists for.
     ///
-    /// Nebenbei belegt der Test, dass unser eigenes <c>ver</c> zu unserer
-    /// eigenen disco#info-Antwort passt: Angekündigt wird aus
-    /// <c>LocalIdentities</c>/<c>LocalFeatures</c>, geantwortet ebenso, und
-    /// hier rechnet die Gegenseite beides gegeneinander nach.
+    /// Along the way the test establishes that our own <c>ver</c> fits our own
+    /// disco#info answer: what is announced comes out of
+    /// <c>LocalIdentities</c>/<c>LocalFeatures</c>, what is answered likewise,
+    /// and here the other side recalculates both against each other.
     /// </remarks>
     [TestFixture]
     public class CapsExchangeTests : AXMPPTests
@@ -54,7 +54,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CapsOfARealContact_AreVerifiedAndCached()
 
         /// <summary>
-        /// Bob sieht Alices Presence, fragt nach, rechnet nach und legt ab.
+        /// Bob sees Alice's presence, asks, recalculates and stores.
         /// </summary>
         [Test]
         public async Task CapsOfARealContact_AreVerifiedAndCached()
@@ -65,31 +65,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectClientAsync("alice");
             var bob    = await ConnectClientAsync("bob");
 
-            var abgelehnt = new List<String>();
-            bob.Connection.EntityCaps!.OnCapsRejected += (from, grund) => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            bob.Connection.EntityCaps!.OnCapsRejected += (from, reason) => refused.Add(reason);
 
-            var aliceNode  = alice.Connection.EntityCaps!.Node;
-            var aliceVer   = alice.Connection.EntityCaps!.CalculateVerificationString();
-            var schluessel = $"{aliceNode}#{aliceVer}";
+            var aliceNode = alice.Connection.EntityCaps!.Node;
+            var aliceVer  = alice.Connection.EntityCaps!.CalculateVerificationString();
+            var key       = $"{aliceNode}#{aliceVer}";
 
-            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(schluessel) is not null,
-                          "Alices geprüfte Capabilities in Bobs Cache");
+            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(key) is not null,
+                          "Alice's checked capabilities in Bob's cache");
 
-            var abgelegt = bob.Connection.EntityCaps!.GetCachedInfo(schluessel)!;
+            var stored = bob.Connection.EntityCaps!.GetCachedInfo(key)!;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt, Is.Empty,
-                            $"Die eigene Ankündigung wurde abgelehnt: {String.Join(" | ", abgelehnt)}");
+                Assert.That(refused, Is.Empty,
+                            $"Our own announcement was refused: {String.Join(" | ", refused)}");
 
-                // Die Gegenprobe zur Prüfung: Was da liegt, ergibt den Hash,
-                // unter dem es liegt.
-                Assert.That(EntityCapsManager.VerificationString(abgelegt.Identities,
-                                                                 abgelegt.Features),
+                // The counter-check to the check: what lies there yields the
+                // hash it lies under.
+                Assert.That(EntityCapsManager.VerificationString(stored.Identities,
+                                                                 stored.Features),
                             Is.EqualTo(aliceVer));
 
-                Assert.That(abgelegt.Features, Does.Contain("urn:xmpp:receipts"));
+                Assert.That(stored.Features, Does.Contain("urn:xmpp:receipts"));
 
             });
 
@@ -100,19 +100,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIdentityWithXmlLang_SurvivesTheRoundTrip()
 
         /// <summary>
-        /// Führt eine Entity ihren Namen in einer Sprache, muss sie das in
-        /// ihrer eigenen Antwort auch sagen.
+        /// If an entity carries its name in a language, it has to say so in its
+        /// own answer as well.
         /// </summary>
         /// <remarks>
-        /// Angekündigt wird ein Hash über <c>category/type/lang/name</c>.
-        /// Bliebe das <c>xml:lang</c> in der disco#info-Antwort weg, errechnete
-        /// die Gegenstelle einen anderen Wert als den angekündigten und lehnte
-        /// uns ab — wir wären für jeden, der nach XEP-0115 §5.4 prüft, ein
-        /// Lügner.
+        /// What is announced is a hash over <c>category/type/lang/name</c>.
+        /// Were the <c>xml:lang</c> to stay out of the disco#info answer, the
+        /// far end would calculate a different value from the announced one and
+        /// would refuse us — we would be a liar for everybody checking
+        /// according to XEP-0115 §5.4.
         ///
-        /// Der Weg dorthin führt über zwei Stellen in verschiedenen Dateien
-        /// (Ankündigung und Antwort); nur zusammen ergeben sie einen Sinn, und
-        /// nur hier laufen sie gegeneinander.
+        /// The path there leads over two places in different files
+        /// (announcement and answer); only together do they make sense, and
+        /// only here do they run against each other.
         /// </remarks>
         [Test]
         public async Task AnIdentityWithXmlLang_SurvivesTheRoundTrip()
@@ -122,44 +122,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            // Die Identität wechselt nach dem Verbinden - die Manager
-            // entstehen erst dort. Die Presence muss deshalb noch einmal
-            // hinaus, sonst steht bei Bob der alte ver-Wert.
+            // The identity changes after the connecting - the managers come
+            // about only there. The presence therefore has to go out once
+            // more, otherwise the old ver value stands at Bob's.
             alice.Connection.Disco!.LocalIdentities.Clear();
             alice.Connection.Disco!.LocalIdentities.Add(
                 new DiscoIdentity("client", "pc", "Psi 0.11", "en"));
 
             await alice.Connection.SendPresenceAsync();
 
-            var neuerVer = alice.Connection.EntityCaps!.CalculateVerificationString();
+            var newVer = alice.Connection.EntityCaps!.CalculateVerificationString();
 
-            // Siehe OwnDataForm_SurvivesTheRoundTrip: erst wenn die neue
-            // Presence beim Server steht, ist die Ankündigung wieder mit der
-            // Antwort in Übereinstimmung.
+            // See OwnDataForm_SurvivesTheRoundTrip: only once the new presence
+            // stands at the server is the announcement in agreement with the
+            // answer again.
             await WaitFor(() => Server.SessionOf(alice.FullJid)?.LastPresence?
-                                      .Contains(neuerVer, StringComparison.Ordinal) == true,
-                          "Alices neue Presence beim Server");
+                                      .Contains(newVer, StringComparison.Ordinal) == true,
+                          "Alice's new presence at the server");
 
             var bob = await ConnectClientAsync("bob");
 
-            var abgelehnt = new List<String>();
-            bob.Connection.EntityCaps!.OnCapsRejected += (from, grund) => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            bob.Connection.EntityCaps!.OnCapsRejected += (from, reason) => refused.Add(reason);
 
-            var schluessel = $"{alice.Connection.EntityCaps!.Node}#{neuerVer}";
+            var key = $"{alice.Connection.EntityCaps!.Node}#{newVer}";
 
-            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(schluessel) is not null,
-                          "Alices geprüfte Capabilities in Bobs Cache");
+            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(key) is not null,
+                          "Alice's checked capabilities in Bob's cache");
 
-            var abgelegt = bob.Connection.EntityCaps!.GetCachedInfo(schluessel)!;
+            var stored = bob.Connection.EntityCaps!.GetCachedInfo(key)!;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt, Is.Empty,
-                            $"Die eigene Ankündigung wurde abgelehnt: {String.Join(" | ", abgelehnt)}");
+                Assert.That(refused, Is.Empty,
+                            $"Our own announcement was refused: {String.Join(" | ", refused)}");
 
-                Assert.That(abgelegt.Identities[0].Language, Is.EqualTo("en"),
-                            "Die Sprache muss in der eigenen Antwort stehen.");
+                Assert.That(stored.Identities[0].Language, Is.EqualTo("en"),
+                            "The language has to stand in our own answer.");
 
             });
 
@@ -170,21 +170,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OwnDataForm_SurvivesTheRoundTrip()
 
         /// <summary>
-        /// XEP-0128: Was in <c>LocalForms</c> steht, geht in die eigene
-        /// disco#info-Antwort <b>und</b> in den angekündigten Hash.
+        /// XEP-0128: What stands in <c>LocalForms</c> goes into our own
+        /// disco#info answer <b>and</b> into the announced hash.
         /// </summary>
         /// <remarks>
-        /// Die beiden gehören zusammen, liegen aber in verschiedenen Dateien -
-        /// die Ankündigung im <c>EntityCapsManager</c>, die Antwort im
-        /// <c>DiscoManager</c>. Ginge das Formular nur in eines von beiden ein,
-        /// wären wir für jede Gegenstelle, die nach XEP-0115 §5.4 nachrechnet,
-        /// ein Fälscher: angekündigter und errechneter Hash gingen auseinander,
-        /// und zwar bei völlig ehrlicher Auskunft.
+        /// The two belong together but lie in different files - the
+        /// announcement in the <c>EntityCapsManager</c>, the answer in the
+        /// <c>DiscoManager</c>. Were the form to go into only one of them, we
+        /// would be a forger for every far end recalculating according to
+        /// XEP-0115 §5.4: announced and calculated hash would come apart, and
+        /// that with an entirely honest piece of information.
         ///
-        /// Der Wert mit <c>&amp;</c> und <c>&lt;</c> ist kein Übermut: Er geht
-        /// durch XML und muss unbeschädigt wieder herauskommen. Käme er
-        /// verändert an, stimmte auch der Hash nicht mehr - der Fehler sähe
-        /// dann aus wie eine Fälschung.
+        /// The value with <c>&amp;</c> and <c>&lt;</c> is no high spirits: It
+        /// goes through XML and has to come out undamaged. Were it to arrive
+        /// changed, the hash would not hold any more either - the error would
+        /// then look like a forgery.
         /// </remarks>
         [Test]
         public async Task OwnDataForm_SurvivesTheRoundTrip()
@@ -195,54 +195,54 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             alice.Connection.Disco!.LocalForms.Add(
-                DiscoForm.SoftwareInfo(Software:         "Jabber & Co <Testfassung>",
+                DiscoForm.SoftwareInfo(Software:         "Jabber & Co <test edition>",
                                        SoftwareVersion:  "0.1",
                                        OperatingSystem:  "Windows"));
 
             await alice.Connection.SendPresenceAsync();
 
-            var neuerVer = alice.Connection.EntityCaps!.CalculateVerificationString();
+            var newVer = alice.Connection.EntityCaps!.CalculateVerificationString();
 
-            // Bob darf erst danach kommen. Zwischen der geänderten Auskunft und
-            // der neuen Presence liegt ein Fenster, in dem Alice noch den alten
-            // ver-Wert angekündigt hat und schon die neue Antwort gäbe - wer
-            // darin fragt, bekommt zu Recht eine Abweichung gemeldet. Das ist
-            // kein Fehler, sondern der Preis dafür, dass sich Capabilities
-            // ändern können; nur hat er in diesem Test nichts zu suchen.
+            // Bob may come only afterwards. Between the changed information and
+            // the new presence lies a window in which Alice still announced the
+            // old ver value and would already give the new answer - whoever
+            // asks within it rightly gets a discrepancy reported. That is no
+            // error but the price for capabilities being able to change; only
+            // it has no business in this test.
             await WaitFor(() => Server.SessionOf(alice.FullJid)?.LastPresence?
-                                      .Contains(neuerVer, StringComparison.Ordinal) == true,
-                          "Alices neue Presence beim Server");
+                                      .Contains(newVer, StringComparison.Ordinal) == true,
+                          "Alice's new presence at the server");
 
             var bob = await ConnectClientAsync("bob");
 
-            var abgelehnt = new List<String>();
-            bob.Connection.EntityCaps!.OnCapsRejected += (from, grund) => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            bob.Connection.EntityCaps!.OnCapsRejected += (from, reason) => refused.Add(reason);
 
-            var schluessel = $"{alice.Connection.EntityCaps!.Node}#{neuerVer}";
+            var key = $"{alice.Connection.EntityCaps!.Node}#{newVer}";
 
-            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(schluessel) is not null,
-                          "Alices geprüfte Capabilities in Bobs Cache");
+            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(key) is not null,
+                          "Alice's checked capabilities in Bob's cache");
 
-            var abgelegt  = bob.Connection.EntityCaps!.GetCachedInfo(schluessel)!;
-            var formular  = abgelegt.Forms.SingleOrDefault();
+            var stored  = bob.Connection.EntityCaps!.GetCachedInfo(key)!;
+            var form    = stored.Forms.SingleOrDefault();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt, Is.Empty,
-                            $"Die eigene Ankündigung wurde abgelehnt: {String.Join(" | ", abgelehnt)}");
+                Assert.That(refused, Is.Empty,
+                            $"Our own announcement was refused: {String.Join(" | ", refused)}");
 
-                Assert.That(formular, Is.Not.Null, "Das Formular fehlt in der Antwort.");
+                Assert.That(form, Is.Not.Null, "The form is missing in the answer.");
 
-                Assert.That(formular!.FormType,
+                Assert.That(form!.FormType,
                             Is.EqualTo("urn:xmpp:dataforms:softwareinfo"));
 
-                Assert.That(formular.Fields.Single(f => f.Var == "software").Values.Single(),
-                            Is.EqualTo("Jabber & Co <Testfassung>"),
-                            "Der Wert muss die XML-Runde unbeschädigt überstehen.");
+                Assert.That(form.Fields.Single(f => f.Var == "software").Values.Single(),
+                            Is.EqualTo("Jabber & Co <test edition>"),
+                            "The value has to survive the XML round trip undamaged.");
 
-                Assert.That(formular.Fields.Any(f => f.Var == "os_version"), Is.False,
-                            "Eine nicht angegebene Auskunft darf kein leeres Feld werden.");
+                Assert.That(form.Fields.Any(f => f.Var == "os_version"), Is.False,
+                            "A piece of information that was not given must not become an empty field.");
 
             });
 
@@ -253,15 +253,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutOwnForms_NothingIsAnnounced()
 
         /// <summary>
-        /// Die Gegenprobe zur Vorgabe: Ohne eigenes Zutun veröffentlicht
-        /// dieser Client keine erweiterten Angaben.
+        /// The counter-check to the setting: without one's own doing this
+        /// client publishes no extended details.
         /// </summary>
         /// <remarks>
-        /// Software, Fassung und Betriebssystem sind genau die Angaben, aus
-        /// denen sich ein Gerät wiedererkennen lässt, und jeder Kontakt bekommt
-        /// sie ungefragt. Dass die Liste leer anfängt, ist deshalb eine
-        /// Entscheidung und kein Zufall - und gehört abgesichert wie jede
-        /// andere.
+        /// Software, version and operating system are precisely the details a
+        /// device can be recognised by again, and every contact gets them
+        /// unasked. That the list begins empty is therefore a decision and no
+        /// coincidence - and belongs secured like every other one.
         /// </remarks>
         [Test]
         public async Task WithoutOwnForms_NothingIsAnnounced()
@@ -272,16 +271,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var schluessel = $"{alice.Connection.EntityCaps!.Node}#" +
+            var key = $"{alice.Connection.EntityCaps!.Node}#" +
                              $"{alice.Connection.EntityCaps!.CalculateVerificationString()}";
 
-            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(schluessel) is not null,
-                          "Alices geprüfte Capabilities in Bobs Cache");
+            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(key) is not null,
+                          "Alice's checked capabilities in Bob's cache");
 
             Assert.Multiple(() =>
             {
                 Assert.That(alice.Connection.Disco!.LocalForms, Is.Empty);
-                Assert.That(bob.Connection.EntityCaps!.GetCachedInfo(schluessel)!.Forms, Is.Empty);
+                Assert.That(bob.Connection.EntityCaps!.GetCachedInfo(key)!.Forms, Is.Empty);
             });
 
         }

@@ -30,100 +30,100 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0030, Abschnitt 3.2: „If the request included a 'node' attribute,
-    /// the response MUST mirror the specified 'node' attribute to ensure
-    /// coherence between the request and the response."
+    /// XEP-0030, section 3.2: "If the request included a 'node' attribute, the
+    /// response MUST mirror the specified 'node' attribute to ensure coherence
+    /// between the request and the response."
     /// </summary>
     /// <remarks>
-    /// Die Spiegelung ist kein Schmuck. XEP-0115, Abschnitt 6.2 lässt eine
-    /// Gegenstelle mit <c>node#ver</c> fragen und legt die Antwort unter genau
-    /// diesem Schlüssel ab; das zurückgegebene <c>node</c> ist die Zusage, dass
-    /// die Antwort zu der Frage gehört. Fehlt sie, füllt eine strenge
-    /// Gegenstelle ihren Cache nicht und fragt bei jeder Presence erneut - der
-    /// Nutzen von XEP-0115 fällt weg, ohne dass irgendetwas kaputt aussieht.
+    /// The mirroring is no decoration. XEP-0115, section 6.2 lets a far end ask
+    /// with <c>node#ver</c> and stores the answer under precisely this key; the
+    /// <c>node</c> given back is the assurance that the answer belongs to the
+    /// question. If it is missing, a strict far end does not fill its cache and
+    /// asks anew at every presence - the use of XEP-0115 falls away without
+    /// anything looking broken.
     ///
-    /// Wir haben das lange von anderen verlangt und selbst nicht geliefert:
-    /// <c>EntityCapsManager</c> fragt seit jeher mit <c>node#ver</c>, unsere
-    /// eigene Antwort trug nie ein <c>node</c>.
+    /// We demanded that of others for a long time and did not deliver it
+    /// ourselves: <c>EntityCapsManager</c> has asked with <c>node#ver</c> all
+    /// along, our own answer never carried a <c>node</c>.
     ///
-    /// Die zweite Hälfte ist die unangenehmere: Ein Node, den es hier nicht
-    /// gibt, wurde bis dahin genauso beantwortet wie gar keiner - mit der
-    /// vollen Merkmalsliste. Damit behauptete diese Seite, jeden erdachten Node
-    /// zu führen. Ein veralteter <c>ver</c> gehört ausdrücklich dazu: Er fragt
-    /// nach dem Stand von damals, und den gibt es nicht mehr. Die aktuelle
-    /// Liste zu schicken wäre die falsche Antwort auf die richtige Frage - der
-    /// Frager rechnet den angekündigten Hash nach, bekommt einen anderen und
-    /// müsste uns für einen Fälscher halten.
+    /// The second half is the more unpleasant one: A node that does not exist
+    /// here was answered up to then just like none at all - with the full
+    /// feature list. With that this side claimed to carry every node ever
+    /// thought up. An outdated <c>ver</c> expressly belongs to it: It asks
+    /// after the state of back then, and that does not exist any more. To send
+    /// the current list would be the wrong answer to the right question - the
+    /// asker recalculates the announced hash, gets a different one and would
+    /// have to take us for a forger.
     /// </remarks>
     [TestFixture]
     public class DiscoNodeTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Fragt den <b>Client</b> über seine Serversitzung nach disco#info und
-        /// gibt seine Antwort roh zurück.
+        /// Queries the <b>client</b> over its server session for disco#info and
+        /// returns its answer raw.
         /// </summary>
-        private async Task<String> FrageClientAsync(XMPPSession  session,
-                                                    String       id,
-                                                    String?      node)
+        private async Task<String> AskTheClientAsync(XMPPSession  session,
+                                                     String       id,
+                                                     String?      node)
         {
 
-            var nodeAttribut = node is not null ? $" node='{node}'" : "";
+            var nodeAttribute = node is not null ? $" node='{node}'" : "";
 
             await session.SendAsync(
                       $"<iq type='get' id='{id}' from='{Server.Domain}' to='{session.FullJid}'>" +
-                      $"<query xmlns='http://jabber.org/protocol/disco#info'{nodeAttribut}/></iq>");
+                      $"<query xmlns='http://jabber.org/protocol/disco#info'{nodeAttribute}/></iq>");
 
             await WaitFor(() => session.Received.Any(f => f.Contains($"id='{id}'", StringComparison.Ordinal)),
-                          $"die disco#info-Antwort auf '{id}'");
+                          $"the disco#info answer to '{id}'");
 
             return session.Received.First(f => f.Contains($"id='{id}'", StringComparison.Ordinal));
 
         }
 
-        /// <summary>Die gebundene Sitzung des einzigen angemeldeten Clients.</summary>
-        private async Task<XMPPSession> SitzungAsync(XMPPClient client)
+        /// <summary>The bound session of the only logged-in client.</summary>
+        private async Task<XMPPSession> SessionAsync(XMPPClient client)
         {
 
             await WaitFor(() => Server.Sessions.Any(s => s.FullJid == client.Connection.FullJid),
-                          "die gebundene Sitzung des Clients");
+                          "the bound session of the client");
 
             return Server.Sessions.First(s => s.FullJid == client.Connection.FullJid);
 
         }
 
         /// <summary>
-        /// Fragt den <b>Server</b> an seiner eigenen Adresse nach disco#info und
-        /// gibt seine Antwort roh zurück.
+        /// Queries the <b>server</b> at its own address for disco#info and
+        /// returns its answer raw.
         /// </summary>
-        private async Task<String> FrageServerAsync(XMPPClient  client,
-                                                    String      id,
-                                                    String?     node)
+        private async Task<String> AskTheServerAsync(XMPPClient  client,
+                                                     String      id,
+                                                     String?     node)
         {
 
-            var nodeAttribut = node is not null ? $" node='{node}'" : "";
-            var antworten    = new ConcurrentQueue<String>();
+            var nodeAttribute = node is not null ? $" node='{node}'" : "";
+            var replies       = new ConcurrentQueue<String>();
 
             client.Connection.OnRawXml += xml =>
             {
                 if (xml.Contains("<<<", StringComparison.Ordinal) &&
                     xml.Contains(id,    StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(xml);
+                    replies.Enqueue(xml);
                 }
             };
 
             await client.SendRawAsync(
                       $"<iq type='get' id='{id}' to='{Server.Domain}'>" +
-                      $"<query xmlns='http://jabber.org/protocol/disco#info'{nodeAttribut}/></iq>");
+                      $"<query xmlns='http://jabber.org/protocol/disco#info'{nodeAttribute}/></iq>");
 
-            await WaitFor(() => !antworten.IsEmpty, $"die disco#info-Antwort des Servers auf '{id}'");
+            await WaitFor(() => !replies.IsEmpty, $"the disco#info answer of the server to '{id}'");
 
-            antworten.TryDequeue(out var antwort);
+            replies.TryDequeue(out var reply);
 
-            return antwort!;
+            return reply!;
 
         }
 
@@ -133,29 +133,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutANode_TheAnswerCarriesNone()
 
         /// <summary>
-        /// Die Gegenprobe zuerst: Ohne <c>node</c> in der Frage darf auch die
-        /// Antwort keines tragen.
+        /// The counter-check first: Without a <c>node</c> in the question the
+        /// answer must carry none either.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test wäre „immer irgendein <c>node</c> anhängen" eine
-        /// bestandene Lösung. Sie wäre falsch: Ein <c>node</c> in der Antwort
-        /// auf eine Frage ohne Node behauptet, die Auskunft gelte nur für einen
-        /// Teilbereich.
+        /// Without this test "always hang some <c>node</c> on" would be a
+        /// passing solution. It would be wrong: A <c>node</c> in the answer to
+        /// a question without a node claims the information holds only for one
+        /// part.
         /// </remarks>
         [Test]
         public async Task WithoutANode_TheAnswerCarriesNone()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
-            var antwort = await FrageClientAsync(session, "ohne-node", null);
+            var reply = await AskTheClientAsync(session, "without-node", null);
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='result'"));
-                Assert.That(antwort, Does.Not.Contain("node="),
-                            $"Die Antwort trägt ein node, obwohl keines gefragt war: {antwort}");
+                Assert.That(reply, Does.Contain("type='result'"));
+                Assert.That(reply, Does.Not.Contain("node="),
+                            $"The answer carries a node although none was asked for: {reply}");
             });
 
         }
@@ -165,29 +165,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OurOwnCapsNode_IsMirrored()
 
         /// <summary>
-        /// Der Kern: Die Frage nach <c>node#ver</c> - so, wie XEP-0115,
-        /// Abschnitt 6.2 sie stellt - bekommt dasselbe <c>node</c> zurück.
+        /// The core: the question after <c>node#ver</c> - the way XEP-0115,
+        /// section 6.2 puts it - gets the same <c>node</c> back.
         /// </summary>
         [Test]
         public async Task OurOwnCapsNode_IsMirrored()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
             var caps    = client.Connection.EntityCaps!;
             var node    = $"{caps.Node}#{caps.CalculateVerificationString()}";
 
-            var antwort = await FrageClientAsync(session, "caps-node", node);
+            var reply = await AskTheClientAsync(session, "caps-node", node);
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='result'"));
-                Assert.That(antwort, Does.Contain($"node='{node}'"),
-                            $"Das node der Frage fehlt in der Antwort: {antwort}");
-                Assert.That(antwort, Does.Contain("<identity"),
-                            "Die Antwort auf den eigenen Caps-Node ist die volle Auskunft.");
-                Assert.That(antwort, Does.Contain("urn:xmpp:ping"));
+                Assert.That(reply, Does.Contain("type='result'"));
+                Assert.That(reply, Does.Contain($"node='{node}'"),
+                            $"The node of the question is missing in the answer: {reply}");
+                Assert.That(reply, Does.Contain("<identity"),
+                            "The answer to one's own caps node is the full information.");
+                Assert.That(reply, Does.Contain("urn:xmpp:ping"));
             });
 
         }
@@ -197,29 +197,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheBareCapsNode_IsAnsweredToo()
 
         /// <summary>
-        /// Der Caps-Node ohne <c>#ver</c> bezeichnet uns ebenfalls und wird
-        /// beantwortet.
+        /// The caps node without <c>#ver</c> designates us as well and is
+        /// answered.
         /// </summary>
         /// <remarks>
-        /// XEP-0115 sagt „SHOULD" zu der Form <c>node#ver</c>, nicht „MUST".
-        /// Wer nur den Node nennt, fragt nach dieser Entity, ohne einen Stand
-        /// festzunageln - das ist beantwortbar, und zwar mit dem heutigen.
+        /// XEP-0115 says "SHOULD" to the form <c>node#ver</c>, not "MUST".
+        /// Whoever names only the node asks after this entity without nailing a
+        /// state down - that is answerable, and with today's one.
         /// </remarks>
         [Test]
         public async Task TheBareCapsNode_IsAnsweredToo()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
             var node    = client.Connection.EntityCaps!.Node;
 
-            var antwort = await FrageClientAsync(session, "blanker-node", node);
+            var reply = await AskTheClientAsync(session, "bare-node", node);
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='result'"));
-                Assert.That(antwort, Does.Contain($"node='{node}'"));
+                Assert.That(reply, Does.Contain("type='result'"));
+                Assert.That(reply, Does.Contain($"node='{node}'"));
             });
 
         }
@@ -229,41 +229,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStaleVerificationString_IsRefused()
 
         /// <summary>
-        /// Ein <c>ver</c>, der nicht mehr unserer ist, fragt nach einem Stand,
-        /// den es nicht mehr gibt - und bekommt <c>&lt;item-not-found/&gt;</c>.
+        /// A <c>ver</c> that is not ours any more asks after a state that does
+        /// not exist any more - and gets <c>&lt;item-not-found/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Das ist die Entscheidung dieses Punktes, und sie ist unbequem:
-        /// Verbreitete Server schicken hier die aktuelle Liste. Das ist
-        /// bequemer und falsch. Der Frager prüft nach XEP-0115, Abschnitt 5.4
-        /// den angekündigten Hash gegen die Antwort; bekommt er zu einem alten
-        /// <c>ver</c> die neue Liste, ergibt sie einen anderen Hash. Er hat dann
-        /// die Wahl, uns für einen Fälscher zu halten oder die Prüfung
-        /// aufzugeben - unser eigener <c>EntityCapsManager</c> würde die Antwort
-        /// ablehnen. Ein Fehler ist die ehrlichere Auskunft: Diesen Stand gibt
-        /// es hier nicht mehr.
+        /// That is the decision of this point, and it is uncomfortable:
+        /// widespread servers send the current list here. That is more
+        /// convenient and wrong. The asker checks the announced hash against
+        /// the answer according to XEP-0115, section 5.4; if they get the new
+        /// list for an old <c>ver</c>, it yields a different hash. They then
+        /// have the choice of taking us for a forger or of giving the check up
+        /// - our own <c>EntityCapsManager</c> would refuse the answer. An error
+        /// is the more honest information: this state does not exist here any
+        /// more.
         /// </remarks>
         [Test]
         public async Task AStaleVerificationString_IsRefused()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
-            var node    = $"{client.Connection.EntityCaps!.Node}#VonGesternXXXXXXXXXXXXXXX=";
+            var node    = $"{client.Connection.EntityCaps!.Node}#FromYesterdayXXXXXXXXXXX=";
 
-            var antwort = await FrageClientAsync(session, "alter-ver", node);
+            var reply = await AskTheClientAsync(session, "stale-ver", node);
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("<item-not-found"));
-                Assert.That(antwort, Does.Contain("urn:ietf:params:xml:ns:xmpp-stanzas"));
-                Assert.That(antwort, Does.Contain($"node='{node}'"),
-                            "Auch der Fehler nennt die Frage, auf die er antwortet " +
-                            $"(RFC 6120, Abschnitt 8.3.1): {antwort}");
-                Assert.That(antwort, Does.Not.Contain("<identity"),
-                            $"Ein Fehler trägt keine Auskunft: {antwort}");
+                Assert.That(reply, Does.Contain("type='error'"));
+                Assert.That(reply, Does.Contain("<item-not-found"));
+                Assert.That(reply, Does.Contain("urn:ietf:params:xml:ns:xmpp-stanzas"));
+                Assert.That(reply, Does.Contain($"node='{node}'"),
+                            "The error names the question it answers as well " +
+                            $"(RFC 6120, section 8.3.1): {reply}");
+                Assert.That(reply, Does.Not.Contain("<identity"),
+                            $"An error carries no information: {reply}");
             });
 
         }
@@ -273,25 +273,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AForeignNode_IsRefused()
 
         /// <summary>
-        /// Ein Node, der mit uns nichts zu tun hat, bekommt ebenfalls
-        /// <c>&lt;item-not-found/&gt;</c> statt der vollen Liste.
+        /// A node that has nothing to do with us gets
+        /// <c>&lt;item-not-found/&gt;</c> as well instead of the full list.
         /// </summary>
         [Test]
         public async Task AForeignNode_IsRefused()
         {
 
             var client  = await ConnectClientAsync("alice");
-            var session = await SitzungAsync(client);
+            var session = await SessionAsync(client);
 
-            var antwort = await FrageClientAsync(session, "fremder-node",
-                                                 "http://jabber.org/protocol/commands");
+            var reply = await AskTheClientAsync(session, "foreign-node",
+                                                "http://jabber.org/protocol/commands");
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("<item-not-found"));
-                Assert.That(antwort, Does.Not.Contain("<feature"),
-                            $"Ein unbekannter Node bekommt keine Merkmalsliste: {antwort}");
+                Assert.That(reply, Does.Contain("type='error'"));
+                Assert.That(reply, Does.Contain("<item-not-found"));
+                Assert.That(reply, Does.Not.Contain("<feature"),
+                            $"An unknown node gets no feature list: {reply}");
             });
 
         }
@@ -301,8 +301,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerAnswersWithoutANode()
 
         /// <summary>
-        /// Dieselbe Gegenprobe für den Server: Die gewöhnliche Frage bleibt
-        /// unverändert beantwortet.
+        /// The same counter-check for the server: the ordinary question stays
+        /// answered unchanged.
         /// </summary>
         [Test]
         public async Task TheServerAnswersWithoutANode()
@@ -310,14 +310,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client  = await ConnectClientAsync("alice");
 
-            var antwort = await FrageServerAsync(client, "server-ohne-node", null);
+            var reply = await AskTheServerAsync(client, "server-without-node", null);
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='result'"));
-                Assert.That(antwort, Does.Contain("category='server'"));
-                Assert.That(antwort, Does.Not.Contain("node="),
-                            $"Die Antwort trägt ein node, obwohl keines gefragt war: {antwort}");
+                Assert.That(reply, Does.Contain("type='result'"));
+                Assert.That(reply, Does.Contain("category='server'"));
+                Assert.That(reply, Does.Not.Contain("node="),
+                            $"The answer carries a node although none was asked for: {reply}");
             });
 
         }
@@ -327,17 +327,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ANodeOutsideTheQuery_DoesNotCount()
 
         /// <summary>
-        /// Ein <c>node</c>-Attribut, das nicht zur Anfrage gehört, macht die
-        /// Anfrage nicht zu einer nach einem Node.
+        /// A <c>node</c> attribute that does not belong to the query does not
+        /// make the query into one after a node.
         /// </summary>
         /// <remarks>
-        /// Der Server liest seine Frames als Zeichenketten, nicht als Baum -
-        /// bewusst, denn er soll den Client nicht mit derselben Brille ansehen,
-        /// mit der der Client sich selbst ansieht. Der Preis ist, dass „steht
-        /// <c>node=</c> irgendwo im Frame" und „trägt die Anfrage ein
-        /// <c>node</c>" zwei verschiedene Dinge sind. Ohne diesen Test wäre der
-        /// Unterschied unbelegt, und die gewöhnliche Abfrage eines Clients, der
-        /// seiner Anfrage irgendetwas beilegt, bekäme einen Fehler.
+        /// The server reads its frames as strings, not as a tree - on purpose,
+        /// because it is not supposed to look at the client with the same
+        /// glasses the client looks at itself with. The price is that "does
+        /// <c>node=</c> stand anywhere in the frame" and "does the query carry
+        /// a <c>node</c>" are two different things. Without this test the
+        /// difference would be unestablished, and the ordinary query of a
+        /// client enclosing anything with its request would get an error.
         /// </remarks>
         [Test]
         public async Task ANodeOutsideTheQuery_DoesNotCount()
@@ -345,31 +345,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client  = await ConnectClientAsync("alice");
 
-            var antworten = new ConcurrentQueue<String>();
+            var replies = new ConcurrentQueue<String>();
 
             client.Connection.OnRawXml += xml =>
             {
                 if (xml.Contains("<<<",           StringComparison.Ordinal) &&
-                    xml.Contains("node-daneben",  StringComparison.Ordinal))
+                    xml.Contains("node-beside",  StringComparison.Ordinal))
                 {
-                    antworten.Enqueue(xml);
+                    replies.Enqueue(xml);
                 }
             };
 
             await client.SendRawAsync(
-                      $"<iq type='get' id='node-daneben' to='{Server.Domain}'>" +
+                      $"<iq type='get' id='node-beside' to='{Server.Domain}'>" +
                       "<query xmlns='http://jabber.org/protocol/disco#info'/>" +
-                      "<beilage xmlns='urn:example:egal' node='nicht-gefragt'/></iq>");
+                      "<enclosure xmlns='urn:example:whatever' node='not-asked'/></iq>");
 
-            await WaitFor(() => !antworten.IsEmpty, "die disco#info-Antwort des Servers");
+            await WaitFor(() => !replies.IsEmpty, "the disco#info answer of the server");
 
-            antworten.TryDequeue(out var antwort);
+            replies.TryDequeue(out var reply);
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='result'"),
-                            $"Das node der Beilage gehört nicht zur Anfrage: {antwort}");
-                Assert.That(antwort, Does.Contain("category='server'"));
+                Assert.That(reply, Does.Contain("type='result'"),
+                            $"The node of the enclosure does not belong to the query: {reply}");
+                Assert.That(reply, Does.Contain("category='server'"));
             });
 
         }
@@ -379,14 +379,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerHasNoNodes()
 
         /// <summary>
-        /// Der Server kündigt keine Capabilities an und führt keine Nodes -
-        /// eine Frage nach einem Node bekommt <c>&lt;item-not-found/&gt;</c>.
+        /// The server announces no capabilities and carries no nodes - a
+        /// question after a node gets <c>&lt;item-not-found/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Der Schalter <c>FailDiscoInfo</c> antwortete schon immer mit dem Text
-        /// „Diesen Node gibt es hier nicht." - einer Aussage, die der Server gar
-        /// nicht treffen konnte, weil er das Attribut nie ansah. Jetzt trifft
-        /// sie zu.
+        /// The switch <c>FailDiscoInfo</c> has always answered with the text
+        /// "This node does not exist here." - a statement the server could not
+        /// make at all, because it never looked at the attribute. Now it holds.
         /// </remarks>
         [Test]
         public async Task TheServerHasNoNodes()
@@ -394,18 +393,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client  = await ConnectClientAsync("alice");
 
-            var antwort = await FrageServerAsync(client, "server-mit-node",
-                                                 "http://jabber.org/protocol/offline");
+            var reply = await AskTheServerAsync(client, "server-with-node",
+                                                "http://jabber.org/protocol/offline");
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("<item-not-found"));
-                Assert.That(antwort, Does.Contain("node='http://jabber.org/protocol/offline'"),
-                            "Auch der Fehler nennt die Frage, auf die er antwortet " +
-                            $"(RFC 6120, Abschnitt 8.3.1): {antwort}");
-                Assert.That(antwort, Does.Not.Contain("category='server'"),
-                            $"Ein unbekannter Node bekommt keine Auskunft: {antwort}");
+                Assert.That(reply, Does.Contain("type='error'"));
+                Assert.That(reply, Does.Contain("<item-not-found"));
+                Assert.That(reply, Does.Contain("node='http://jabber.org/protocol/offline'"),
+                            "The error names the question it answers as well " +
+                            $"(RFC 6120, section 8.3.1): {reply}");
+                Assert.That(reply, Does.Not.Contain("category='server'"),
+                            $"An unknown node gets no information: {reply}");
             });
 
         }
