@@ -28,40 +28,40 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
-    // Siehe XMPPServer.cs: Hermod bringt einen eigenen Typ IPAddress mit, der
-    // den gleichnamigen aus System.Net verdeckt. Der Alias muss innerhalb der
-    // Namespace-Deklaration stehen, sonst gewinnt das Namespace-Member.
+    // See XMPPServer.cs: Hermod brings along a type IPAddress of its own that
+    // hides the one of the same name from System.Net. The alias has to stand
+    // inside the namespace declaration, otherwise the namespace member wins.
     using IPAddress = System.Net.IPAddress;
 
     /// <summary>
-    /// Server-zu-Server über die klassische Rahmung: TCP, Port 5269,
-    /// <c>jabber:server</c>-Streams (RFC 6120).
+    /// Server-to-server over the classic framing: TCP, port 5269,
+    /// <c>jabber:server</c> streams (RFC 6120).
     /// </summary>
     /// <remarks>
-    /// Dieselbe Protokollschicht wie <see cref="WebSocketServerLinks"/> - es
-    /// wechselt nur, was darunter liegt: <see cref="TcpStreamFraming"/> statt
-    /// <see cref="WebSocketFraming"/> und <see cref="XmlStreamSplitter"/> statt
-    /// fertiger WebSocket-Rahmen. Dialback, Absenderprüfung,
-    /// Verbindungsverwaltung und Fehlerbehandlung stehen unverändert in
+    /// The same protocol layer as <see cref="WebSocketServerLinks"/> - only
+    /// what lies beneath changes: <see cref="TcpStreamFraming"/> instead of
+    /// <see cref="WebSocketFraming"/> and <see cref="XmlStreamSplitter"/>
+    /// instead of ready-made WebSocket frames. Dialback, the sender check, the
+    /// connection management and the error handling stand unchanged in
     /// <see cref="S2SStream"/>.
     ///
-    /// <b>Das ist der Weg zu fremden Servern.</b> ejabberd und Prosody sprechen
-    /// genau das; die WebSocket-Strecke verbindet nur Instanzen dieses Servers
-    /// miteinander.
+    /// <b>This is the way to foreign servers.</b> ejabberd and Prosody speak
+    /// exactly this; the WebSocket link only connects instances of this server
+    /// with one another.
     ///
-    /// <b>Wie TLS zustande kommt, entscheidet <see cref="TcpTlsMode"/>.</b>
-    /// Vorgabe ist STARTTLS (RFC 6120, Abschnitt 5.4): der Stream beginnt im
-    /// Klartext, handelt Verschlüsselung aus und fängt danach von vorn an.
-    /// <see cref="TcpTlsMode.Direct"/> spart die Aushandlung und ist zwischen
-    /// zwei Instanzen dieses Servers das Einfachere.
+    /// <b>How TLS comes about is decided by <see cref="TcpTlsMode"/>.</b> The
+    /// default is STARTTLS (RFC 6120, section 5.4): the stream begins in
+    /// plaintext, negotiates encryption and starts over afterwards.
+    /// <see cref="TcpTlsMode.Direct"/> saves the negotiation and is the simpler
+    /// one between two instances of this server.
     ///
-    /// Die Aushandlung selbst steht hier im Transport und nicht in
-    /// <see cref="S2SStream"/>. Das ist kein Zufall: der Stream vor TLS ist ein
-    /// Wegwerfstream, dessen Zustand nach der Verschlüsselung verworfen wird
-    /// (Abschnitt 5.4.3.3). Die Protokollschicht bekommt den Strom erst, wenn
-    /// er verschlüsselt ist, und muss von der Aushandlung nichts wissen - und
-    /// bekommt so auch keine Gelegenheit, versehentlich etwas aus der
-    /// Klartextphase zu übernehmen.
+    /// The negotiation itself stands here in the transport and not in
+    /// <see cref="S2SStream"/>. That is no accident: the stream before TLS is a
+    /// throwaway stream whose state is discarded after the encryption
+    /// (section 5.4.3.3). The protocol layer only gets the stream once it is
+    /// encrypted and does not have to know anything about the negotiation - and
+    /// thereby gets no opportunity to take something over from the plaintext
+    /// phase by accident either.
     /// </remarks>
     public sealed class TcpServerLinks : IServerLinks, IAsyncDisposable
     {
@@ -76,26 +76,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private readonly Lock                             _lock       = new();
 
         /// <summary>
-        /// Die offenen eingehenden Streams - für XEP-0288 die einzige Stelle,
-        /// an der sich einer für die Rückrichtung finden lässt.
+        /// The open incoming streams - for XEP-0288 the only place where one
+        /// can be found for the return direction.
         /// </summary>
         /// <remarks>
-        /// Eine Liste und kein Wörterbuch nach Domain: die Domain steht beim
-        /// Anlegen noch nicht fest (sie kommt erst mit dem <c>&lt;open/&gt;</c>
-        /// der Gegenstelle), und mehrere Verbindungen derselben Domain sind
-        /// erlaubt. Bei den Zahlen, um die es hier geht, kostet das Durchsehen
-        /// nichts.
+        /// A list and not a dictionary by domain: the domain is not settled
+        /// when the entry is created (it only comes with the
+        /// <c>&lt;open/&gt;</c> of the peer), and several connections of the
+        /// same domain are permitted. At the numbers this is about, looking
+        /// through costs nothing.
         /// </remarks>
         private readonly List<InboundLink>                _inbound    = [];
 
         /// <summary>
-        /// Ein angenommener Stream samt der Verbindung, auf der er liegt.
+        /// An accepted stream together with the connection it lies on.
         /// </summary>
         /// <remarks>
-        /// Die Verbindung gehört dazu, weil das Herunterfahren sie schliessen
-        /// muss. Ein <see cref="S2SStream"/> allein lässt sich zwar abbrechen,
-        /// aber der Socket bliebe offen - und die Gegenstelle hielte ihn für
-        /// benutzbar.
+        /// The connection belongs with it, because the shutdown has to close
+        /// it. An <see cref="S2SStream"/> alone can be aborted, but the socket
+        /// would stay open - and the peer would take it for usable.
         /// </remarks>
         private sealed record InboundLink(S2SStream Stream, TcpClient Client);
 
@@ -117,107 +116,103 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>Der Port, auf dem eingehende S2S-Verbindungen erwartet werden.</summary>
+        /// <summary>The port on which incoming S2S connections are expected.</summary>
         public Int32 Port { get; }
 
-        /// <summary>Das Zertifikat für eingehende Verbindungen, oder null für Klartext.</summary>
+        /// <summary>The certificate for incoming connections, or null for plaintext.</summary>
         public X509Certificate2? Certificate { get; }
 
-        /// <summary>Wie eingehende Verbindungen zu TLS kommen.</summary>
+        /// <summary>How incoming connections come to TLS.</summary>
         public TcpTlsMode Mode { get; }
 
         /// <summary>
-        /// Soll die Domain der Gegenstelle ueber ihr TLS-Zertifikat belegt
-        /// werden (SASL-EXTERNAL, XEP-0178) statt ueber Dialback?
+        /// Shall the domain of the peer be proven through its TLS certificate
+        /// (SASL-EXTERNAL, XEP-0178) instead of through dialback?
         /// </summary>
         /// <remarks>
-        /// Setzt gegenseitiges TLS voraus - ohne Klientzertifikat gibt es
-        /// nichts zu pruefen. Ist es eingeschaltet und legt die Gegenstelle
-        /// keines vor, bleibt Dialback der Weg; das Angebot unterbleibt dann
-        /// einfach.
+        /// Presupposes mutual TLS - without a client certificate there is
+        /// nothing to check. If it is switched on and the peer presents none,
+        /// dialback remains the way; the offer is then simply omitted.
         /// </remarks>
         public Boolean UseSaslExternal { get; init; }
 
         /// <summary>
-        /// XEP-0288: die Rückrichtung auf <b>eingehenden</b> Verbindungen
-        /// anbieten.
+        /// XEP-0288: offer the return direction on <b>incoming</b> connections.
         /// </summary>
         /// <remarks>
-        /// Ohne die Erweiterung antwortet jede Seite über eine <b>eigene</b>
-        /// ausgehende Verbindung (RFC 6120, Abschnitt 4.1). Das setzt voraus,
-        /// dass die Gegenstelle uns erreichen kann - hinter NAT, hinter einer
-        /// Firewall oder ohne DNS-Eintrag kann sie das nicht, und die Antwort
-        /// geht verloren, ohne dass jemand es merkt.
+        /// Without the extension each side answers over a connection of its
+        /// <b>own</b> (RFC 6120, section 4.1). That presupposes that the peer
+        /// can reach us - behind NAT, behind a firewall or without a DNS entry
+        /// it cannot, and the answer is lost without anyone noticing.
         ///
-        /// Getrennt von <see cref="RequestBidirectionalStreams"/>, weil es
-        /// zwei verschiedene Dinge sind: hier sagen wir einer anwählenden
-        /// Gegenstelle, dass sie uns über ihre eigene Verbindung antworten
-        /// darf; dort erbitten wir dasselbe von einer Gegenstelle, die wir
-        /// anwählen. Zusammengeschaltet waren sie nicht bloss unscharf - es
-        /// war damit unmöglich, unsere Ankündigung überhaupt zu beobachten:
-        /// solange unsere ausgehende Verbindung die Rückrichtung nutzt, wählt
-        /// die Gegenstelle uns gar nicht erst an.
+        /// Kept apart from <see cref="RequestBidirectionalStreams"/>, because
+        /// they are two different things: here we tell a peer that dials us
+        /// that it may answer us over its own connection; there we ask the same
+        /// of a peer that we dial. Wired together they were not merely
+        /// imprecise - it was thereby impossible to observe our announcement at
+        /// all: as long as our outgoing connection uses the return direction,
+        /// the peer does not dial us in the first place.
         /// </remarks>
         public Boolean OfferBidirectionalStreams { get; init; }
 
         /// <summary>
-        /// XEP-0288: die Rückrichtung auf <b>ausgehenden</b> Verbindungen
-        /// erbitten.
+        /// XEP-0288: ask for the return direction on <b>outgoing</b>
+        /// connections.
         /// </summary>
         /// <remarks>
-        /// Sinnvoll, wenn die Gegenstelle uns nicht erreichen kann. Siehe
-        /// <see cref="OfferBidirectionalStreams"/> für die Gegenrichtung.
+        /// Sensible when the peer cannot reach us. See
+        /// <see cref="OfferBidirectionalStreams"/> for the opposite direction.
         /// </remarks>
         public Boolean RequestBidirectionalStreams { get; init; }
 
         /// <summary>
-        /// Wie viele Stanzas über die Rückrichtung eines eingehenden Streams
-        /// gingen, statt über eine eigene Verbindung.
+        /// How many stanzas went over the return direction of an incoming
+        /// stream instead of over a connection of our own.
         /// </summary>
         /// <remarks>
-        /// Der einzige von aussen sichtbare Unterschied. Ob eine Nachricht
-        /// ankommt, sagt darüber nichts - sie käme über beide Wege an, und
-        /// genau deshalb wäre ein Test ohne diese Zahl blind dafür, welchen
-        /// sie genommen hat.
+        /// The only difference visible from the outside. Whether a message
+        /// arrives says nothing about it - it would arrive over both routes,
+        /// and precisely for that reason a test without this number would be
+        /// blind to which one it took.
         /// </remarks>
         public Int32 BidirectionalDeliveryCount => Volatile.Read(ref _bidiDeliveries);
 
-        /// <summary>Das Dialback-Geheimnis dieses Servers (XEP-0220).</summary>
+        /// <summary>The dialback secret of this server (XEP-0220).</summary>
         public String DialbackSecret { get; } = DialbackKey.NewSecret();
 
         /// <summary>
-        /// Woher die Adresse einer Domain kommt, die nicht von Hand
-        /// hinterlegt ist. Null lässt es bei der Gegenstellenliste.
+        /// Where the address of a domain comes from that is not entered by
+        /// hand. Null leaves it at the peer list.
         /// </summary>
         /// <remarks>
-        /// Die Liste geht vor. Das ist Absicht und keine Bequemlichkeit: ein
-        /// Eintrag von Hand ist eine Entscheidung des Betreibers, eine
-        /// DNS-Antwort nur eine Auskunft aus dem Netz - und ohne DNSSEC eine
-        /// unbeglaubigte. Wer beides hat, soll die Entscheidung behalten.
+        /// The list goes first. That is intentional and no convenience: an
+        /// entry by hand is a decision of the operator, a DNS answer only a
+        /// piece of information from the network - and without DNSSEC an
+        /// uncertified one. Whoever has both shall keep the decision.
         ///
-        /// <b>Für die Dialback-Rückfrage verschiebt das die Vertrauenswurzel.</b>
-        /// Bisher stand dort ausschliesslich die Liste des Betreibers, und
-        /// genau daraus bezog die Prüfung ihre Schärfe. Wird die autoritative
-        /// Adresse über DNS gesucht, ist Dialback nur noch so verlässlich wie
-        /// die Auflösung - so ist XEP-0220 gemeint, aber es ist weniger, als
-        /// die Liste bot. Wer das nicht will, lässt diese Eigenschaft null und
-        /// trägt seine Gegenstellen ein.
+        /// <b>For the dialback query this shifts the root of trust.</b> Until
+        /// now only the operator's list stood there, and it was exactly from
+        /// that that the check drew its sharpness. If the authoritative address
+        /// is searched for through DNS, dialback is only as reliable as the
+        /// resolution - that is how XEP-0220 means it, but it is less than the
+        /// list offered. Whoever does not want that leaves this property null
+        /// and enters their peers.
         /// </remarks>
         public IS2SAddressResolver? AddressResolver { get; init; }
 
-        /// <summary>Anzahl der jemals angenommenen eingehenden Verbindungen.</summary>
+        /// <summary>The number of incoming connections ever accepted.</summary>
         public Int32 InboundConnectionCount => Volatile.Read(ref _inboundCounter);
 
         /// <summary>
-        /// Wie oft dieser Server einen Dialback-Schlüssel beim autoritativen
-        /// Server nachgefragt hat.
+        /// How often this server has queried a dialback key at the
+        /// authoritative server.
         /// </summary>
         /// <remarks>
-        /// Der einzige von aussen sichtbare Unterschied zwischen Dialback und
-        /// SASL-EXTERNAL: das eine ruft zurück, das andere liest das
-        /// Zertifikat. Die Zahl der Verbindungen taugt dafür nicht - über die
-        /// Grenze läuft noch anderes, etwa die automatische
-        /// Empfangsbestätigung des Clients.
+        /// The only difference visible from the outside between dialback and
+        /// SASL-EXTERNAL: the one calls back, the other reads the certificate.
+        /// The number of connections is no good for that - other things run
+        /// across the boundary too, such as the automatic delivery receipt of
+        /// the client.
         /// </remarks>
         public Int32 DialbackVerificationCount => Volatile.Read(ref _dialbackVerifications);
 
@@ -226,13 +221,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Constructor(s)
 
         /// <summary>
-        /// Legt den eingehenden Zweig an und nimmt sofort Verbindungen an.
+        /// Creates the incoming branch and accepts connections right away.
         /// </summary>
-        /// <param name="localServer">Der Server, dessen S2S-Gegenstelle dies ist.</param>
-        /// <param name="port">Fester Port, oder 0 für einen freien. Vorgesehen ist 5269.</param>
+        /// <param name="localServer">The server whose S2S counterpart this is.</param>
+        /// <param name="port">A fixed port, or 0 for a free one. Intended is 5269.</param>
         /// <param name="mode">
-        /// Wie TLS zustande kommt. Vorgabe ist STARTTLS, weil das der Weg aus
-        /// RFC 6120, Abschnitt 5.4 ist und weil fremde Server ihn erwarten.
+        /// How TLS comes about. The default is STARTTLS, because that is the
+        /// way from RFC 6120, section 5.4 and because foreign servers expect
+        /// it.
         /// </param>
         public TcpServerLinks(XMPPServer  localServer,
                               Int32       port   = 0,
@@ -260,21 +256,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region AddPeer(domain, host, port, useTLS, validator)
 
         /// <summary>
-        /// Macht eine fremde Domain über Rechnername und Port erreichbar.
+        /// Makes a foreign domain reachable through a host name and a port.
         /// </summary>
         /// <remarks>
-        /// Von Hand, weil die Auflösung über SRV-Records
-        /// (<c>_xmpp-server._tcp</c>, RFC 6120 Abschnitt 3.2.1) noch fehlt.
-        /// Diese Liste ist zugleich das, was bei der Dialback-Prüfung an die
-        /// Stelle des DNS tritt - siehe <see cref="VerifyDialbackKeyAsync"/>.
+        /// By hand, because the resolution through SRV records
+        /// (<c>_xmpp-server._tcp</c>, RFC 6120 section 3.2.1) is still missing.
+        /// This list is at the same time what takes the place of DNS in the
+        /// dialback check - see <see cref="VerifyDialbackKeyAsync"/>.
         ///
-        /// <b>Der Rechnername sollte zu einer Adressfamilie auflösen, auf der
-        /// die Gegenstelle auch horcht.</b> Dieser Listener bindet
-        /// IPv4-Loopback; ein Name wie <c>localhost</c>, der zuerst nach IPv6
-        /// auflöst, kostet dann je Verbindung rund zwei Sekunden, bis der
-        /// Fallback greift - die Verbindung kommt zustande, nur eben spät.
-        /// Genau das hat den ersten Zustellvorgang von 82 auf 4167 Millisekunden
-        /// verlängert, und zwar unauffällig, weil am Ende alles funktionierte.
+        /// <b>The host name should resolve to an address family the peer
+        /// actually listens on.</b> This listener binds IPv4 loopback; a name
+        /// like <c>localhost</c> that resolves to IPv6 first then costs around
+        /// two seconds per connection until the fallback takes hold - the
+        /// connection comes about, only late. That is exactly what lengthened
+        /// the first delivery from 82 to 4167 milliseconds, and
+        /// inconspicuously at that, because in the end everything worked.
         /// </remarks>
         public void AddPeer(String                                domain,
                             String                                host,
@@ -291,7 +287,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (static) Connect(a, b)
 
         /// <summary>
-        /// Verbindet zwei Server über TCP in beide Richtungen.
+        /// Connects two servers over TCP in both directions.
         /// </summary>
         public static void Connect(XMPPServer  a,
                                    XMPPServer  b,
@@ -301,15 +297,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (String.Equals(a.Domain, b.Domain, StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException(
-                          $"Beide Server bedienen '{a.Domain}' - eine Föderation mit sich selbst ergibt nichts.",
+                          $"Both servers serve '{a.Domain}' - a federation with itself amounts to nothing.",
                           nameof(b));
 
             var linksA = LinksOf(a, mode, useSaslExternal);
             var linksB = LinksOf(b, mode, useSaslExternal);
 
-            // Ausdrücklich die Adresse und nicht "localhost": der Listener
-            // bindet IPv4-Loopback, und ein Name, der zuerst nach IPv6
-            // auflöst, kostet je Verbindung den Fallback ab.
+            // Explicitly the address and not "localhost": the listener binds
+            // IPv4 loopback, and a name that resolves to IPv6 first costs the
+            // fallback on every connection.
             var loopback = IPAddress.Loopback.ToString();
 
             linksA.AddPeer(b.Domain, loopback, linksB.Port, linksB.Mode, b.IsOwnCertificate);
@@ -331,20 +327,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                                 CancellationToken  cancellationToken = default)
         {
 
-            // XEP-0288: liegt für diese Domain eine eingehende Verbindung mit
-            // freigeschalteter Rückrichtung, geht die Stanza dort hinaus.
+            // XEP-0288: if an incoming connection with an enabled return
+            // direction is on hand for this domain, the stanza goes out there.
             //
-            // Vorrang vor dem Anwählen, und das ist der ganze Zweck: die
-            // Gegenstelle hat sich die Rückrichtung erbeten, weil sie damit
-            // rechnet, dass wir sie nicht erreichen. Erst anzuwählen und die
-            // bestehende Verbindung nur als Notnagel zu behandeln, hiesse
-            // genau dort zu scheitern, wo die Erweiterung hilft.
-            // Kein Schalter davor: BidiEnabled kann nur wahr sein, wenn wir
-            // die Rückrichtung angeboten *und* die Gegenstelle sie erbeten
-            // hat. Eine zusätzliche Abfrage prüfte dieselbe Aussage ein
-            // zweites Mal - und hing bis zuletzt am falschen Schalter, dem
-            // für die ausgehende Seite.
-            if (await S2SStream.TryDeliverOverBidiAsync(EingehendeStreams(), remoteDomain,
+            // Taking precedence over dialling, and that is the whole purpose:
+            // the peer asked for the return direction because it reckons we
+            // cannot reach it. Dialling first and treating the existing
+            // connection only as a last resort would mean failing exactly where
+            // the extension helps.
+            // No switch in front of it: BidiEnabled can only be true when we
+            // offered the return direction *and* the peer asked for it. An
+            // additional query would check the same statement a second time -
+            // and hung on the wrong switch until the very end, the one for the
+            // outgoing side.
+            if (await S2SStream.TryDeliverOverBidiAsync(InboundStreams(), remoteDomain,
                                                         stanza, cancellationToken))
             {
                 Interlocked.Increment(ref _bidiDeliveries);
@@ -359,17 +355,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Eine Momentaufnahme der offenen eingehenden Streams.
+        /// A snapshot of the open incoming streams.
         /// </summary>
         /// <remarks>
-        /// Eine Kopie, damit die Sperre nicht über das Senden gehalten wird -
-        /// eine langsame Gegenstelle hielte sonst jede weitere Zustellung auf.
-        /// Der Schalter davor ist eine Abkürzung und keine Sicherung:
-        /// <c>BidiEnabled</c> setzt sich nur auf einem Stream, der mit
-        /// <c>offerBidi</c> angelegt wurde, und das kommt aus demselben
-        /// Schalter. Eine Mutation überlebt ihn deshalb zu Recht.
+        /// A copy, so that the lock is not held across the sending - a slow
+        /// peer would otherwise hold up every further delivery. The switch in
+        /// front of it is a shortcut and not a safeguard:
+        /// <c>BidiEnabled</c> only sets itself on a stream created with
+        /// <c>offerBidi</c>, and that comes from the same switch. A mutation
+        /// therefore survives it rightly.
         /// </remarks>
-        private IReadOnlyList<S2SStream> EingehendeStreams()
+        private IReadOnlyList<S2SStream> InboundStreams()
         {
             lock (_lock)
                 return [.. _inbound.Select(l => l.Stream)];
@@ -381,12 +377,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (internal) VerifyDialbackKeyAsync(senderDomain, streamId, key)
 
         /// <summary>
-        /// XEP-0220, Schritt 2 und 3 - wie bei
-        /// <see cref="WebSocketServerLinks"/>, nur über TCP.
+        /// XEP-0220, steps 2 and 3 - as with
+        /// <see cref="WebSocketServerLinks"/>, only over TCP.
         /// </summary>
         /// <remarks>
-        /// Auch hier gilt: gefragt wird die hinterlegte Adresse der
-        /// Absenderdomain, nicht der, der sich gerade ausweisen will.
+        /// Here too it holds: what is asked is the address on record of the
+        /// sender domain, not whoever is currently trying to identify itself.
         /// </remarks>
         internal async Task<Boolean> VerifyDialbackKeyAsync(String senderDomain,
                                                             String streamId,
@@ -395,7 +391,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             Interlocked.Increment(ref _dialbackVerifications);
 
-            foreach (var peer in await KandidatenFuerAsync(senderDomain))
+            foreach (var peer in await CandidatesForAsync(senderDomain))
             {
 
                 if (await VerifyAtAsync(peer, senderDomain, streamId, key))
@@ -408,29 +404,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Die Adressen, unter denen eine Domain für die Dialback-Rückfrage
-        /// erreichbar sein könnte.
+        /// The addresses a domain might be reachable at for the dialback query.
         /// </summary>
         /// <remarks>
-        /// Der Eintrag von Hand geht vor; erst danach die Auflösung. Ohne
-        /// beides gibt es niemanden zu fragen - und Glauben ist keine
-        /// Prüfung.
+        /// The entry by hand goes first; only after it the resolution. Without
+        /// both there is nobody to ask - and believing is not checking.
         ///
-        /// Dass die Rückfrage überhaupt aufgelöst werden muss, ist der
-        /// Normalfall aus XEP-0220: der prüfende Server sucht den autoritativen
-        /// selbst. Es verschiebt aber die Vertrauenswurzel vom Betreiber ins
-        /// DNS - siehe <see cref="AddressResolver"/>.
+        /// That the query has to be resolved at all is the normal case from
+        /// XEP-0220: the checking server searches for the authoritative one
+        /// itself. It does, however, shift the root of trust from the operator
+        /// into DNS - see <see cref="AddressResolver"/>.
         /// </remarks>
-        private async Task<IReadOnlyList<PeerConfig>> KandidatenFuerAsync(String domain)
+        private async Task<IReadOnlyList<PeerConfig>> CandidatesForAsync(String domain)
         {
 
-            PeerConfig? eingetragen;
+            PeerConfig? configured;
 
             lock (_lock)
-                _peers.TryGetValue(domain, out eingetragen);
+                _peers.TryGetValue(domain, out configured);
 
-            if (eingetragen is not null)
-                return [eingetragen];
+            if (configured is not null)
+                return [configured];
 
             if (AddressResolver is null)
                 return [];
@@ -438,12 +432,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             try
             {
 
-                var ziele = await AddressResolver.ResolveAsync(domain);
+                var targets = await AddressResolver.ResolveAsync(domain);
 
-                return [.. ziele.Select(z => new PeerConfig(z.Host,
-                                                            z.Port,
-                                                            Mode,
-                                                            DefaultPeerValidator))];
+                return [.. targets.Select(z => new PeerConfig(z.Host,
+                                                              z.Port,
+                                                              Mode,
+                                                              DefaultPeerValidator))];
 
             }
             catch (Exception)
@@ -454,7 +448,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Fragt eine einzelne Adresse nach dem Dialback-Schlüssel.
+        /// Asks a single address about the dialback key.
         /// </summary>
         private async Task<Boolean> VerifyAtAsync(PeerConfig  peer,
                                                   String      senderDomain,
@@ -473,18 +467,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 client = new TcpClient();
                 await client.ConnectAsync(peer.Host, peer.Port, cts.Token);
 
-                var netz = await WrapAsync(client, peer, senderDomain, cts.Token);
+                var net = await WrapAsync(client, peer, senderDomain, cts.Token);
 
-                if (netz is null)
+                if (net is null)
                     return false;
 
                 var stream = S2SStream.InitiateVerification(
                                  _localServer.Domain,
                                  senderDomain,
-                                 (frame, ct) => SendAsync(netz, frame, ct),
+                                 (frame, ct) => SendAsync(net, frame, ct),
                                  framing: TcpStreamFraming.Instance);
 
-                _ = PumpAsync(netz, stream, null);
+                _ = PumpAsync(net, stream, null);
 
                 await stream.OpenAsync(cts.Token);
 
@@ -506,7 +500,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             finally
             {
                 try { client?.Dispose(); }
-                catch { /* egal */ }
+                catch { /* never mind */ }
             }
 
         }
@@ -532,7 +526,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 }
                 catch (Exception)
                 {
-                    // Listener beendet - Schluss.
+                    // The listener has ended - that is that.
                     return;
                 }
 
@@ -551,24 +545,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private async Task HandleInboundAsync(TcpClient client)
         {
 
-            Stream?             netz             = null;
+            Stream?             net              = null;
             X509Certificate?    peerCertificate  = null;
 
             try
             {
 
-                netz = client.GetStream();
+                net = client.GetStream();
 
                 if (Mode == TcpTlsMode.Direct)
                 {
 
-                    var tls = new SslStream(netz, leaveInnerStreamOpen: false);
+                    var tls = new SslStream(net, leaveInnerStreamOpen: false);
 
                     await tls.AuthenticateAsServerAsync(
                               ServerOptions(),
                               _cts.Token);
 
-                    netz = tls;
+                    net = tls;
                     peerCertificate = tls.RemoteCertificate;
 
                 }
@@ -576,27 +570,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 else if (Mode == TcpTlsMode.StartTls)
                 {
 
-                    // Mit Zeitlimit: eine Gegenstelle, die den Handshake
-                    // anfängt und dann schweigt, hielte diese Verbindung sonst
-                    // für immer - und beim Herunterfahren den ganzen Server.
+                    // With a time limit: a peer that begins the handshake and
+                    // then falls silent would otherwise hold this connection
+                    // forever - and the whole server at shutdown.
                     using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
                     handshakeCts.CancelAfter(HandshakeTimeout);
 
-                    var tls = await StartTlsAsServerAsync(netz, handshakeCts.Token);
+                    var tls = await StartTlsAsServerAsync(net, handshakeCts.Token);
 
-                    // Ohne TLS gibt es keinen Stream. Der Aufrufer erfährt es
-                    // daran, dass die Verbindung endet.
+                    // Without TLS there is no stream. The caller learns of it
+                    // from the connection ending.
                     if (tls is null)
                         return;
 
-                    netz             = tls;
+                    net              = tls;
                     peerCertificate  = tls.RemoteCertificate;
 
                 }
 
                 var stream = S2SStream.Accept(
                                  _localServer.Domain,
-                                 (frame, ct) => SendAsync(netz, frame, ct),
+                                 (frame, ct) => SendAsync(net, frame, ct),
                                  (peerDomain, stanza) => _localServer.AcceptFromRemoteAsync(peerDomain, stanza),
                                  secret:            DialbackSecret,
                                  verifyKey:         VerifyDialbackKeyAsync,
@@ -611,7 +605,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 try
                 {
-                    await PumpAsync(netz, stream, null);
+                    await PumpAsync(net, stream, null);
                 }
                 finally
                 {
@@ -622,12 +616,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Verbindung abgerissen - im Betrieb der Normalfall.
+                // The connection dropped - in operation the normal case.
             }
             finally
             {
-                try { netz?.Dispose(); }  catch { /* egal */ }
-                try { client.Dispose(); } catch { /* egal */ }
+                try { net?.Dispose(); }   catch { /* never mind */ }
+                try { client.Dispose(); } catch { /* never mind */ }
             }
 
         }
@@ -643,11 +637,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
             {
 
-                if (_outbound.TryGetValue(remoteDomain, out var vorhanden))
-                    return vorhanden.Connecting!;
+                if (_outbound.TryGetValue(remoteDomain, out var existing))
+                    return existing.Connecting!;
 
-                // Kein Eintrag von Hand und kein Resolver - dann gibt es die
-                // Domain für diesen Server nicht.
+                // No entry by hand and no resolver - then the domain does not
+                // exist for this server.
                 if (!_peers.TryGetValue(remoteDomain, out var peer) &&
                     AddressResolver is null)
                 {
@@ -668,41 +662,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Sucht die Adressen einer Domain und versucht sie der Reihe nach.
+        /// Searches for the addresses of a domain and tries them in turn.
         /// </summary>
         /// <remarks>
-        /// Der Reihe nach und nicht nur das erste Ziel: SRV-Einträge nennen
-        /// Ausweichrechner, und sie aufzulisten ohne sie zu benutzen wäre eine
-        /// halbe Umsetzung. Die Reihenfolge stammt aus
-        /// <see cref="SrvSelection"/> und wird hier nicht mehr angetastet.
+        /// In turn and not only the first target: SRV records name fallback
+        /// hosts, and listing them without using them would be half an
+        /// implementation. The order comes from <see cref="SrvSelection"/> and
+        /// is not touched again here.
         ///
-        /// Die Betriebsart und die Zertifikatsprüfung kommen von den
-        /// Vorgabewerten dieses Servers - insbesondere wird gegen die
-        /// <b>gesuchte Domain</b> geprüft und nicht gegen den Rechnernamen aus
-        /// dem SRV-Eintrag. Andersherum genügte ein gefälschter Eintrag, um
-        /// die Prüfung zu bestehen.
+        /// The mode and the certificate validation come from the default values
+        /// of this server - in particular the check is against the <b>domain
+        /// sought</b> and not against the host name from the SRV record. The
+        /// other way round a forged record would suffice to pass the check.
         /// </remarks>
         private async Task<S2SStream?> ResolveAndConnectAsync(String             remoteDomain,
                                                               OutboundSlot       slot,
                                                               CancellationToken  cancellationToken)
         {
 
-            IReadOnlyList<SrvTarget> ziele;
+            IReadOnlyList<SrvTarget> targets;
 
             try
             {
-                ziele = await AddressResolver!.ResolveAsync(remoteDomain, cancellationToken);
+                targets = await AddressResolver!.ResolveAsync(remoteDomain, cancellationToken);
             }
             catch (Exception)
             {
-                ziele = [];
+                targets = [];
             }
 
-            foreach (var ziel in ziele)
+            foreach (var target in targets)
             {
 
-                var peer = new PeerConfig(ziel.Host,
-                                          ziel.Port,
+                var peer = new PeerConfig(target.Host,
+                                          target.Port,
                                           Mode,
                                           DefaultPeerValidator);
 
@@ -711,10 +704,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (stream is not null)
                 {
 
-                    // Der Platz im Cache wurde von ConnectOutboundAsync bei
-                    // jedem Fehlversuch geräumt - für den Erfolg muss er
-                    // wieder stehen, sonst baut die nächste Zustellung erneut
-                    // auf.
+                    // The slot in the cache was cleared by ConnectOutboundAsync
+                    // on every failed attempt - for the success it has to stand
+                    // again, otherwise the next delivery establishes a new one.
                     lock (_lock)
                         _outbound[remoteDomain] = slot;
 
@@ -731,13 +723,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Die Zertifikatsprüfung für aufgelöste Gegenstellen.
+        /// The certificate validation for resolved peers.
         /// </summary>
         /// <remarks>
-        /// Null überlässt sie dem Betriebssystem - für den Betrieb die
-        /// richtige Vorgabe, weil ein fremder Server ein Zertifikat einer
-        /// bekannten CA vorlegen soll. Im Testaufbau wird sie gesetzt, weil
-        /// selbst signierte Zertifikate sonst nirgends durchkämen.
+        /// Null leaves it to the operating system - for operation the right
+        /// default, because a foreign server shall present a certificate of a
+        /// known CA. In the test setup it is set, because self-signed
+        /// certificates would otherwise get through nowhere.
         /// </remarks>
         public RemoteCertificateValidationCallback? DefaultPeerValidator { get; init; }
 
@@ -756,9 +748,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 handshakeCts.CancelAfter(HandshakeTimeout);
 
-                var netz = await WrapAsync(client, peer, remoteDomain, handshakeCts.Token);
+                var net = await WrapAsync(client, peer, remoteDomain, handshakeCts.Token);
 
-                if (netz is null)
+                if (net is null)
                 {
                     DropOutbound(remoteDomain, slot);
                     return null;
@@ -767,35 +759,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 var stream = S2SStream.Initiate(
                                  _localServer.Domain,
                                  remoteDomain,
-                                 (frame, ct) => SendAsync(netz, frame, ct),
+                                 (frame, ct) => SendAsync(net, frame, ct),
                                  secret:            DialbackSecret,
                                  framing:           TcpStreamFraming.Instance,
                                  canOfferExternal:  UseSaslExternal && Certificate is not null,
 
-                                 // XEP-0288: was über die Rückrichtung
-                                 // hereinkommt, geht denselben Weg wie auf
-                                 // einem eingehenden Stream - samt
-                                 // Absenderprüfung. Dass die Gegenstelle ist,
-                                 // wer sie zu sein behauptet, steht hier
-                                 // schon fest: wir haben sie angewählt und ihr
-                                 // Zertifikat geprüft.
+                                 // XEP-0288: what comes in over the return
+                                 // direction goes the same way as on an
+                                 // incoming stream - sender check included.
+                                 // That the peer is who it claims to be is
+                                 // already settled here: we dialled it and
+                                 // checked its certificate.
                                  deliverStanza:     (peerDomain, stanza)
                                                         => _localServer.AcceptFromRemoteAsync(peerDomain, stanza),
                                  useBidi:           RequestBidirectionalStreams);
 
                 stream.OnClosed += _ => DropOutbound(remoteDomain, slot);
 
-                _ = PumpAsync(netz, stream, () =>
+                _ = PumpAsync(net, stream, () =>
                     {
                         DropOutbound(remoteDomain, slot);
-                        try { client.Dispose(); } catch { /* egal */ }
+                        try { client.Dispose(); } catch { /* never mind */ }
                     });
 
                 await stream.OpenAsync(cancellationToken);
 
                 if (!await stream.WaitUntilReadyAsync(HandshakeTimeout, cancellationToken))
                 {
-                    stream.Abort("Aufbau nicht abgeschlossen");
+                    stream.Abort("The setup was not completed");
                     DropOutbound(remoteDomain, slot);
                     return null;
                 }
@@ -832,8 +823,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private class) FrameReader
 
         /// <summary>
-        /// Liest einzelne Rahmen aus einem Strom - für die Aushandlung, bevor
-        /// ein <see cref="S2SStream"/> übernimmt.
+        /// Reads individual frames out of a stream - for the negotiation,
+        /// before an <see cref="S2SStream"/> takes over.
         /// </summary>
         private sealed class FrameReader
         {
@@ -849,25 +840,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
 
             /// <summary>
-            /// Steht noch etwas im Puffer, das die Gegenstelle vorausgeschickt
-            /// hat?
+            /// Is there still something in the buffer that the peer sent ahead?
             /// </summary>
             public Boolean HasPending => _pending.Count > 0;
 
-            /// <summary>Der nächste Rahmen, oder null wenn der Strom endet.</summary>
+            /// <summary>The next frame, or null when the stream ends.</summary>
             public async Task<String?> NextAsync(CancellationToken cancellationToken)
             {
 
                 while (_pending.Count == 0)
                 {
 
-                    var gelesen = await _stream.ReadAsync(_buffer, cancellationToken);
+                    var read = await _stream.ReadAsync(_buffer, cancellationToken);
 
-                    if (gelesen <= 0)
+                    if (read <= 0)
                         return null;
 
-                    foreach (var rahmen in _splitter.Push(Encoding.UTF8.GetString(_buffer, 0, gelesen)))
-                        _pending.Enqueue(rahmen);
+                    foreach (var frame in _splitter.Push(Encoding.UTF8.GetString(_buffer, 0, read)))
+                        _pending.Enqueue(frame);
 
                 }
 
@@ -879,66 +869,65 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #endregion
 
-        #region (private) STARTTLS (RFC 6120, Abschnitt 5.4)
+        #region (private) STARTTLS (RFC 6120, section 5.4)
 
-        /// <summary>Der Namensraum der TLS-Aushandlung.</summary>
+        /// <summary>The namespace of the TLS negotiation.</summary>
         private const String TlsNamespace = "urn:ietf:params:xml:ns:xmpp-tls";
 
         /// <summary>
-        /// STARTTLS auf der annehmenden Seite.
+        /// STARTTLS on the accepting side.
         /// </summary>
-        /// <returns>Der verschlüsselte Strom, oder null wenn nichts daraus wurde.</returns>
-        private async Task<SslStream?> StartTlsAsServerAsync(Stream             netz,
+        /// <returns>The encrypted stream, or null when nothing came of it.</returns>
+        private async Task<SslStream?> StartTlsAsServerAsync(Stream             net,
                                                              CancellationToken  cancellationToken)
         {
 
-            var leser = new FrameReader(netz);
+            var reader = new FrameReader(net);
 
-            var kopf = await leser.NextAsync(cancellationToken);
+            var header = await reader.NextAsync(cancellationToken);
 
-            if (kopf is null || !TcpStreamFraming.Instance.IsStreamOpen(kopf))
+            if (header is null || !TcpStreamFraming.Instance.IsStreamOpen(header))
                 return null;
 
-            await SendAsync(netz,
+            await SendAsync(net,
                             TcpStreamFraming.Instance.StreamOpen(_localServer.Domain,
-                                                                 S2SStream.Attr(kopf, "from"),
+                                                                 S2SStream.Attr(header, "from"),
                                                                  Guid.NewGuid().ToString("N")),
                             cancellationToken);
 
-            // <required/>, weil RFC 6120, Abschnitt 13.7 für S2S
-            // Verschlüsselung verlangt. Wer sie ausschlägt, bekommt keinen
-            // Stream - nicht einen unverschlüsselten.
-            await SendAsync(netz,
+            // <required/>, because RFC 6120, section 13.7 demands encryption
+            // for S2S. Whoever declines it gets no stream - not an unencrypted
+            // one.
+            await SendAsync(net,
                             $"<stream:features xmlns:stream='{S2SStream.StreamNamespace}'>" +
                             $"<starttls xmlns='{TlsNamespace}'><required/></starttls>" +
                             "</stream:features>",
                             cancellationToken);
 
-            var anfrage = await leser.NextAsync(cancellationToken);
+            var request = await reader.NextAsync(cancellationToken);
 
-            if (anfrage is null ||
-                !anfrage.StartsWith("<starttls", StringComparison.Ordinal) ||
-                !anfrage.Contains(TlsNamespace, StringComparison.Ordinal))
+            if (request is null ||
+                !request.StartsWith("<starttls", StringComparison.Ordinal) ||
+                !request.Contains(TlsNamespace, StringComparison.Ordinal))
             {
 
-                await SendAsync(netz, $"<failure xmlns='{TlsNamespace}'/>", cancellationToken);
+                await SendAsync(net, $"<failure xmlns='{TlsNamespace}'/>", cancellationToken);
 
                 return null;
 
             }
 
-            // RFC 6120, Abschnitt 5.4.3.3: nach dem <starttls/> darf im
-            // Klartext nichts mehr folgen. Steht doch etwas im Puffer, hat die
-            // Gegenstelle vorausgeschickt - entweder ist sie kaputt, oder
-            // jemand versucht, Klartext in den gleich verschlüsselten Stream
-            // zu schmuggeln. Beides ist ein Grund aufzuhören und keiner
-            // weiterzumachen.
-            if (leser.HasPending)
+            // RFC 6120, section 5.4.3.3: after the <starttls/> nothing more may
+            // follow in the clear. If something does stand in the buffer, the
+            // peer has sent ahead - either it is broken, or somebody is trying
+            // to smuggle plaintext into the stream that is about to be
+            // encrypted. Both are a reason to stop and none to carry on.
+            if (reader.HasPending)
                 return null;
 
-            await SendAsync(netz, $"<proceed xmlns='{TlsNamespace}'/>", cancellationToken);
+            await SendAsync(net, $"<proceed xmlns='{TlsNamespace}'/>", cancellationToken);
 
-            var tls = new SslStream(netz, leaveInnerStreamOpen: false);
+            var tls = new SslStream(net, leaveInnerStreamOpen: false);
 
             await tls.AuthenticateAsServerAsync(ServerOptions(), cancellationToken);
 
@@ -947,58 +936,58 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// STARTTLS auf der aufbauenden Seite.
+        /// STARTTLS on the establishing side.
         /// </summary>
         /// <remarks>
-        /// Der hier geführte Stream ist ein Wegwerfstream: nach der
-        /// Verschlüsselung fängt alles von vorn an, mit neuem Stream-Kopf und
-        /// neuer Stream-ID (RFC 6120, Abschnitt 5.4.3.3). Deshalb steht das
-        /// hier im Transport und nicht in <see cref="S2SStream"/> - jene
-        /// Schicht bekommt den Strom erst, wenn er verschlüsselt ist, und
-        /// muss von der Aushandlung nichts wissen.
+        /// The stream conducted here is a throwaway stream: after the
+        /// encryption everything starts over, with a new stream header and a
+        /// new stream ID (RFC 6120, section 5.4.3.3). That is why this stands
+        /// here in the transport and not in <see cref="S2SStream"/> - that
+        /// layer only gets the stream once it is encrypted and does not have to
+        /// know anything about the negotiation.
         /// </remarks>
-        private async Task<SslStream?> StartTlsAsClientAsync(Stream             netz,
+        private async Task<SslStream?> StartTlsAsClientAsync(Stream             net,
                                                              PeerConfig         peer,
                                                              String             remoteDomain,
                                                              CancellationToken  cancellationToken)
         {
 
-            var leser = new FrameReader(netz);
+            var reader = new FrameReader(net);
 
-            await SendAsync(netz,
+            await SendAsync(net,
                             TcpStreamFraming.Instance.StreamOpen(_localServer.Domain, remoteDomain, null),
                             cancellationToken);
 
-            var bietetTls = false;
+            var offersTls = false;
 
-            while (await leser.NextAsync(cancellationToken) is { } rahmen)
+            while (await reader.NextAsync(cancellationToken) is { } frame)
             {
 
-                if (TcpStreamFraming.Instance.IsStreamOpen(rahmen))
+                if (TcpStreamFraming.Instance.IsStreamOpen(frame))
                     continue;
 
-                bietetTls = rahmen.Contains(TlsNamespace, StringComparison.Ordinal);
+                offersTls = frame.Contains(TlsNamespace, StringComparison.Ordinal);
                 break;
 
             }
 
-            // Kein STARTTLS im Angebot - dann gibt es keine Verbindung. Im
-            // Klartext weiterzumachen wäre genau der Rückfall, gegen den die
-            // Aushandlung existiert.
-            if (!bietetTls)
+            // No STARTTLS in the offer - then there is no connection. Carrying
+            // on in the clear would be exactly the fallback the negotiation
+            // exists against.
+            if (!offersTls)
                 return null;
 
-            await SendAsync(netz, $"<starttls xmlns='{TlsNamespace}'/>", cancellationToken);
+            await SendAsync(net, $"<starttls xmlns='{TlsNamespace}'/>", cancellationToken);
 
-            var antwort = await leser.NextAsync(cancellationToken);
+            var answer = await reader.NextAsync(cancellationToken);
 
-            if (antwort is null || !antwort.StartsWith("<proceed", StringComparison.Ordinal))
+            if (answer is null || !answer.StartsWith("<proceed", StringComparison.Ordinal))
                 return null;
 
-            if (leser.HasPending)
+            if (reader.HasPending)
                 return null;
 
-            var tls = new SslStream(netz,
+            var tls = new SslStream(net,
                                     leaveInnerStreamOpen: false,
                                     userCertificateValidationCallback: peer.Validator);
 
@@ -1013,14 +1002,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) SASL-EXTERNAL
 
         /// <summary>
-        /// Die TLS-Einstellungen des annehmenden Servers.
+        /// The TLS settings of the accepting server.
         /// </summary>
         /// <remarks>
-        /// Fuer SASL-EXTERNAL muss das Klientzertifikat <b>angefordert</b>
-        /// werden - ohne diese Zeile gibt es keines, und die Pruefung haette
-        /// nichts zu lesen. Angefordert heisst nicht verlangt: bleibt es aus,
-        /// kommt die Verbindung trotzdem zustande und die Gegenstelle weist
-        /// sich per Dialback aus.
+        /// For SASL-EXTERNAL the client certificate has to be <b>requested</b> -
+        /// without this line there is none, and the check would have nothing to
+        /// read. Requested does not mean demanded: if it fails to come, the
+        /// connection comes about all the same and the peer identifies itself
+        /// by dialback.
         /// </remarks>
         private SslServerAuthenticationOptions ServerOptions()
 
@@ -1033,12 +1022,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                };
 
         /// <summary>
-        /// Die TLS-Einstellungen des aufbauenden Servers.
+        /// The TLS settings of the establishing server.
         /// </summary>
         /// <remarks>
-        /// Das eigene Zertifikat geht nur mit, wenn SASL-EXTERNAL vorgesehen
-        /// ist. Die Gegenstelle prueft es; ob es <i>ihr</i> genuegt, entscheidet
-        /// sie.
+        /// Our own certificate only goes along when SASL-EXTERNAL is intended.
+        /// The peer checks it; whether it suffices for <i>them</i> is their
+        /// decision.
         /// </remarks>
         private SslClientAuthenticationOptions ClientOptions(String remoteDomain)
 
@@ -1050,20 +1039,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                };
 
         /// <summary>
-        /// Macht aus dem vorgelegten Zertifikat die Pruefung, die
-        /// <see cref="S2SStream"/> braucht - oder null, wenn es keines gibt.
+        /// Turns the certificate presented into the check
+        /// <see cref="S2SStream"/> needs - or null when there is none.
         /// </summary>
         /// <remarks>
-        /// Null ist hier die richtige Antwort und keine Notloesung: ohne
-        /// Zertifikat darf SASL-EXTERNAL gar nicht erst angeboten werden.
+        /// Null is the right answer here and no makeshift: without a
+        /// certificate SASL-EXTERNAL must not be offered in the first place.
         ///
-        /// <b>Was diese Pruefung nicht leistet:</b> sie sagt, fuer welche
-        /// Domains das Zertifikat ausgestellt ist - nicht, ob ihm zu trauen
-        /// ist. Die Kette gegen eine bekannte CA zu pruefen ist Sache des
-        /// TLS-Handshakes und damit der hinterlegten Pruefung; im Testaufbau
-        /// ist das ein angehefteter Fingerabdruck. Wer hier eine Pruefung
-        /// einsetzt, die alles durchlaesst, hat SASL-EXTERNAL auf eine
-        /// Selbstauskunft reduziert.
+        /// <b>What this check does not achieve:</b> it says which domains the
+        /// certificate is issued for - not whether it is to be trusted.
+        /// Checking the chain against a known CA is the business of the TLS
+        /// handshake and thereby of the validation on record; in the test setup
+        /// that is a pinned fingerprint. Whoever puts a validation in here that
+        /// lets everything through has reduced SASL-EXTERNAL to a statement
+        /// about oneself.
         /// </remarks>
         private Func<String, Boolean>? IdentityCheckFor(X509Certificate? peerCertificate)
         {
@@ -1071,10 +1060,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (!UseSaslExternal || peerCertificate is null)
                 return null;
 
-            var zertifikat = peerCertificate as X509Certificate2
-                                 ?? X509CertificateLoader.LoadCertificate(peerCertificate.GetRawCertData());
+            var certificate = peerCertificate as X509Certificate2
+                                  ?? X509CertificateLoader.LoadCertificate(peerCertificate.GetRawCertData());
 
-            return domain => CertificateIdentity.Authorises(zertifikat, domain);
+            return domain => CertificateIdentity.Authorises(certificate, domain);
 
         }
 
@@ -1083,27 +1072,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) WrapAsync / SendAsync / PumpAsync
 
         /// <summary>
-        /// Bringt die Verbindung in den Zustand, in dem die Protokollschicht
-        /// sie übernehmen darf - je nach Modus im Klartext, sofort
-        /// verschlüsselt oder nach STARTTLS.
+        /// Brings the connection into the state in which the protocol layer may
+        /// take it over - depending on the mode in the clear, encrypted right
+        /// away or after STARTTLS.
         /// </summary>
-        /// <returns>null, wenn TLS vorgesehen war und nicht zustande kam.</returns>
+        /// <returns>null when TLS was intended and did not come about.</returns>
         private async Task<Stream?> WrapAsync(TcpClient          client,
                                               PeerConfig         peer,
                                               String             remoteDomain,
                                               CancellationToken  cancellationToken)
         {
 
-            var netz = (Stream) client.GetStream();
+            var net = (Stream) client.GetStream();
 
             if (peer.Mode == TcpTlsMode.None)
-                return netz;
+                return net;
 
             if (peer.Mode == TcpTlsMode.StartTls)
-                return await StartTlsAsClientAsync(netz, peer, remoteDomain, cancellationToken);
+                return await StartTlsAsClientAsync(net, peer, remoteDomain, cancellationToken);
 
             var tls = new SslStream(
-                          netz,
+                          net,
                           leaveInnerStreamOpen: false,
                           userCertificateValidationCallback: peer.Validator);
 
@@ -1124,22 +1113,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Liest den Strom und reicht jeden vollständigen Rahmen an die
-        /// Protokollschicht.
+        /// Reads the stream and passes every complete frame to the protocol
+        /// layer.
         /// </summary>
         /// <remarks>
-        /// Hier steckt der ganze Unterschied zu WebSocket: was gelesen wird,
-        /// hat mit Elementgrenzen nichts zu tun.
-        /// <see cref="XmlStreamSplitter"/> macht daraus Rahmen.
+        /// Here sits the whole difference to WebSocket: what is read has
+        /// nothing to do with element boundaries.
+        /// <see cref="XmlStreamSplitter"/> makes frames out of it.
         /// </remarks>
-        private static async Task PumpAsync(Stream stream, S2SStream s2s, Action? beimEnde)
+        private static async Task PumpAsync(Stream stream, S2SStream s2s, Action? onEnd)
         {
 
-            var puffer    = new Byte[8192];
-            var zerleger  = new XmlStreamSplitter();
+            var buffer    = new Byte[8192];
+            var splitter  = new XmlStreamSplitter();
 
-            // Nach einem SASL-Neustart beginnt der Strom als neues Dokument.
-            s2s.OnRestart += zerleger.Reset;
+            // After a SASL restart the stream begins as a new document.
+            s2s.OnRestart += splitter.Reset;
 
             try
             {
@@ -1147,15 +1136,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 while (!s2s.IsClosed)
                 {
 
-                    var gelesen = await stream.ReadAsync(puffer);
+                    var read = await stream.ReadAsync(buffer);
 
-                    if (gelesen <= 0)
+                    if (read <= 0)
                         break;
 
-                    foreach (var rahmen in zerleger.Push(Encoding.UTF8.GetString(puffer, 0, gelesen)))
+                    foreach (var frame in splitter.Push(Encoding.UTF8.GetString(buffer, 0, read)))
                     {
 
-                        await s2s.ProcessFrameAsync(rahmen);
+                        await s2s.ProcessFrameAsync(frame);
 
                         if (s2s.IsClosed)
                             break;
@@ -1167,12 +1156,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Verbindung weg.
+                // Connection gone.
             }
 
-            s2s.Abort("TCP-Verbindung beendet");
+            s2s.Abort("The TCP connection has ended");
 
-            beimEnde?.Invoke();
+            onEnd?.Invoke();
 
         }
 
@@ -1187,48 +1176,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             await _cts.CancelAsync();
 
             try { _listener.Stop(); }
-            catch { /* egal */ }
+            catch { /* never mind */ }
 
-            // Angenommene Verbindungen ausdrücklich schliessen. Das Abbrechen
-            // des Tokens allein genügt nicht: der Lesevorgang auf einem Socket
-            // bricht damit nicht zuverlässig ab, die Schleife bleibt stehen,
-            // bis die Gegenstelle auflegt - und bis dahin hält *sie* die
-            // Verbindung für benutzbar und schickt darüber weiter.
+            // Close accepted connections explicitly. Cancelling the token alone
+            // does not suffice: the read on a socket does not break off
+            // reliably with it, the loop stays standing until the peer hangs up
+            // - and until then *it* takes the connection for usable and keeps
+            // sending over it.
             //
-            // Gefunden im Lauf gegen Prosody: nach dem Ende eines Testservers
-            // beantwortete Prosody die nächste Anfrage noch dreissig Sekunden
-            // lang über den längst toten Socket. Zwischen zwei Instanzen dieses
-            // Servers fiel das nie auf, weil dort beide Seiten gleichzeitig
-            // verschwinden.
-            List<InboundLink> eingehend;
+            // Found in the run against Prosody: after the end of a test server,
+            // Prosody kept answering the next request for another thirty
+            // seconds over the long since dead socket. Between two instances of
+            // this server it never showed, because there both sides disappear
+            // at the same time.
+            List<InboundLink> inbound;
 
             lock (_lock)
             {
-                eingehend = [.. _inbound];
+                inbound = [.. _inbound];
                 _inbound.Clear();
             }
 
-            foreach (var link in eingehend)
+            foreach (var link in inbound)
             {
-                link.Stream.Abort("Server wird beendet");
-                try { link.Client.Dispose(); } catch { /* egal */ }
+                link.Stream.Abort("The server is shutting down");
+                try { link.Client.Dispose(); } catch { /* never mind */ }
             }
 
-            List<Task<S2SStream?>> ausgehend;
+            List<Task<S2SStream?>> outbound;
 
             lock (_lock)
-                ausgehend = [.. _outbound.Values
-                                         .Select(slot => slot.Connecting)
-                                         .Where(task => task is not null)
-                                         .Cast<Task<S2SStream?>>()];
+                outbound = [.. _outbound.Values
+                                        .Select(slot => slot.Connecting)
+                                        .Where(task => task is not null)
+                                        .Cast<Task<S2SStream?>>()];
 
-            foreach (var task in ausgehend)
+            foreach (var task in outbound)
             {
-                // Mit Zeitlimit: ein hängender Verbindungsaufbau darf das
-                // Herunterfahren nicht blockieren. Ohne das wurde aus einem
-                // fehlgeschlagenen Test ein stehender Testlauf.
-                try { (await task.WaitAsync(HandshakeTimeout))?.Abort("Server wird beendet"); }
-                catch { /* Aufbau gescheitert oder zu langsam */ }
+                // With a time limit: a hanging connection setup must not block
+                // the shutdown. Without it a failed test turned into a test run
+                // that stood still.
+                try { (await task.WaitAsync(HandshakeTimeout))?.Abort("The server is shutting down"); }
+                catch { /* the setup failed or was too slow */ }
             }
 
             _cts.Dispose();
