@@ -143,7 +143,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 // abgelehnt. Bis zum node-Attribut stand hier „Diesen Node gibt
                 // es hier nicht" - eine Auskunft über etwas, das der Server gar
                 // nicht ansah, und die Abfrage nennt nicht einmal einen Node.
-                Assert.That(reported!.Text,      Is.EqualTo("Diese Auskunft wird hier nicht erteilt."));
+                Assert.That(reported!.Text,      Is.EqualTo("This information is not given here."));
             });
 
         }
