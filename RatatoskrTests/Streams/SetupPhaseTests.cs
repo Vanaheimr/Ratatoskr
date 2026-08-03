@@ -28,24 +28,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Aufbauphase zwischen Resource Binding und <c>Connected</c>.
+    /// The setup phase between the resource binding and <c>Connected</c>.
     ///
-    /// Der Client aktiviert dort Carbons und holt den Roster ab. Was in dieser
-    /// Zeit sonst noch eintrifft - nachgelieferte Nachrichten, Presence,
-    /// Roster-Pushes - gehört genauso zugestellt wie später auch. Ein echter
-    /// Server schickt es, sobald die Resource gebunden ist, und wartet nicht
-    /// ab, bis der Client mit seinem Aufbau fertig ist.
+    /// There the client switches carbons on and fetches the roster. Whatever
+    /// else arrives during that time - messages handed on later, presence,
+    /// roster pushes - belongs delivered just as much as later on. A real
+    /// server sends it as soon as the resource is bound, and does not wait
+    /// until the client has finished its setup.
     /// </summary>
     [TestFixture]
     public class SetupPhaseTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Erstellt einen Client samt Konto, hängt die Ereignisse an und
-        /// verbindet erst danach - Ereignisse aus der Aufbauphase gingen sonst
-        /// verloren, bevor der Test sie sehen kann.
+        /// Creates a client along with its account, hangs the events on and
+        /// only connects afterwards - events from the setup phase would
+        /// otherwise be lost before the test can see them.
         /// </summary>
         private XMPPClient PreparedClient(String localPart = "alice")
         {
@@ -63,9 +63,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageAfterBind_IsDelivered()
 
         /// <summary>
-        /// Der Kern: eine Nachricht, die zwischen Binding und
-        /// <c>Connected</c> eintrifft, wurde von der Aufbauphase vom Socket
-        /// gelesen und stillschweigend verworfen. Sie muss ankommen.
+        /// The heart of it: a message that arrives between the binding and
+        /// <c>Connected</c> was read off the socket by the setup phase and
+        /// discarded in silence. It has to arrive.
         /// </summary>
         [Test]
         public async Task MessageAfterBind_IsDelivered()
@@ -73,7 +73,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.DeliverAfterBind.Add(
                 "<message from='bob@localhost/desktop' to='{jid}' type='chat' id='offline-1'>" +
-                "<body>Noch offen von gestern</body></message>");
+                "<body>Still open from yesterday</body></message>");
 
             var client    = PreparedClient();
             var received  = new List<XMPPMessage>();
@@ -83,9 +83,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.ConnectAsync();
 
             await WaitFor(() => received.Count == 1,
-                          "nachgelieferte Nachricht aus der Aufbauphase");
+                          "the message handed on from the setup phase");
 
-            Assert.That(received[0].Body, Is.EqualTo("Noch offen von gestern"));
+            Assert.That(received[0].Body, Is.EqualTo("Still open from yesterday"));
 
         }
 
@@ -94,9 +94,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PresenceAfterBind_IsDelivered()
 
         /// <summary>
-        /// Dasselbe für Presence. Geprüft wird nur die Zustellung, nicht der
-        /// Roster: der Kontakt steht zu diesem Zeitpunkt noch gar nicht darin,
-        /// weil die Presence dem Roster-Abruf vorausläuft.
+        /// The same for presence. Only the delivery is checked, not the roster:
+        /// at that point the contact is not in it at all, because the presence
+        /// runs ahead of the roster fetch.
         /// </summary>
         [Test]
         public async Task PresenceAfterBind_IsDelivered()
@@ -113,7 +113,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.ConnectAsync();
 
             await WaitFor(() => presences.Contains("bob@localhost/desktop"),
-                          "Presence aus der Aufbauphase");
+                          "the presence from the setup phase");
 
         }
 
@@ -122,21 +122,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RosterPushAfterBind_IsApplied()
 
         /// <summary>
-        /// Ein Roster-Push direkt nach dem Binding. Er trägt kein 'from' und
-        /// ist damit nach RFC 6121, Abschnitt 2.1.6 autorisiert.
+        /// A roster push straight after the binding. It carries no 'from' and
+        /// is thereby authorised under RFC 6121, section 2.1.6.
         /// </summary>
         /// <remarks>
-        /// Der Kontakt steht auch im Roster des Kontos, und das ist seit dem
-        /// Ersetzen (siehe D8) nötig: Der Push kommt in der Aufbauphase, also
-        /// <i>vor</i> dem Roster-Ergebnis, und das Ergebnis ist der Stand.
-        /// Ein Server, der einen Eintrag pusht, den er selbst nicht führt,
-        /// widerspricht sich - vorher fiel das nicht auf, weil der Client das
-        /// Ergebnis bloss einarbeitete.
+        /// The contact stands in the roster of the account as well, and since
+        /// the replacing (see D8) that is necessary: the push comes in the
+        /// setup phase, so <i>before</i> the roster result, and the result is
+        /// the state. A server that pushes an entry it does not itself keep
+        /// contradicts itself - before, that did not show, because the client
+        /// merely worked the result in.
         ///
-        /// Geprüft wird damit weiterhin, was der Test prüfen soll: dass eine
-        /// Stanza aus der Aufbauphase nicht verlorengeht. Früher las der
-        /// Client dort bis zu zehn Rahmen selbst vom Socket und verwarf alles,
-        /// was er nicht erwartete.
+        /// What the test is meant to check is thereby still checked: that a
+        /// stanza from the setup phase does not get lost. The client used to
+        /// read up to ten frames off the socket itself there and discarded
+        /// everything it did not expect.
         /// </remarks>
         [Test]
         public async Task RosterPushAfterBind_IsApplied()
@@ -148,8 +148,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 "<item jid='carol@localhost' name='Carol' subscription='both'/>" +
                 "</query></iq>");
 
-            // Der Client zuerst - er legt das Konto an, dessen Roster gleich
-            // gefüllt wird.
+            // The client first - it creates the account whose roster is about
+            // to be filled.
             var client = PreparedClient();
 
             Server.GetAccount($"alice@{Server.Domain}")!
@@ -158,7 +158,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.ConnectAsync();
 
             await WaitFor(() => client.Roster.GetItem("carol@localhost") is not null,
-                          "Roster-Push aus der Aufbauphase");
+                          "the roster push from the setup phase");
 
             Assert.That(client.Roster.GetItem("carol@localhost")?.Name, Is.EqualTo("Carol"));
 
@@ -169,11 +169,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageMentioningTheRosterId_IsNotMistakenForTheAnswer()
 
         /// <summary>
-        /// Die Zuordnung lief über <c>Contains("id='roster1'")</c> - also über
-        /// den Text des ganzen Rahmens. Eine Nachricht, die diese Zeichenfolge
-        /// im Text führt, wurde damit für die Roster-Antwort gehalten: der
-        /// Client hörte auf zu warten, fand kein <c>&lt;query/&gt;</c> und
-        /// blieb ohne Kontakte zurück.
+        /// The matching ran over <c>Contains("id='roster1'")</c> - that is, over
+        /// the text of the whole frame. A message carrying that character
+        /// sequence in its text was thereby taken for the roster answer: the
+        /// client stopped waiting, found no <c>&lt;query/&gt;</c> and was left
+        /// without contacts.
         /// </summary>
         [Test]
         public async Task MessageMentioningTheRosterId_IsNotMistakenForTheAnswer()
@@ -182,23 +182,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var account = Server.AddAccount("alice");
             account.SetRosterEntry(new RosterEntry("dave@localhost", "Dave", "both"));
 
-            // Die erste Nachricht bringt die Carbons-Schleife dazu, ihre
-            // Antwort für gefunden zu halten; erst dadurch bekommt die
-            // Roster-Schleife die zweite überhaupt zu sehen.
+            // The first message gets the carbons loop to take its answer for
+            // found; only through that does the roster loop get to see the
+            // second one at all.
             Server.DeliverAfterBind.Add(
                 "<message from='bob@localhost/desktop' to='{jid}' type='chat'>" +
-                "<body>Steht da id='carbons-enable'?</body></message>");
+                "<body>Does it say id='carbons-enable' there?</body></message>");
 
             Server.DeliverAfterBind.Add(
                 "<message from='bob@localhost/desktop' to='{jid}' type='chat'>" +
-                "<body>Schau mal, da steht id='roster1' drin</body></message>");
+                "<body>Look, it says id='roster1' in there</body></message>");
 
             var client = PreparedClient();
 
             await client.ConnectAsync();
 
             await WaitFor(() => client.Roster.GetItem("dave@localhost") is not null,
-                          "Roster trotz vorgetäuschter Antwort");
+                          "the roster despite the feigned answer");
 
         }
 
@@ -207,11 +207,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageMentioningTheCarbonsId_IsNotMistakenForTheAnswer()
 
         /// <summary>
-        /// Dieselbe Textzuordnung bei XEP-0280: eine Nachricht, die
-        /// <c>id='carbons-enable'</c> im Text führt, galt als Antwort. Weil
-        /// sie kein <c>type='result'</c> trägt, hielt der Client Carbons
-        /// anschliessend für nicht verfügbar - obwohl der Server sie gleich
-        /// darauf bestätigte.
+        /// The same text matching with XEP-0280: a message carrying
+        /// <c>id='carbons-enable'</c> in its text counted as the answer.
+        /// Because it carries no <c>type='result'</c>, the client afterwards
+        /// held carbons to be unavailable - although the server confirmed them
+        /// right after.
         /// </summary>
         [Test]
         public async Task MessageMentioningTheCarbonsId_IsNotMistakenForTheAnswer()
@@ -219,14 +219,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.DeliverAfterBind.Add(
                 "<message from='bob@localhost/desktop' to='{jid}' type='chat'>" +
-                "<body>Steht da wirklich id='carbons-enable'?</body></message>");
+                "<body>Does it really say id='carbons-enable'?</body></message>");
 
             var client = PreparedClient();
 
             await client.ConnectAsync();
 
             Assert.That(client.CarbonsEnabled, Is.True,
-                        "Carbons hätten nach der Bestätigung des Servers aktiv sein müssen.");
+                        "Carbons should have been active after the server's confirmation.");
 
         }
 
@@ -235,11 +235,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RejectedBind_IsNotReportedAsSuccess()
 
         /// <summary>
-        /// Der gebundene JID wurde mit <c>&lt;jid&gt;([^&lt;]+)&lt;/jid&gt;</c>
-        /// gesucht; blieb die Suche erfolglos, nahm der Client stillschweigend
-        /// den selbst gewünschten JID an. Ein abgelehntes Binding sah damit
-        /// aus wie ein erfolgreiches, und der Client meldete sich mit einem
-        /// JID online, den er nie zugeteilt bekommen hat.
+        /// The bound JID was sought with
+        /// <c>&lt;jid&gt;([^&lt;]+)&lt;/jid&gt;</c>; if the search came up
+        /// empty, the client silently took the JID it had wished for itself. A
+        /// refused binding thereby looked like a successful one, and the client
+        /// reported itself online with a JID it was never assigned.
         /// </summary>
         [Test]
         public async Task RejectedBind_IsNotReportedAsSuccess()
@@ -250,12 +250,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client  = PreparedClient();
             var errors  = new List<String>();
 
-            // Ein abgelehntes Binding schickt den Client sonst durch zwanzig
-            // Reconnects mit exponentiellem Backoff - der Testlauf hing dadurch
-            // gut sechs Minuten an dieser einen Frage, und der Runner brach ihn
-            // ab, wenn der Test allein lief. Über einen Reconnect zum selben
-            // Ergebnis zu kommen wäre auch keine Antwort, nur eine langsame
-            // Wiederholung derselben Frage.
+            // A refused binding otherwise sends the client through twenty
+            // reconnects with exponential backoff - the test run hung a good six
+            // minutes on this one question, and the runner broke it off when the
+            // test ran on its own. Getting to the same result over a reconnect
+            // would be no answer either, only a slow repetition of the same
+            // question.
             client.Connection.MaxReconnectAttempts = 0;
 
             client.OnError += e => errors.Add(e);
@@ -265,9 +265,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(client.IsConnected, Is.False,
-                            "Nach abgelehntem Binding darf der Client nicht als verbunden gelten.");
+                            "After a refused binding the client must not count as connected.");
                 Assert.That(errors, Is.Not.Empty,
-                            "Ein abgelehntes Binding muss gemeldet werden.");
+                            "A refused binding has to be reported.");
             });
 
         }
@@ -277,11 +277,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RequiredSession_IsRequested()
 
         /// <summary>
-        /// Die Legacy-Session (RFC 3921) wurde übersprungen, sobald das Wort
-        /// "optional" irgendwo in den Stream-Features vorkam. XEP-0198 setzt
-        /// aber genau dieses Element in sein eigenes Feature
-        /// (<c>&lt;sm&gt;&lt;optional/&gt;&lt;/sm&gt;</c>) - ein Server, der
-        /// beides ankündigt, bekam die zwingende Session nie angefordert.
+        /// The legacy session (RFC 3921) was skipped as soon as the word
+        /// "optional" occurred anywhere in the stream features. But XEP-0198
+        /// puts exactly that element into its own feature
+        /// (<c>&lt;sm&gt;&lt;optional/&gt;&lt;/sm&gt;</c>) - a server that
+        /// announces both never got the required session asked for.
         /// </summary>
         [Test]
         public async Task RequiredSession_IsRequested()
@@ -295,7 +295,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => Server.AllReceived.Any(f => f.Contains("urn:ietf:params:xml:ns:xmpp-session",
                                                                        StringComparison.Ordinal)),
-                          "angeforderte Legacy-Session");
+                          "the legacy session that was asked for");
 
         }
 
@@ -304,8 +304,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OptionalSession_IsNotRequested()
 
         /// <summary>
-        /// Die Gegenprobe: ist die Session als <c>&lt;optional/&gt;</c>
-        /// angekündigt, wird sie nicht angefordert.
+        /// The counter-check: if the session is announced as
+        /// <c>&lt;optional/&gt;</c>, it is not asked for.
         /// </summary>
         [Test]
         public async Task OptionalSession_IsNotRequested()
@@ -318,7 +318,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(Server.AllReceived.Any(f => f.Contains("urn:ietf:params:xml:ns:xmpp-session",
                                                                StringComparison.Ordinal)),
                         Is.False,
-                        "Eine als optional angekündigte Session gehört nicht angefordert.");
+                        "A session announced as optional does not belong asked for.");
 
         }
 

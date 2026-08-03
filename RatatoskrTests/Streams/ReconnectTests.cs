@@ -29,10 +29,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Beim Reconnect muss die vorige Verbindung vollständig abgebaut werden.
-    /// Wird die alte CancellationTokenSource nur überschrieben statt
-    /// abgebrochen, laufen Empfangs- und Keepalive-Schleife weiter und
-    /// summieren sich mit jedem Reconnect auf.
+    /// On a reconnect the previous connection has to be taken down completely.
+    /// If the old CancellationTokenSource is merely overwritten instead of
+    /// cancelled, the receive and keepalive loops carry on running and add up
+    /// with every reconnect.
     /// </summary>
     [TestFixture]
     public class ReconnectTests : AXMPPTests
@@ -44,21 +44,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Zählt, was die Keepalive-Schleife tatsächlich verschickt.
+        /// Counts what the keepalive loop actually sends.
         /// </summary>
         /// <remarks>
-        /// Die Schleife wählt ihr Mittel nach Lage: ist XEP-0198 ausgehandelt,
-        /// schickt sie ein <c>&lt;r/&gt;</c>, sonst einen XEP-0199-Ping. Diese
-        /// beiden Tests zählten bis zuletzt nur Pings - und als Stream
-        /// Management zum Vorgabewert wurde, zählten sie nichts mehr.
+        /// The loop picks its means according to the situation: if XEP-0198 has
+        /// been negotiated it sends an <c>&lt;r/&gt;</c>, otherwise a XEP-0199
+        /// ping. These two tests counted nothing but pings until recently - and
+        /// when stream management became the default, they counted nothing at
+        /// all.
         ///
-        /// Der eine Test wurde davon rot, der andere <b>grün</b>: „null Pings
-        /// sind höchstens sieben Pings" trifft zu, und ein Test, der nichts
-        /// mehr misst, sagt das nicht von selbst. Deshalb hier beide Verfahren
-        /// und beide Tests über beide.
+        /// One test turned red from that, the other <b>green</b>: "no pings are
+        /// at most seven pings" holds, and a test that no longer measures
+        /// anything does not say so of its own accord. Hence both procedures
+        /// here and both tests over both.
         /// </remarks>
         private static Int32 KeepaliveCount(XMPPSession session, Boolean streamManagement)
 
@@ -71,7 +72,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Reconnect_EstablishesExactlyOneNewConnection()
 
         /// <summary>
-        /// Jeder Verbindungsabriss führt zu genau einer neuen Server-Verbindung.
+        /// Every torn connection leads to exactly one new server connection.
         /// </summary>
         [Test]
         public async Task Reconnect_EstablishesExactlyOneNewConnection()
@@ -91,13 +92,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Server.KillAllSessions();
 
                 await WaitFor(() => Server.ConnectionCount > before && client.IsConnected,
-                              $"Reconnect {i + 1} von {kills}",
+                              $"reconnect {i + 1} of {kills}",
                               TimeSpan.FromSeconds(20));
 
             }
 
             Assert.That(Server.ConnectionCount, Is.EqualTo(kills + 1),
-                        "Der Server hat mehr oder weniger Verbindungen gesehen als erwartet.");
+                        "The server saw more or fewer connections than expected.");
 
         }
 
@@ -106,9 +107,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Reconnect_DoesNotAccumulateKeepaliveLoops()
 
         /// <summary>
-        /// Nach mehreren Reconnects darf weiterhin nur eine Keepalive-Schleife
-        /// laufen. Mit dem früheren Leak feuerten nach drei Abrissen vier
-        /// Schleifen parallel - gemessen 17 statt 6 Pings in drei Sekunden.
+        /// After several reconnects only one keepalive loop may still be
+        /// running. With the earlier leak, four loops fired in parallel after
+        /// three tears - measured 17 instead of 6 pings in three seconds.
         /// </summary>
         [Test]
         [TestCase(true,  TestName = "Reconnect_DoesNotAccumulateKeepaliveLoops(Stream Management)")]
@@ -129,12 +130,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Server.KillAllSessions();
 
                 await WaitFor(() => Server.ConnectionCount > before && client.IsConnected,
-                              $"Reconnect {i + 1} von {kills}",
+                              $"reconnect {i + 1} of {kills}",
                               TimeSpan.FromSeconds(20));
 
             }
 
-            // Messfenster: nur die aktuelle Sitzung zählen
+            // Measuring window: count only the current session
             var session = Server.SessionOf(client.FullJid)!;
             await Task.Delay(300);
 
@@ -143,22 +144,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await Task.Delay(window);
 
-            var gezaehlt  = KeepaliveCount(session, streamManagement) - before2;
+            var counted   = KeepaliveCount(session, streamManagement) - before2;
             var expected  = (Int32) (window.TotalMilliseconds / Keepalive.TotalMilliseconds);
             var limit     = expected + 2;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gezaehlt, Is.LessThanOrEqualTo(limit),
-                            $"{gezaehlt} Keepalives in {window.TotalSeconds}s, erwartet höchstens {limit}. " +
-                            $"Das deutet auf {Math.Round((Double) gezaehlt / expected, 1)} parallele Keepalive-Schleifen hin.");
+                Assert.That(counted, Is.LessThanOrEqualTo(limit),
+                            $"{counted} keepalives in {window.TotalSeconds}s, expected at most {limit}. " +
+                            $"That points to {Math.Round((Double) counted / expected, 1)} parallel keepalive loops.");
 
-                // Die Untergrenze ist der eigentliche Zugewinn: ohne sie besteht
-                // dieser Test auch dann, wenn gar kein Keepalive mehr feuert -
-                // und genau das war er eine Zeitlang.
-                Assert.That(gezaehlt, Is.GreaterThan(0),
-                            "Kein einziges Keepalive im Messfenster - dann prüft dieser Test nichts.");
+                // The lower bound is what really gained something: without it
+                // this test passes even when no keepalive fires at all - and
+                // that is what it was for a while.
+                Assert.That(counted, Is.GreaterThan(0),
+                            "Not a single keepalive in the measuring window - then this test checks nothing.");
 
             });
 
@@ -169,7 +170,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Disconnect_StopsKeepalive()
 
         /// <summary>
-        /// Nach dem Trennen darf kein Keepalive mehr feuern.
+        /// After disconnecting no keepalive may fire any more.
         /// </summary>
         [Test]
         [TestCase(true,  TestName = "Disconnect_StopsKeepalive(Stream Management)")]
@@ -182,17 +183,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session  = Server.SessionOf(client.FullJid)!;
 
             await WaitFor(() => KeepaliveCount(session, streamManagement) > 0,
-                          "erstes Keepalive");
+                          "the first keepalive");
 
             await client.DisconnectAsync();
             await Task.Delay(300);
 
-            var nachTrennung = KeepaliveCount(session, streamManagement);
+            var afterDisconnect = KeepaliveCount(session, streamManagement);
 
             await Task.Delay(TimeSpan.FromSeconds(2));
 
-            Assert.That(KeepaliveCount(session, streamManagement), Is.EqualTo(nachTrennung),
-                        "Nach dem Trennen kamen weitere Keepalives an.");
+            Assert.That(KeepaliveCount(session, streamManagement), Is.EqualTo(afterDisconnect),
+                        "Further keepalives arrived after disconnecting.");
 
         }
 
@@ -201,9 +202,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Disconnect_WithSilentServer_ReturnsWithinCloseTimeout()
 
         /// <summary>
-        /// Beantwortet der Server das Close-Frame nicht, darf DisconnectAsync
-        /// trotzdem zügig zurückkehren - der Close-Handshake ist auf drei
-        /// Sekunden begrenzt, danach wird der Socket abgebrochen.
+        /// If the server does not answer the close frame, DisconnectAsync must
+        /// still come back promptly - the close handshake is limited to three
+        /// seconds, after which the socket is torn down.
         /// </summary>
         [Test]
         public async Task Disconnect_WithSilentServer_ReturnsWithinCloseTimeout()
@@ -221,16 +222,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(sw.Elapsed, Is.LessThan(TimeSpan.FromSeconds(10)),
-                            $"DisconnectAsync hing {sw.Elapsed.TotalSeconds:F1}s.");
+                            $"DisconnectAsync hung for {sw.Elapsed.TotalSeconds:F1}s.");
 
-                // Ohne Untergrenze bestünde der Test auch dann, wenn der Server
-                // gar nicht schweigt, sondern die Verbindung abreisst - der
-                // Client kehrt dann sofort zurück und das Zeitlimit hat nie
-                // gegriffen. Genau so ist er beim Umbau des Transports einmal
-                // durchgelaufen.
+                // Without a lower bound the test would pass even when the server
+                // does not stay silent but tears the connection down - the
+                // client then comes back at once and the time limit never took
+                // hold. That is exactly how it ran through once while the
+                // transport was being rebuilt.
                 Assert.That(sw.Elapsed, Is.GreaterThan(TimeSpan.FromSeconds(2)),
-                            $"DisconnectAsync kehrte nach {sw.Elapsed.TotalSeconds:F1}s zurück - " +
-                            "das Zeitlimit des Close-Handshakes kann nicht gegriffen haben.");
+                            $"DisconnectAsync came back after {sw.Elapsed.TotalSeconds:F1}s - " +
+                            "the time limit of the close handshake cannot have taken hold.");
 
                 Assert.That(client.IsConnected, Is.False);
             });

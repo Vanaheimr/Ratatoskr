@@ -31,16 +31,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6120, Abschnitt 5: XMPP läuft über TLS.
+    /// RFC 6120, section 5: XMPP runs over TLS.
     ///
-    /// Der Testserver sprach <c>ws://</c>, also gingen die Passwörter der
-    /// SASL-PLAIN-Anmeldung im Klartext über die Leitung. Alles andere in
-    /// diesem Projekt war damit akademisch.
+    /// The test server spoke <c>ws://</c>, so the passwords of the SASL PLAIN
+    /// login went over the wire in the clear. Everything else in this project
+    /// was academic while that was so.
     ///
-    /// Diese Tests prüfen zweierlei, und das zweite ist das schwierigere: dass
-    /// eine Verbindung zustande kommt, und dass sie es aus dem richtigen Grund
-    /// tut. Eine TLS-Prüfung, die alles durchwinkt, ist von einer, die das
-    /// richtige Zertifikat erkennt, nur an den Gegenproben zu unterscheiden.
+    /// These tests check two things, and the second is the harder one: that a
+    /// connection comes about, and that it does so for the right reason. A TLS
+    /// check that waves everything through can only be told from one that
+    /// recognises the right certificate by the counter-checks.
     /// </summary>
     [TestFixture]
     public class TlsTests : AXMPPTests
@@ -49,8 +49,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ServerUri_IsWss()
 
         /// <summary>
-        /// Der Einstieg: der Server bietet <c>wss://</c> an, nicht
-        /// <c>ws://</c>.
+        /// The way in: the server offers <c>wss://</c>, not <c>ws://</c>.
         /// </summary>
         [Test]
         public void ServerUri_IsWss()
@@ -59,10 +58,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(Server.Uri, Does.StartWith("wss://"),
-                            "Der Server muss über TLS erreichbar sein.");
+                            "The server has to be reachable over TLS.");
 
                 Assert.That(Server.Certificate, Is.Not.Null,
-                            "Ohne Zertifikat gibt es kein TLS.");
+                            "Without a certificate there is no TLS.");
             });
 
         }
@@ -72,8 +71,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Client_ConnectsOverTls()
 
         /// <summary>
-        /// Ein Client verbindet sich über TLS und kann sich anmelden - die
-        /// gesamte Aushandlung läuft dann verschlüsselt.
+        /// A client connects over TLS and can log in - the whole negotiation
+        /// then runs encrypted.
         /// </summary>
         [Test]
         public async Task Client_ConnectsOverTls()
@@ -94,12 +93,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RejectedCertificate_PreventsTheConnection()
 
         /// <summary>
-        /// Die erste Gegenprobe: weist der Client das Zertifikat zurück, kommt
-        /// keine Verbindung zustande.
+        /// The first counter-check: if the client turns the certificate away,
+        /// no connection comes about.
         ///
-        /// Ohne diesen Test bestünde der vorige auch dann, wenn gar kein TLS im
-        /// Spiel wäre - eine Zertifikatsprüfung, die nie aufgerufen wird, kann
-        /// nichts verhindern.
+        /// Without this test the previous one would pass even if no TLS were
+        /// involved at all - a certificate check that is never called can
+        /// prevent nothing.
         /// </summary>
         [Test]
         public async Task RejectedCertificate_PreventsTheConnection()
@@ -120,10 +119,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(client.IsConnected, Is.False,
-                            "Ein zurückgewiesenes Zertifikat darf keine Verbindung ergeben.");
+                            "A certificate that was turned away must not yield a connection.");
 
                 Assert.That(errors, Is.Not.Empty,
-                            "Der Abbruch muss gemeldet werden.");
+                            "The break-off has to be reported.");
             });
 
         }
@@ -133,12 +132,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DefaultValidation_RejectsTheSelfSignedCertificate()
 
         /// <summary>
-        /// Die zweite Gegenprobe: ohne eigene Prüfung greift die des
-        /// Betriebssystems, und die lehnt ein selbst signiertes Zertifikat ab.
+        /// The second counter-check: without a check of one's own the operating
+        /// system's takes hold, and that refuses a self-signed certificate.
         ///
-        /// Damit ist belegt, dass die Verbindungen der übrigen Tests am
-        /// angehefteten Fingerabdruck hängen und nicht daran, dass irgendwo
-        /// eine Prüfung fehlt.
+        /// That vouches for the connections of the other tests hanging on the
+        /// pinned fingerprint and not on a check being missing somewhere.
         /// </summary>
         [Test]
         public async Task DefaultValidation_RejectsTheSelfSignedCertificate()
@@ -154,7 +152,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await FailingConnectAsync(client);
 
             Assert.That(client.IsConnected, Is.False,
-                        "Ein selbst signiertes Zertifikat darf die Standardprüfung nicht bestehen.");
+                        "A self-signed certificate must not pass the standard check.");
 
         }
 
@@ -163,30 +161,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PinnedCertificate_AcceptsOnlyTheOwnOne()
 
         /// <summary>
-        /// Die Prüfung, mit der alle Tests arbeiten, nimmt genau das
-        /// Zertifikat dieses Servers an - ein anderes, gleich gebautes nicht.
+        /// The check all the tests work with accepts exactly the certificate of
+        /// this server - another one, built the same way, it does not.
         /// </summary>
         /// <remarks>
-        /// Ein zweiter Server erzeugt sich ein eigenes Zertifikat mit
-        /// demselben Namen. Würde die Prüfung nur den Namen ansehen, ginge das
-        /// hier durch.
+        /// A second server makes itself a certificate of its own with the same
+        /// name. If the check looked only at the name, this would go through.
         /// </remarks>
         [Test]
         public async Task PinnedCertificate_AcceptsOnlyTheOwnOne()
         {
 
-            await using var anderer = Watched(new XMPPServer());
+            await using var other = Watched(new XMPPServer());
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(Server.IsOwnCertificate(this, Server.Certificate, null, System.Net.Security.SslPolicyErrors.None),
                             Is.True,
-                            "Das eigene Zertifikat muss angenommen werden.");
+                            "The own certificate has to be accepted.");
 
-                Assert.That(Server.IsOwnCertificate(this, anderer.Certificate, null, System.Net.Security.SslPolicyErrors.None),
+                Assert.That(Server.IsOwnCertificate(this, other.Certificate, null, System.Net.Security.SslPolicyErrors.None),
                             Is.False,
-                            "Das Zertifikat eines anderen Servers darf nicht durchgehen.");
+                            "The certificate of another server must not go through.");
 
             });
 
@@ -197,25 +194,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PlainServer_StillSpeaksWs()
 
         /// <summary>
-        /// Der Ausweg bleibt offen: ohne TLS spricht der Server weiterhin
-        /// <c>ws://</c>. Das ist für die Fehlersuche mit einem Mitschnitt
-        /// nützlich - und der Schalter soll nicht bloss behauptet sein.
+        /// The way out stays open: without TLS the server goes on speaking
+        /// <c>ws://</c>. That is useful for hunting faults with a recording -
+        /// and the switch should not be merely claimed.
         /// </summary>
         [Test]
         public async Task PlainServer_StillSpeaksWs()
         {
 
-            await using var klartext = Watched(new XMPPServer(useTLS: false));
+            await using var plain = Watched(new XMPPServer(useTLS: false));
 
-            klartext.Start();
-            klartext.AddAccount("alice");
+            plain.Start();
+            plain.AddAccount("alice");
 
-            Assert.That(klartext.Uri, Does.StartWith("ws://"));
-            Assert.That(klartext.Certificate, Is.Null);
+            Assert.That(plain.Uri, Does.StartWith("ws://"));
+            Assert.That(plain.Certificate, Is.Null);
 
-            var connection = new XMPPConnection($"alice@{klartext.Domain}",
+            var connection = new XMPPConnection($"alice@{plain.Domain}",
                                                 "pw",
-                                                klartext.Uri)
+                                                plain.Uri)
             {
                 KeepaliveEnabled      = false,
                 MaxReconnectAttempts  = 0
@@ -234,39 +231,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASuppliedCertificate_IsUsedInsteadOfASelfSignedOne()
 
         /// <summary>
-        /// Das Serverzertifikat darf von aussen kommen.
+        /// The server certificate may come from outside.
         /// </summary>
         /// <remarks>
-        /// Ein selbst signiertes Zertifikat kann keine fremde Gegenstelle
-        /// prüfen: sie müsste genau dieses eine kennen, und es entsteht bei
-        /// jedem Start neu. Für einen Lauf gegen Prosody - und für jeden
-        /// Betrieb, der kein Test ist - muss es aus einer Kette kommen, der
-        /// beide Seiten trauen. Daran scheiterte der Anlauf gegen eine fremde
-        /// Gegenstelle, bevor ein einziges Byte Protokoll gewechselt war.
+        /// A self-signed certificate cannot be checked by a foreign
+        /// counterpart: it would have to know this one particular certificate,
+        /// and that arises anew at every start. For a run against Prosody - and
+        /// for any service that is not a test - it has to come from a chain
+        /// both sides trust. That is what the attempt against a foreign
+        /// counterpart failed at, before a single byte of protocol had been
+        /// exchanged.
         /// </remarks>
         [Test]
         public async Task ASuppliedCertificate_IsUsedInsteadOfASelfSignedOne()
         {
 
-            using var eigenes = ErzeugeZertifikat("beispiel.test");
+            using var own = MakeCertificate("example.test");
 
-            await using var server = Watched(new XMPPServer("beispiel.test", certificate: eigenes));
+            await using var server = Watched(new XMPPServer("example.test", certificate: own));
 
             server.Start();
             server.AddAccount("alice");
 
-            Assert.That(server.Certificate?.Thumbprint, Is.EqualTo(eigenes.Thumbprint),
-                        "Der Server hat sich trotzdem eines selbst gebaut.");
+            Assert.That(server.Certificate?.Thumbprint, Is.EqualTo(own.Thumbprint),
+                        "The server built itself one all the same.");
 
-            // Und es trägt auch wirklich den Handshake: die Prüfung des
-            // Clients heftet den Fingerabdruck genau dieses Zertifikats an.
+            // And it really does carry the handshake: the check on the client
+            // side pins the fingerprint of exactly this certificate.
             var connection = new XMPPConnection($"alice@{server.Domain}", "pw", server.Uri) {
                                  KeepaliveEnabled            = false,
                                  MaxReconnectAttempts        = 0,
                                  ServerCertificateValidator  = (_, c, _, _) =>
                                      c is not null &&
                                      c.GetCertHashString(HashAlgorithmName.SHA256)
-                                      .Equals(eigenes.GetCertHashString(HashAlgorithmName.SHA256),
+                                      .Equals(own.GetCertHashString(HashAlgorithmName.SHA256),
                                               StringComparison.OrdinalIgnoreCase)
                              };
 
@@ -278,7 +276,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static X509Certificate2 ErzeugeZertifikat(String domain)
+        private static X509Certificate2 MakeCertificate(String domain)
         {
 
             using var key = RSA.Create(2048);
@@ -290,15 +288,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             request.CertificateExtensions.Add(
                 new X509EnhancedKeyUsageExtension([new Oid("1.3.6.1.5.5.7.3.1")], true));
 
-            var namen = new SubjectAlternativeNameBuilder();
-            namen.AddDnsName(domain);
-            namen.AddDnsName("localhost");
-            request.CertificateExtensions.Add(namen.Build());
+            var names = new SubjectAlternativeNameBuilder();
+            names.AddDnsName(domain);
+            names.AddDnsName("localhost");
+            request.CertificateExtensions.Add(names.Build());
 
-            var zertifikat = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),
+            var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),
                                                       DateTimeOffset.UtcNow.AddDays(1));
 
-            return X509CertificateLoader.LoadPkcs12(zertifikat.Export(X509ContentType.Pfx), null);
+            return X509CertificateLoader.LoadPkcs12(certificate.Export(X509ContentType.Pfx), null);
 
         }
 

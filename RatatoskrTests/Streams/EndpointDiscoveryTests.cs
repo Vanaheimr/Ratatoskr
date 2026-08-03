@@ -27,25 +27,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0156 am Verbindungsaufbau: Wer keinen Endpunkt nennt, bekommt den
-    /// aus dem <c>host-meta</c> seiner Domain.
+    /// XEP-0156 at the connection setup: whoever names no endpoint gets the one
+    /// from the <c>host-meta</c> of their domain.
     /// </summary>
     /// <remarks>
-    /// Die Reihenfolge im XEP ist ausdrücklich eine Nachrangige: „HTTPS queries
-    /// for host-meta information MUST be used only as a fallback after the
-    /// methods specified in RFC 6120 have been exhausted." Für diesen Client
-    /// heisst das: Ein angegebener Endpunkt wird nie überstimmt. Gefragt wird
-    /// nur, wenn der Aufrufer keinen genannt hat - und schlägt auch das fehl,
-    /// bleibt es beim eingebauten Vorgabewert.
+    /// The order in the XEP is expressly a subordinate one: "HTTPS queries for
+    /// host-meta information MUST be used only as a fallback after the methods
+    /// specified in RFC 6120 have been exhausted." For this client that means:
+    /// an endpoint that was given is never overruled. The question is asked only
+    /// when the caller named none - and if that fails too, the built-in default
+    /// stands.
     /// </remarks>
     [TestFixture]
     public class EndpointDiscoveryTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Ein Abrufer, der für jede Adresse dieselbe Antwort gibt.</summary>
-        private static AltConnectionsResolver Antwortet(String? hostMeta)
+        /// <summary>A resolver that gives the same answer for every address.</summary>
+        private static AltConnectionsResolver Answers(String? hostMeta)
             => new ((uri, ct) => Task.FromResult(hostMeta));
 
         #endregion
@@ -54,8 +54,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDiscoveredEndpointIsUsed()
 
         /// <summary>
-        /// Der Kern: ohne angegebenen Endpunkt meldet sich der Client dort an,
-        /// wohin das <c>host-meta</c> zeigt.
+        /// The heart of it: without a given endpoint the client logs in where
+        /// the <c>host-meta</c> points.
         /// </summary>
         [Test]
         public async Task TheDiscoveredEndpointIsUsed()
@@ -66,7 +66,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var connection = new XMPPConnection($"alice@{Server.Domain}", "pw")
             {
                 ServerCertificateValidator  = Server.IsOwnCertificate,
-                EndpointDiscovery           = Antwortet(
+                EndpointDiscovery           = Answers(
                     "{ \"links\": [ { \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"" +
                     Server.Uri + "\" } ] }")
             };
@@ -90,59 +90,57 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAHostMeta_TheDefaultRemains()
 
         /// <summary>
-        /// Findet die Discovery nichts, bleibt der eingebaute Vorgabewert
-        /// stehen - und der Verbindungsaufbau scheitert dort, nicht an der
-        /// Discovery.
+        /// If the discovery finds nothing, the built-in default stands - and the
+        /// connection setup fails there, not at the discovery.
         /// </summary>
         /// <remarks>
-        /// Geprüft wird beides: der Endpunkt, bei dem es bleibt, und dass der
-        /// Fehler ihn nennt. Der Transport selbst tut das nicht - er meldet
-        /// „Unable to connect to the remote server" und schweigt darüber,
-        /// wohin (siehe D47).
+        /// Both are checked: the endpoint it stays at, and that the error names
+        /// it. The transport itself does not - it reports "Unable to connect to
+        /// the remote server" and says nothing about where to (see D47).
         /// </remarks>
         [Test]
         public async Task WithoutAHostMeta_TheDefaultRemains()
         {
 
-            var gefragt = 0;
+            var asked = 0;
 
             var connection = new XMPPConnection($"alice@{Server.Domain}", "pw")
             {
                 EndpointDiscovery      = new AltConnectionsResolver((uri, ct) =>
                                          {
-                                             gefragt++;
+                                             asked++;
                                              return Task.FromResult<String?>(null);
                                          }),
 
-                // Auf 5443 hört nichts; jeder Versuch endet sofort. Die
-                // Vorgabe wären fünf davon mit wachsender Wartezeit - für eine
-                // Aussage, die schon der erste trifft.
+                // Nothing listens on 5443; every attempt ends at once. The
+                // default would be five of them with growing waits - for a
+                // statement the first one already makes.
                 MaxReconnectAttempts   = 1,
                 InitialReconnectDelay  = TimeSpan.FromMilliseconds(50)
             };
 
             var client = new XMPPClient(connection);
 
-            var fehler = await FailingConnectAsync(client);
+            var error = await FailingConnectAsync(client);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(connection.WebSocketUri, Is.EqualTo($"wss://{Server.Domain}:5443/ws"));
 
-                Assert.That(fehler.Message, Does.Contain(connection.WebSocketUri),
-                            $"Der Fehler nennt den Endpunkt nicht: {fehler.Message}");
+                Assert.That(error.Message, Does.Contain(connection.WebSocketUri),
+                            $"The error does not name the endpoint: {error.Message}");
 
-                Assert.That(fehler.InnerException, Is.Not.Null,
-                            "Und er trägt den ursprünglichen Fehler bei sich.");
+                Assert.That(error.InnerException, Is.Not.Null,
+                            "And it carries the original error with it.");
 
-                // Zwei Adressen (host-meta.json und host-meta) - aber nur
-                // einmal, obwohl der Client danach noch einen zweiten
-                // Verbindungsversuch macht. Wer bei jedem Versuch neu sucht,
-                // wartet bei einem Server, der weg ist, jedes Mal wieder auf
-                // eine HTTPS-Antwort, die es nicht gibt.
-                Assert.That(gefragt, Is.EqualTo(2),
-                            $"Die Discovery lief mehr als einmal an: {gefragt} Abfragen.");
+                // Two addresses (host-meta.json and host-meta) - but only once,
+                // although the client makes a second connection attempt
+                // afterwards. Whoever searches afresh at every attempt waits,
+                // with a server that is gone, every time again for an HTTPS
+                // answer that does not exist.
+                Assert.That(asked, Is.EqualTo(2),
+                            $"The discovery ran more than once: {asked} queries.");
 
             });
 
@@ -153,27 +151,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheErrorNamesTheDiscoveredEndpoint()
 
         /// <summary>
-        /// Scheitert der Aufbau an einem <b>gefundenen</b> Endpunkt, nennt der
-        /// Fehler diesen - nicht den Vorgabewert.
+        /// If the setup fails at a <b>discovered</b> endpoint, the error names
+        /// that one - not the default.
         /// </summary>
         /// <remarks>
-        /// Das ist der Fall, für den der Endpunkt überhaupt in die Meldung
-        /// gehört: Er stammt aus dem <c>host-meta</c> einer fremden Domain und
-        /// steht in keinem Quelltext, den der Aufrufer lesen könnte. „Unable to
-        /// connect to the remote server" lässt ihn dann raten.
+        /// That is the case the endpoint belongs in the message for at all: it
+        /// comes from the <c>host-meta</c> of a foreign domain and stands in no
+        /// source the caller could read. "Unable to connect to the remote
+        /// server" then leaves them guessing.
         /// </remarks>
         [Test]
         public async Task TheErrorNamesTheDiscoveredEndpoint()
         {
 
-            // Auf Port 1 hört nichts, und zwar zuverlässig.
-            const String Gefunden = "wss://127.0.0.1:1/ws";
+            // Nothing listens on port 1, and reliably so.
+            const String Discovered = "wss://127.0.0.1:1/ws";
 
             var connection = new XMPPConnection($"alice@{Server.Domain}", "pw")
             {
-                EndpointDiscovery      = Antwortet(
+                EndpointDiscovery      = Answers(
                     "{ \"links\": [ { \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"" +
-                    Gefunden + "\" } ] }"),
+                    Discovered + "\" } ] }"),
 
                 MaxReconnectAttempts   = 1,
                 InitialReconnectDelay  = TimeSpan.FromMilliseconds(50)
@@ -181,13 +179,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client  = new XMPPClient(connection);
 
-            var fehler  = await FailingConnectAsync(client);
+            var error  = await FailingConnectAsync(client);
 
             Assert.Multiple(() =>
             {
-                Assert.That(connection.WebSocketUri, Is.EqualTo(Gefunden));
-                Assert.That(fehler.Message,          Does.Contain(Gefunden),
-                            $"Der Fehler nennt den gefundenen Endpunkt nicht: {fehler.Message}");
+                Assert.That(connection.WebSocketUri, Is.EqualTo(Discovered));
+                Assert.That(error.Message,          Does.Contain(Discovered),
+                            $"The error does not name the discovered endpoint: {error.Message}");
             });
 
         }
@@ -197,15 +195,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADeliberateCancel_StaysACancel()
 
         /// <summary>
-        /// Ein abgebrochener Verbindungsaufbau bleibt ein Abbruch und wird
-        /// nicht zum Protokollfehler umgedeutet.
+        /// A cancelled connection setup stays a cancellation and is not
+        /// reinterpreted as a protocol error.
         /// </summary>
         /// <remarks>
-        /// Die Meldung mit dem Endpunkt ist für das gedacht, was schiefgeht -
-        /// nicht für das, was der Aufrufer selbst veranlasst hat. Wer sein
-        /// Token zieht, bekommt seine <c>OperationCanceledException</c>, sonst
-        /// kann er den eigenen Abbruch nicht mehr von einem Fehlschlag
-        /// unterscheiden.
+        /// The message with the endpoint is meant for what goes wrong - not for
+        /// what the caller brought about themselves. Whoever pulls their token
+        /// gets their <c>OperationCanceledException</c>, otherwise they can no
+        /// longer tell their own cancellation from a failure.
         /// </remarks>
         [Test]
         public void ADeliberateCancel_StaysACancel()
@@ -216,10 +213,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 ServerCertificateValidator = Server.IsOwnCertificate
             };
 
-            using var abbruch = new CancellationTokenSource();
-            abbruch.Cancel();
+            using var cancel = new CancellationTokenSource();
+            cancel.Cancel();
 
-            Assert.That(async () => await connection.ConnectAsync(abbruch.Token),
+            Assert.That(async () => await connection.ConnectAsync(cancel.Token),
                         Throws.InstanceOf<OperationCanceledException>());
 
         }
@@ -229,14 +226,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGivenEndpoint_IsNeverOverruled()
 
         /// <summary>
-        /// Wer einen Endpunkt angibt, wird nicht gefragt - die Discovery läuft
-        /// gar nicht erst an.
+        /// Whoever gives an endpoint is not asked - the discovery does not run
+        /// at all.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test wäre „immer erst nachschauen" eine bestandene
-        /// Lösung. Sie wäre falsch und teuer: Ein Aufrufer, der seinen Endpunkt
-        /// kennt, zahlte für jede Verbindung eine HTTPS-Abfrage, und ein
-        /// fremdes <c>host-meta</c> könnte ihn woandershin schicken.
+        /// Without this test "always look first" would be a passing solution. It
+        /// would be wrong and expensive: a caller who knows their endpoint would
+        /// pay an HTTPS query for every connection, and a foreign
+        /// <c>host-meta</c> could send them somewhere else.
         /// </remarks>
         [Test]
         public async Task AGivenEndpoint_IsNeverOverruled()
@@ -244,17 +241,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            var gefragt = false;
+            var asked = false;
 
             var connection = new XMPPConnection($"alice@{Server.Domain}", "pw", Server.Uri)
             {
                 ServerCertificateValidator  = Server.IsOwnCertificate,
                 EndpointDiscovery           = new AltConnectionsResolver((uri, ct) =>
                                               {
-                                                  gefragt = true;
+                                                  asked = true;
                                                   return Task.FromResult<String?>(
                                                       "{ \"links\": [ { \"rel\": \"urn:xmpp:alt-connections:websocket\"," +
-                                                      " \"href\": \"wss://woanders.example:443/ws\" } ] }");
+                                                      " \"href\": \"wss://elsewhere.example:443/ws\" } ] }");
                                               })
             };
 
@@ -264,7 +261,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(gefragt,                 Is.False, "Der angegebene Endpunkt steht nicht zur Debatte.");
+                Assert.That(asked,                 Is.False, "The endpoint that was given is not up for debate.");
                 Assert.That(connection.WebSocketUri, Is.EqualTo(Server.Uri));
             });
 

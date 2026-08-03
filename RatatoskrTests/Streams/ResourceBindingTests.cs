@@ -27,28 +27,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6120, Abschnitt 7: das Resource Binding.
+    /// RFC 6120, section 7: the resource binding.
     ///
-    /// Der Client bat um <c>console-&lt;Prozess-ID&gt;</c> und hatte keinen
-    /// Plan B. Ein Server, der eine belegte Resource ablehnt statt selbst eine
-    /// freie zu vergeben - Abschnitt 7.7.2.2 lässt ihm die Wahl -, brachte
-    /// damit jeden zweiten Client im selben Prozess zum Scheitern.
+    /// The client asked for <c>console-&lt;process id&gt;</c> and had no plan
+    /// B. A server that refuses a resource already in use instead of handing
+    /// out a free one itself - section 7.7.2.2 leaves it the choice - thereby
+    /// made every second client in the same process fail.
     /// </summary>
     [TestFixture]
     public class ResourceBindingTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Erstellt einen Client ohne Reconnect.
+        /// Creates a client without reconnecting.
         /// </summary>
         /// <remarks>
-        /// Ein gescheitertes Binding lässt den Client sonst bis zu zwanzigmal
-        /// neu verbinden. Diese Tests fragen aber, ob das Binding
-        /// <b>selbst</b> zurechtkommt - über einen Reconnect zum Ziel zu
-        /// finden wäre keine Antwort darauf, nur eine langsame Wiederholung
-        /// derselben Frage.
+        /// A failed binding otherwise makes the client connect anew up to
+        /// twenty times. These tests ask whether the binding copes
+        /// <b>itself</b>, though - finding the way to the goal over a reconnect
+        /// would be no answer to that, only a slow repetition of the same
+        /// question.
         /// </remarks>
         private XMPPClient SingleAttemptClient(String localPart = "alice")
         {
@@ -69,8 +69,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConflictingResource_IsRetriedWithoutOne()
 
         /// <summary>
-        /// Der Kern: nach <c>&lt;conflict/&gt;</c> bindet der Client einmal
-        /// ohne Wunsch neu und übernimmt, was der Server vergibt.
+        /// The heart of it: after a <c>&lt;conflict/&gt;</c> the client binds
+        /// once more without a wish and takes what the server hands out.
         /// </summary>
         [Test]
         public async Task ConflictingResource_IsRetriedWithoutOne()
@@ -78,17 +78,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.ConflictOnUsedResource = true;
 
-            var erste  = await ConnectClientAsync("alice");
-            var zweite = SingleAttemptClient();
+            var first  = await ConnectClientAsync("alice");
+            var second = SingleAttemptClient();
 
-            await zweite.ConnectAsync();
+            await second.ConnectAsync();
 
             Assert.Multiple(() =>
             {
-                Assert.That(zweite.IsConnected, Is.True,
-                            "Die zweite Resource muss trotz Konflikt zustande kommen.");
-                Assert.That(zweite.FullJid, Is.Not.EqualTo(erste.FullJid));
-                Assert.That(zweite.BareJid, Is.EqualTo(erste.BareJid));
+                Assert.That(second.IsConnected, Is.True,
+                            "The second resource has to come about despite the conflict.");
+                Assert.That(second.FullJid, Is.Not.EqualTo(first.FullJid));
+                Assert.That(second.BareJid, Is.EqualTo(first.BareJid));
             });
 
         }
@@ -98,9 +98,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConflictingResource_KeepsBothSessionsUsable()
 
         /// <summary>
-        /// Die neu vergebene Resource muss auch adressierbar sein - sonst wäre
-        /// der Client zwar verbunden, aber unter einem JID, den der Server
-        /// nicht kennt.
+        /// The newly handed-out resource must be addressable as well - otherwise
+        /// the client would be connected, but under a JID the server does not
+        /// know.
         /// </summary>
         [Test]
         public async Task ConflictingResource_KeepsBothSessionsUsable()
@@ -109,12 +109,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.ConflictOnUsedResource = true;
 
             await ConnectClientAsync("alice");
-            var zweite = SingleAttemptClient();
+            var second = SingleAttemptClient();
 
-            await zweite.ConnectAsync();
+            await second.ConnectAsync();
 
-            await WaitFor(() => Server.SessionOf(zweite.FullJid) is not null,
-                          "Serversitzung zur neu vergebenen Resource");
+            await WaitFor(() => Server.SessionOf(second.FullJid) is not null,
+                          "the server session for the newly handed-out resource");
 
         }
 
@@ -123,9 +123,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NonConflictRejection_IsNotRetried()
 
         /// <summary>
-        /// Nur ein Konflikt rechtfertigt den zweiten Versuch. Wird das Binding
-        /// aus einem anderen Grund abgelehnt, käme derselbe Fehler wieder -
-        /// der Client bricht ab, statt es noch einmal zu probieren.
+        /// Only a conflict justifies the second attempt. If the binding is
+        /// refused for another reason, the same error would come back - the
+        /// client breaks off instead of trying again.
         /// </summary>
         [Test]
         public async Task NonConflictRejection_IsNotRetried()
@@ -147,7 +147,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(Server.AllReceived.Count(f => f.Contains("urn:ietf:params:xml:ns:xmpp-bind",
                                                                      StringComparison.Ordinal)),
                             Is.EqualTo(1),
-                            "Auf eine Ablehnung ohne Konflikt gehört genau ein Versuch.");
+                            "A refusal without a conflict deserves exactly one attempt.");
             });
 
         }
@@ -157,21 +157,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConfiguredResource_IsRequested()
 
         /// <summary>
-        /// <c>console-&lt;Prozess-ID&gt;</c> war fest verdrahtet - in einer
-        /// Bibliothek doppelt unpassend: der Name behauptet eine Konsole, und
-        /// zwei Nutzer derselben Bibliothek im selben Prozess bekamen
-        /// denselben Wunsch.
+        /// <c>console-&lt;process id&gt;</c> was hard-wired - in a library
+        /// doubly unfitting: the name claims a console, and two users of the
+        /// same library in the same process got the same wish.
         /// </summary>
         [Test]
         public async Task ConfiguredResource_IsRequested()
         {
 
             var client = SingleAttemptClient();
-            client.Connection.Resource = "telefon";
+            client.Connection.Resource = "phone";
 
             await client.ConnectAsync();
 
-            Assert.That(client.FullJid, Does.EndWith("/telefon"));
+            Assert.That(client.FullJid, Does.EndWith("/phone"));
 
         }
 
@@ -180,8 +179,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NoResource_LetsTheServerChoose()
 
         /// <summary>
-        /// Ohne Wunsch vergibt der Server (RFC 6120, Abschnitt 7.6). Das ist
-        /// derselbe Weg, den der Client nach einem Konflikt geht.
+        /// Without a wish the server hands one out (RFC 6120, section 7.6).
+        /// That is the same way the client goes after a conflict.
         /// </summary>
         [Test]
         public async Task NoResource_LetsTheServerChoose()
@@ -205,21 +204,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UsedResource_IsVariedByDefault()
 
         /// <summary>
-        /// Gegenprobe zum Default: ohne den Schalter vergibt der Server selbst
-        /// eine abweichende Resource, und der Client merkt vom Konflikt nichts.
-        /// So verhalten sich die verbreiteten Server.
+        /// The counter-check to the default: without the switch the server
+        /// hands out a differing resource itself, and the client notices
+        /// nothing of the conflict. That is how the widespread servers behave.
         /// </summary>
         [Test]
         public async Task UsedResource_IsVariedByDefault()
         {
 
-            var erste  = await ConnectClientAsync("alice");
-            var zweite = await ConnectClientAsync("alice");
+            var first  = await ConnectClientAsync("alice");
+            var second = await ConnectClientAsync("alice");
 
             Assert.Multiple(() =>
             {
-                Assert.That(zweite.IsConnected, Is.True);
-                Assert.That(zweite.FullJid, Is.Not.EqualTo(erste.FullJid));
+                Assert.That(second.IsConnected, Is.True);
+                Assert.That(second.FullJid, Is.Not.EqualTo(first.FullJid));
             });
 
         }

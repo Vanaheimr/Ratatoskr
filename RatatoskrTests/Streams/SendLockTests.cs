@@ -27,15 +27,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XMPPConnection serialisiert ausgehende Stanzas über ein SemaphoreSlim,
-    /// weil der WebSocket-Vertrag nur einen ausstehenden Sendevorgang erlaubt
-    /// und aus mehreren Richtungen gleichzeitig gesendet wird (Keepalive,
-    /// Auto-Receipts aus der Empfangsschleife, Benutzeraktionen).
+    /// XMPPConnection serialises outgoing stanzas through a SemaphoreSlim,
+    /// because the WebSocket contract allows only one outstanding send and
+    /// sending happens from several directions at once (keepalive, automatic
+    /// receipts from the receive loop, user actions).
     ///
-    /// Hinweis zur Einordnung: ClientWebSocket serialisiert unter .NET 10
-    /// bereits intern, ein ungeschützter Aufruf brach in Messungen nicht. Das
-    /// Lock sichert die Zusicherung explizit ab, statt sich auf ein
-    /// undokumentiertes Implementierungsdetail zu verlassen.
+    /// A note on where this stands: ClientWebSocket already serialises
+    /// internally under .NET 10, and an unguarded call did not break in
+    /// measurements. The lock secures the promise expressly instead of relying
+    /// on an undocumented implementation detail.
     /// </summary>
     [TestFixture]
     public class SendLockTests : AXMPPTests
@@ -51,10 +51,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConcurrentSends_ArriveIntactAndComplete()
 
         /// <summary>
-        /// 200 gleichzeitige Sends mit je 40 kB Nutzlast müssen fehlerfrei
-        /// durchlaufen und unverfälscht ankommen. Vermischen sich die Frames,
-        /// stimmt entweder die Länge nicht oder der Rumpf ist nicht mehr
-        /// einheitlich.
+        /// 200 simultaneous sends with 40 kB of payload each must run through
+        /// without an error and arrive unfalsified. If the frames mix, either
+        /// the length is wrong or the body is no longer uniform.
         /// </summary>
         [Test]
         public async Task ConcurrentSends_ArriveIntactAndComplete()
@@ -80,65 +79,65 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var failed = errors.Where(e => e is not null).ToList();
 
             Assert.That(failed, Is.Empty,
-                        $"{failed.Count} von {Burst} parallelen Sends sind fehlgeschlagen, " +
-                        $"erster Fehler: {failed.FirstOrDefault()?.Message}");
+                        $"{failed.Count} of {Burst} parallel sends failed, " +
+                        $"first error: {failed.FirstOrDefault()?.Message}");
 
             await WaitFor(() => Inspect(session.Received).intact == Burst,
-                          $"Eintreffen aller {Burst} Stanzas",
+                          $"the arrival of all {Burst} stanzas",
                           TimeSpan.FromSeconds(20));
 
             var (intact, corrupt) = Inspect(session.Received);
 
             Assert.Multiple(() =>
             {
-                Assert.That(intact,  Is.EqualTo(Burst), "Es fehlen Stanzas.");
-                Assert.That(corrupt, Is.Zero,           "Es sind beschädigte Stanzas angekommen.");
+                Assert.That(intact,  Is.EqualTo(Burst), "Stanzas are missing.");
+                Assert.That(corrupt, Is.Zero,           "Damaged stanzas have arrived.");
             });
 
         }
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Eine Stanza, deren Rumpf aus genau einem wiederholten Zeichen besteht.</summary>
+        /// <summary>A stanza whose body consists of exactly one repeated character.</summary>
         /// <remarks>
-        /// Hier stand bis D26 ein erfundenes <c>&lt;p/&gt;</c>. Der Gedanke war
-        /// richtig — der Rahmen soll <b>folgenlos</b> sein, damit dieser Test
-        /// den Sende-Lock und die Unversehrtheit misst und nicht nebenbei die
-        /// Zustellung. Der Weg dorthin trägt nicht mehr: Seit D26 beendet der
-        /// Server einen Stream, auf dem ein unbekanntes Element ankommt (RFC
-        /// 6120, Abschnitt 4.9.3.24), und der erste der 200 Rahmen riss die
-        /// Verbindung für die übrigen 199.
+        /// Until D26 an invented <c>&lt;p/&gt;</c> stood here. The thought was
+        /// right — the frame is meant to be <b>without consequence</b>, so that
+        /// this test measures the send lock and the intactness and not, in
+        /// passing, the delivery. The way there no longer carries: since D26 the
+        /// server ends a stream on which an unknown element arrives (RFC 6120,
+        /// section 4.9.3.24), and the first of the 200 frames tore the
+        /// connection down for the remaining 199.
         ///
-        /// Folgenlos ist jetzt anders erreicht: Ein <c>iq</c> vom Typ
-        /// <c>result</c> ohne Empfänger ist eine <b>Antwort an den Server auf
-        /// nichts</b>. RFC 6120, Abschnitt 8.2.3, Regel 4 verbietet, darauf zu
-        /// antworten; es wird also angenommen, aufgezeichnet und fallen
-        /// gelassen. Genau das, was das <c>&lt;p/&gt;</c> geleistet hat, nur mit
-        /// einem Element, das es im Protokoll gibt.
+        /// Being without consequence is achieved differently now: an <c>iq</c>
+        /// of type <c>result</c> without a recipient is an <b>answer to the
+        /// server about nothing</b>. RFC 6120, section 8.2.3, rule 4 forbids
+        /// answering it; so it is accepted, recorded and dropped. Exactly what
+        /// the <c>&lt;p/&gt;</c> achieved, only with an element the protocol
+        /// actually has.
         /// </remarks>
         private static String Payload(Int32 i)
             => $"<iq type='result' id='burst-{i}'>" +
                new String((Char) ('A' + i % 26), PayloadSize) +
                "</iq>";
 
-        /// <summary>Zählt vollständige und beschädigte Payload-Frames.</summary>
+        /// <summary>Counts complete and damaged payload frames.</summary>
         private static (Int32 intact, Int32 corrupt) Inspect(IEnumerable<String> frames)
         {
 
             Int32 intact = 0, corrupt = 0;
 
-            // Der Rahmen kommt nicht so an, wie er abgeschickt wurde: Der Client
-            // setzt auf jede Stanza den Namensraum jabber:client (RFC 7395,
-            // Abschnitt 3.3.3 - über WebSocket gibt es kein umschliessendes
-            // <stream:stream>, von dem sie ihn erben könnte). Das <p/> von
-            // früher bekam ihn nicht, weil es keine Stanza war.
+            // The frame does not arrive as it was sent: the client puts the
+            // namespace jabber:client on every stanza (RFC 7395, section 3.3.3
+            // - over WebSocket there is no enclosing <stream:stream> for it to
+            // inherit one from). The <p/> of earlier days did not get one,
+            // because it was not a stanza.
             //
-            // Deshalb wird die Reihenfolge der Attribute hier nicht festgelegt,
-            // wohl aber der Rahmen als Ganzes: Anfang, id, Rumpf und Ende. Genau
-            // darum geht es - dass sich zwei gleichzeitige Sends nicht ineinander
-            // schieben.
+            // So the order of the attributes is not pinned down here, but the
+            // frame as a whole is: beginning, id, body and end. That is what
+            // this is about - that two simultaneous sends do not slide into
+            // each other.
             foreach (var f in frames.Where(x => x.Contains("id='burst-", StringComparison.Ordinal)))
             {
 

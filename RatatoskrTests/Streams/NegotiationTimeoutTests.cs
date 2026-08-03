@@ -30,29 +30,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Aushandlung wartet nicht ewig: Bleibt eine Antwort aus, scheitert
-    /// der Verbindungsaufbau mit einer Meldung statt zu hängen.
+    /// The negotiation does not wait for ever: if an answer fails to come, the
+    /// connection setup fails with a message instead of hanging.
     /// </summary>
     /// <remarks>
-    /// Der Fall ist an fünf Mutationen aufgefallen, verteilt über D25 bis D29,
-    /// und jedes Mal auf dieselbe Weise: Der Lauf hing, statt zu scheitern —
-    /// ein Ergebnis, das keines ist. Fünfmal derselbe Befund aus fünf
-    /// Richtungen ist keine Beobachtung mehr, sondern eine Eigenschaft.
+    /// The case showed up at five mutations, spread over D25 to D29, and every
+    /// time in the same way: the run hung instead of failing — a result that is
+    /// none. The same finding five times from five directions is no longer an
+    /// observation but a property.
     ///
-    /// **Und der Vermerk dazu war im Detail falsch.** Er lautete „ConnectAsync
-    /// wartet ohne eigene Frist auf die Antwort zum Resource Binding". Das
-    /// Binding hat sehr wohl eine Frist — <c>SendIqAsync</c> setzt sie seit
-    /// jeher. Ohne Frist waren die <b>Lese-Schritte</b> der Aushandlung: Der
-    /// Stream-Kopf, die Features, jede SASL-Runde gehen über
-    /// <c>ReceiveStanzaAsync</c>, und das wartete allein auf dem Token des
-    /// Aufrufers. Ein aus dem Kopf geschriebener Vermerk ist eben keine
-    /// Bestandsaufnahme — dieselbe Lehre wie in D19 und D23, diesmal an einer
-    /// Diagnose statt an einer Liste.
+    /// **And the note about it was wrong in the detail.** It read "ConnectAsync
+    /// waits without a deadline of its own for the answer to the resource
+    /// binding". The binding very much has a deadline — <c>SendIqAsync</c> has
+    /// set one all along. What had no deadline were the <b>reading</b> steps of
+    /// the negotiation: the stream header, the features, every SASL round go
+    /// through <c>ReceiveStanzaAsync</c>, and that waited on the caller's token
+    /// alone. A note written from memory is not a survey — the same lesson as
+    /// in D19 and D23, this time on a diagnosis instead of on a list.
     ///
-    /// Was ein Fehlschlag nicht herstellt, ist Schweigen: Ein Fehler kommt an,
-    /// ein geschlossener Socket kommt an. Deshalb der Schalter
-    /// <see cref="XMPPServer.AnswerStreamOpen"/> — eine Gegenstelle, die die
-    /// Verbindung annimmt und dann nichts mehr sagt.
+    /// What a failure does not produce is silence: an error arrives, a closed
+    /// socket arrives. Hence the switch
+    /// <see cref="XMPPServer.AnswerStreamOpen"/> — a counterpart that accepts
+    /// the connection and then says nothing more.
     /// </remarks>
     [TestFixture]
     public class NegotiationTimeoutTests : AXMPPTests
@@ -61,23 +60,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASilentServer_DoesNotHangTheSetup()
 
         /// <summary>
-        /// Der Kern: Schweigt der Server nach der Stream-Eröffnung, scheitert
-        /// <c>ConnectAsync</c> — und zwar in endlicher Zeit.
+        /// The heart of it: if the server stays silent after the stream is
+        /// opened, <c>ConnectAsync</c> fails — and in finite time at that.
         /// </summary>
         /// <remarks>
-        /// Die eigene Frist des Tests ist grosszügiger als die des Clients und
-        /// trägt trotzdem die Aussage: Läuft sie ab, hat der Client nicht
-        /// aufgegeben, und genau das ist der Fehler, um den es geht. Ohne sie
-        /// hinge dieser Test so, wie der Verbindungsaufbau hing — ein Test, der
-        /// den Fehler nachstellt, den er prüft, ist keiner.
+        /// The test's own deadline is more generous than the client's and
+        /// carries the statement all the same: if it runs out, the client has
+        /// not given up, and that is exactly the fault this is about. Without
+        /// it this test would hang the way the connection setup hung — a test
+        /// that reproduces the fault it checks for is none.
         ///
-        /// Geprüft wird die <b>Rückkehr</b> und der gemeldete Fehler, nicht
-        /// eine Ausnahme: <c>ConnectInternalAsync</c> fängt jeden
-        /// Verbindungsfehler ab und meldet ihn über <c>OnError</c> und den
-        /// Zustand. Das ist die Bauart des Hauses und war nie der Mangel — der
-        /// Mangel war, dass der Aufruf gar nicht zurückkam. Ob ein
-        /// stillschweigend zurückkehrendes <c>ConnectAsync</c> eine gute
-        /// Schnittstelle ist, ist eine andere Frage und steht unter „Später".
+        /// What is checked is the <b>return</b> and the reported error, not an
+        /// exception: <c>ConnectInternalAsync</c> catches every connection
+        /// error and reports it through <c>OnError</c> and the state. That is
+        /// the way the house is built and was never the defect — the defect was
+        /// that the call did not come back at all. Whether a quietly returning
+        /// <c>ConnectAsync</c> is a good interface is another question and
+        /// stands under "later".
         /// </remarks>
         [Test]
         public async Task ASilentServer_DoesNotHangTheSetup()
@@ -88,30 +87,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = CreateClient("alice", maxReconnectAttempts: 0);
 
-            var gemeldet = new ConcurrentQueue<String>();
-            client.OnError += m => gemeldet.Enqueue(m);
+            var reported = new ConcurrentQueue<String>();
+            client.OnError += m => reported.Enqueue(m);
 
-            var uhr     = Stopwatch.StartNew();
-            var versuch = FailingConnectAsync(client);
+            var clock   = Stopwatch.StartNew();
+            var attempt = FailingConnectAsync(client);
 
-            var fertig = await Task.WhenAny(versuch, Task.Delay(TimeSpan.FromSeconds(40)));
+            var finished = await Task.WhenAny(attempt, Task.Delay(TimeSpan.FromSeconds(40)));
 
-            Assert.That(fertig, Is.SameAs(versuch),
-                        "Der Verbindungsaufbau hängt: Der Server schweigt, und der " +
-                        "Client wartet ohne Frist auf eine Antwort, die nie kommt.");
+            Assert.That(finished, Is.SameAs(attempt),
+                        "The connection setup hangs: the server stays silent, and the " +
+                        "client waits without a deadline for an answer that never comes.");
 
-            await versuch;
-            uhr.Stop();
+            await attempt;
+            clock.Stop();
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(client.IsConnected, Is.False,
-                            "Ein schweigender Server ist kein gelungener Aufbau.");
+                            "A silent server is not a successful setup.");
 
-                Assert.That(gemeldet, Is.Not.Empty,
-                            "Und er muss gemeldet werden - sonst ist er von einem " +
-                            "gelungenen Aufbau nicht zu unterscheiden.");
+                Assert.That(reported, Is.Not.Empty,
+                            "And it has to be reported - otherwise it cannot be told " +
+                            "apart from a successful setup.");
 
             });
 
@@ -122,12 +121,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFailureNamesTheStepThatTimedOut()
 
         /// <summary>
-        /// Die Meldung nennt den Schritt, an dem es hing.
+        /// The message names the step it hung at.
         /// </summary>
         /// <remarks>
-        /// Eine abgelaufene Frist ohne Angabe, worauf gewartet wurde, verschiebt
-        /// die Suche nur: Der Aufrufer weiss dann, dass etwas nicht kam, aber
-        /// nicht, was. Genau daran habe ich heute mehrfach Zeit verloren.
+        /// A deadline that ran out without saying what was being waited for only
+        /// shifts the search: the caller then knows that something did not come,
+        /// but not what. That is exactly what cost me time several times today.
         /// </remarks>
         [Test]
         public async Task TheFailureNamesTheStepThatTimedOut()
@@ -138,26 +137,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = CreateClient("alice", maxReconnectAttempts: 0);
 
-            var gemeldet = new ConcurrentQueue<String>();
-            client.OnError += m => gemeldet.Enqueue(m);
+            var reported = new ConcurrentQueue<String>();
+            client.OnError += m => reported.Enqueue(m);
 
-            var versuch = FailingConnectAsync(client);
-            var fertig  = await Task.WhenAny(versuch, Task.Delay(TimeSpan.FromSeconds(40)));
+            var attempt = FailingConnectAsync(client);
+            var finished  = await Task.WhenAny(attempt, Task.Delay(TimeSpan.FromSeconds(40)));
 
-            Assert.That(fertig, Is.SameAs(versuch), "Der Verbindungsaufbau hängt.");
+            Assert.That(finished, Is.SameAs(attempt), "The connection setup hangs.");
 
-            await versuch;
+            await attempt;
 
-            gemeldet.TryDequeue(out var meldung);
+            reported.TryDequeue(out var message);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(meldung, Does.Contain("negotiation"),
-                            "Die Meldung muss sagen, in welcher Phase es hing.");
+                Assert.That(message, Does.Contain("negotiation"),
+                            "The message has to say which phase it hung in.");
 
-                Assert.That(meldung, Does.Contain("stream header"),
-                            "Und auf welchen Schritt gewartet wurde.");
+                Assert.That(message, Does.Contain("stream header"),
+                            "And which step was being waited for.");
 
             });
 
@@ -168,23 +167,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFailedSetup_ThrowsInsteadOfReturningQuietly()
 
         /// <summary>
-        /// Ein gescheiterter Aufbau wirft — er kehrt nicht stillschweigend
-        /// zurück.
+        /// A failed setup throws — it does not come back in silence.
         /// </summary>
         /// <remarks>
-        /// Bis D31 meldete <c>ConnectAsync</c> einen Fehlschlag nur über
-        /// <c>OnError</c> und den Zustand. Wer nichts abonniert hatte, sah
-        /// zwischen gelungen und gescheitert <b>keinen Unterschied</b> — und
-        /// arbeitete auf einer Verbindung weiter, die es nicht gibt.
+        /// Until D31 <c>ConnectAsync</c> reported a failure only through
+        /// <c>OnError</c> and the state. Whoever had subscribed to nothing saw
+        /// <b>no difference</b> between success and failure — and carried on
+        /// working on a connection that does not exist.
         ///
-        /// Das ist dasselbe Übel wie in D30, eine Ebene höher: Dort kam gar
-        /// keine Antwort, hier kommt eine, die nichts sagt. Ein Rückgabewert
-        /// hätte es nicht behoben — einen kann man ignorieren, und ein
-        /// ignorierter Rückgabewert ist wieder Schweigen.
+        /// That is the same ill as in D30, one level up: there no answer came
+        /// at all, here one comes that says nothing. A return value would not
+        /// have cured it — a return value can be ignored, and an ignored return
+        /// value is silence again.
         ///
-        /// Nur der ausdrückliche Aufruf wirft. Der Wiederverbindungsversuch im
-        /// Hintergrund hat keinen Aufrufer, dem er etwas schulden könnte, und
-        /// meldet weiterhin über Ereignisse.
+        /// Only the express call throws. The reconnect attempt in the
+        /// background has no caller it could owe anything to, and goes on
+        /// reporting through events.
         /// </remarks>
         [Test]
         public void AFailedSetup_ThrowsInsteadOfReturningQuietly()
@@ -195,22 +193,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = CreateClient("alice", maxReconnectAttempts: 0);
 
-            var fehler = Assert.CatchAsync(async () => await client.ConnectAsync());
+            var error = Assert.CatchAsync(async () => await client.ConnectAsync());
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(fehler, Is.Not.Null,
-                            "Ein schweigender Server ist kein gelungener Aufbau - " +
-                            "und muss dem Aufrufer auffallen, auch ohne Abonnement.");
+                Assert.That(error, Is.Not.Null,
+                            "A silent server is not a successful setup - " +
+                            "and has to strike the caller, even without a subscription.");
 
-                // Der geworfene Fehler trägt dieselbe Auskunft wie der
-                // gemeldete. Stünde sie nur im Ereignis, müsste der Aufrufer
-                // doch wieder abonnieren, um zu erfahren, was los war - und
-                // genau das sollte der Wurf ihm ersparen.
-                Assert.That(fehler!.Message, Does.Contain("stream header"),
-                            "Der geworfene Fehler muss den Schritt nennen, nicht nur " +
-                            "die Tatsache des Scheiterns.");
+                // The error thrown carries the same information as the one
+                // reported. If it stood in the event only, the caller would have
+                // to subscribe after all to learn what was going on - and that
+                // is exactly what the throw is meant to spare them.
+                Assert.That(error!.Message, Does.Contain("stream header"),
+                            "The error thrown has to name the step, not merely " +
+                            "the fact of the failure.");
 
             });
 
@@ -221,13 +219,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOriginalErrorSurvivesTheThrow()
 
         /// <summary>
-        /// Geworfen wird der ursprüngliche Fehler, nicht eine Hülle darum.
+        /// What is thrown is the original error, not a shell around it.
         /// </summary>
         /// <remarks>
-        /// Ein falsches Passwort ist etwas anderes als eine
-        /// Zeitüberschreitung, und der Aufrufer soll das eine vom anderen
-        /// unterscheiden können, ohne in einer Meldung zu lesen. Eine
-        /// gemeinsame Hülle über allem nähme ihm genau das.
+        /// A wrong password is something other than a timeout, and the caller
+        /// should be able to tell the one from the other without reading a
+        /// message. A common shell over everything would take exactly that away
+        /// from them.
         /// </remarks>
         [Test]
         public void TheOriginalErrorSurvivesTheThrow()
@@ -235,11 +233,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            var client = CreateClient("alice", password: "falsch", maxReconnectAttempts: 0);
+            var client = CreateClient("alice", password: "wrong", maxReconnectAttempts: 0);
 
             Assert.That(async () => await client.ConnectAsync(),
                         Throws.InstanceOf<AuthenticationException>(),
-                        "Ein falsches Passwort bleibt ein Authentifizierungsfehler.");
+                        "A wrong password stays an authentication error.");
 
         }
 
@@ -248,11 +246,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAnsweringServer_IsUnaffected()
 
         /// <summary>
-        /// Die Gegenprobe: Der gewöhnliche Aufbau bleibt unberührt.
+        /// The counter-check: the ordinary setup stays untouched.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn die Frist so knapp
-        /// wäre, dass sie jeden Aufbau abwürgt.
+        /// Without it the collection would pass even if the deadline were so
+        /// tight that it choked off every setup.
         /// </remarks>
         [Test]
         public async Task AnAnsweringServer_IsUnaffected()
