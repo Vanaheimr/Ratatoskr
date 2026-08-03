@@ -67,8 +67,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -183,7 +183,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(empfangen[0].Body,        Is.EqualTo("Hallo per Zertifikat!"));
-                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@links.example"));
+                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@left.example"));
 
                 Assert.That(_rechtsLinks.DialbackVerificationCount, Is.Zero,
                             "Mit SASL-EXTERNAL darf die Gegenstelle nicht zurückfragen.");
@@ -222,7 +222,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WarteAuf(() => empfangen.Count > 0, "die Nachricht auf dem anderen Server");
 
             await WarteAuf(() => _rechtsLinks.DialbackVerificationCount > 0,
-                           "die Dialback-Rückfrage von rechts.example");
+                           "die Dialback-Rückfrage von right.example");
 
         }
 
@@ -260,7 +260,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ACertificateForAnotherDomain_GetsNothingThrough()
 
         /// <summary>
-        /// Wer sich als <c>links.example</c> ausgibt, aber ein Zertifikat für
+        /// Wer sich als <c>left.example</c> ausgibt, aber ein Zertifikat für
         /// <c>schwindler.example</c> vorlegt, kommt nicht durch.
         /// </summary>
         /// <remarks>
@@ -317,7 +317,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             const String Kopf = "<stream:stream xmlns='jabber:server' " +
                                 "xmlns:stream='http://etherx.jabber.org/streams' " +
                                 "xmlns:db='jabber:server:dialback' " +
-                                "from='links.example' to='rechts.example' version='1.0'>";
+                                "from='left.example' to='right.example' version='1.0'>";
 
             await Roh(Kopf);
             await RohLiesBis("urn:ietf:params:xml:ns:xmpp-tls");
@@ -330,7 +330,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await tls.AuthenticateAsClientAsync(
                       new SslClientAuthenticationOptions {
-                          TargetHost          = "rechts.example",
+                          TargetHost          = "right.example",
                           ClientCertificates  = [schwindler.Certificate!]
                       },
                       cts.Token);
@@ -366,13 +366,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WarteAuf(() => Sah("EXTERNAL"), "das SASL-Angebot");
 
-            var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("links.example"));
+            var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("left.example"));
 
             await Sende($"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>{authzid}</auth>");
 
             await WarteAuf(() => Sah("failure") || Sah("success"), "die SASL-Antwort");
 
-            await Sende($"<message from='wer@links.example' to='{bob.BareJid}' type='chat'>" +
+            await Sende($"<message from='wer@left.example' to='{bob.BareJid}' type='chat'>" +
                         "<body>Durchgerutscht?</body></message>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));

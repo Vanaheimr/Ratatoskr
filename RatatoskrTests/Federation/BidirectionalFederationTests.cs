@@ -94,8 +94,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private void EinseitigVerbinden(Boolean bidi)
         {
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -308,8 +308,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheReturnPath_GoesToTheRightDomain()
         {
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             var ferner = _guard.Watched(new XMPPServer("ferner.example"));
 

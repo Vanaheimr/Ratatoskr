@@ -86,8 +86,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -181,7 +181,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(empfangen[0].Body,         Is.EqualTo("Hallo über TCP!"));
-                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@links.example"));
+                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -320,7 +320,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// </remarks>
         [Test]
         public Task AnImpostorWithoutTheSecret_FailsDialbackOverTcp()
-            => HochstaplerScheitert("links.example");
+            => HochstaplerScheitert("left.example");
 
         #endregion
 
@@ -396,11 +396,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await Sende("<stream:stream xmlns='jabber:server' " +
                         "xmlns:stream='http://etherx.jabber.org/streams' " +
                         "xmlns:db='jabber:server:dialback' " +
-                        $"from='{behaupteteDomain}' to='rechts.example' version='1.0'>");
+                        $"from='{behaupteteDomain}' to='right.example' version='1.0'>");
 
             await WarteAuf(() => Sah("<stream:stream"), "den Stream-Kopf der Gegenstelle");
 
-            await Sende($"<db:result from='{behaupteteDomain}' to='rechts.example'>" +
+            await Sende($"<db:result from='{behaupteteDomain}' to='right.example'>" +
                         "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" +
                         "</db:result>");
 
@@ -460,7 +460,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await netz.WriteAsync(Encoding.UTF8.GetBytes(
                 "<stream:stream xmlns='jabber:server' " +
                 "xmlns:stream='http://etherx.jabber.org/streams' " +
-                "from='links.example' to='rechts.example' version='1.0'>"));
+                "from='left.example' to='right.example' version='1.0'>"));
 
             var begruessung = "";
 
@@ -476,7 +476,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Statt <starttls/> gleich eine Stanza - im Klartext.
             await netz.WriteAsync(Encoding.UTF8.GetBytes(
-                $"<message from='alice@links.example' to='{bob.BareJid}' type='chat'>" +
+                $"<message from='alice@left.example' to='{bob.BareJid}' type='chat'>" +
                 "<body>Ohne Verschlüsselung, bitte.</body></message>"));
 
             await Task.Delay(TimeSpan.FromSeconds(1));
@@ -503,7 +503,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                     leaveInnerStreamOpen: false,
                                     userCertificateValidationCallback: _rechts.IsOwnCertificate);
 
-            await tls.AuthenticateAsClientAsync("rechts.example");
+            await tls.AuthenticateAsClientAsync("right.example");
 
             return tls;
 
@@ -536,7 +536,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await Roh("<stream:stream xmlns='jabber:server' " +
                       "xmlns:stream='http://etherx.jabber.org/streams' " +
-                      "from='beliebig.example' to='rechts.example' version='1.0'>");
+                      "from='beliebig.example' to='right.example' version='1.0'>");
 
             var begruessung = "";
 
@@ -560,7 +560,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                     leaveInnerStreamOpen: false,
                                     userCertificateValidationCallback: _rechts.IsOwnCertificate);
 
-            await tls.AuthenticateAsClientAsync("rechts.example");
+            await tls.AuthenticateAsClientAsync("right.example");
 
             return tls;
 

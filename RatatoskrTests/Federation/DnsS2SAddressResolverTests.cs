@@ -154,14 +154,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.rechts.example", 10, 20, "im.rechts.example", 5269));
+                               Eintrag("_xmpp-server._tcp.right.example", 10, 20, "im.right.example", 5269));
 
-            var ziele = await resolver.ResolveAsync("rechts.example");
+            var ziele = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
                 Assert.That(ziele,             Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host,     Is.EqualTo("im.rechts.example"));
+                Assert.That(ziele[0].Host,     Is.EqualTo("im.right.example"));
                 Assert.That(ziele[0].Port,     Is.EqualTo(5269));
                 Assert.That(ziele[0].Priority, Is.EqualTo(10));
                 Assert.That(ziele[0].Weight,   Is.EqualTo(20));
@@ -182,9 +182,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.rechts.example", 0, 0, "im.rechts.example", 15269));
+                               Eintrag("_xmpp-server._tcp.right.example", 0, 0, "im.right.example", 15269));
 
-            var ziele = await resolver.ResolveAsync("rechts.example");
+            var ziele = await resolver.ResolveAsync("right.example");
 
             Assert.That(ziele[0].Port, Is.EqualTo(15269));
 
@@ -207,16 +207,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var resolver = await ServerMit(
-                               Eintrag("_xmpp-client._tcp.rechts.example", 0, 0, "falsch.rechts.example", 5222));
+                               Eintrag("_xmpp-client._tcp.right.example", 0, 0, "falsch.right.example", 5222));
 
-            var ziele = await resolver.ResolveAsync("rechts.example");
+            var ziele = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
                 Assert.That(ziele, Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host, Is.EqualTo("rechts.example"),
+                Assert.That(ziele[0].Host, Is.EqualTo("right.example"),
                             "Ohne passenden SRV-Eintrag gilt der Rückfall auf die Domain selbst.");
-                Assert.That(ziele[0].Host, Is.Not.EqualTo("falsch.rechts.example"));
+                Assert.That(ziele[0].Host, Is.Not.EqualTo("falsch.right.example"));
             });
 
         }
@@ -234,11 +234,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.rechts.example", 30, 0, "drittens.example", 5269),
-                               Eintrag("_xmpp-server._tcp.rechts.example", 10, 0, "erstens.example",  5269),
-                               Eintrag("_xmpp-server._tcp.rechts.example", 20, 0, "zweitens.example", 5269));
+                               Eintrag("_xmpp-server._tcp.right.example", 30, 0, "drittens.example", 5269),
+                               Eintrag("_xmpp-server._tcp.right.example", 10, 0, "erstens.example",  5269),
+                               Eintrag("_xmpp-server._tcp.right.example", 20, 0, "zweitens.example", 5269));
 
-            var ziele = await resolver.ResolveAsync("rechts.example");
+            var ziele = await resolver.ResolveAsync("right.example");
 
             Assert.That(ziele.Select(z => z.Host),
                         Is.EqualTo(new[] { "erstens.example", "zweitens.example", "drittens.example" }));
@@ -260,12 +260,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var resolver = await ServerMit(
                                Eintrag("_xmpp-server._tcp.woanders.example", 0, 0, "egal.example", 5269));
 
-            var ziele = await resolver.ResolveAsync("rechts.example");
+            var ziele = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
                 Assert.That(ziele,         Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host, Is.EqualTo("rechts.example"));
+                Assert.That(ziele[0].Host, Is.EqualTo("right.example"));
                 Assert.That(ziele[0].Port, Is.EqualTo(5269));
             });
 
@@ -292,7 +292,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var streng = new DnsS2SAddressResolver(_dnsClient!) { FallBackToDomain = false };
 
-            Assert.That(await streng.ResolveAsync("rechts.example"), Is.Empty);
+            Assert.That(await streng.ResolveAsync("right.example"), Is.Empty);
 
         }
 
@@ -314,9 +314,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var resolver = await ServerMit(
-                               Eintrag("_xmpp-server._tcp.rechts.example", 0, 0, ".", 0));
+                               Eintrag("_xmpp-server._tcp.right.example", 0, 0, ".", 0));
 
-            Assert.That(await resolver.ResolveAsync("rechts.example"), Is.Empty);
+            Assert.That(await resolver.ResolveAsync("right.example"), Is.Empty);
 
         }
 
@@ -346,12 +346,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                Timeout = TimeSpan.FromSeconds(1)
                            };
 
-            var ziele = await resolver.ResolveAsync("rechts.example");
+            var ziele = await resolver.ResolveAsync("right.example");
 
             Assert.Multiple(() =>
             {
                 Assert.That(ziele,         Has.Count.EqualTo(1));
-                Assert.That(ziele[0].Host, Is.EqualTo("rechts.example"));
+                Assert.That(ziele[0].Host, Is.EqualTo("right.example"));
             });
 
         }

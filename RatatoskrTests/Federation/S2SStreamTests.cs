@@ -74,7 +74,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private S2SStream Eingehend(List<String>? zugestellt = null)
 
             => S2SStream.Accept(
-                   "rechts.example",
+                   "right.example",
                    Senden,
                    (peer, stanza) =>
                    {
@@ -86,11 +86,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private S2SStream EingehendMit(RemoteStanzaResult urteil)
 
             => S2SStream.Accept(
-                   "rechts.example",
+                   "right.example",
                    Senden,
                    (_, _) => Task.FromResult(urteil));
 
-        private static String OpenVon(String from, String? to = "rechts.example", String? id = null)
+        private static String OpenVon(String from, String? to = "right.example", String? id = null)
 
             => $"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' from='{from}'" +
                (to is not null ? $" to='{to}'" : "") +
@@ -113,7 +113,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheInitiatorSendsItsDomainInTheStreamHeader()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
 
@@ -121,8 +121,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(_gesendet, Has.Count.EqualTo(1));
                 Assert.That(_gesendet[0], Does.Contain("urn:ietf:params:xml:ns:xmpp-framing"));
-                Assert.That(_gesendet[0], Does.Contain("from='links.example'"));
-                Assert.That(_gesendet[0], Does.Contain("to='rechts.example'"));
+                Assert.That(_gesendet[0], Does.Contain("from='left.example'"));
+                Assert.That(_gesendet[0], Does.Contain("to='right.example'"));
             });
 
         }
@@ -146,12 +146,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = Eingehend();
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             Assert.Multiple(() =>
             {
                 Assert.That(stream.IsOpen,       Is.True);
-                Assert.That(stream.RemoteDomain, Is.EqualTo("links.example"));
+                Assert.That(stream.RemoteDomain, Is.EqualTo("left.example"));
                 Assert.That(stream.StreamId,     Is.Not.Null.And.Not.Empty);
                 Assert.That(Gesendet($"id='{stream.StreamId}'"), Is.True,
                             "Die vergebene Kennung muss auch hinausgehen.");
@@ -174,7 +174,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = Eingehend();
 
-            await stream.ProcessFrameAsync(OpenVon("links.example", to: "ganzwoanders.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example", to: "ganzwoanders.example"));
 
             Assert.Multiple(() =>
             {
@@ -200,7 +200,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var stream = Eingehend();
 
             await stream.ProcessFrameAsync(
-                      "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='rechts.example' version='1.0'/>");
+                      "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='right.example' version='1.0'/>");
 
             Assert.Multiple(() =>
             {
@@ -228,10 +228,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheInitiatorRefusesAnAnswerFromAnotherDomain()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("boese.example", to: "links.example", id: "abc"));
+            await stream.ProcessFrameAsync(OpenVon("boese.example", to: "left.example", id: "abc"));
 
             Assert.Multiple(() =>
             {
@@ -253,10 +253,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheInitiatorTakesTheStreamIdFromTheAnswer()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", to: "links.example", id: "s-4711"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-4711"));
 
             Assert.Multiple(() =>
             {
@@ -281,7 +281,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var stream     = Eingehend(zugestellt);
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@links.example' to='bob@rechts.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
 
             Assert.Multiple(() =>
             {
@@ -306,10 +306,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var zugestellt = new List<String>();
             var stream     = Eingehend(zugestellt);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             var verstanden = await stream.ProcessFrameAsync(
-                                 "<message from='alice@links.example' to='bob@rechts.example'><body>Hallo</body></message>");
+                                 "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
 
             Assert.Multiple(() =>
             {
@@ -341,13 +341,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = EingehendMit(RemoteStanzaResult.ForeignSender);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             var abgelehnt = new List<String>();
             stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
 
             await stream.ProcessFrameAsync(
-                      "<message from='chef@bank.example' to='bob@rechts.example'><body>Überweisen Sie.</body></message>");
+                      "<message from='chef@bank.example' to='bob@right.example'><body>Überweisen Sie.</body></message>");
 
             Assert.Multiple(() =>
             {
@@ -383,13 +383,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = EingehendMit(RemoteStanzaResult.MalformedSender);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             var abgelehnt = new List<String>();
             stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
 
             await stream.ProcessFrameAsync(
-                      "<message from='al ice@links.example' to='bob@rechts.example'><body>Hallo</body></message>");
+                      "<message from='al ice@left.example' to='bob@right.example'><body>Hallo</body></message>");
 
             Assert.Multiple(() =>
             {
@@ -419,13 +419,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = EingehendMit(RemoteStanzaResult.MalformedRecipient);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             var abgelehnt = new List<String>();
             stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@links.example' to='b ob@rechts.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='b ob@right.example'><body>Hallo</body></message>");
 
             Assert.Multiple(() =>
             {
@@ -456,13 +456,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = EingehendMit(RemoteStanzaResult.ForeignRecipient);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             var abgelehnt = new List<String>();
             stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@links.example' to='wer@ganzwoanders.example'><body>Weiter</body></message>");
+                      "<message from='alice@left.example' to='wer@ganzwoanders.example'><body>Weiter</body></message>");
 
             Assert.Multiple(() =>
             {
@@ -492,16 +492,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task AnOutgoingStream_TakesNoStanzas()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", to: "links.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
 
             var abgelehnt = new List<String>();
             stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
 
             var verstanden = await stream.ProcessFrameAsync(
-                                 "<message from='bob@rechts.example' to='alice@links.example'><body>Antwort</body></message>");
+                                 "<message from='bob@right.example' to='alice@left.example'><body>Antwort</body></message>");
 
             Assert.Multiple(() =>
             {
@@ -523,12 +523,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task SendingBeforeTheHandshake_IsRefused()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
 
             var gesendet = await stream.SendStanzaAsync(
-                               "<message from='alice@links.example' to='bob@rechts.example'/>");
+                               "<message from='alice@left.example' to='bob@right.example'/>");
 
             Assert.Multiple(() =>
             {
@@ -549,10 +549,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task AClosedStream_TakesNothingMore()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", to: "links.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
 
             var grund   = "noch nicht beendet";
             stream.OnClosed += r => grund = r ?? "(ordentlich)";
@@ -560,7 +560,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync("<close xmlns='urn:ietf:params:xml:ns:xmpp-framing'/>");
 
             var gesendet = await stream.SendStanzaAsync(
-                               "<message from='alice@links.example' to='bob@rechts.example'/>");
+                               "<message from='alice@left.example' to='bob@right.example'/>");
 
             Assert.Multiple(() =>
             {
@@ -594,7 +594,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var zugestellt = new List<String>();
 
             var stream = S2SStream.Accept(
-                             "rechts.example",
+                             "right.example",
                              Senden,
                              (peer, stanza) =>
                              {
@@ -606,15 +606,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync(
                       "<stream:stream xmlns='jabber:server' " +
                       "xmlns:stream='http://etherx.jabber.org/streams' " +
-                      "from='links.example' to='rechts.example' version='1.0'>");
+                      "from='left.example' to='right.example' version='1.0'>");
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@links.example' to='bob@rechts.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
 
             Assert.Multiple(() =>
             {
                 Assert.That(stream.IsOpen,        Is.True);
-                Assert.That(stream.RemoteDomain,  Is.EqualTo("links.example"));
+                Assert.That(stream.RemoteDomain,  Is.EqualTo("left.example"));
                 Assert.That(stream.StreamId,      Is.Not.Null.And.Not.Empty);
                 Assert.That(zugestellt,           Has.Count.EqualTo(1));
 
@@ -638,14 +638,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TcpFramingClosesWithTheRootElement()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             framing: TcpStreamFraming.Instance);
 
             await stream.OpenAsync();
             await stream.ProcessFrameAsync(
                       "<stream:stream xmlns='jabber:server' " +
                       "xmlns:stream='http://etherx.jabber.org/streams' " +
-                      "from='rechts.example' to='links.example' id='s-9' version='1.0'>");
+                      "from='right.example' to='left.example' id='s-9' version='1.0'>");
 
             Assert.That(stream.StreamId, Is.EqualTo("s-9"));
 
@@ -681,7 +681,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TcpFramingCarriesDialbackThroughUnchanged()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             secret:  "s3cr3tf0rd14lb4ck",
                                             framing: TcpStreamFraming.Instance);
 
@@ -690,12 +690,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                       "<stream:stream xmlns='jabber:server' " +
                       "xmlns:stream='http://etherx.jabber.org/streams' " +
                       "xmlns:db='jabber:server:dialback' " +
-                      "from='rechts.example' to='links.example' id='D60000229F' version='1.0'>");
+                      "from='right.example' to='left.example' id='D60000229F' version='1.0'>");
 
             // Derselbe Vektor wie in DialbackKeyTests, nur mit vertauschten
-            // Beispiel-Domains: Ziel ist hier rechts.example.
+            // Beispiel-Domains: Ziel ist hier right.example.
             var erwartet = DialbackKey.Generate("s3cr3tf0rd14lb4ck",
-                                                "rechts.example", "links.example", "D60000229F");
+                                                "right.example", "left.example", "D60000229F");
 
             Assert.Multiple(() =>
             {
@@ -705,7 +705,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             });
 
             await stream.ProcessFrameAsync(
-                      "<db:result from='rechts.example' to='links.example' type='valid'/>");
+                      "<db:result from='right.example' to='left.example' type='valid'/>");
 
             Assert.That(stream.IsAuthenticated, Is.True);
 
@@ -729,18 +729,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var ohne = Eingehend();
-            await ohne.ProcessFrameAsync(OpenVon("links.example"));
+            await ohne.ProcessFrameAsync(OpenVon("left.example"));
 
             Assert.That(Gesendet("EXTERNAL"), Is.False,
                         "Ohne Zertifikat darf EXTERNAL nicht angeboten werden.");
 
             _gesendet.Clear();
 
-            var mit = S2SStream.Accept("rechts.example", Senden,
+            var mit = S2SStream.Accept("right.example", Senden,
                                        (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                        externalIdentity: _ => true);
 
-            await mit.ProcessFrameAsync(OpenVon("links.example"));
+            await mit.ProcessFrameAsync(OpenVon("left.example"));
 
             Assert.Multiple(() =>
             {
@@ -764,20 +764,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var geprueft = new List<String>();
 
-            var stream = S2SStream.Accept("rechts.example", Senden,
+            var stream = S2SStream.Accept("right.example", Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: d => { geprueft.Add(d); return true; });
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
-            var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("links.example"));
+            var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("left.example"));
 
             await stream.ProcessFrameAsync(
                       $"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>{authzid}</auth>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(geprueft,                 Is.EquivalentTo(new[] { "links.example" }));
+                Assert.That(geprueft,                 Is.EquivalentTo(new[] { "left.example" }));
                 Assert.That(Gesendet("<success"),     Is.True);
                 Assert.That(stream.IsAuthenticated,   Is.True);
                 Assert.That(stream.AuthenticatedBy,   Is.EqualTo("SASL-EXTERNAL"));
@@ -804,13 +804,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task ACertificateThatDoesNotCoverTheDomain_IsRefused()
         {
 
-            var stream = S2SStream.Accept("rechts.example", Senden,
+            var stream = S2SStream.Accept("right.example", Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: _ => false);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
-            var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("links.example"));
+            var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("left.example"));
 
             await stream.ProcessFrameAsync(
                       $"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>{authzid}</auth>");
@@ -842,11 +842,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task ClaimingADifferentDomainThanTheStreamHeader_IsRefused()
         {
 
-            var stream = S2SStream.Accept("rechts.example", Senden,
+            var stream = S2SStream.Accept("right.example", Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: _ => true);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("bank.example"));
 
@@ -875,18 +875,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var geprueft = new List<String>();
 
-            var stream = S2SStream.Accept("rechts.example", Senden,
+            var stream = S2SStream.Accept("right.example", Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: d => { geprueft.Add(d); return true; });
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             await stream.ProcessFrameAsync(
                       "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>=</auth>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(geprueft,               Is.EquivalentTo(new[] { "links.example" }));
+                Assert.That(geprueft,               Is.EquivalentTo(new[] { "left.example" }));
                 Assert.That(stream.IsAuthenticated, Is.True);
             });
 
@@ -903,11 +903,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task AnUnofferedMechanism_IsRefused()
         {
 
-            var stream = S2SStream.Accept("rechts.example", Senden,
+            var stream = S2SStream.Accept("right.example", Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: _ => true);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             await stream.ProcessFrameAsync(
                       "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>eA==</auth>");
@@ -933,7 +933,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var zugestellt = new List<String>();
 
-            var stream = S2SStream.Accept("rechts.example", Senden,
+            var stream = S2SStream.Accept("right.example", Senden,
                                           (_, stanza) =>
                                           {
                                               zugestellt.Add(stanza);
@@ -942,10 +942,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                           verifyKey: (_, _, _) => Task.FromResult(false),
                                           externalIdentity: _ => true);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@links.example' to='bob@rechts.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
 
             Assert.That(zugestellt, Is.Empty);
 
@@ -963,11 +963,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheInitiatorRestartsTheStreamAfterSuccess()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             canOfferExternal: true);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", to: "links.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
 
             await stream.ProcessFrameAsync(
                       "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
@@ -1008,12 +1008,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task ARefusedExternal_DoesNotFallBackToDialback()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             secret: "s3cr3tf0rd14lb4ck",
                                             canOfferExternal: true);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", to: "links.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
             await stream.ProcessFrameAsync(
                       "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                       "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
@@ -1043,12 +1043,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task WithoutExternalOnOffer_TheInitiatorUsesDialback()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             secret: "s3cr3tf0rd14lb4ck",
                                             canOfferExternal: true);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", to: "links.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
             await stream.ProcessFrameAsync(
                       "<stream:features xmlns:stream='http://etherx.jabber.org/streams'/>");
 
@@ -1078,7 +1078,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task WaitingForAStreamThatNeverOpens_GivesUp()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
 
@@ -1126,7 +1126,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = Eingehend();
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             _gesendet.Clear();
 
@@ -1171,7 +1171,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = Eingehend();
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             _gesendet.Clear();
 
@@ -1212,7 +1212,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task AnAbortAtTheInitiator_IsNotAnswered()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
 
             await stream.OpenAsync();
 
@@ -1258,7 +1258,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var stream = Eingehend();
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             _gesendet.Clear();
 

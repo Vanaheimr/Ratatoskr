@@ -62,8 +62,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -145,8 +145,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// </summary>
         /// <remarks>
         /// Gehört nicht zu dem, was hier geprüft wird, ist aber nötig: die
-        /// Dialback-Rückfrage geht von <c>rechts.example</c> aus, und ohne
-        /// Adresse für <c>links.example</c> könnte sie niemanden fragen. In
+        /// Dialback-Rückfrage geht von <c>right.example</c> aus, und ohne
+        /// Adresse für <c>left.example</c> könnte sie niemanden fragen. In
         /// den übrigen Föderationstests erledigt das
         /// <c>TcpServerLinks.Connect</c> für beide Richtungen; hier wird nur
         /// eine Seite über den Resolver verkabelt, also muss die andere von
@@ -154,7 +154,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// </remarks>
         private void RueckwegEintragen()
 
-            => _rechtsLinks.AddPeer("links.example",
+            => _rechtsLinks.AddPeer("left.example",
                                     System.Net.IPAddress.Loopback.ToString(),
                                     _linksLinks.Port,
                                     TcpTlsMode.StartTls,
@@ -194,7 +194,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         private const String Stanza =
-            "<message from='alice@links.example' to='bob@rechts.example'><body>aufgeloest</body></message>";
+            "<message from='alice@left.example' to='bob@right.example'><body>aufgeloest</body></message>";
 
         #endregion
 
@@ -215,7 +215,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var empfangen = new List<XMPPMessage>();
             bob.OnMessage += m => empfangen.Add(m);
 
-            var zugestellt = await _linksLinks.DeliverAsync("rechts.example", Stanza)
+            var zugestellt = await _linksLinks.DeliverAsync("right.example", Stanza)
                                               .WaitAsync(TimeSpan.FromSeconds(25));
 
             await WarteAuf(() => empfangen.Count > 0, "die Nachricht über das aufgelöste Ziel");
@@ -223,7 +223,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(zugestellt, Is.True);
-                Assert.That(resolver.Gefragt, Is.EquivalentTo(new[] { "rechts.example" }));
+                Assert.That(resolver.Gefragt, Is.EquivalentTo(new[] { "right.example" }));
             });
 
         }
@@ -248,7 +248,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var resolver = SenderMitResolver(_ => throw new InvalidOperationException(
                                                       "Der Resolver darf hier nicht gefragt werden."));
 
-            _linksLinks.AddPeer("rechts.example",
+            _linksLinks.AddPeer("right.example",
                                 System.Net.IPAddress.Loopback.ToString(),
                                 _rechtsLinks.Port,
                                 TcpTlsMode.StartTls,
@@ -259,7 +259,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var empfangen = new List<XMPPMessage>();
             bob.OnMessage += m => empfangen.Add(m);
 
-            await _linksLinks.DeliverAsync("rechts.example", Stanza)
+            await _linksLinks.DeliverAsync("right.example", Stanza)
                              .WaitAsync(TimeSpan.FromSeconds(25));
 
             await WarteAuf(() => empfangen.Count > 0, "die Nachricht über den Eintrag von Hand");
@@ -294,7 +294,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var empfangen = new List<XMPPMessage>();
             bob.OnMessage += m => empfangen.Add(m);
 
-            var zugestellt = await _linksLinks.DeliverAsync("rechts.example", Stanza)
+            var zugestellt = await _linksLinks.DeliverAsync("right.example", Stanza)
                                               .WaitAsync(TimeSpan.FromSeconds(30));
 
             await WarteAuf(() => empfangen.Count > 0, "die Nachricht über das zweite Ziel");
@@ -379,13 +379,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var empfangen = new List<XMPPMessage>();
             bob.OnMessage += m => empfangen.Add(m);
 
-            await _linksLinks.DeliverAsync("rechts.example", Stanza)
+            await _linksLinks.DeliverAsync("right.example", Stanza)
                              .WaitAsync(TimeSpan.FromSeconds(25));
 
             await WarteAuf(() => empfangen.Count > 0, "die Nachricht");
 
             lock (gepruefteNamen)
-                Assert.That(gepruefteNamen, Has.All.EqualTo("rechts.example"),
+                Assert.That(gepruefteNamen, Has.All.EqualTo("right.example"),
                             "TLS muss gegen die gesuchte Domain laufen, nicht gegen das SRV-Ziel.");
 
         }

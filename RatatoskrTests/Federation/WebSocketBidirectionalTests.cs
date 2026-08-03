@@ -98,8 +98,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private void Verkabeln(Boolean bidi)
         {
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -264,7 +264,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var ging = await _rechtsS.DeliverAsync(
                            "woanders.example",
-                           "<message from='juliet@rechts.example' to='romeo@woanders.example'/>");
+                           "<message from='juliet@right.example' to='romeo@woanders.example'/>");
 
             Assert.Multiple(() =>
             {

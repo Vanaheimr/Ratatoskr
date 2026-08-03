@@ -66,7 +66,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             return Task.CompletedTask;
         }
 
-        private static String OpenVon(String from, String? to = "rechts.example", String? id = null)
+        private static String OpenVon(String from, String? to = "right.example", String? id = null)
 
             => $"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' from='{from}'" +
                (to is not null ? $" to='{to}'" : "") +
@@ -113,12 +113,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheReceiverAnnouncesBidi()
         {
 
-            var stream = S2SStream.Accept("rechts.example",
+            var stream = S2SStream.Accept("right.example",
                                           Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           offerBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             Assert.Multiple(() =>
             {
@@ -145,11 +145,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task WithoutTheSwitch_NothingIsAnnounced()
         {
 
-            var stream = S2SStream.Accept("rechts.example",
+            var stream = S2SStream.Accept("right.example",
                                           Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted));
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             Assert.Multiple(() =>
             {
@@ -176,11 +176,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task AnUnannouncedBidi_IsRefused()
         {
 
-            var stream = S2SStream.Accept("rechts.example",
+            var stream = S2SStream.Accept("right.example",
                                           Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted));
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
 
             var angenommen = await stream.ProcessFrameAsync(
                                  $"<bidi xmlns='{S2SStream.BidiNamespace}'/>");
@@ -206,10 +206,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheInitiatorAsksForBidi_OnlyWhenOffered()
         {
 
-            var mitAngebot = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var mitAngebot = S2SStream.Initiate("left.example", "right.example", Senden,
                                                 canOfferExternal: true, useBidi: true);
 
-            await mitAngebot.ProcessFrameAsync(OpenVon("rechts.example", "links.example", "abc"));
+            await mitAngebot.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
             await mitAngebot.ProcessFrameAsync(FeaturesMit(bidi: true));
 
             Assert.That(Gesendet($"<bidi xmlns='{S2SStream.BidiNamespace}'/>"), Is.True,
@@ -218,10 +218,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             _gesendet.Clear();
 
-            var ohneAngebot = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var ohneAngebot = S2SStream.Initiate("left.example", "right.example", Senden,
                                                  canOfferExternal: true, useBidi: true);
 
-            await ohneAngebot.ProcessFrameAsync(OpenVon("rechts.example", "links.example", "abc"));
+            await ohneAngebot.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
             await ohneAngebot.ProcessFrameAsync(FeaturesMit(bidi: false));
 
             Assert.Multiple(() =>
@@ -263,10 +263,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task AnOfferInTheEnableNamespace_IsUnderstood()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             canOfferExternal: true, useBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", "links.example", "abc"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
 
             // Wortwörtlich das, was ejabberd 24.12 schickt.
             await stream.ProcessFrameAsync(
@@ -306,10 +306,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task BidiGoesOutBeforeTheAuthentication()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             canOfferExternal: true, useBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", "links.example", "abc"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
             await stream.ProcessFrameAsync(FeaturesMit(bidi: true));
 
             var bidi = IndexVon(S2SStream.BidiNamespace);
@@ -336,11 +336,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task BidiAlsoGoesOutBeforeDialback()
         {
 
-            var stream = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
                                             secret:  DialbackKey.NewSecret(),
                                             useBidi: true);
 
-            await stream.ProcessFrameAsync(OpenVon("rechts.example", "links.example", "abc"));
+            await stream.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
             await stream.ProcessFrameAsync(FeaturesMit(bidi: true, external: false));
 
             var bidi     = IndexVon(S2SStream.BidiNamespace);
@@ -375,13 +375,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 return Task.FromResult(RemoteStanzaResult.Accepted);
             }
 
-            var ohne = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var ohne = S2SStream.Initiate("left.example", "right.example", Senden,
                                           deliverStanza: Zustellen);
 
-            await ohne.ProcessFrameAsync(OpenVon("rechts.example", "links.example", "abc"));
+            await ohne.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
 
             var abgewiesen = await ohne.ProcessFrameAsync(
-                                 "<message from='juliet@rechts.example' to='romeo@links.example'/>");
+                                 "<message from='juliet@right.example' to='romeo@left.example'/>");
 
             Assert.Multiple(() =>
             {
@@ -390,16 +390,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(zugestellt, Is.Empty);
             });
 
-            var mit = S2SStream.Initiate("links.example", "rechts.example", Senden,
+            var mit = S2SStream.Initiate("left.example", "right.example", Senden,
                                          canOfferExternal:  true,
                                          deliverStanza:     Zustellen,
                                          useBidi:           true);
 
-            await mit.ProcessFrameAsync(OpenVon("rechts.example", "links.example", "abc"));
+            await mit.ProcessFrameAsync(OpenVon("right.example", "left.example", "abc"));
             await mit.ProcessFrameAsync(FeaturesMit(bidi: true));
 
             var angenommen = await mit.ProcessFrameAsync(
-                                 "<message from='juliet@rechts.example' to='romeo@links.example'/>");
+                                 "<message from='juliet@right.example' to='romeo@left.example'/>");
 
             Assert.Multiple(() =>
             {
@@ -429,20 +429,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheReturnPath_StaysShutBeforeAuthentication()
         {
 
-            var stream = S2SStream.Accept("rechts.example",
+            var stream = S2SStream.Accept("right.example",
                                           Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           verifyKey:  (_, _, _) => Task.FromResult(true),
                                           offerBidi:  true);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example"));
+            await stream.ProcessFrameAsync(OpenVon("left.example"));
             await stream.ProcessFrameAsync($"<bidi xmlns='{S2SStream.BidiNamespace}'/>");
 
             Assert.That(stream.BidiEnabled,  Is.True);
             Assert.That(stream.IsAuthenticated, Is.False, "Aufbau des Tests: noch nicht ausgewiesen.");
 
             var ging = await stream.SendStanzaOverBidiAsync(
-                           "<message from='juliet@rechts.example' to='romeo@links.example'/>");
+                           "<message from='juliet@right.example' to='romeo@left.example'/>");
 
             Assert.That(ging, Is.False,
                         "Vor dem Ausweis darf über die Rückrichtung nichts hinausgehen.");
@@ -469,28 +469,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheReturnPath_CarriesOnlyOurOwnDomain()
         {
 
-            var stream = S2SStream.Accept("rechts.example",
+            var stream = S2SStream.Accept("right.example",
                                           Senden,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           verifyKey:  (_, _, _) => Task.FromResult(true),
                                           offerBidi:  true);
 
-            await stream.ProcessFrameAsync(OpenVon("links.example", id: "s1"));
+            await stream.ProcessFrameAsync(OpenVon("left.example", id: "s1"));
             await stream.ProcessFrameAsync($"<bidi xmlns='{S2SStream.BidiNamespace}'/>");
 
             // Dialback abschliessen, damit nur noch die Absenderprüfung im Weg
             // stehen kann.
             await stream.ProcessFrameAsync(
                       $"<db:result xmlns:db='{DialbackKey.Namespace}' " +
-                      "from='links.example' to='rechts.example'>egal</db:result>");
+                      "from='left.example' to='right.example'>egal</db:result>");
 
             Assert.That(stream.IsAuthenticated, Is.True, "Aufbau des Tests: ausgewiesen.");
 
             var eigene = await stream.SendStanzaOverBidiAsync(
-                             "<message from='juliet@rechts.example' to='romeo@links.example'/>");
+                             "<message from='juliet@right.example' to='romeo@left.example'/>");
 
             var fremde = await stream.SendStanzaOverBidiAsync(
-                             "<message from='eve@woanders.example' to='romeo@links.example'/>");
+                             "<message from='eve@woanders.example' to='romeo@left.example'/>");
 
             Assert.Multiple(() =>
             {

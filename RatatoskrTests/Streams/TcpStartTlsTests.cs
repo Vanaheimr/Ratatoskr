@@ -66,7 +66,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
             _guard.Reset();
 
-            _server = _guard.Watched(new XMPPServer("links.example"));
+            _server = _guard.Watched(new XMPPServer("left.example"));
             _server.Start();
         }
 
@@ -218,7 +218,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         private const String Stanza =
-            "<message from='alice@links.example' to='bob@fremd.example'><body>hallo</body></message>";
+            "<message from='alice@left.example' to='bob@fremd.example'><body>hallo</body></message>";
 
         #endregion
 
@@ -247,7 +247,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 await Schreibe(netz,
                     "<stream:stream xmlns='jabber:server' " +
                     "xmlns:stream='http://etherx.jabber.org/streams' " +
-                    "from='fremd.example' to='links.example' id='x' version='1.0'>");
+                    "from='fremd.example' to='left.example' id='x' version='1.0'>");
                 await Schreibe(netz,
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'/>");
 
@@ -292,7 +292,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 await Schreibe(netz,
                     "<stream:stream xmlns='jabber:server' " +
                     "xmlns:stream='http://etherx.jabber.org/streams' " +
-                    "from='fremd.example' to='links.example' id='x' version='1.0'>");
+                    "from='fremd.example' to='left.example' id='x' version='1.0'>");
                 await Schreibe(netz,
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                     "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'><required/></starttls>" +
@@ -338,7 +338,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 await Schreibe(netz,
                     "<stream:stream xmlns='jabber:server' " +
                     "xmlns:stream='http://etherx.jabber.org/streams' " +
-                    "from='fremd.example' to='links.example' id='x' version='1.0'>");
+                    "from='fremd.example' to='left.example' id='x' version='1.0'>");
                 await Schreibe(netz,
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                     "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'><required/></starttls>" +
@@ -400,7 +400,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await Schreibe(netz,
                 "<stream:stream xmlns='jabber:server' " +
                 "xmlns:stream='http://etherx.jabber.org/streams' " +
-                "from='fremd.example' to='links.example' version='1.0'>");
+                "from='fremd.example' to='left.example' version='1.0'>");
 
             await LiesBis(netz,
                           t => t.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal),
@@ -409,7 +409,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // <starttls/> und eine Stanza in einem einzigen Schreibvorgang.
             await Schreibe(netz,
                 "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" +
-                "<message from='alice@fremd.example' to='bob@links.example'><body>x</body></message>");
+                "<message from='alice@fremd.example' to='bob@left.example'><body>x</body></message>");
 
             var antwort = await LiesBis(netz, t => t.Length > 0, cts.Token)
                               .WaitAsync(TimeSpan.FromSeconds(10));
@@ -447,7 +447,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await Schreibe(netz,
                 "<stream:stream xmlns='jabber:server' " +
                 "xmlns:stream='http://etherx.jabber.org/streams' " +
-                "from='fremd.example' to='links.example' version='1.0'>");
+                "from='fremd.example' to='left.example' version='1.0'>");
 
             var begruessung = await LiesBis(netz,
                                             t => t.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal),
@@ -457,7 +457,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "STARTTLS muss als zwingend angekündigt werden.");
 
             await Schreibe(netz,
-                "<message from='alice@fremd.example' to='bob@links.example'><body>x</body></message>");
+                "<message from='alice@fremd.example' to='bob@left.example'><body>x</body></message>");
 
             var antwort = await LiesBis(netz,
                                         t => t.Contains("failure", StringComparison.Ordinal),

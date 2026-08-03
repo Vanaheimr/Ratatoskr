@@ -75,8 +75,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -91,8 +91,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var zone = new InMemoryDNSZone();
 
-            zone.Add(SrvEintrag("_xmpp-server._tcp.links.example.",  portLinks),
-                     SrvEintrag("_xmpp-server._tcp.rechts.example.", portRechts));
+            zone.Add(SrvEintrag("_xmpp-server._tcp.left.example.",  portLinks),
+                     SrvEintrag("_xmpp-server._tcp.right.example.", portRechts));
 
             var dnsPort = FreierUdpPort();
 
@@ -230,8 +230,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// hinterlegt wäre.
         /// </summary>
         /// <remarks>
-        /// Das schliesst die Dialback-Rückfrage ein: <c>rechts.example</c>
-        /// muss <c>links.example</c> selbst auflösen, um den vorgelegten
+        /// Das schliesst die Dialback-Rückfrage ein: <c>right.example</c>
+        /// muss <c>left.example</c> selbst auflösen, um den vorgelegten
         /// Schlüssel prüfen zu können.
         /// </remarks>
         [Test]
@@ -251,7 +251,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(empfangen[0].Body,        Is.EqualTo("Hallo über DNS!"));
-                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@links.example"));
+                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@left.example"));
 
                 Assert.That(_rechtsLinks.DialbackVerificationCount, Is.GreaterThan(0),
                             "Die Rückfrage muss stattgefunden haben - und ihren Weg über DNS gefunden haben.");

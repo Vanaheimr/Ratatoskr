@@ -98,14 +98,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void TheSubjectAlternativeNamesAreTheIdentities()
         {
 
-            using var cert = MakeCertificate("links.example", ["links.example", "im.links.example"]);
+            using var cert = MakeCertificate("left.example", ["left.example", "im.left.example"]);
 
             Assert.Multiple(() =>
             {
                 Assert.That(CertificateIdentity.DomainsOf(cert),
-                            Is.EquivalentTo(new[] { "links.example", "im.links.example" }));
-                Assert.That(CertificateIdentity.Authorises(cert, "links.example"),     Is.True);
-                Assert.That(CertificateIdentity.Authorises(cert, "im.links.example"),  Is.True);
+                            Is.EquivalentTo(new[] { "left.example", "im.left.example" }));
+                Assert.That(CertificateIdentity.Authorises(cert, "left.example"),     Is.True);
+                Assert.That(CertificateIdentity.Authorises(cert, "im.left.example"),  Is.True);
             });
 
         }
@@ -118,9 +118,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void AForeignDomain_IsNotAuthorised()
         {
 
-            using var cert = MakeCertificate("links.example", ["links.example"]);
+            using var cert = MakeCertificate("left.example", ["left.example"]);
 
-            Assert.That(CertificateIdentity.Authorises(cert, "rechts.example"), Is.False);
+            Assert.That(CertificateIdentity.Authorises(cert, "right.example"), Is.False);
 
         }
 
@@ -135,9 +135,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void TheComparisonIgnoresCase()
         {
 
-            using var cert = MakeCertificate("links.example", ["Links.EXAMPLE"]);
+            using var cert = MakeCertificate("left.example", ["Left.EXAMPLE"]);
 
-            Assert.That(CertificateIdentity.Authorises(cert, "links.example"), Is.True);
+            Assert.That(CertificateIdentity.Authorises(cert, "left.example"), Is.True);
 
         }
 
@@ -153,12 +153,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void WithoutAnySan_TheCommonNameCounts()
         {
 
-            using var cert = MakeCertificate("links.example");
+            using var cert = MakeCertificate("left.example");
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.DomainsOf(cert), Is.EquivalentTo(new[] { "links.example" }));
-                Assert.That(CertificateIdentity.Authorises(cert, "links.example"), Is.True);
+                Assert.That(CertificateIdentity.DomainsOf(cert), Is.EquivalentTo(new[] { "left.example" }));
+                Assert.That(CertificateIdentity.Authorises(cert, "left.example"), Is.True);
             });
 
         }
@@ -235,12 +235,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void AWildcard_AuthorisesNothing()
         {
 
-            using var cert = MakeCertificate("*.links.example", ["*.links.example"]);
+            using var cert = MakeCertificate("*.left.example", ["*.left.example"]);
 
             Assert.Multiple(() =>
             {
-                Assert.That(CertificateIdentity.Authorises(cert, "im.links.example"), Is.False);
-                Assert.That(CertificateIdentity.Authorises(cert, "links.example"),    Is.False);
+                Assert.That(CertificateIdentity.Authorises(cert, "im.left.example"), Is.False);
+                Assert.That(CertificateIdentity.Authorises(cert, "left.example"),    Is.False);
             });
 
         }
@@ -256,7 +256,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void AnEmptyDomain_AuthorisesNothing()
         {
 
-            using var cert = MakeCertificate("links.example", ["links.example"]);
+            using var cert = MakeCertificate("left.example", ["left.example"]);
 
             Assert.Multiple(() =>
             {

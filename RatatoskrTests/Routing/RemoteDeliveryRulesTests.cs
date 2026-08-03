@@ -63,8 +63,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
-        private const String Alice = "alice@links.example";
-        private const String Bob   = "bob@rechts.example";
+        private const String Alice = "alice@left.example";
+        private const String Bob   = "bob@right.example";
 
         #endregion
 
@@ -78,8 +78,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -1073,9 +1073,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// </summary>
         /// <remarks>
         /// Der Absender des Fehlers ist hier die ganze Aussage. Käme er von
-        /// <c>rechts.example</c>, wäre die Stanza über die Grenze gegangen und
+        /// <c>right.example</c>, wäre die Stanza über die Grenze gegangen und
         /// erst drüben abgewiesen worden — der Test bestünde, und die Regel für
-        /// den Router wäre trotzdem nicht umgesetzt. Nur <c>links.example</c>
+        /// den Router wäre trotzdem nicht umgesetzt. Nur <c>left.example</c>
         /// beweist, dass sie den eigenen Server nicht verlassen hat.
         ///
         /// Warum ein Router überhaupt urteilen soll, statt weiterzureichen: Eine
@@ -1226,12 +1226,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// Implementierung nicht.
         ///
         /// <c>IsLocal</c> allein reicht nicht, weil es nur die Domain ansieht.
-        /// <c>b ob@rechts.example</c> gehört hierher und ist trotzdem keine
+        /// <c>b ob@right.example</c> gehört hierher und ist trotzdem keine
         /// Adresse — die Stanza lief bis in die Zustellung und sah dort aus wie
         /// eine an einen abwesenden Empfänger.
         ///
         /// Die zweite Adresse prüft die <b>Reihenfolge</b>: Bei
-        /// <c>bob@-rechts.example</c> ist schon die Domain keine, und
+        /// <c>bob@-right.example</c> ist schon die Domain keine, und
         /// <c>IsLocal</c> würde sie deshalb für die einer dritten Partei
         /// halten. Stünde die Prüfung dahinter, hiesse der Grund „fremder
         /// Empfänger" — richtig abgewiesen, falsch begründet, und der Absender

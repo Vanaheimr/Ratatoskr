@@ -70,8 +70,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -240,7 +240,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(empfangen[0].Body,         Is.EqualTo("Hallo über den echten Draht!"));
-                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@links.example"));
+                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -365,10 +365,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// </summary>
         /// <remarks>
         /// Der Hochstapler baut regulär auf und legt einen selbst erfundenen
-        /// Schlüssel für <c>links.example</c> vor. Der annehmende Server fragt
+        /// Schlüssel für <c>left.example</c> vor. Der annehmende Server fragt
         /// daraufhin nicht ihn, sondern die Adresse, die <b>er selbst</b> für
-        /// <c>links.example</c> hinterlegt hat - und der echte
-        /// <c>links.example</c> kennt den Schlüssel nicht. Genau darauf beruht
+        /// <c>left.example</c> hinterlegt hat - und der echte
+        /// <c>left.example</c> kennt den Schlüssel nicht. Genau darauf beruht
         /// das Verfahren: die Prüfung fragt nie den, der geprüft wird.
         /// </remarks>
         [Test]
@@ -385,15 +385,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await boese.SendeAsync(
                 "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
-                "from='links.example' to='rechts.example' version='1.0'/>");
+                "from='left.example' to='right.example' version='1.0'/>");
 
             await WarteAuf(() => boese.Sah("<open"), "den Stream-Kopf der Gegenstelle");
 
-            // Ein frei erfundener Schlüssel - das Geheimnis von links.example
+            // Ein frei erfundener Schlüssel - das Geheimnis von left.example
             // hat der Angreifer nicht.
             await boese.SendeAsync(
                 "<db:result xmlns:db='jabber:server:dialback' " +
-                "from='links.example' to='rechts.example'>" +
+                "from='left.example' to='right.example'>" +
                 "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" +
                 "</db:result>");
 
@@ -402,7 +402,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Und der Versuch, trotzdem zuzustellen.
             await boese.SendeAsync(
-                $"<message from='alice@links.example' to='{bob.BareJid}' type='chat'>" +
+                $"<message from='alice@left.example' to='{bob.BareJid}' type='chat'>" +
                 "<body>Durchgerutscht?</body></message>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
@@ -446,13 +446,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await boese.SendeAsync(
                 "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
-                "from='niemand.example' to='rechts.example' version='1.0'/>");
+                "from='niemand.example' to='right.example' version='1.0'/>");
 
             await WarteAuf(() => boese.Sah("<open"), "den Stream-Kopf der Gegenstelle");
 
             await boese.SendeAsync(
                 "<db:result xmlns:db='jabber:server:dialback' " +
-                "from='niemand.example' to='rechts.example'>" +
+                "from='niemand.example' to='right.example'>" +
                 "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" +
                 "</db:result>");
 
@@ -506,11 +506,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             bob.OnMessage                  += m => empfangen.Add(m);
             _rechts.OnRemoteStanzaRejected += (peer, grund) => abgewiesen.Add((peer, grund));
 
-            // links.example baut regulär auf (die Verbindung weist sich also
-            // korrekt als "links.example" aus), behauptet in der Stanza selbst
+            // left.example baut regulär auf (die Verbindung weist sich also
+            // korrekt als "left.example" aus), behauptet in der Stanza selbst
             // aber, für eine dritte Domain zu sprechen.
             await _linksLinks.DeliverAsync(
-                "rechts.example",
+                "right.example",
                 $"<message from='chef@bank.example' to='{bob.BareJid}' type='chat'>" +
                 "<body>Bitte überweisen Sie 10000 Euro.</body></message>");
 
@@ -529,7 +529,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@links.example"));
+                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@left.example"));
                 Assert.That(_rechtsLinks.InboundConnectionCount, Is.GreaterThan(vorDerEchten),
                             "Nach dem Stream-Fehler muss die nächste Zustellung eine neue Verbindung aufbauen.");
             });

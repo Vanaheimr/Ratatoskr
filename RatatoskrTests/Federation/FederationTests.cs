@@ -62,8 +62,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -163,7 +163,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(empfangen[0].Body,         Is.EqualTo("Hallo über die Grenze!"));
-                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@links.example"));
+                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -198,7 +198,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(beiAlice[0].Body,         Is.EqualTo("Antwort"));
-                Assert.That(beiAlice[0].FromBareJid,  Is.EqualTo("bob@rechts.example"));
+                Assert.That(beiAlice[0].FromBareJid,  Is.EqualTo("bob@right.example"));
             });
 
         }
@@ -226,7 +226,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.SetPresenceAsync();
 
-            await WarteAuf(() => gesehen.Any(g => g.From.StartsWith("alice@links.example", StringComparison.Ordinal)),
+            await WarteAuf(() => gesehen.Any(g => g.From.StartsWith("alice@left.example", StringComparison.Ordinal)),
                            "Alices Presence bei Bob");
 
         }
@@ -257,7 +257,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.SetPresenceAsync();
 
             var kam = await XMPPServer.WaitUntilAsync(
-                          () => gesehen.Any(f => f.StartsWith("alice@links.example", StringComparison.Ordinal)),
+                          () => gesehen.Any(f => f.StartsWith("alice@left.example", StringComparison.Ordinal)),
                           TimeSpan.FromSeconds(2));
 
             Assert.That(kam, Is.False,
@@ -291,9 +291,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             bob.OnMessage                  += m => empfangen.Add(m);
             _rechts.OnRemoteStanzaRejected += (peer, grund) => abgewiesen.Add((peer, grund));
 
-            // links.example behauptet, für eine dritte Domain zu sprechen.
+            // left.example behauptet, für eine dritte Domain zu sprechen.
             var angenommen = await _rechts.ReceiveFromRemoteAsync(
-                                 "links.example",
+                                 "left.example",
                                  $"<message from='chef@bank.example' to='{bob.BareJid}' type='chat'>" +
                                  "<body>Bitte überweisen Sie 10000 Euro.</body></message>");
 
@@ -327,8 +327,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             _rechts.OnRemoteStanzaRejected += (_, grund) => abgewiesen.Add(grund);
 
             var angenommen = await _rechts.ReceiveFromRemoteAsync(
-                                 "links.example",
-                                 "<message from='alice@links.example' to='wer@ganzwoanders.example' type='chat'>" +
+                                 "left.example",
+                                 "<message from='alice@left.example' to='wer@ganzwoanders.example' type='chat'>" +
                                  "<body>Weiterreichen bitte.</body></message>");
 
             Assert.Multiple(() =>
@@ -376,7 +376,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task ConnectingAServerToItself_IsRefused()
         {
 
-            await using var doppelt = _guard.Watched(new XMPPServer("links.example"));
+            await using var doppelt = _guard.Watched(new XMPPServer("left.example"));
 
             Assert.Throws<ArgumentException>(() => DirectServerLinks.Connect(_links, doppelt));
 

@@ -64,8 +64,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // durch eine Stanza, die der andere geschickt hat.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("links.example"));
-            _rechts  = _guard.Watched(new XMPPServer("rechts.example"));
+            _links   = _guard.Watched(new XMPPServer("left.example"));
+            _rechts  = _guard.Watched(new XMPPServer("right.example"));
 
             _links.Start();
             _rechts.Start();
@@ -164,10 +164,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(anfragen[0], Is.EqualTo("alice@links.example"));
+                Assert.That(anfragen[0], Is.EqualTo("alice@left.example"));
 
                 // Abschnitt 3.1.2: beim Antragsteller ist die Anfrage offen.
-                Assert.That(Zustand(_links, "alice@links.example", "bob@rechts.example"),
+                Assert.That(Zustand(_links, "alice@left.example", "bob@right.example"),
                             Is.EqualTo("none"));
             });
 
@@ -202,17 +202,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
 
-            await WarteAuf(() => Zustand(_links, "alice@links.example", "bob@rechts.example") == "to",
+            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "to",
                            "die 'to'-Hälfte bei Alice");
 
             Assert.Multiple(() =>
             {
                 // Alice darf Bob sehen.
-                Assert.That(Zustand(_links,  "alice@links.example", "bob@rechts.example"),
+                Assert.That(Zustand(_links,  "alice@left.example", "bob@right.example"),
                             Is.EqualTo("to"));
 
                 // Bob erlaubt Alice, ihn zu sehen.
-                Assert.That(Zustand(_rechts, "bob@rechts.example",  "alice@links.example"),
+                Assert.That(Zustand(_rechts, "bob@right.example",  "alice@left.example"),
                             Is.EqualTo("from"));
             });
 
@@ -245,7 +245,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WarteAuf(() => anfragen.Count > 0, "die Anfrage bei Bob");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
-            await WarteAuf(() => Zustand(_rechts, "bob@rechts.example", "alice@links.example") == "from",
+            await WarteAuf(() => Zustand(_rechts, "bob@right.example", "alice@left.example") == "from",
                            "die 'from'-Hälfte bei Bob");
 
             var gesehen = new List<String>();
@@ -253,7 +253,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.SetPresenceAsync();
 
-            await WarteAuf(() => gesehen.Any(g => g.StartsWith("bob@rechts.example", StringComparison.Ordinal)),
+            await WarteAuf(() => gesehen.Any(g => g.StartsWith("bob@right.example", StringComparison.Ordinal)),
                            "Bobs Presence bei Alice");
 
         }
@@ -295,7 +295,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
 
-            await WarteAuf(() => gesehen.Any(g => g.StartsWith("bob@rechts.example", StringComparison.Ordinal)),
+            await WarteAuf(() => gesehen.Any(g => g.StartsWith("bob@right.example", StringComparison.Ordinal)),
                            "Bobs Presence allein aufgrund der Zustimmung");
 
         }
@@ -328,7 +328,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WarteAuf(() => anfragen.Count > 0, "die erste Anfrage bei Bob");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
-            await WarteAuf(() => Zustand(_links, "alice@links.example", "bob@rechts.example") == "to",
+            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "to",
                            "die Zustimmung bei Alice");
 
             // Alice fragt noch einmal - Bob soll davon nichts merken.
@@ -340,7 +340,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(anfragen, Has.Count.EqualTo(1),
                             "Der Kontakt darf nicht erneut gefragt werden.");
-                Assert.That(Zustand(_links, "alice@links.example", "bob@rechts.example"),
+                Assert.That(Zustand(_links, "alice@left.example", "bob@right.example"),
                             Is.EqualTo("to"));
             });
 
@@ -368,19 +368,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WarteAuf(() => anfragen.Count > 0, "die Anfrage bei Bob");
 
             await bob.AcceptSubscriptionAsync(alice.BareJid);
-            await WarteAuf(() => Zustand(_links, "alice@links.example", "bob@rechts.example") == "to",
+            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "to",
                            "die Zustimmung bei Alice");
 
             await bob.DenySubscriptionAsync(alice.BareJid);
 
-            await WarteAuf(() => Zustand(_links, "alice@links.example", "bob@rechts.example") == "none",
+            await WarteAuf(() => Zustand(_links, "alice@left.example", "bob@right.example") == "none",
                            "den Entzug bei Alice");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Zustand(_links,  "alice@links.example", "bob@rechts.example"),
+                Assert.That(Zustand(_links,  "alice@left.example", "bob@right.example"),
                             Is.EqualTo("none"));
-                Assert.That(Zustand(_rechts, "bob@rechts.example",  "alice@links.example"),
+                Assert.That(Zustand(_rechts, "bob@right.example",  "alice@left.example"),
                             Is.EqualTo("none"));
             });
 
@@ -399,13 +399,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var angenommen = await _rechts.ReceiveFromRemoteAsync(
-                                 "links.example",
-                                 "<presence from='alice@links.example' to='niemand@rechts.example' type='subscribe'/>");
+                                 "left.example",
+                                 "<presence from='alice@left.example' to='niemand@right.example' type='subscribe'/>");
 
             Assert.Multiple(() =>
             {
                 Assert.That(angenommen, Is.True, "Die Stanza selbst ist in Ordnung.");
-                Assert.That(_rechts.GetAccount("niemand@rechts.example"), Is.Null);
+                Assert.That(_rechts.GetAccount("niemand@right.example"), Is.Null);
             });
 
         }
@@ -435,11 +435,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // Bob gibt es, aber er ist nicht verbunden.
             _rechts.AddAccount("bob");
 
-            await alice.AddContactAsync("bob@rechts.example", "Bob");
+            await alice.AddContactAsync("bob@right.example", "Bob");
 
-            await WarteAuf(() => _rechts.GetAccount("bob@rechts.example")!
+            await WarteAuf(() => _rechts.GetAccount("bob@right.example")!
                                         .PendingSubscriptionRequests
-                                        .ContainsKey("alice@links.example"),
+                                        .ContainsKey("alice@left.example"),
                            "die aufbewahrte Anfrage auf der anderen Seite");
 
             var anfragen = new List<String>();
@@ -449,7 +449,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WarteAuf(() => anfragen.Count > 0, "die nachgereichte Anfrage bei Bob");
 
-            Assert.That(anfragen[0], Is.EqualTo("alice@links.example"));
+            Assert.That(anfragen[0], Is.EqualTo("alice@left.example"));
 
         }
 
