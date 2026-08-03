@@ -501,7 +501,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             "Das abgelehnte Gerät wurde nicht gemeldet.");
 
                 Assert.That(uebersprungen[0].DeviceId, Is.EqualTo(bob.Omemo.Identity.DeviceId));
-                Assert.That(uebersprungen[0].Reason,   Does.Contain("abgelehnt"));
+                Assert.That(uebersprungen[0].Reason,   Does.Contain("refused"));
 
             });
 
@@ -629,7 +629,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(uebersprungen, Has.Count.EqualTo(1),
                             "Das Gerät mit geändertem Schlüssel wurde nicht übersprungen.");
 
-                Assert.That(uebersprungen[0].Reason, Does.Contain("IdentityKey"));
+                Assert.That(uebersprungen[0].Reason, Does.Contain("identity key"));
 
             });
 

@@ -26,29 +26,29 @@ using Microsoft.Extensions.Logging;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Was beim Verschlüsseln für ein einzelnes Gerät herauskam.
+/// What came out of the encryption for a single device.
 /// </summary>
-/// <param name="Jid">Wem es gehört.</param>
-/// <param name="DeviceId">Welches Gerät.</param>
-/// <param name="Reason">Warum es übersprungen wurde.</param>
+/// <param name="Jid">Whom it belongs to.</param>
+/// <param name="DeviceId">Which device.</param>
+/// <param name="Reason">Why it was skipped.</param>
 public sealed record OmemoSkippedDevice(String Jid, UInt32 DeviceId, String Reason);
 
 /// <summary>
-/// Eine entschlüsselte Nachricht.
+/// A decrypted message.
 /// </summary>
-/// <param name="Content">Der Inhalt der SCE-Hülle.</param>
-/// <param name="SenderDeviceId">Von welchem Gerät sie kam.</param>
-/// <param name="Trust">Wie dieses Gerät eingestuft ist.</param>
-/// <param name="IdentityCheck">Ob sein Schlüssel neu, bekannt oder ein anderer ist.</param>
+/// <param name="Content">The content of the SCE envelope.</param>
+/// <param name="SenderDeviceId">Which device it came from.</param>
+/// <param name="Trust">How this device is classified.</param>
+/// <param name="IdentityCheck">Whether its key is new, known or a different one.</param>
 /// <param name="EnvelopeFrom">
-/// Der Absender <b>aus der verschlüsselten Hülle</b> - nicht der aus der
-/// Stanza.
+/// The sender <b>out of the encrypted envelope</b> - not the one from the
+/// stanza.
 /// </param>
 /// <remarks>
-/// Die beiden Absender getrennt zu führen ist der Sinn der Beigabe aus
-/// XEP-0420: Der äussere lässt sich von jedem ändern, der innere nicht. Sie
-/// werden beim Entschlüsseln abgeglichen; hier steht der innere, damit ein
-/// Aufrufer die Prüfung auch sehen kann und nicht nur darauf vertrauen muss.
+/// Keeping the two senders apart is the point of the affix from XEP-0420: the
+/// outer one can be changed by anybody, the inner one cannot. They are compared
+/// when decrypting; here the inner one stands, so that a caller can also see
+/// the check and does not merely have to trust it.
 /// </remarks>
 public sealed record OmemoDecrypted(IReadOnlyList<XElement>  Content,
                                     UInt32                   SenderDeviceId,
@@ -57,30 +57,29 @@ public sealed record OmemoDecrypted(IReadOnlyList<XElement>  Content,
                                     String?                  EnvelopeFrom);
 
 /// <summary>
-/// Führt zusammen, was die Etappen davor gebaut haben: Schlüsselmaterial,
-/// X3DH, Ratschen, Drahtformat, PEP und Speicher.
+/// Brings together what the stages before have built: key material, X3DH,
+/// ratchets, wire format, PEP and storage.
 /// </summary>
 /// <remarks>
-/// <b>Die schwierigste Frage hier ist nicht das Verschlüsseln, sondern was bei
-/// einem Gerät geschieht, für das es nicht klappt.</b> Ein Kontakt hat vier
-/// Geräte, eines davon hat kein abrufbares Bundle. Drei Antworten sind
-/// möglich, und nur eine ist brauchbar:
+/// <b>The hardest question here is not the encrypting but what happens with a
+/// device it does not work for.</b> A contact has four devices, one of them has
+/// no fetchable bundle. Three answers are possible, and only one is usable:
 ///
 /// <list type="bullet">
-/// <item><b>Gar nicht senden.</b> Dann macht ein einziges kaputtes Gerät den
-///       Menschen unerreichbar - und er erfährt nie, warum ihm niemand mehr
-///       schreibt.</item>
-/// <item><b>Unverschlüsselt senden.</b> Das ist die schlimmste: Der Absender
-///       glaubt, verschlüsselt zu haben. Ein Angreifer, der ein Bundle
-///       unerreichbar macht, bekommt damit den Klartext.</item>
-/// <item><b>Verschlüsselt an alle übrigen, und sagen, wer fehlt.</b> Das tut
-///       diese Klasse - <see cref="OmemoEncryptionResult.Skipped"/> nennt
-///       jedes übersprungene Gerät samt Grund.</item>
+/// <item><b>Do not send at all.</b> Then a single broken device makes the human
+///       being unreachable - and they never learn why nobody writes to them any
+///       more.</item>
+/// <item><b>Send unencrypted.</b> That is the worst one: the sender believes
+///       they have encrypted. An attacker who makes a bundle unreachable
+///       thereby gets the plaintext.</item>
+/// <item><b>Encrypted to all the rest, and say who is missing.</b> That is what
+///       this class does - <see cref="OmemoEncryptionResult.Skipped"/> names
+///       every skipped device together with the reason.</item>
 /// </list>
 ///
-/// <b>Die eigenen weiteren Geräte gehören dazu</b>, sonst sieht der eigene
-/// Rechner nicht, was das eigene Telefon geschrieben hat. Das eigene <i>Gerät
-/// selbst</i> nicht: Es müsste eine Sitzung mit sich selbst führen.
+/// <b>One's own further devices belong with it</b>, otherwise one's own
+/// computer does not see what one's own telephone has written. One's own
+/// <i>device itself</i> does not: it would have to keep a session with itself.
 /// </remarks>
 public sealed class OmemoManager
 {
@@ -98,25 +97,25 @@ public sealed class OmemoManager
 
     #region Properties
 
-    /// <summary>Das eigene Schlüsselmaterial.</summary>
+    /// <summary>One's own key material.</summary>
     public OmemoIdentity Identity { get; }
 
-    /// <summary>Der eigene Fingerabdruck.</summary>
+    /// <summary>One's own fingerprint.</summary>
     public String Fingerprint => Identity.Fingerprint;
 
     /// <summary>
-    /// Wird an ein Gerät geschrieben, über das noch niemand entschieden hat?
+    /// Is anything written to a device nobody has decided about yet?
     /// </summary>
     /// <remarks>
-    /// <b>Blind Trust Before Verification.</b> Auf true - der Vorgabe - geht
-    /// eine Nachricht auch an unbestätigte Geräte; auf false nur an
-    /// ausdrücklich bestätigte.
+    /// <b>Blind trust before verification.</b> On true - the default - a message
+    /// goes to unconfirmed devices as well; on false only to expressly confirmed
+    /// ones.
     ///
-    /// Die Vorgabe ist eine Abwägung und keine Bequemlichkeit: Ein Verfahren,
-    /// das vor der ersten Nachricht einen Fingerabdruckvergleich verlangt,
-    /// wird nicht benutzt - und unbenutzte Verschlüsselung schützt niemanden.
-    /// Wer einmal verglichen hat, merkt jeden späteren Wechsel; das ist der
-    /// Gewinn, und er bleibt auch bei blindem Anfangen erhalten.
+    /// The default is a trade-off and no convenience: a procedure that demands a
+    /// fingerprint comparison before the first message does not get used - and
+    /// unused encryption protects nobody. Whoever has compared once notices
+    /// every later change; that is the gain, and it is kept even when the
+    /// beginning was blind.
     /// </remarks>
     public Boolean TrustNewDevicesBlindly { get; set; } = true;
 
@@ -125,8 +124,8 @@ public sealed class OmemoManager
     #region Constructor(s)
 
     /// <summary>
-    /// Baut den Verwalter auf einem Speicher auf - und legt frisches
-    /// Schlüsselmaterial an, wenn es noch keines gibt.
+    /// Builds the manager on a storage - and creates fresh key material when
+    /// there is none yet.
     /// </summary>
     public OmemoManager(IOmemoStore                               store,
                         String                                    ownBareJid,
@@ -150,133 +149,132 @@ public sealed class OmemoManager
     #region EncryptAsync(recipients, content)
 
     /// <summary>
-    /// Verschlüsselt einen Inhalt für alle Geräte der Empfänger und die
-    /// eigenen weiteren.
+    /// Encrypts a content for all devices of the recipients and one's own
+    /// further ones.
     /// </summary>
     public async Task<OmemoEncryptionResult> EncryptAsync(IEnumerable<String>      recipients,
                                                           IReadOnlyList<XElement>  content)
     {
 
-        // Die Hülle nach XEP-0420 - mit dem eigenen Absender darin, damit sich
-        // die Nachricht nicht unter fremdem Namen weiterreichen lässt.
-        var huelle = new SceEnvelope(content,
+        // The envelope per XEP-0420 - with one's own sender in it, so that the
+        // message cannot be passed on under a foreign name.
+        var envelope = new SceEnvelope(content,
                                      From: _ownBareJid,
                                      Time: DateTimeOffset.UtcNow).ToXml();
 
-        var nutzlast = OmemoPayloadCipher.Encrypt(
-                           System.Text.Encoding.UTF8.GetBytes(huelle.ToString(SaveOptions.DisableFormatting)));
+        var payload = OmemoPayloadCipher.Encrypt(
+                           System.Text.Encoding.UTF8.GetBytes(envelope.ToString(SaveOptions.DisableFormatting)));
 
-        var schluessel  = new Dictionary<String, IReadOnlyList<OmemoKey>>(StringComparer.OrdinalIgnoreCase);
-        var uebersprungen = new List<OmemoSkippedDevice>();
+        var keys  = new Dictionary<String, IReadOnlyList<OmemoKey>>(StringComparer.OrdinalIgnoreCase);
+        var skipped = new List<OmemoSkippedDevice>();
 
-        // Die eigenen weiteren Geräte gehören dazu - sonst sieht der eigene
-        // Rechner nicht, was das eigene Telefon geschrieben hat.
+        // One's own further devices belong with it - otherwise one's own
+        // computer does not see what one's own telephone has written.
         foreach (var jid in recipients.Append(_ownBareJid)
                                       .Select(JidUtilities.Bare)
                                       .Distinct(StringComparer.OrdinalIgnoreCase))
         {
 
-            var liste = await _fetchDeviceList(jid);
+            var list = await _fetchDeviceList(jid);
 
-            if (liste is null)
+            if (list is null)
             {
-                uebersprungen.Add(new OmemoSkippedDevice(jid, 0, "keine Geräteliste"));
+                skipped.Add(new OmemoSkippedDevice(jid, 0, "no device list"));
                 continue;
             }
 
-            var fuerDiesenJid = new List<OmemoKey>();
+            var forThisJid = new List<OmemoKey>();
 
-            foreach (var geraet in liste.Devices)
+            foreach (var device in list.Devices)
             {
 
-                // Das eigene Gerät müsste eine Sitzung mit sich selbst führen.
-                if (geraet.Id == Identity.DeviceId &&
+                // One's own device would have to keep a session with itself.
+                if (device.Id == Identity.DeviceId &&
                     String.Equals(jid, _ownBareJid, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var (eintrag, grund) = await VerschluesselnFuerAsync(jid, geraet.Id, nutzlast.KeyAndHmac);
+                var (entry, reason) = await EncryptForAsync(jid, device.Id, payload.KeyAndHmac);
 
-                if (eintrag is not null)
-                    fuerDiesenJid.Add(eintrag);
+                if (entry is not null)
+                    forThisJid.Add(entry);
                 else
-                    uebersprungen.Add(new OmemoSkippedDevice(jid, geraet.Id, grund!));
+                    skipped.Add(new OmemoSkippedDevice(jid, device.Id, reason!));
 
             }
 
-            if (fuerDiesenJid.Count > 0)
-                schluessel[jid] = fuerDiesenJid;
+            if (forThisJid.Count > 0)
+                keys[jid] = forThisJid;
 
         }
 
         return new OmemoEncryptionResult(
-                   new OmemoEncryptedElement(Identity.DeviceId, schluessel, nutzlast.Ciphertext),
-                   uebersprungen);
+                   new OmemoEncryptedElement(Identity.DeviceId, keys, payload.Ciphertext),
+                   skipped);
 
     }
 
     /// <summary>
-    /// Verschlüsselt die 48 Byte für ein einzelnes Gerät - und baut die
-    /// Sitzung auf, wenn es noch keine gibt.
+    /// Encrypts the 48 bytes for a single device - and builds the session when
+    /// there is none yet.
     /// </summary>
-    private async Task<(OmemoKey? Key, String? Reason)> VerschluesselnFuerAsync(String  jid,
+    private async Task<(OmemoKey? Key, String? Reason)> EncryptForAsync(String  jid,
                                                                                 UInt32  deviceId,
                                                                                 Byte[]  keyAndHmac)
     {
 
-        var vertrauen = _store.TrustOf(jid, deviceId);
+        var trust = _store.TrustOf(jid, deviceId);
 
-        if (vertrauen == OmemoTrust.Distrusted)
-            return (null, "ausdrücklich abgelehnt");
+        if (trust == OmemoTrust.Distrusted)
+            return (null, "expressly refused");
 
-        if (vertrauen == OmemoTrust.Undecided && !TrustNewDevicesBlindly)
-            return (null, "nicht bestätigt");
+        if (trust == OmemoTrust.Undecided && !TrustNewDevicesBlindly)
+            return (null, "not confirmed");
 
-        var abgelegt = _store.LoadSession(jid, deviceId);
+        var stored = _store.LoadSession(jid, deviceId);
 
-        // Eine bestehende Sitzung.
-        if (abgelegt is not null)
+        // An existing session.
+        if (stored is not null)
         {
 
-            var ratchet   = DoubleRatchet.Import(abgelegt.Ratchet);
-            var nachricht = ratchet.Encrypt(keyAndHmac, abgelegt.AssociatedData);
+            var ratchet   = DoubleRatchet.Import(stored.Ratchet);
+            var message = ratchet.Encrypt(keyAndHmac, stored.AssociatedData);
 
             _store.SaveSession(jid, deviceId,
-                               new OmemoSessionState(ratchet.Export(), abgelegt.AssociatedData));
+                               new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
 
-            return (new OmemoKey(deviceId, OmemoWireFormat.Encode(nachricht), false), null);
+            return (new OmemoKey(deviceId, OmemoWireFormat.Encode(message), false), null);
 
         }
 
-        // Keine Sitzung - also eine beginnen.
+        // No session - so begin one.
         var bundle = await _fetchBundle(jid, deviceId);
 
         if (bundle is null)
-            return (null, "kein abrufbares Bundle");
+            return (null, "no fetchable bundle");
 
-        // Der IdentityKey aus dem Bundle wird vermerkt, bevor irgendetwas
-        // damit gerechnet wird: Ein Wechsel gehört gemeldet, nicht
-        // stillschweigend benutzt.
-        var pruefung = _store.RecordIdentity(jid, deviceId, bundle.IdentityKey);
+        // The identity key from the bundle is noted down before anything is
+        // computed with it: a change belongs reported, not used silently.
+        var check = _store.RecordIdentity(jid, deviceId, bundle.IdentityKey);
 
-        if (pruefung == OmemoIdentityCheck.Changed)
-            return (null, "der IdentityKey hat sich geändert");
+        if (check == OmemoIdentityCheck.Changed)
+            return (null, "the identity key has changed");
 
         if (!TrustNewDevicesBlindly && _store.TrustOf(jid, deviceId) != OmemoTrust.Trusted)
-            return (null, "nicht bestätigt");
+            return (null, "not confirmed");
 
         var x3dh    = X3DH.Initiate(Identity, bundle);
-        var neu     = DoubleRatchet.InitiateAsSender(x3dh.SharedSecret, bundle.SignedPreKey);
-        var inhalt  = neu.Encrypt(keyAndHmac, x3dh.AssociatedData);
+        var fresh     = DoubleRatchet.InitiateAsSender(x3dh.SharedSecret, bundle.SignedPreKey);
+        var content  = fresh.Encrypt(keyAndHmac, x3dh.AssociatedData);
 
-        _store.SaveSession(jid, deviceId, new OmemoSessionState(neu.Export(), x3dh.AssociatedData));
+        _store.SaveSession(jid, deviceId, new OmemoSessionState(fresh.Export(), x3dh.AssociatedData));
 
-        var austausch = new OmemoKeyExchange(x3dh.UsedPreKeyId ?? 0,
+        var exchange = new OmemoKeyExchange(x3dh.UsedPreKeyId ?? 0,
                                              bundle.SignedPreKeyId,
                                              Identity.PublicIdentityKey,
                                              x3dh.EphemeralKey!,
-                                             OmemoWireFormat.Encode(inhalt));
+                                             OmemoWireFormat.Encode(content));
 
-        return (new OmemoKey(deviceId, austausch.Encode(), true), null);
+        return (new OmemoKey(deviceId, exchange.Encode(), true), null);
 
     }
 
@@ -285,67 +283,66 @@ public sealed class OmemoManager
     #region DecryptAsync(element, senderBareJid)
 
     /// <summary>
-    /// Entschlüsselt eine Nachricht, die an dieses Gerät gerichtet ist.
+    /// Decrypts a message directed at this device.
     /// </summary>
     /// <returns>
-    /// null, wenn nichts für dieses Gerät dabei war oder es sich nicht lesen
-    /// lässt.
+    /// null when there was nothing for this device in it or it cannot be read.
     /// </returns>
     /// <remarks>
-    /// <b>Ein Fehlschlag wirft nicht, sondern ergibt null.</b> Eine
-    /// unlesbare Nachricht ist für den Empfänger dasselbe wie keine, und ein
-    /// Absturz liesse sich von jedem auslösen, der Unsinn schickt. Der Grund
-    /// steht im Protokoll - dort, wo jemand nachsieht, der sucht.
+    /// <b>A failure does not throw but yields null.</b> An unreadable message is
+    /// for the recipient the same as none, and a crash could be triggered by
+    /// anybody who sends nonsense. The reason stands in the log - there, where
+    /// somebody who is looking will look.
     /// </remarks>
     public async Task<OmemoDecrypted?> DecryptAsync(OmemoEncryptedElement  element,
                                                     String                 senderBareJid)
     {
 
         var jid     = JidUtilities.Bare(senderBareJid);
-        var eintrag = element.KeyFor(_ownBareJid, Identity.DeviceId);
+        var entry = element.KeyFor(_ownBareJid, Identity.DeviceId);
 
-        if (eintrag is null)
+        if (entry is null)
         {
-            _logger?.LogDebug("OMEMO: Die Nachricht von {Jid} war nicht für dieses Gerät bestimmt", jid);
+            _logger?.LogDebug("OMEMO: the message from {Jid} was not meant for this device", jid);
             return null;
         }
 
         if (element.Payload is null)
         {
-            // Eine Nachricht ohne Nutzlast baut nur die Sitzung auf. Sie wird
-            // trotzdem verarbeitet - genau dafür gibt es sie.
-            _ = await SitzungAufbauenAsync(jid, element.SenderDeviceId, eintrag);
+            // A message without a payload only builds the session. It is
+            // processed all the same - that is exactly what it exists for.
+            _ = await BuildSessionAsync(jid, element.SenderDeviceId, entry);
             return null;
         }
 
         try
         {
 
-            var (klartext, pruefung) = await EntschluesselnAsync(jid, element.SenderDeviceId, eintrag);
+            var (plaintext, check) = await DecryptEntryAsync(jid, element.SenderDeviceId, entry);
 
-            if (klartext is null)
+            if (plaintext is null)
                 return null;
 
-            var roh = OmemoPayloadCipher.Decrypt(element.Payload, klartext);
+            var raw = OmemoPayloadCipher.Decrypt(element.Payload, plaintext);
 
-            if (!SceEnvelope.TryRead(XElement.Parse(System.Text.Encoding.UTF8.GetString(roh)),
-                                     out var huelle,
+            if (!SceEnvelope.TryRead(XElement.Parse(System.Text.Encoding.UTF8.GetString(raw)),
+                                     out var envelope,
                                      senderBareJid))
             {
-                _logger?.LogWarning("OMEMO: Die Hülle von {Jid} nennt einen anderen Absender", jid);
+                _logger?.LogWarning("OMEMO: the envelope from {Jid} names another sender", jid);
                 return null;
             }
 
-            return new OmemoDecrypted(huelle!.Content,
+            return new OmemoDecrypted(envelope!.Content,
                                       element.SenderDeviceId,
                                       _store.TrustOf(jid, element.SenderDeviceId),
-                                      pruefung,
-                                      huelle.From);
+                                      check,
+                                      envelope.From);
 
         }
         catch (Exception e)
         {
-            _logger?.LogWarning("OMEMO: Die Nachricht von {Jid}/{Device} liess sich nicht lesen: {Reason}",
+            _logger?.LogWarning("OMEMO: the message from {Jid}/{Device} could not be read: {Reason}",
                                 jid, element.SenderDeviceId, e.Message);
             return null;
         }
@@ -353,92 +350,92 @@ public sealed class OmemoManager
     }
 
     /// <summary>
-    /// Holt die 48 Byte aus dem Eintrag - über eine bestehende Sitzung oder
-    /// über einen Schlüsselaustausch.
+    /// Fetches the 48 bytes out of the entry - by way of an existing session or
+    /// by way of a key exchange.
     /// </summary>
-    private async Task<(Byte[]? KeyAndHmac, OmemoIdentityCheck Check)> EntschluesselnAsync(
-        String jid, UInt32 deviceId, OmemoKey eintrag)
+    private async Task<(Byte[]? KeyAndHmac, OmemoIdentityCheck Check)> DecryptEntryAsync(
+        String jid, UInt32 deviceId, OmemoKey entry)
     {
 
-        if (eintrag.IsKeyExchange)
-            return await SitzungAufbauenAsync(jid, deviceId, eintrag);
+        if (entry.IsKeyExchange)
+            return await BuildSessionAsync(jid, deviceId, entry);
 
-        var abgelegt = _store.LoadSession(jid, deviceId);
+        var stored = _store.LoadSession(jid, deviceId);
 
-        if (abgelegt is null)
+        if (stored is null)
         {
-            _logger?.LogWarning("OMEMO: Keine Sitzung mit {Jid}/{Device}, und die Nachricht bringt " +
-                                "keinen Schlüsselaustausch mit", jid, deviceId);
+            _logger?.LogWarning("OMEMO: no session with {Jid}/{Device}, and the message brings " +
+                                "no key exchange along", jid, deviceId);
             return (null, OmemoIdentityCheck.New);
         }
 
-        var ratchet   = DoubleRatchet.Import(abgelegt.Ratchet);
-        var klartext  = ratchet.Decrypt(OmemoWireFormat.Decode(eintrag.Data), abgelegt.AssociatedData);
+        var ratchet   = DoubleRatchet.Import(stored.Ratchet);
+        var plaintext  = ratchet.Decrypt(OmemoWireFormat.Decode(entry.Data), stored.AssociatedData);
 
-        _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), abgelegt.AssociatedData));
+        _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
 
-        return (klartext, OmemoIdentityCheck.Known);
+        return (plaintext, OmemoIdentityCheck.Known);
 
     }
 
     /// <summary>
-    /// Nimmt einen Schlüsselaustausch an und legt die Sitzung an.
+    /// Accepts a key exchange and creates the session.
     /// </summary>
-    private async Task<(Byte[]? KeyAndHmac, OmemoIdentityCheck Check)> SitzungAufbauenAsync(
-        String jid, UInt32 deviceId, OmemoKey eintrag)
+    private async Task<(Byte[]? KeyAndHmac, OmemoIdentityCheck Check)> BuildSessionAsync(
+        String jid, UInt32 deviceId, OmemoKey entry)
     {
 
         await Task.CompletedTask;
 
-        var austausch = OmemoKeyExchange.Decode(eintrag.Data);
+        var exchange = OmemoKeyExchange.Decode(entry.Data);
 
-        // Erst den IdentityKey vermerken, dann rechnen. Ein Wechsel wird
-        // gemeldet und die Nachricht nicht angenommen - von aussen ist ein neu
-        // aufgesetztes Gerät nicht von einem Angreifer zu unterscheiden, und
-        // das ist keine Entscheidung, die ein Programm treffen kann.
-        var pruefung = _store.RecordIdentity(jid, deviceId, austausch.IdentityKey);
+        // First note down the identity key, then compute. A change is reported
+        // and the message is not accepted - from outside a newly set-up device
+        // cannot be told apart from an attacker, and that is not a decision a
+        // program can make.
+        var check = _store.RecordIdentity(jid, deviceId, exchange.IdentityKey);
 
-        if (pruefung == OmemoIdentityCheck.Changed)
+        if (check == OmemoIdentityCheck.Changed)
         {
-            _logger?.LogWarning("OMEMO: {Jid}/{Device} meldet sich mit einem anderen IdentityKey",
+            _logger?.LogWarning("OMEMO: {Jid}/{Device} reports with a different identity key",
                                 jid, deviceId);
-            return (null, pruefung);
+            return (null, check);
         }
 
         var x3dh = X3DH.Accept(Identity,
-                               austausch.IdentityKey,
-                               austausch.EphemeralKey,
-                               austausch.SignedPreKeyId,
-                               austausch.PreKeyId == 0 ? null : austausch.PreKeyId);
+                               exchange.IdentityKey,
+                               exchange.EphemeralKey,
+                               exchange.SignedPreKeyId,
+                               exchange.PreKeyId == 0 ? null : exchange.PreKeyId);
 
         var ratchet   = DoubleRatchet.InitiateAsReceiver(x3dh.SharedSecret, Identity.SignedPreKey);
-        var klartext  = ratchet.Decrypt(OmemoWireFormat.Decode(austausch.Message), x3dh.AssociatedData);
+        var plaintext  = ratchet.Decrypt(OmemoWireFormat.Decode(exchange.Message), x3dh.AssociatedData);
 
         lock (_lock)
         {
 
             _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), x3dh.AssociatedData));
 
-            // Der verbrauchte PreKey ist fort - das gehört sofort abgelegt,
-            // sonst wäre er nach einem Neustart wieder da und die Nachricht
-            // ein zweites Mal annehmbar.
+            // The prekey used up is gone - that belongs stored at once,
+            // otherwise it would be back after a restart and the message
+            // acceptable a second time.
             _store.SaveIdentity(Identity.Export());
 
         }
 
-        return (klartext, pruefung);
+        return (plaintext, check);
 
     }
 
     #endregion
 
-    #region Fingerabdrücke und Vertrauen
+    #region Fingerprints and trust
 
-    /// <summary>Alle bekannten Geräte samt Fingerabdruck und Einstufung.</summary>
+    /// <summary>All known devices together with fingerprint and classification.</summary>
     public IReadOnlyList<OmemoDeviceRecord> KnownDevices()
         => _store.KnownDevices();
 
-    /// <summary>Entscheidet über ein Gerät.</summary>
+    /// <summary>Decides about a device.</summary>
     public Boolean SetTrust(String bareJid, UInt32 deviceId, OmemoTrust trust)
         => _store.SetTrust(JidUtilities.Bare(bareJid), deviceId, trust);
 
@@ -447,17 +444,18 @@ public sealed class OmemoManager
 }
 
 /// <summary>
-/// Das Ergebnis des Verschlüsselns: die Stanza und wer nicht mitlesen kann.
+/// The result of the encryption: the stanza and who cannot read along.
 /// </summary>
-/// <param name="Element">Das <c>&lt;encrypted/&gt;</c>-Element.</param>
+/// <param name="Element">The <c>&lt;encrypted/&gt;</c> element.</param>
 /// <param name="Skipped">
-/// Die übersprungenen Geräte samt Grund - <b>leer heisst: alle sind dabei</b>.
+/// The skipped devices together with the reason - <b>empty means: all are
+/// included</b>.
 /// </param>
 /// <remarks>
-/// Die Liste ist der Grund, warum diese Methode kein blosses
-/// <c>XElement</c> zurückgibt. Ein Absender, der nicht erfährt, dass drei von
-/// vier Geräten seines Gegenübers nicht mitlesen, hält sein Gespräch für
-/// geführt - und wundert sich über die ausbleibende Antwort.
+/// The list is the reason why this method does not give back a mere
+/// <c>XElement</c>. A sender who does not learn that three out of four devices
+/// of their counterpart cannot read along takes their conversation for held -
+/// and wonders about the answer that does not come.
 /// </remarks>
 public sealed record OmemoEncryptionResult(OmemoEncryptedElement                Element,
                                            IReadOnlyList<OmemoSkippedDevice>    Skipped);
