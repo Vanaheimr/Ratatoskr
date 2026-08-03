@@ -28,16 +28,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Das Zielbild aus dem Arbeitsplan: zwei Server mit verschiedenen
-    /// Domains, an jedem ein echter Client, und eine Nachricht geht von einem
-    /// zum anderen.
+    /// The target picture from the work plan: two servers with different
+    /// domains, a real client at each, and a message goes from the one to the
+    /// other.
     ///
-    /// Verbunden sind die beiden über <see cref="DirectServerLinks"/>, also
-    /// ohne Netz dazwischen. Was hier <b>nicht</b> geprüft wird, ist deshalb
-    /// genauso wichtig wie das, was geprüft wird: es gibt keinen Stream, kein
-    /// TLS zwischen den Servern, keinen Dialback. Geprüft wird Routing,
-    /// Adressierung und Zustellung über die Domain-Grenze - und die
-    /// Absenderprüfung, auf die ein echter Transport später baut.
+    /// The two are connected over <see cref="DirectServerLinks"/>, so without a
+    /// net in between. What is <b>not</b> checked here is therefore just as
+    /// important as what is checked: there is no stream, no TLS between the
+    /// servers, no dialback. What is checked is routing, addressing and
+    /// delivery across the domain border - and the sender check a real
+    /// transport builds on later.
     /// </summary>
     [TestFixture]
     public class FederationTests
@@ -45,8 +45,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer _links = null!;
-        private XMPPServer _rechts = null!;
+        private XMPPServer _left  = null!;
+        private XMPPServer _right = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -55,37 +55,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void ZweiServer()
+        public void TwoServers()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The guard on both: An error on the one server often comes about
+            // through a stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            DirectServerLinks.Connect(_links, _rechts);
+            DirectServerLinks.Connect(_left, _right);
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -93,9 +93,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Verbindet einen Client mit einem der beiden Server.</summary>
+        /// <summary>Connects a client to one of the two servers.</summary>
         private async Task<XMPPClient> ConnectAsync(XMPPServer server, String localPart)
         {
 
@@ -121,21 +121,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Trägt einen Kontakt über die Domain-Grenze hinweg in beide Roster
-        /// ein, wie es nach einem vollständigen Subscription-Handshake wäre.
+        /// Enters a contact into both rosters across the domain border, as it
+        /// would be after a complete subscription handshake.
         /// </summary>
-        private void MacheKontakte(XMPPClient a, XMPPClient b)
+        private void MakeContacts(XMPPClient a, XMPPClient b)
         {
 
-            _links.GetAccount(a.BareJid)!.SetRosterEntry(new RosterEntry(b.BareJid, null, "both"));
-            _rechts.GetAccount(b.BareJid)!.SetRosterEntry(new RosterEntry(a.BareJid, null, "both"));
+            _left.GetAccount(a.BareJid)!.SetRosterEntry(new RosterEntry(b.BareJid, null, "both"));
+            _right.GetAccount(b.BareJid)!.SetRosterEntry(new RosterEntry(a.BareJid, null, "both"));
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         #endregion
@@ -144,26 +144,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageCrossesTheDomainBoundary()
 
         /// <summary>
-        /// Der Kern des ganzen Punktes.
+        /// The core of the whole point.
         /// </summary>
         [Test]
         public async Task MessageCrossesTheDomainBoundary()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo über die Grenze!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello across the border!");
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht auf dem anderen Server");
+            await WaitFor(() => received.Count > 0, "the message on the other server");
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen[0].Body,         Is.EqualTo("Hallo über die Grenze!"));
-                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].Body,         Is.EqualTo("Hello across the border!"));
+                Assert.That(received[0].FromBareJid,  Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -173,32 +173,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAnswerFindsItsWayBack()
 
         /// <summary>
-        /// Und zurück - die Richtung ist nicht dieselbe Frage, weil sie über
-        /// die zweite Hälfte der Verkabelung läuft.
+        /// And back - the direction is not the same question, because it runs
+        /// over the second half of the wiring.
         /// </summary>
         [Test]
         public async Task TheAnswerFindsItsWayBack()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var beiBob    = new List<XMPPMessage>();
-            var beiAlice  = new List<XMPPMessage>();
+            var atBob    = new List<XMPPMessage>();
+            var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => beiBob.Add(m);
-            alice.OnMessage  += m => beiAlice.Add(m);
+            bob.OnMessage    += m => atBob.Add(m);
+            alice.OnMessage  += m => atAlice.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Frage");
-            await WarteAuf(() => beiBob.Count > 0, "die Frage bei Bob");
+            await alice.SendMessageAsync(bob.BareJid, "Question");
+            await WaitFor(() => atBob.Count > 0, "the question at Bob's");
 
-            await bob.SendMessageAsync(beiBob[0].FromBareJid, "Antwort");
-            await WarteAuf(() => beiAlice.Count > 0, "die Antwort bei Alice");
+            await bob.SendMessageAsync(atBob[0].FromBareJid, "Answer");
+            await WaitFor(() => atAlice.Count > 0, "the answer at Alice's");
 
             Assert.Multiple(() =>
             {
-                Assert.That(beiAlice[0].Body,         Is.EqualTo("Antwort"));
-                Assert.That(beiAlice[0].FromBareJid,  Is.EqualTo("bob@right.example"));
+                Assert.That(atAlice[0].Body,         Is.EqualTo("Answer"));
+                Assert.That(atAlice[0].FromBareJid,  Is.EqualTo("bob@right.example"));
             });
 
         }
@@ -208,26 +208,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PresenceCrossesTheBoundary()
 
         /// <summary>
-        /// Presence geht denselben Weg - an Kontakte mit <c>from</c> oder
-        /// <c>both</c>, gleich auf welcher Domain sie liegen (RFC 6121,
-        /// Abschnitt 4.2.2).
+        /// Presence takes the same path - to contacts with <c>from</c> or
+        /// <c>both</c>, no matter which domain they lie on (RFC 6121,
+        /// section 4.2.2).
         /// </summary>
         [Test]
         public async Task PresenceCrossesTheBoundary()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            MacheKontakte(alice, bob);
+            MakeContacts(alice, bob);
 
-            var gesehen = new List<(String From, String Type)>();
-            bob.OnPresenceChanged += (from, type) => gesehen.Add((from, type));
+            var seen = new List<(String From, String Type)>();
+            bob.OnPresenceChanged += (from, type) => seen.Add((from, type));
 
             await alice.SetPresenceAsync();
 
-            await WarteAuf(() => gesehen.Any(g => g.From.StartsWith("alice@left.example", StringComparison.Ordinal)),
-                           "Alices Presence bei Bob");
+            await WaitFor(() => seen.Any(g => g.From.StartsWith("alice@left.example", StringComparison.Ordinal)),
+                          "Alice's presence at Bob's");
 
         }
 
@@ -236,32 +236,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PresenceStaysAwayFromNonSubscribers()
 
         /// <summary>
-        /// Die Gegenprobe: ohne Berechtigung geht auch über die Grenze nichts.
+        /// The counter-check: without permission nothing goes across the border
+        /// either.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test bestünde der vorige auch dann, wenn der Server
-        /// Presence einfach an jede fremde Domain schickte, die er kennt.
+        /// Without this test the previous one would pass even if the server
+        /// simply sent presence to every foreign domain it knows.
         /// </remarks>
         [Test]
         public async Task PresenceStaysAwayFromNonSubscribers()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            // Kein MacheKontakte: die beiden kennen einander nicht.
+            // No MakeContacts: the two do not know each other.
 
-            var gesehen = new List<String>();
-            bob.OnPresenceChanged += (from, _) => gesehen.Add(from);
+            var seen = new List<String>();
+            bob.OnPresenceChanged += (from, _) => seen.Add(from);
 
             await alice.SetPresenceAsync();
 
-            var kam = await XMPPServer.WaitUntilAsync(
-                          () => gesehen.Any(f => f.StartsWith("alice@left.example", StringComparison.Ordinal)),
+            var came = await XMPPServer.WaitUntilAsync(
+                           () => seen.Any(f => f.StartsWith("alice@left.example", StringComparison.Ordinal)),
                           TimeSpan.FromSeconds(2));
 
-            Assert.That(kam, Is.False,
-                        "Presence darf nur an Kontakte mit from oder both gehen.");
+            Assert.That(came, Is.False,
+                        "Presence may only go to contacts with from or both.");
 
         }
 
@@ -270,38 +271,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SpoofedSender_IsRejected()
 
         /// <summary>
-        /// Eine Gegenstelle darf ausschliesslich für ihre eigene Domain
-        /// sprechen.
+        /// A far end may speak exclusively for its own domain.
         /// </summary>
         /// <remarks>
-        /// Das ist die Prüfung, um derentwillen es Dialback überhaupt gibt.
-        /// Ohne sie könnte jeder Server, mit dem man je spricht, Nachrichten
-        /// im Namen jedes beliebigen anderen einschleusen - und ein Client
-        /// hätte keine Möglichkeit, das zu bemerken.
+        /// That is the check for whose sake dialback exists at all. Without it
+        /// every server one ever speaks to could smuggle in messages in the
+        /// name of any other one - and a client would have no way of noticing.
         /// </remarks>
         [Test]
         public async Task SpoofedSender_IsRejected()
         {
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen  = new List<XMPPMessage>();
-            var abgewiesen = new List<(String Peer, String Grund)>();
+            var received = new List<XMPPMessage>();
+            var refused  = new List<(String Peer, String Reason)>();
 
-            bob.OnMessage                  += m => empfangen.Add(m);
-            _rechts.OnRemoteStanzaRejected += (peer, grund) => abgewiesen.Add((peer, grund));
+            bob.OnMessage                  += m => received.Add(m);
+            _right.OnRemoteStanzaRejected += (peer, reason) => refused.Add((peer, reason));
 
-            // left.example behauptet, für eine dritte Domain zu sprechen.
-            var angenommen = await _rechts.ReceiveFromRemoteAsync(
-                                 "left.example",
-                                 $"<message from='chef@bank.example' to='{bob.BareJid}' type='chat'>" +
-                                 "<body>Bitte überweisen Sie 10000 Euro.</body></message>");
+            // left.example claims to speak for a third domain.
+            var accepted = await _right.ReceiveFromRemoteAsync(
+                              "left.example",
+                                 $"<message from='boss@bank.example' to='{bob.BareJid}' type='chat'>" +
+                                 "<body>Please transfer 10000 euros.</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(angenommen, Is.False, "Die Stanza hätte abgewiesen werden müssen.");
-                Assert.That(empfangen,  Is.Empty, "Sie darf den Client nicht erreichen.");
-                Assert.That(abgewiesen, Is.Not.Empty, "Die Abweisung muss gemeldet werden.");
+                Assert.That(accepted, Is.False, "The stanza should have been turned away.");
+                Assert.That(received,  Is.Empty, "It must not reach the client.");
+                Assert.That(refused, Is.Not.Empty, "The turning away has to be reported.");
             });
 
         }
@@ -311,30 +310,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region RelayingForThirdParties_IsRejected()
 
         /// <summary>
-        /// Und der Server leitet nicht für Dritte weiter - eine Stanza an eine
-        /// Domain, die nicht seine ist, nimmt er gar nicht erst an.
+        /// And the server does not relay for third parties - a stanza to a
+        /// domain that is not its own it does not even take in.
         /// </summary>
         /// <remarks>
-        /// Sonst wäre er ein offenes Relais: wer einmal verbunden ist, könnte
-        /// über ihn jede andere Domain anschreiben und die Herkunft
-        /// verschleiern.
+        /// Otherwise it would be an open relay: whoever is connected once could
+        /// write to any other domain over it and obscure the origin.
         /// </remarks>
         [Test]
         public async Task RelayingForThirdParties_IsRejected()
         {
 
-            var abgewiesen = new List<String>();
-            _rechts.OnRemoteStanzaRejected += (_, grund) => abgewiesen.Add(grund);
+            var refused = new List<String>();
+            _right.OnRemoteStanzaRejected += (_, reason) => refused.Add(reason);
 
-            var angenommen = await _rechts.ReceiveFromRemoteAsync(
-                                 "left.example",
-                                 "<message from='alice@left.example' to='wer@ganzwoanders.example' type='chat'>" +
-                                 "<body>Weiterreichen bitte.</body></message>");
+            var accepted = await _right.ReceiveFromRemoteAsync(
+                              "left.example",
+                                 "<message from='alice@left.example' to='who@faraway.example' type='chat'>" +
+                                 "<body>Pass it on, please.</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(angenommen, Is.False);
-                Assert.That(abgewiesen, Is.Not.Empty);
+                Assert.That(accepted, Is.False);
+                Assert.That(refused, Is.Not.Empty);
             });
 
         }
@@ -344,23 +342,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnknownDomain_StillYieldsAnError()
 
         /// <summary>
-        /// Eine Domain, zu der es keine Verbindung gibt, führt weiterhin zum
-        /// Fehler - auch wenn es andere Verbindungen gibt.
+        /// A domain there is no connection to still leads to the error - even
+        /// when there are other connections.
         /// </summary>
         [Test]
         public async Task UnknownDomain_StillYieldsAnError()
         {
 
-            var alice   = await ConnectAsync(_links, "alice");
-            var fehler  = new List<StanzaError>();
+            var alice   = await ConnectAsync(_left, "alice");
+            var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => fehler.Add(e);
+            alice.OnStanzaError += (_, e) => errors.Add(e);
 
-            await alice.SendMessageAsync("wer@ganzwoanders.example", "Hallo?");
+            await alice.SendMessageAsync("who@faraway.example", "Hello?");
 
-            await WarteAuf(() => fehler.Count > 0, "den Fehler zur unbekannten Domain");
+            await WaitFor(() => errors.Count > 0, "the error for the unknown domain");
 
-            Assert.That(fehler[0].Condition, Is.EqualTo("remote-server-not-found"));
+            Assert.That(errors[0].Condition, Is.EqualTo("remote-server-not-found"));
 
         }
 
@@ -369,16 +367,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConnectingAServerToItself_IsRefused()
 
         /// <summary>
-        /// Zwei Server auf derselben Domain zu verbinden ergibt nichts und ist
-        /// fast sicher ein Versehen.
+        /// To connect two servers on the same domain yields nothing and is
+        /// almost surely an oversight.
         /// </summary>
         [Test]
         public async Task ConnectingAServerToItself_IsRefused()
         {
 
-            await using var doppelt = _guard.Watched(new XMPPServer("left.example"));
+            await using var duplicate = _guard.Watched(new XMPPServer("left.example"));
 
-            Assert.Throws<ArgumentException>(() => DirectServerLinks.Connect(_links, doppelt));
+            Assert.Throws<ArgumentException>(() => DirectServerLinks.Connect(_left, duplicate));
 
         }
 
@@ -387,54 +385,52 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStanzaFromAbroad_ReachesTheClientAsJabberClient()
 
         /// <summary>
-        /// Was von einem fremden Server hereinkommt, geht dem lokalen Client
-        /// als <c>jabber:client</c> zu - nicht als <c>jabber:server</c>.
+        /// What comes in from a foreign server goes to the local client as
+        /// <c>jabber:client</c> - not as <c>jabber:server</c>.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 4.8.1 gibt jedem Stream seinen
-        /// Content-Namensraum: <c>jabber:server</c> zwischen Servern,
-        /// <c>jabber:client</c> auf der Client-Verbindung. Beim Übergang muss
-        /// er mitwechseln. Die ausgehende Richtung war schon behoben, die
-        /// eingehende blieb liegen - unser eigener Client stört sich nicht
-        /// daran, weil er Stanzas am lokalen Namen erkennt und den Namensraum
-        /// gar nicht ansieht.
+        /// RFC 6120, section 4.8.1 gives every stream its content namespace:
+        /// <c>jabber:server</c> between servers, <c>jabber:client</c> on the
+        /// client connection. At the transition it has to change along. The
+        /// outbound direction was fixed already, the inbound one was left
+        /// lying - our own client does not mind, because it recognises stanzas
+        /// by the local name and does not look at the namespace at all.
         ///
-        /// Genau diese Nachsicht hat den Fehler auf der anderen Seite
-        /// jahrelang verdeckt: der Client schickte seine Stanzas ohne jeden
-        /// Namensraum hinaus, und niemand hat es bemerkt, bis Prosody das
-        /// Bind-IQ abwies.
+        /// Precisely this leniency covered up the error on the other side for
+        /// years: the client sent its stanzas out without any namespace, and
+        /// nobody noticed until Prosody turned the bind IQ away.
         ///
-        /// Geprüft wird auf dem Draht, nicht am Ereignis: was der Client daraus
-        /// macht, ist eine andere Frage als das, was er bekommt.
+        /// What is checked is on the wire, not at the event: what the client
+        /// makes of it is a different question from what it gets.
         /// </remarks>
         [Test]
         public async Task AStanzaFromAbroad_ReachesTheClientAsJabberClient()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            MacheKontakte(alice, bob);
+            MakeContacts(alice, bob);
 
-            await alice.SendMessageAsync(bob.BareJid, "Über die Grenze");
+            await alice.SendMessageAsync(bob.BareJid, "Across the border");
 
-            var bobsSitzung = _rechts.SessionOf(bob.FullJid!)!;
+            var bobsSession = _right.SessionOf(bob.FullJid!)!;
 
-            await WarteAuf(() => bobsSitzung.Sent.Any(f => f.Contains("Über die Grenze",
-                                                                     StringComparison.Ordinal)),
-                           "die zugestellte Nachricht");
+            await WaitFor(() => bobsSession.Sent.Any(f => f.Contains("Across the border",
+                                                                    StringComparison.Ordinal)),
+                           "the delivered message");
 
-            var zugestellt = bobsSitzung.Sent.First(f => f.Contains("Über die Grenze",
-                                                                   StringComparison.Ordinal));
+            var delivered = bobsSession.Sent.First(f => f.Contains("Across the border",
+                                                                  StringComparison.Ordinal));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(zugestellt, Does.Contain("xmlns='jabber:client'"),
-                            "Die Stanza kam ohne den Namensraum der Client-Verbindung an.");
+                Assert.That(delivered, Does.Contain("xmlns='jabber:client'"),
+                            "The stanza arrived without the namespace of the client connection.");
 
-                Assert.That(zugestellt, Does.Not.Contain("jabber:server"),
-                            "Der Namensraum der Serververbindung ist mit durchgereicht worden.");
+                Assert.That(delivered, Does.Not.Contain("jabber:server"),
+                            "The namespace of the server connection has been passed through.");
 
             });
 
@@ -445,40 +441,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EverythingTheServerSendsCarriesTheClientNamespace()
 
         /// <summary>
-        /// Auch was der Server selbst erzeugt, trägt den Namensraum.
+        /// What the server itself produces carries the namespace as well.
         /// </summary>
         /// <remarks>
-        /// Über TCP stünde er einmal am <c>&lt;stream:stream&gt;</c> und gälte
-        /// für alles darin. Über WebSocket gibt es dieses Element nicht: jeder
-        /// Rahmen muss für sich lesbar sein, „complete with all relevant
-        /// namespace and language declarations" (RFC 7395, Abschnitt 3.3.3).
+        /// Over TCP it would stand once at the <c>&lt;stream:stream&gt;</c> and
+        /// would hold for everything within. Over WebSocket this element does
+        /// not exist: every frame has to be readable on its own, "complete with
+        /// all relevant namespace and language declarations" (RFC 7395,
+        /// section 3.3.3).
         ///
-        /// Der Server hat bis hierher gar keinen geschickt - Presence,
-        /// Roster-Pushes, Fehler-IQs, alles ohne. Aufgefallen ist es nie, weil
-        /// unser Client sie am lokalen Namen erkennt. Ein fremder Client dürfte
-        /// strenger sein, und wir wüssten erst dann davon.
+        /// Up to here the server sent none at all - presence, roster pushes,
+        /// error IQs, all without. It never stood out, because our client
+        /// recognises them by the local name. A foreign client would be
+        /// allowed to be stricter, and we would learn of it only then.
         ///
-        /// Nonzas bleiben aussen vor: sie bringen ihren eigenen Namensraum mit,
-        /// und ein <c>&lt;enabled/&gt;</c> nach <c>jabber:client</c> umzuhängen
-        /// machte es unlesbar.
+        /// Nonzas stay out of it: they bring their own namespace along, and to
+        /// rehang an <c>&lt;enabled/&gt;</c> onto <c>jabber:client</c> would
+        /// make it unreadable.
         /// </remarks>
         [Test]
         public async Task EverythingTheServerSendsCarriesTheClientNamespace()
         {
 
-            var alice = await ConnectAsync(_links, "alice");
+            var alice = await ConnectAsync(_left, "alice");
 
-            var sitzung = _links.SessionOf(alice.FullJid!)!;
+            var session = _left.SessionOf(alice.FullJid!)!;
 
-            await WarteAuf(() => sitzung.Sent.Any(f => f.StartsWith("<iq", StringComparison.Ordinal)),
-                           "irgendeine Stanza vom Server");
+            await WaitFor(() => session.Sent.Any(f => f.StartsWith("<iq", StringComparison.Ordinal)),
+                          "any stanza from the server");
 
-            var stanzas = sitzung.Sent.Where(f => f.StartsWith("<message",  StringComparison.Ordinal) ||
+            var stanzas = session.Sent.Where(f => f.StartsWith("<message",  StringComparison.Ordinal) ||
                                                   f.StartsWith("<presence", StringComparison.Ordinal) ||
                                                   f.StartsWith("<iq",       StringComparison.Ordinal))
                                       .ToList();
 
-            var nonzas  = sitzung.Sent.Where(f => f.StartsWith("<open",     StringComparison.Ordinal) ||
+            var nonzas  = session.Sent.Where(f => f.StartsWith("<open",     StringComparison.Ordinal) ||
                                                   f.StartsWith("<features", StringComparison.Ordinal) ||
                                                   f.StartsWith("<success",  StringComparison.Ordinal) ||
                                                   f.StartsWith("<enabled",  StringComparison.Ordinal))
@@ -491,11 +488,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 foreach (var s in stanzas)
                     Assert.That(s, Does.Contain("xmlns='jabber:client'"),
-                                $"Ohne Namensraum hinausgegangen: {s}");
+                                $"Gone out without a namespace: {s}");
 
                 foreach (var n in nonzas)
                     Assert.That(n, Does.Not.Contain("jabber:client"),
-                                $"Einer Nonza den Stanza-Namensraum aufgesetzt: {n}");
+                                $"Put the stanza namespace on a nonza: {n}");
 
             });
 

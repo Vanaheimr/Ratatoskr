@@ -32,16 +32,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Dasselbe Zielbild wie in <see cref="FederationTests"/> und
-    /// <see cref="WebSocketFederationTests"/>, diesmal über die klassische
-    /// Rahmung: TCP, <c>jabber:server</c>-Streams (RFC 6120).
+    /// The same target picture as in <see cref="FederationTests"/> and
+    /// <see cref="WebSocketFederationTests"/>, this time over the classic
+    /// framing: TCP, <c>jabber:server</c> streams (RFC 6120).
     /// </summary>
     /// <remarks>
-    /// Der Sinn dieser Datei ist der Vergleich. Sie prüft dieselben Dinge wie
-    /// die WebSocket-Fassung, und sie tut es mit derselben Protokollschicht -
-    /// gewechselt hat nur, was darunter liegt. Bliebe hier etwas rot, das dort
-    /// grün ist, wäre die Trennung aus S4b-1 an genau der Stelle nicht sauber
-    /// gewesen.
+    /// The point of this file is the comparison. It checks the same things as
+    /// the WebSocket version, and it does so with the same protocol layer -
+    /// what has changed is only what lies underneath. Were something to stay
+    /// red here that is green there, the separation from S4b-1 would not have
+    /// been clean at precisely that place.
     /// </remarks>
     [TestFixture(TcpTlsMode.StartTls)]
     [TestFixture(TcpTlsMode.Direct)]
@@ -51,26 +51,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Data
 
         /// <summary>
-        /// Jeder Test läuft zweimal: einmal mit STARTTLS (RFC 6120 §5.4) und
-        /// einmal mit TLS ab dem ersten Byte.
+        /// Every test runs twice: once with STARTTLS (RFC 6120 §5.4) and once
+        /// with TLS from the first byte on.
         /// </summary>
         /// <remarks>
-        /// Beide Wege enden in derselben Protokollschicht, unterscheiden sich
-        /// aber in allem davor. Die Fragen sind dieselben, also sollen sie auch
-        /// zweimal gestellt werden - statt einen zweiten Satz Tests zu
-        /// schreiben, der bei jeder Änderung nachzuziehen wäre.
+        /// Both paths end in the same protocol layer but differ in everything
+        /// before it. The questions are the same, so they shall be put twice as
+        /// well - instead of writing a second set of tests that would have to
+        /// be pulled along at every change.
         /// </remarks>
-        private readonly TcpTlsMode _modus;
+        private readonly TcpTlsMode _mode;
 
-        public TcpFederationTests(TcpTlsMode modus)
+        public TcpFederationTests(TcpTlsMode mode)
         {
-            _modus = modus;
+            _mode = mode;
         }
 
-        private XMPPServer _links = null!;
-        private XMPPServer _rechts = null!;
-        private TcpServerLinks _linksLinks = null!;
-        private TcpServerLinks _rechtsLinks = null!;
+        private XMPPServer _left           = null!;
+        private XMPPServer _right          = null!;
+        private TcpServerLinks _leftLinks  = null!;
+        private TcpServerLinks _rightLinks = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -79,43 +79,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void ZweiServer()
+        public void TwoServers()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The guard on both: An error on the one server often comes about
+            // through a stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            TcpServerLinks.Connect(_links, _rechts, _modus);
+            TcpServerLinks.Connect(_left, _right, _mode);
 
-            _linksLinks   = (TcpServerLinks) _links.ServerLinks!;
-            _rechtsLinks  = (TcpServerLinks) _rechts.ServerLinks!;
+            _leftLinks   = (TcpServerLinks) _left.ServerLinks!;
+            _rightLinks  = (TcpServerLinks) _right.ServerLinks!;
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            await _linksLinks.DisposeAsync();
-            await _rechtsLinks.DisposeAsync();
+            await _leftLinks.DisposeAsync();
+            await _rightLinks.DisposeAsync();
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -123,7 +123,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private async Task<XMPPClient> ConnectAsync(XMPPServer server, String localPart)
         {
@@ -149,10 +149,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         #endregion
@@ -161,27 +161,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageCrossesTheDomainBoundaryOverTcp()
 
         /// <summary>
-        /// Der Kern: eine Nachricht über einen echten
-        /// <c>jabber:server</c>-Stream.
+        /// The core: a message over a real <c>jabber:server</c> stream.
         /// </summary>
         [Test]
         public async Task MessageCrossesTheDomainBoundaryOverTcp()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo über TCP!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello over TCP!");
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht auf dem anderen Server");
+            await WaitFor(() => received.Count > 0, "the message on the other server");
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen[0].Body,         Is.EqualTo("Hallo über TCP!"));
-                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].Body,         Is.EqualTo("Hello over TCP!"));
+                Assert.That(received[0].FromBareJid,  Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -194,22 +193,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheAnswerFindsItsWayBackOverTcp()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var beiBob    = new List<XMPPMessage>();
-            var beiAlice  = new List<XMPPMessage>();
+            var atBob    = new List<XMPPMessage>();
+            var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => beiBob.Add(m);
-            alice.OnMessage  += m => beiAlice.Add(m);
+            bob.OnMessage    += m => atBob.Add(m);
+            alice.OnMessage  += m => atAlice.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Frage");
-            await WarteAuf(() => beiBob.Count > 0, "die Frage bei Bob");
+            await alice.SendMessageAsync(bob.BareJid, "Question");
+            await WaitFor(() => atBob.Count > 0, "the question at Bob's");
 
-            await bob.SendMessageAsync(beiBob[0].FromBareJid, "Antwort");
-            await WarteAuf(() => beiAlice.Count > 0, "die Antwort bei Alice");
+            await bob.SendMessageAsync(atBob[0].FromBareJid, "Answer");
+            await WaitFor(() => atAlice.Count > 0, "the answer at Alice's");
 
-            Assert.That(beiAlice[0].Body, Is.EqualTo("Antwort"));
+            Assert.That(atAlice[0].Body, Is.EqualTo("Answer"));
 
         }
 
@@ -221,30 +220,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task SeveralMessagesReuseTheSameConnection()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "eins");
-            await WarteAuf(() => empfangen.Count == 1, "die erste Nachricht");
+            await alice.SendMessageAsync(bob.BareJid, "one");
+            await WaitFor(() => received.Count == 1, "the first message");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            var nachDemAufbau = _rechtsLinks.InboundConnectionCount;
+            var afterTheSetup = _rightLinks.InboundConnectionCount;
 
-            await alice.SendMessageAsync(bob.BareJid, "zwei");
-            await alice.SendMessageAsync(bob.BareJid, "drei");
-            await WarteAuf(() => empfangen.Count == 3, "alle drei Nachrichten");
+            await alice.SendMessageAsync(bob.BareJid, "two");
+            await alice.SendMessageAsync(bob.BareJid, "three");
+            await WaitFor(() => received.Count == 3, "all three messages");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(nachDemAufbau, Is.GreaterThan(0));
-                Assert.That(_rechtsLinks.InboundConnectionCount, Is.EqualTo(nachDemAufbau),
-                            "Weitere Nachrichten dürfen keine neue Verbindung aufbauen.");
+                Assert.That(afterTheSetup, Is.GreaterThan(0));
+                Assert.That(_rightLinks.InboundConnectionCount, Is.EqualTo(afterTheSetup),
+                            "Further messages must not build a new connection.");
             });
 
         }
@@ -254,31 +253,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ALongMessageSurvivesBeingSplitAcrossPackets()
 
         /// <summary>
-        /// Eine Stanza, die nicht in ein TCP-Paket passt.
+        /// A stanza that does not fit into one TCP packet.
         /// </summary>
         /// <remarks>
-        /// Über WebSocket gibt es diese Frage nicht - ein Frame ist ein
-        /// Element. Über TCP ist sie <b>die</b> Frage, und sie fällt bei
-        /// kurzen Testnachrichten über localhost nie auf. Deshalb hier ein
-        /// Rumpf, der jede übliche Paketgrösse überschreitet.
+        /// Over WebSocket this question does not exist - a frame is an element.
+        /// Over TCP it is <b>the</b> question, and it never stands out with
+        /// short test messages over localhost. Hence a body here that exceeds
+        /// every usual packet size.
         /// </remarks>
         [Test]
         public async Task ALongMessageSurvivesBeingSplitAcrossPackets()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            var lang = String.Concat(Enumerable.Repeat("Lange Nachricht. ", 4000));
+            var longBody = String.Concat(Enumerable.Repeat("Long message. ", 4000));
 
-            await alice.SendMessageAsync(bob.BareJid, lang);
+            await alice.SendMessageAsync(bob.BareJid, longBody);
 
-            await WarteAuf(() => empfangen.Count > 0, "die lange Nachricht");
+            await WaitFor(() => received.Count > 0, "the long message");
 
-            Assert.That(empfangen[0].Body, Is.EqualTo(lang));
+            Assert.That(received[0].Body, Is.EqualTo(longBody));
 
         }
 
@@ -290,16 +289,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task ADomainWithoutAPeer_StillYieldsAnError()
         {
 
-            var alice   = await ConnectAsync(_links, "alice");
-            var fehler  = new List<StanzaError>();
+            var alice   = await ConnectAsync(_left, "alice");
+            var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => fehler.Add(e);
+            alice.OnStanzaError += (_, e) => errors.Add(e);
 
-            await alice.SendMessageAsync("wer@ganzwoanders.example", "Hallo?");
+            await alice.SendMessageAsync("who@faraway.example", "Hello?");
 
-            await WarteAuf(() => fehler.Count > 0, "den Fehler zur unbekannten Domain");
+            await WaitFor(() => errors.Count > 0, "the error for the unknown domain");
 
-            Assert.That(fehler[0].Condition, Is.EqualTo("remote-server-not-found"));
+            Assert.That(errors[0].Condition, Is.EqualTo("remote-server-not-found"));
 
         }
 
@@ -308,116 +307,114 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnImpostorWithoutTheSecret_FailsDialbackOverTcp()
 
         /// <summary>
-        /// Dialback über TCP - wer die Domain nur behauptet, kommt nicht
-        /// durch.
+        /// Dialback over TCP - whoever merely claims the domain does not get
+        /// through.
         /// </summary>
         /// <remarks>
-        /// Der Hochstapler baut eine rohe TLS-Verbindung auf und schreibt den
-        /// Stream von Hand. Das ist zugleich die Gegenprobe dazu, dass die
-        /// Rahmung wirklich RFC 6120 ist und nicht doch noch etwas von
-        /// RFC 7395 durchscheint: ein Stream-Kopf im falschen Format käme hier
-        /// gar nicht erst an.
+        /// The impostor builds a raw TLS connection up and writes the stream by
+        /// hand. That is at the same time the counter-check that the framing
+        /// really is RFC 6120 and that nothing of RFC 7395 shows through after
+        /// all: a stream header in the wrong format would not even arrive here.
         /// </remarks>
         [Test]
         public Task AnImpostorWithoutTheSecret_FailsDialbackOverTcp()
-            => HochstaplerScheitert("left.example");
+            => ImpostorFails("left.example");
 
         #endregion
 
         #region AnImpostorForAnUnknownDomain_CannotBeVerifiedAtAll()
 
         /// <summary>
-        /// Für eine Domain ohne hinterlegte Adresse kann niemand gefragt
-        /// werden - also wird auch nichts angenommen.
+        /// For a domain without a deposited address nobody can be asked - so
+        /// nothing is taken in either.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum vorigen Test: dort scheitert der Schlüssel, hier
-        /// scheitert schon die Möglichkeit zu prüfen. Ohne diesen Fall bliebe
-        /// die Zeile, die eine unbekannte Domain ablehnt, ungeprüft - und die
-        /// unbekannte Domain wäre der bequemere Weg hinein als die bekannte.
+        /// The counter-check to the previous test: there the key fails, here
+        /// the very possibility of checking fails. Without this case the line
+        /// refusing an unknown domain would stay unchecked - and the unknown
+        /// domain would be the more convenient way in than the known one.
         /// </remarks>
         [Test]
         public Task AnImpostorForAnUnknownDomain_CannotBeVerifiedAtAll()
-            => HochstaplerScheitert("niemand.example");
+            => ImpostorFails("nobody.example");
 
         #endregion
 
-        #region (Hilfsfunktion) HochstaplerScheitert(behaupteteDomain)
+        #region (helper function) ImpostorFails(claimedDomain)
 
         /// <summary>
-        /// Verbindet sich von Hand mit dem TCP-S2S-Eingang, behauptet eine
-        /// fremde Domain, legt einen erfundenen Dialback-Schlüssel vor und
-        /// versucht danach zuzustellen.
+        /// Connects by hand to the TCP S2S entrance, claims a foreign domain,
+        /// presents an invented dialback key and tries to deliver afterwards.
         /// </summary>
-        private async Task HochstaplerScheitert(String behaupteteDomain)
+        private async Task ImpostorFails(String claimedDomain)
         {
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
             using var client = new TcpClient();
-            await client.ConnectAsync(System.Net.IPAddress.Loopback, _rechtsLinks.Port);
+            await client.ConnectAsync(System.Net.IPAddress.Loopback, _rightLinks.Port);
 
-            // Je nach Betriebsart kommt TLS sofort oder erst nach der
-            // Aushandlung. Der Hochstapler muss denselben Weg gehen wie ein
-            // echter Server - sonst prüft der Test nur, dass zwei Seiten
-            // aneinander vorbeireden.
-            await using var tls = _modus == TcpTlsMode.StartTls
-                                      ? await StartTlsVonHandAsync(client)
-                                      : await SofortTlsAsync(client);
+            // Depending on the mode of operation TLS comes at once or only
+            // after the negotiation. The impostor has to take the same path as
+            // a real server - otherwise the test only checks that two sides
+            // talk past each other.
+            await using var tls = _mode == TcpTlsMode.StartTls
+                                      ? await StartTlsByHandAsync(client)
+                                      : await ImmediateTlsAsync(client);
 
-            var gelesen = new StringBuilder();
+            var loaded = new StringBuilder();
 
             _ = Task.Run(async () =>
             {
-                var puffer = new Byte[8192];
+                var buffer = new Byte[8192];
                 try
                 {
                     while (true)
                     {
-                        var n = await tls.ReadAsync(puffer);
+                        var n = await tls.ReadAsync(buffer);
                         if (n <= 0) break;
-                        lock (gelesen) gelesen.Append(Encoding.UTF8.GetString(puffer, 0, n));
+                        lock (loaded) loaded.Append(Encoding.UTF8.GetString(buffer, 0, n));
                     }
                 }
-                catch (Exception) { /* Verbindung zu - erwartet */ }
+                catch (Exception) { /* connection shut - expected */ }
             });
 
-            async Task Sende(String text)
+            async Task Send(String text)
                 => await tls.WriteAsync(Encoding.UTF8.GetBytes(text));
 
-            Boolean Sah(String text)
+            Boolean Saw(String text)
             {
-                lock (gelesen) return gelesen.ToString().Contains(text, StringComparison.Ordinal);
+                lock (loaded) return loaded.ToString().Contains(text, StringComparison.Ordinal);
             }
 
-            await Sende("<stream:stream xmlns='jabber:server' " +
-                        "xmlns:stream='http://etherx.jabber.org/streams' " +
+            await Send("<stream:stream xmlns='jabber:server' " +
+                       "xmlns:stream='http://etherx.jabber.org/streams' " +
                         "xmlns:db='jabber:server:dialback' " +
-                        $"from='{behaupteteDomain}' to='right.example' version='1.0'>");
+                        $"from='{claimedDomain}' to='right.example' version='1.0'>");
 
-            await WarteAuf(() => Sah("<stream:stream"), "den Stream-Kopf der Gegenstelle");
+            await WaitFor(() => Saw("<stream:stream"), "the stream header of the far end");
 
-            await Sende($"<db:result from='{behaupteteDomain}' to='right.example'>" +
-                        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" +
+            await Send($"<db:result from='{claimedDomain}' to='right.example'>" +
+                       "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" +
                         "</db:result>");
 
-            await WarteAuf(() => Sah("db:result") && Sah("type="), "die Dialback-Antwort");
+            await WaitFor(() => Saw("db:result") && Saw("type="), "the dialback answer");
 
-            await Sende($"<message from='wer@{behaupteteDomain}' to='{bob.BareJid}' type='chat'>" +
-                        "<body>Durchgerutscht?</body></message>");
+            await Send($"<message from='who@{claimedDomain}' to='{bob.BareJid}' type='chat'>" +
+                       "<body>Slipped through?</body></message>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Sah("type='invalid'"), Is.True,
-                            "Der erfundene Schlüssel muss als ungültig zurückkommen.");
-                Assert.That(Sah("type='valid'"),   Is.False);
-                Assert.That(empfangen, Is.Empty,
-                            "Ohne bestandenes Dialback darf keine Stanza zugestellt werden.");
+                Assert.That(Saw("type='invalid'"), Is.True,
+                            "The invented key has to come back as invalid.");
+                Assert.That(Saw("type='valid'"),   Is.False);
+                Assert.That(received, Is.Empty,
+                            "Without a passed dialback no stanza may be delivered.");
             });
 
         }
@@ -427,81 +424,82 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PlaintextGetsNoStream()
 
         /// <summary>
-        /// Der Kern von STARTTLS: wer die Verschlüsselung ausschlägt, bekommt
-        /// keinen Stream - und keinen unverschlüsselten.
+        /// The core of STARTTLS: whoever declines the encryption gets no stream
+        /// - and no unencrypted one.
         /// </summary>
         /// <remarks>
-        /// Nur im STARTTLS-Betrieb sinnvoll; bei TLS ab dem ersten Byte gibt
-        /// es die Frage nicht, weil im Klartext gar nichts erst ankäme.
+        /// Only meaningful in STARTTLS operation; with TLS from the first byte
+        /// on the question does not exist, because in plaintext nothing would
+        /// arrive at all.
         ///
-        /// Das ist die Zeile, an der die Aushandlung ihren Wert hat. Ein
-        /// Server, der nach einem abgelehnten <c>&lt;starttls/&gt;</c> einfach
-        /// im Klartext weitermachte, hätte die Verschlüsselung zu einer
-        /// Höflichkeit gemacht, die jeder Zwischenmann wegverhandeln kann.
+        /// That is the line at which the negotiation has its worth. A server
+        /// that simply carried on in plaintext after a declined
+        /// <c>&lt;starttls/&gt;</c> would have made the encryption into a
+        /// politeness that every man in the middle can negotiate away.
         /// </remarks>
         [Test]
         public async Task PlaintextGetsNoStream()
         {
 
-            if (_modus != TcpTlsMode.StartTls)
-                Assert.Ignore("Nur im STARTTLS-Betrieb sinnvoll.");
+            if (_mode != TcpTlsMode.StartTls)
+                Assert.Ignore("Only meaningful in STARTTLS operation.");
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
             using var client = new TcpClient();
-            await client.ConnectAsync(System.Net.IPAddress.Loopback, _rechtsLinks.Port);
+            await client.ConnectAsync(System.Net.IPAddress.Loopback, _rightLinks.Port);
 
-            var netz    = client.GetStream();
-            var puffer  = new Byte[8192];
+            var net     = client.GetStream();
+            var buffer  = new Byte[8192];
 
-            await netz.WriteAsync(Encoding.UTF8.GetBytes(
-                "<stream:stream xmlns='jabber:server' " +
+            await net.WriteAsync(Encoding.UTF8.GetBytes(
+               "<stream:stream xmlns='jabber:server' " +
                 "xmlns:stream='http://etherx.jabber.org/streams' " +
                 "from='left.example' to='right.example' version='1.0'>"));
 
-            var begruessung = "";
+            var greeting = "";
 
-            while (!begruessung.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal))
+            while (!greeting.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal))
             {
-                var n = await netz.ReadAsync(puffer);
+                var n = await net.ReadAsync(buffer);
                 if (n <= 0) break;
-                begruessung += Encoding.UTF8.GetString(puffer, 0, n);
+                greeting += Encoding.UTF8.GetString(buffer, 0, n);
             }
 
-            Assert.That(begruessung, Does.Contain("<required/>"),
-                        "STARTTLS muss als zwingend angekündigt werden.");
+            Assert.That(greeting, Does.Contain("<required/>"),
+                        "STARTTLS has to be announced as mandatory.");
 
-            // Statt <starttls/> gleich eine Stanza - im Klartext.
-            await netz.WriteAsync(Encoding.UTF8.GetBytes(
-                $"<message from='alice@left.example' to='{bob.BareJid}' type='chat'>" +
-                "<body>Ohne Verschlüsselung, bitte.</body></message>"));
+            // Instead of <starttls/> a stanza straight away - in plaintext.
+            await net.WriteAsync(Encoding.UTF8.GetBytes(
+               $"<message from='alice@left.example' to='{bob.BareJid}' type='chat'>" +
+                "<body>Without encryption, please.</body></message>"));
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen, Is.Empty,
-                            "Im Klartext darf keine Stanza zugestellt werden.");
-                Assert.That(begruessung, Does.Not.Contain("proceed"),
-                            "Ohne <starttls/> gibt es kein <proceed/>.");
+                Assert.That(received, Is.Empty,
+                            "In plaintext no stanza may be delivered.");
+                Assert.That(greeting, Does.Not.Contain("proceed"),
+                            "Without <starttls/> there is no <proceed/>.");
             });
 
         }
 
         #endregion
 
-        #region (Hilfsfunktionen) SofortTlsAsync / StartTlsVonHandAsync
+        #region (helper functions) ImmediateTlsAsync / StartTlsByHandAsync
 
-        /// <summary>TLS ab dem ersten Byte.</summary>
-        private async Task<SslStream> SofortTlsAsync(TcpClient client)
+        /// <summary>TLS from the first byte on.</summary>
+        private async Task<SslStream> ImmediateTlsAsync(TcpClient client)
         {
 
             var tls = new SslStream(client.GetStream(),
                                     leaveInnerStreamOpen: false,
-                                    userCertificateValidationCallback: _rechts.IsOwnCertificate);
+                                    userCertificateValidationCallback: _right.IsOwnCertificate);
 
             await tls.AuthenticateAsClientAsync("right.example");
 
@@ -510,55 +508,55 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Die STARTTLS-Aushandlung aus RFC 6120, Abschnitt 5.4 von Hand -
-        /// Klartext-Stream, <c>&lt;starttls/&gt;</c>, <c>&lt;proceed/&gt;</c>,
-        /// dann TLS.
+        /// The STARTTLS negotiation from RFC 6120, section 5.4 by hand -
+        /// plaintext stream, <c>&lt;starttls/&gt;</c>, <c>&lt;proceed/&gt;</c>,
+        /// then TLS.
         /// </summary>
         /// <remarks>
-        /// Von Hand und nicht über <see cref="TcpServerLinks"/>, damit der
-        /// Test die Gegenstelle wirklich prüft und nicht bloss die eigene
-        /// Implementierung gegen sich selbst.
+        /// By hand and not over <see cref="TcpServerLinks"/>, so that the test
+        /// really checks the far end and not merely our own implementation
+        /// against itself.
         /// </remarks>
-        private async Task<SslStream> StartTlsVonHandAsync(TcpClient client)
+        private async Task<SslStream> StartTlsByHandAsync(TcpClient client)
         {
 
-            var netz    = client.GetStream();
-            var puffer  = new Byte[8192];
+            var net     = client.GetStream();
+            var buffer  = new Byte[8192];
 
-            async Task Roh(String text)
-                => await netz.WriteAsync(Encoding.UTF8.GetBytes(text));
+            async Task Raw(String text)
+                => await net.WriteAsync(Encoding.UTF8.GetBytes(text));
 
-            async Task<String> Lies()
+            async Task<String> Read()
             {
-                var n = await netz.ReadAsync(puffer);
-                return Encoding.UTF8.GetString(puffer, 0, n);
+                var n = await net.ReadAsync(buffer);
+                return Encoding.UTF8.GetString(buffer, 0, n);
             }
 
-            await Roh("<stream:stream xmlns='jabber:server' " +
+            await Raw("<stream:stream xmlns='jabber:server' " +
                       "xmlns:stream='http://etherx.jabber.org/streams' " +
-                      "from='beliebig.example' to='right.example' version='1.0'>");
+                      "from='arbitrary.example' to='right.example' version='1.0'>");
 
-            var begruessung = "";
+            var greeting = "";
 
-            while (!begruessung.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal))
-                begruessung += await Lies();
+            while (!greeting.Contains("urn:ietf:params:xml:ns:xmpp-tls", StringComparison.Ordinal))
+                greeting += await Read();
 
-            Assert.That(begruessung, Does.Contain("<required/>"),
-                        "Der Server muss STARTTLS als zwingend ankündigen.");
+            Assert.That(greeting, Does.Contain("<required/>"),
+                        "The server has to announce STARTTLS as mandatory.");
 
-            await Roh("<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+            await Raw("<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
 
-            var antwort = "";
+            var reply = "";
 
-            while (!antwort.Contains("proceed", StringComparison.Ordinal) &&
-                   !antwort.Contains("failure", StringComparison.Ordinal))
-                antwort += await Lies();
+            while (!reply.Contains("proceed", StringComparison.Ordinal) &&
+                   !reply.Contains("failure", StringComparison.Ordinal))
+                reply += await Read();
 
-            Assert.That(antwort, Does.Contain("proceed"));
+            Assert.That(reply, Does.Contain("proceed"));
 
-            var tls = new SslStream(netz,
+            var tls = new SslStream(net,
                                     leaveInnerStreamOpen: false,
-                                    userCertificateValidationCallback: _rechts.IsOwnCertificate);
+                                    userCertificateValidationCallback: _right.IsOwnCertificate);
 
             await tls.AuthenticateAsClientAsync("right.example");
 
@@ -571,49 +569,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DisposingTheLinks_ClosesEstablishedInboundConnections()
 
         /// <summary>
-        /// Ein beendeter S2S-Zweig lässt keine angenommene Verbindung offen.
+        /// A finished S2S branch leaves no accepted connection open.
         /// </summary>
         /// <remarks>
-        /// Das Abbrechen des Tokens genügt dafür nicht: der Lesevorgang auf
-        /// einem Socket bricht damit nicht zuverlässig ab, die Schleife bleibt
-        /// stehen, bis die Gegenstelle auflegt. Bis dahin hält <b>sie</b> die
-        /// Verbindung für benutzbar und schickt darüber weiter - alles davon
-        /// ist verloren, und niemand erfährt es.
+        /// Cancelling the token is not enough for that: the reading on a socket
+        /// does not break off reliably with it, the loop stays put until the
+        /// far end hangs up. Until then <b>it</b> considers the connection
+        /// usable and goes on sending over it - all of that is lost, and nobody
+        /// learns of it.
         ///
-        /// Gefunden im Lauf gegen Prosody: nach dem Ende eines Testservers
-        /// beantwortete Prosody die nächste Anfrage noch dreissig Sekunden lang
-        /// über den längst toten Socket. Zwischen zwei Instanzen dieses Servers
-        /// fiel das nie auf, weil dort beide Seiten gleichzeitig verschwinden.
+        /// Found in the run against Prosody: after the end of a test server
+        /// Prosody went on answering the next request over the long dead socket
+        /// for thirty seconds. Between two instances of this server that never
+        /// stood out, because there both sides disappear at the same time.
         ///
-        /// Ohne TLS, weil es hier um den Socket geht und nicht um den
-        /// Handshake darüber.
+        /// Without TLS, because this is about the socket and not about the
+        /// handshake over it.
         /// </remarks>
         [Test]
         public async Task DisposingTheLinks_ClosesEstablishedInboundConnections()
         {
 
-            await using var server = _guard.Watched(new XMPPServer("allein.example", useTLS: false));
+            await using var server = _guard.Watched(new XMPPServer("alone.example", useTLS: false));
             server.Start();
 
             var links = new TcpServerLinks(server, mode: TcpTlsMode.None);
 
-            using var gegenstelle = new TcpClient();
-            await gegenstelle.ConnectAsync(System.Net.IPAddress.Loopback, links.Port);
+            using var peer = new TcpClient();
+            await peer.ConnectAsync(System.Net.IPAddress.Loopback, links.Port);
 
-            await WarteAuf(() => links.InboundConnectionCount > 0,
-                           "die angenommene Verbindung");
+            await WaitFor(() => links.InboundConnectionCount > 0,
+                          "the accepted connection");
 
             await links.DisposeAsync();
 
-            // Ein geschlossener Socket liefert beim Lesen 0 Bytes. Bleibt er
-            // offen, läuft das Zeitlimit ab und der Test scheitert genau daran.
-            var puffer = new Byte[1];
+            // A closed socket delivers 0 bytes on reading. If it stays open,
+            // the time limit runs out and the test fails on precisely that.
+            var buffer = new Byte[1];
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-            var gelesen = await gegenstelle.GetStream().ReadAsync(puffer, cts.Token);
+            var loaded = await peer.GetStream().ReadAsync(buffer, cts.Token);
 
-            Assert.That(gelesen, Is.Zero,
-                        "Die Gegenstelle hält die Verbindung weiter für offen.");
+            Assert.That(loaded, Is.Zero,
+                        "The far end still considers the connection open.");
 
         }
 

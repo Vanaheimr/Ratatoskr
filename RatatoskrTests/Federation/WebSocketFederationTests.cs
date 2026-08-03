@@ -31,19 +31,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Dasselbe Zielbild wie in <see cref="FederationTests"/> - zwei Server,
-    /// zwei Clients, eine Nachricht über die Domain-Grenze -, diesmal aber
-    /// über ein echtes Netz: <see cref="WebSocketServerLinks"/> statt
+    /// The same target picture as in <see cref="FederationTests"/> - two
+    /// servers, two clients, a message across the domain border -, this time
+    /// however over a real net: <see cref="WebSocketServerLinks"/> instead of
     /// <see cref="DirectServerLinks"/>.
     /// </summary>
     /// <remarks>
-    /// Der Unterschied zu <see cref="FederationTests"/> ist genau die Zeile
-    /// im Setup, die die beiden Server verbindet. Alles andere - Routing,
-    /// Adressierung, Absenderprüfung - ist bereits dort geprüft und muss hier
-    /// nicht noch einmal geprüft werden; hier geht es um den Transport
-    /// selbst: kommt eine Stanza wirklich über einen Socket, durch TLS,
-    /// zweimal auseinandergefaltet (WebSocket-Rahmen, dann S2S-Rahmen) und
-    /// wieder zusammen an.
+    /// The difference to <see cref="FederationTests"/> is precisely the line in
+    /// the setup that connects the two servers. Everything else - routing,
+    /// addressing, sender check - is checked there already and does not have to
+    /// be checked here once more; here it is about the transport itself: does a
+    /// stanza really arrive over a socket, through TLS, unfolded twice
+    /// (WebSocket frame, then S2S frame) and put together again.
     /// </remarks>
     [TestFixture]
     public class WebSocketFederationTests
@@ -51,10 +50,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer _links = null!;
-        private XMPPServer _rechts = null!;
-        private WebSocketServerLinks _linksLinks = null!;
-        private WebSocketServerLinks _rechtsLinks = null!;
+        private XMPPServer _left  = null!;
+        private XMPPServer _right = null!;
+        private WebSocketServerLinks _leftLinks = null!;
+        private WebSocketServerLinks _rightLinks = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -63,43 +62,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void ZweiServer()
+        public void TwoServers()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The guard on both: An error on the one server often comes about
+            // through a stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
-            WebSocketServerLinks.Connect(_links, _rechts);
+            WebSocketServerLinks.Connect(_left, _right);
 
-            _linksLinks   = (WebSocketServerLinks) _links.ServerLinks!;
-            _rechtsLinks  = (WebSocketServerLinks) _rechts.ServerLinks!;
+            _leftLinks   = (WebSocketServerLinks) _left.ServerLinks!;
+            _rightLinks  = (WebSocketServerLinks) _right.ServerLinks!;
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* does not matter in the teardown */ }
             }
 
             _clients.Clear();
 
-            await _linksLinks.DisposeAsync();
-            await _rechtsLinks.DisposeAsync();
+            await _leftLinks.DisposeAsync();
+            await _rightLinks.DisposeAsync();
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -107,7 +106,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private async Task<XMPPClient> ConnectAsync(XMPPServer server, String localPart)
         {
@@ -133,82 +132,81 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         /// <summary>
-        /// Ein Hochstapler: verbindet sich von Hand mit dem S2S-Eingang eines
-        /// Servers und behauptet, für eine fremde Domain zu sprechen.
+        /// An impostor: connects by hand to the S2S entrance of a server and
+        /// claims to speak for a foreign domain.
         /// </summary>
         /// <remarks>
-        /// Bewusst zu Fuss über einen rohen <see cref="ClientWebSocket"/> und
-        /// nicht über <see cref="WebSocketServerLinks"/>: dessen ausgehender
-        /// Zweig würde brav einen richtigen Schlüssel erzeugen. Ein Angreifer
-        /// hat das Geheimnis der Domain aber gerade nicht - genau das soll
-        /// geprüft werden.
+        /// On foot over a raw <see cref="ClientWebSocket"/> on purpose and not
+        /// over <see cref="WebSocketServerLinks"/>: its outbound branch would
+        /// dutifully produce a correct key. An attacker however does not have
+        /// the secret of the domain - precisely that is what is to be checked.
         /// </remarks>
-        private sealed class Hochstapler : IAsyncDisposable
+        private sealed class Impostor : IAsyncDisposable
         {
 
             private readonly ClientWebSocket _socket = new();
 
-            public List<String> Empfangen { get; } = [];
+            public List<String> Received { get; } = [];
 
-            public async Task VerbindeAsync(WebSocketServerLinks ziel, XMPPServer zielServer)
+            public async Task ConnectAsync(WebSocketServerLinks target, XMPPServer targetServer)
             {
 
                 _socket.Options.AddSubProtocol("xmpp-server");
-                _socket.Options.RemoteCertificateValidationCallback = zielServer.IsOwnCertificate;
+                _socket.Options.RemoteCertificateValidationCallback = targetServer.IsOwnCertificate;
 
-                await _socket.ConnectAsync(new Uri(ziel.Uri), CancellationToken.None);
+                await _socket.ConnectAsync(new Uri(target.Uri), CancellationToken.None);
 
-                _ = LiesAsync();
+                _ = ReadAsync();
 
             }
 
-            public async Task SendeAsync(String rahmen)
-                => await _socket.SendAsync(Encoding.UTF8.GetBytes(rahmen),
+            public async Task SendAsync(String frame)
+                => await _socket.SendAsync(Encoding.UTF8.GetBytes(frame),
                                            WebSocketMessageType.Text, true, CancellationToken.None);
 
-            private async Task LiesAsync()
+            private async Task ReadAsync()
             {
 
-                var puffer = new Byte[8192];
+                var buffer = new Byte[8192];
 
                 try
                 {
                     while (_socket.State == WebSocketState.Open)
                     {
 
-                        var ergebnis = await _socket.ReceiveAsync(puffer, CancellationToken.None);
+                        var result = await _socket.ReceiveAsync(buffer, CancellationToken.None);
 
-                        if (ergebnis.MessageType == WebSocketMessageType.Close)
+                        if (result.MessageType == WebSocketMessageType.Close)
                             break;
 
-                        lock (Empfangen)
-                            Empfangen.Add(Encoding.UTF8.GetString(puffer, 0, ergebnis.Count));
+                        lock (Received)
+                            Received.Add(Encoding.UTF8.GetString(buffer, 0, result.Count));
 
                     }
                 }
                 catch (Exception)
                 {
-                    // Verbindung zu - im Test der erwartete Ausgang.
+                    // Connection shut - in the test the expected outcome.
                 }
 
             }
 
-            public Boolean Sah(String text)
+            public Boolean Saw(String text)
             {
-                lock (Empfangen)
-                    return Empfangen.Any(f => f.Contains(text, StringComparison.Ordinal));
+                lock (Received)
+                    return Received.Any(f => f.Contains(text, StringComparison.Ordinal));
             }
 
             public ValueTask DisposeAsync()
             {
-                try { _socket.Dispose(); } catch { /* egal */ }
+                try { _socket.Dispose(); } catch { /* does not matter */ }
                 return ValueTask.CompletedTask;
             }
 
@@ -220,27 +218,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageCrossesTheDomainBoundaryOverWebSocket()
 
         /// <summary>
-        /// Der Kern: eine Nachricht geht durch zwei echte Server, verbunden
-        /// über einen echten WebSocket-S2S-Link.
+        /// The core: a message goes through two real servers, connected over a
+        /// real WebSocket S2S link.
         /// </summary>
         [Test]
         public async Task MessageCrossesTheDomainBoundaryOverWebSocket()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo über den echten Draht!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello over the real wire!");
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht auf dem anderen Server");
+            await WaitFor(() => received.Count > 0, "the message on the other server");
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen[0].Body,         Is.EqualTo("Hallo über den echten Draht!"));
-                Assert.That(empfangen[0].FromBareJid,  Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].Body,         Is.EqualTo("Hello over the real wire!"));
+                Assert.That(received[0].FromBareJid,  Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -250,29 +248,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAnswerFindsItsWayBackOverWebSocket()
 
         /// <summary>
-        /// Zurück läuft die Antwort über den zweiten, unabhängig aufgebauten
-        /// Link in Gegenrichtung.
+        /// Back the answer runs over the second, independently built link in
+        /// the reverse direction.
         /// </summary>
         [Test]
         public async Task TheAnswerFindsItsWayBackOverWebSocket()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var beiBob    = new List<XMPPMessage>();
-            var beiAlice  = new List<XMPPMessage>();
+            var atBob    = new List<XMPPMessage>();
+            var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => beiBob.Add(m);
-            alice.OnMessage  += m => beiAlice.Add(m);
+            bob.OnMessage    += m => atBob.Add(m);
+            alice.OnMessage  += m => atAlice.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Frage");
-            await WarteAuf(() => beiBob.Count > 0, "die Frage bei Bob");
+            await alice.SendMessageAsync(bob.BareJid, "Question");
+            await WaitFor(() => atBob.Count > 0, "the question at Bob's");
 
-            await bob.SendMessageAsync(beiBob[0].FromBareJid, "Antwort");
-            await WarteAuf(() => beiAlice.Count > 0, "die Antwort bei Alice");
+            await bob.SendMessageAsync(atBob[0].FromBareJid, "Answer");
+            await WaitFor(() => atAlice.Count > 0, "the answer at Alice's");
 
-            Assert.That(beiAlice[0].Body, Is.EqualTo("Antwort"));
+            Assert.That(atAlice[0].Body, Is.EqualTo("Answer"));
 
         }
 
@@ -281,51 +279,51 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SeveralMessagesReuseTheSameConnection()
 
         /// <summary>
-        /// Zweite und dritte Nachricht bauen keine neue Verbindung mehr auf -
-        /// der Verbindungs-Cache greift.
+        /// The second and third message do not build a new connection any more
+        /// - the connection cache takes hold.
         /// </summary>
         /// <remarks>
-        /// Geprüft wird, dass die Zahl der Verbindungen nicht <b>wächst</b>,
-        /// nicht dass sie einen bestimmten Wert hat. Wie viele der erste
-        /// Austausch braucht, hängt daran, was sonst noch über die Grenze geht:
-        /// mit Dialback kommt je Richtung eine Verifikationsverbindung dazu,
-        /// und Bobs automatische Empfangsbestätigung (XEP-0184/0333) baut die
-        /// Gegenrichtung gleich mit auf. Eine feste Zahl hier festzuschreiben
-        /// hiesse, den Test bei jeder solchen Änderung nachzuziehen, ohne dass
-        /// er dadurch mehr über die Wiederverwendung aussagte.
+        /// What is checked is that the number of connections does not
+        /// <b>grow</b>, not that it has a particular value. How many the first
+        /// exchange needs hangs on what else goes across the border: with
+        /// dialback a verification connection comes along per direction, and
+        /// Bob's automatic delivery receipt (XEP-0184/0333) builds the reverse
+        /// direction straight away too. To fix a particular number here would
+        /// mean pulling the test along at every such change without it saying
+        /// any more about the reuse for it.
         /// </remarks>
         [Test]
         public async Task SeveralMessagesReuseTheSameConnection()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "eins");
-            await WarteAuf(() => empfangen.Count == 1, "die erste Nachricht");
+            await alice.SendMessageAsync(bob.BareJid, "one");
+            await WaitFor(() => received.Count == 1, "the first message");
 
-            // Der Gegenrichtung Zeit lassen, sich ebenfalls aufzubauen -
-            // sonst zählte der Vergleich unten eine Verbindung mit, die
-            // ohnehin gerade erst entstand.
+            // Give the reverse direction time to build itself up as well -
+            // otherwise the comparison below would count a connection that had
+            // only just come about anyway.
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            var nachDemAufbau = _rechtsLinks.InboundConnectionCount;
+            var afterTheSetup = _rightLinks.InboundConnectionCount;
 
-            await alice.SendMessageAsync(bob.BareJid, "zwei");
-            await alice.SendMessageAsync(bob.BareJid, "drei");
-            await WarteAuf(() => empfangen.Count == 3, "alle drei Nachrichten");
+            await alice.SendMessageAsync(bob.BareJid, "two");
+            await alice.SendMessageAsync(bob.BareJid, "three");
+            await WaitFor(() => received.Count == 3, "all three messages");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(nachDemAufbau, Is.GreaterThan(0),
-                            "Der erste Austausch muss überhaupt eine Verbindung gebraucht haben.");
-                Assert.That(_rechtsLinks.InboundConnectionCount, Is.EqualTo(nachDemAufbau),
-                            "Weitere Nachrichten dürfen keine neue S2S-Verbindung aufbauen.");
+                Assert.That(afterTheSetup, Is.GreaterThan(0),
+                            "The first exchange must have needed a connection at all.");
+                Assert.That(_rightLinks.InboundConnectionCount, Is.EqualTo(afterTheSetup),
+                            "Further messages must not build a new S2S connection.");
             });
 
         }
@@ -335,23 +333,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADomainWithoutAPeer_StillYieldsAnError()
 
         /// <summary>
-        /// Eine unbekannte Domain führt weiterhin zum Fehler, jetzt über den
-        /// echten Transport statt über <see cref="DirectServerLinks"/>.
+        /// An unknown domain still leads to the error, now over the real
+        /// transport instead of over <see cref="DirectServerLinks"/>.
         /// </summary>
         [Test]
         public async Task ADomainWithoutAPeer_StillYieldsAnError()
         {
 
-            var alice   = await ConnectAsync(_links, "alice");
-            var fehler  = new List<StanzaError>();
+            var alice   = await ConnectAsync(_left, "alice");
+            var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => fehler.Add(e);
+            alice.OnStanzaError += (_, e) => errors.Add(e);
 
-            await alice.SendMessageAsync("wer@ganzwoanders.example", "Hallo?");
+            await alice.SendMessageAsync("who@faraway.example", "Hello?");
 
-            await WarteAuf(() => fehler.Count > 0, "den Fehler zur unbekannten Domain");
+            await WaitFor(() => errors.Count > 0, "the error for the unknown domain");
 
-            Assert.That(fehler[0].Condition, Is.EqualTo("remote-server-not-found"));
+            Assert.That(errors[0].Condition, Is.EqualTo("remote-server-not-found"));
 
         }
 
@@ -360,60 +358,60 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnImpostorWithoutTheSecret_FailsDialback()
 
         /// <summary>
-        /// Der Punkt von Dialback: wer die Domain nur behauptet, kommt nicht
-        /// durch (XEP-0220).
+        /// The point of dialback: whoever merely claims the domain does not get
+        /// through (XEP-0220).
         /// </summary>
         /// <remarks>
-        /// Der Hochstapler baut regulär auf und legt einen selbst erfundenen
-        /// Schlüssel für <c>left.example</c> vor. Der annehmende Server fragt
-        /// daraufhin nicht ihn, sondern die Adresse, die <b>er selbst</b> für
-        /// <c>left.example</c> hinterlegt hat - und der echte
-        /// <c>left.example</c> kennt den Schlüssel nicht. Genau darauf beruht
-        /// das Verfahren: die Prüfung fragt nie den, der geprüft wird.
+        /// The impostor builds up regularly and presents a self-invented key
+        /// for <c>left.example</c>. The accepting server thereupon asks not it
+        /// but the address <b>it itself</b> has deposited for
+        /// <c>left.example</c> - and the real <c>left.example</c> does not know
+        /// the key. Precisely on that the procedure rests: the check never asks
+        /// the one being checked.
         /// </remarks>
         [Test]
         public async Task AnImpostorWithoutTheSecret_FailsDialback()
         {
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await using var boese = new Hochstapler();
-            await boese.VerbindeAsync(_rechtsLinks, _rechts);
+            await using var evil = new Impostor();
+            await evil.ConnectAsync(_rightLinks, _right);
 
-            await boese.SendeAsync(
-                "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
+            await evil.SendAsync(
+              "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
                 "from='left.example' to='right.example' version='1.0'/>");
 
-            await WarteAuf(() => boese.Sah("<open"), "den Stream-Kopf der Gegenstelle");
+            await WaitFor(() => evil.Saw("<open"), "the stream header of the far end");
 
-            // Ein frei erfundener Schlüssel - das Geheimnis von left.example
-            // hat der Angreifer nicht.
-            await boese.SendeAsync(
-                "<db:result xmlns:db='jabber:server:dialback' " +
+            // A freely invented key - the attacker does not have the secret of
+            // left.example.
+            await evil.SendAsync(
+              "<db:result xmlns:db='jabber:server:dialback' " +
                 "from='left.example' to='right.example'>" +
                 "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" +
                 "</db:result>");
 
-            await WarteAuf(() => boese.Sah("db:result") && boese.Sah("type="),
-                           "die Dialback-Antwort");
+            await WaitFor(() => evil.Saw("db:result") && evil.Saw("type="),
+                          "the dialback answer");
 
-            // Und der Versuch, trotzdem zuzustellen.
-            await boese.SendeAsync(
-                $"<message from='alice@left.example' to='{bob.BareJid}' type='chat'>" +
-                "<body>Durchgerutscht?</body></message>");
+            // And the attempt to deliver nevertheless.
+            await evil.SendAsync(
+              $"<message from='alice@left.example' to='{bob.BareJid}' type='chat'>" +
+                "<body>Slipped through?</body></message>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(boese.Sah("type='invalid'"), Is.True,
-                            "Der erfundene Schlüssel muss als ungültig zurückkommen.");
-                Assert.That(boese.Sah("type='valid'"),   Is.False);
-                Assert.That(empfangen, Is.Empty,
-                            "Ohne bestandenes Dialback darf keine Stanza zugestellt werden.");
+                Assert.That(evil.Saw("type='invalid'"), Is.True,
+                            "The invented key has to come back as invalid.");
+                Assert.That(evil.Saw("type='valid'"),   Is.False);
+                Assert.That(received, Is.Empty,
+                            "Without a passed dialback no stanza may be delivered.");
             });
 
         }
@@ -423,52 +421,52 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnImpostorForAnUnknownDomain_CannotBeVerifiedAtAll()
 
         /// <summary>
-        /// Für eine Domain, zu der es keine hinterlegte Adresse gibt, kann
-        /// niemand gefragt werden - also wird auch nichts angenommen.
+        /// For a domain there is no deposited address for, nobody can be asked
+        /// - so nothing is taken in either.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum vorigen Test: dort scheiterte der Schlüssel,
-        /// hier scheitert schon die Möglichkeit zu prüfen. Beides muss zur
-        /// Ablehnung führen, sonst wäre die unbekannte Domain der bequemere
-        /// Weg hinein.
+        /// The counter-check to the previous test: there the key failed, here
+        /// the very possibility of checking fails. Both have to lead to a
+        /// refusal, otherwise the unknown domain would be the more convenient
+        /// way in.
         /// </remarks>
         [Test]
         public async Task AnImpostorForAnUnknownDomain_CannotBeVerifiedAtAll()
         {
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await using var boese = new Hochstapler();
-            await boese.VerbindeAsync(_rechtsLinks, _rechts);
+            await using var evil = new Impostor();
+            await evil.ConnectAsync(_rightLinks, _right);
 
-            await boese.SendeAsync(
-                "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
-                "from='niemand.example' to='right.example' version='1.0'/>");
+            await evil.SendAsync(
+              "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
+                "from='nobody.example' to='right.example' version='1.0'/>");
 
-            await WarteAuf(() => boese.Sah("<open"), "den Stream-Kopf der Gegenstelle");
+            await WaitFor(() => evil.Saw("<open"), "the stream header of the far end");
 
-            await boese.SendeAsync(
-                "<db:result xmlns:db='jabber:server:dialback' " +
-                "from='niemand.example' to='right.example'>" +
+            await evil.SendAsync(
+              "<db:result xmlns:db='jabber:server:dialback' " +
+                "from='nobody.example' to='right.example'>" +
                 "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff" +
                 "</db:result>");
 
-            await WarteAuf(() => boese.Sah("db:result") && boese.Sah("type="),
-                           "die Dialback-Antwort");
+            await WaitFor(() => evil.Saw("db:result") && evil.Saw("type="),
+                          "the dialback answer");
 
-            await boese.SendeAsync(
-                $"<message from='wer@niemand.example' to='{bob.BareJid}' type='chat'>" +
-                "<body>Und so?</body></message>");
+            await evil.SendAsync(
+              $"<message from='who@nobody.example' to='{bob.BareJid}' type='chat'>" +
+                "<body>And like this?</body></message>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(boese.Sah("type='invalid'"), Is.True);
-                Assert.That(empfangen, Is.Empty);
+                Assert.That(evil.Saw("type='invalid'"), Is.True);
+                Assert.That(received, Is.Empty);
             });
 
         }
@@ -478,60 +476,58 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SpoofedSender_IsRejectedAndEndsTheStream()
 
         /// <summary>
-        /// Über den echten Transport hat die Absenderprüfung jetzt eine
-        /// Konsequenz, die <see cref="DirectServerLinks"/> nicht bieten
-        /// konnte: der Stream endet, und die Verbindung wird abgebaut statt
-        /// als Leiche weiterzuhängen.
+        /// Over the real transport the sender check now has a consequence
+        /// <see cref="DirectServerLinks"/> could not offer: the stream ends,
+        /// and the connection is torn down instead of hanging on as a corpse.
         /// </summary>
         /// <remarks>
-        /// <see cref="WebSocketServerLinks.DeliverAsync"/> meldet nur, ob der
-        /// Rahmen auf einen offenen Stream geschrieben wurde - für eine
-        /// echte S2S-Verbindung gibt es kein synchrones "angekommen und
-        /// akzeptiert" je Stanza, das wäre XEP-0198 und keine Eigenschaft von
-        /// S2S. Beobachtbar ist die Ablehnung deshalb nicht am Rückgabewert,
-        /// sondern daran, dass der Client die Nachricht nie sieht und dass
-        /// die nächste Zustellung an dieselbe Domain eine neue Verbindung
-        /// aufbaut, weil die alte tot ist.
+        /// <see cref="WebSocketServerLinks.DeliverAsync"/> reports only whether
+        /// the frame was written onto an open stream - for a real S2S
+        /// connection there is no synchronous "arrived and accepted" per
+        /// stanza, that would be XEP-0198 and no property of S2S. The refusal
+        /// is therefore observable not at the return value but at the client
+        /// never seeing the message and at the next delivery to the same domain
+        /// building a new connection, because the old one is dead.
         /// </remarks>
         [Test]
         public async Task SpoofedSender_IsRejectedAndEndsTheStream()
         {
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen  = new List<XMPPMessage>();
-            var abgewiesen = new List<(String Peer, String Grund)>();
+            var received = new List<XMPPMessage>();
+            var refused  = new List<(String Peer, String Reason)>();
 
-            bob.OnMessage                  += m => empfangen.Add(m);
-            _rechts.OnRemoteStanzaRejected += (peer, grund) => abgewiesen.Add((peer, grund));
+            bob.OnMessage                  += m => received.Add(m);
+            _right.OnRemoteStanzaRejected += (peer, reason) => refused.Add((peer, reason));
 
-            // left.example baut regulär auf (die Verbindung weist sich also
-            // korrekt als "left.example" aus), behauptet in der Stanza selbst
-            // aber, für eine dritte Domain zu sprechen.
-            await _linksLinks.DeliverAsync(
-                "right.example",
-                $"<message from='chef@bank.example' to='{bob.BareJid}' type='chat'>" +
-                "<body>Bitte überweisen Sie 10000 Euro.</body></message>");
+            // left.example builds up regularly (the connection therefore
+            // identifies itself correctly as "left.example"), but claims in the
+            // stanza itself to speak for a third domain.
+            await _leftLinks.DeliverAsync(
+               "right.example",
+                $"<message from='boss@bank.example' to='{bob.BareJid}' type='chat'>" +
+                "<body>Please transfer 10000 euros.</body></message>");
 
-            await WarteAuf(() => abgewiesen.Count > 0, "die Abweisung durch die Absenderprüfung");
+            await WaitFor(() => refused.Count > 0, "the turning away by the sender check");
 
-            Assert.That(empfangen, Is.Empty, "Die gefälschte Nachricht darf den Client nicht erreichen.");
+            Assert.That(received, Is.Empty, "The forged message must not reach the client.");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
-            var vorDerEchten = _rechtsLinks.InboundConnectionCount;
+            var beforeTheRealOne = _rightLinks.InboundConnectionCount;
 
-            // Der Stream von vorhin ist zu. Eine echte Nachricht muss trotzdem
-            // ankommen - über eine neu aufgebaute Verbindung.
-            await alice.SendMessageAsync(bob.BareJid, "Trotzdem da.");
-            await WarteAuf(() => empfangen.Count > 0, "die echte Nachricht nach dem Stream-Fehler");
+            // The stream from before is shut. A real message has to arrive
+            // nevertheless - over a newly built connection.
+            await alice.SendMessageAsync(bob.BareJid, "Here anyway.");
+            await WaitFor(() => received.Count > 0, "the real message after the stream error");
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@left.example"));
-                Assert.That(_rechtsLinks.InboundConnectionCount, Is.GreaterThan(vorDerEchten),
-                            "Nach dem Stream-Fehler muss die nächste Zustellung eine neue Verbindung aufbauen.");
+                Assert.That(received[0].FromBareJid, Is.EqualTo("alice@left.example"));
+                Assert.That(_rightLinks.InboundConnectionCount, Is.GreaterThan(beforeTheRealOne),
+                            "After the stream error the next delivery has to build a new connection.");
             });
 
         }
