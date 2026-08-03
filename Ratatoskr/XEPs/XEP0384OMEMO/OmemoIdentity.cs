@@ -24,29 +24,28 @@ using System.Security.Cryptography;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Das eigene Schlüsselmaterial eines Geräts: IdentityKey, Signed PreKey und
-/// die einmal verwendbaren PreKeys.
+/// The own key material of a device: identity key, signed prekey and the
+/// prekeys usable once.
 /// </summary>
 /// <remarks>
-/// <b>Die drei Schlüsselarten unterscheiden sich in ihrer Lebensdauer, und
-/// genau daran hängt, was sie schützen.</b>
+/// <b>The three kinds of key differ in their lifetime, and precisely on that
+/// hangs what they protect.</b>
 ///
-/// Der <b>IdentityKey</b> lebt so lange wie das Gerät; sein Fingerabdruck ist
-/// das, was ein Mensch vergleicht. Er wird nie ausgetauscht - täte er es,
-/// wären alle bisherigen Vergleiche wertlos.
+/// The <b>identity key</b> lives as long as the device; its fingerprint is what
+/// a human being compares. It is never exchanged - if it were, all previous
+/// comparisons would be worthless.
 ///
-/// Der <b>Signed PreKey</b> wird regelmässig gewechselt. Er ist der Grund,
-/// warum ein gestohlener Schlüssel nicht rückwirkend alles öffnet: Wer den
-/// heutigen hat, kommt an die Sitzungen von vorletzter Woche nicht heran, weil
-/// es den Schlüssel von damals nicht mehr gibt. Deshalb wird der abgelöste
-/// noch eine Weile aufgehoben und dann <b>wirklich</b> vergessen - ein
-/// aufgehobener alter Schlüssel nimmt genau die Eigenschaft zurück, für die es
-/// den Wechsel gibt.
+/// The <b>signed prekey</b> is rotated regularly. It is the reason why a stolen
+/// key does not retroactively open everything: whoever has today's does not get
+/// at the sessions of the week before last, because the key from back then does
+/// not exist any more. That is why the superseded one is kept for a while and
+/// then <b>really</b> forgotten - a kept old key takes back precisely the
+/// property the rotation exists for.
 ///
-/// Die <b>PreKeys</b> gelten einmal. Sie sorgen dafür, dass zwei erste
-/// Nachrichten an dasselbe Gerät nicht denselben Sitzungsschlüssel ergeben.
-/// Geht der Vorrat zur Neige, kann eine Sitzung auch ohne einen beginnen - das
-/// ist ausdrücklich vorgesehen und kostet nur diese eine Eigenschaft.
+/// The <b>prekeys</b> hold once. They see to it that two first messages to the
+/// same device do not yield the same session key. If the stock runs low, a
+/// session can begin without one too - that is expressly provided for and costs
+/// only this one property.
 /// </remarks>
 public sealed class OmemoIdentity
 {
@@ -56,73 +55,71 @@ public sealed class OmemoIdentity
     private readonly Dictionary<UInt32, Curve25519KeyPair> _preKeys = [];
     private readonly Lock _lock = new();
 
-    /// <summary>Wie viele PreKeys ein frisches Gerät veröffentlicht.</summary>
+    /// <summary>How many prekeys a fresh device publishes.</summary>
     public const Int32 PreKeyCount = 100;
 
     #endregion
 
     #region Properties
 
-    /// <summary>Der IdentityKey - so lange gültig wie dieses Gerät.</summary>
+    /// <summary>The identity key - valid as long as this device.</summary>
     public Curve25519KeyPair IdentityKey { get; }
 
     /// <summary>
-    /// Die Gerätekennung (XEP-0384, Abschnitt 5.1): eine positive Zahl, unter
-    /// der dieses Gerät in der Device-Liste steht.
+    /// The device identifier (XEP-0384, section 5.1): a positive number under
+    /// which this device stands in the device list.
     /// </summary>
     public UInt32 DeviceId { get; }
 
-    /// <summary>Der aktuelle Signed PreKey.</summary>
+    /// <summary>The current signed prekey.</summary>
     public Curve25519KeyPair SignedPreKey { get; private set; }
 
-    /// <summary>Seine Kennung.</summary>
+    /// <summary>Its identifier.</summary>
     public UInt32 SignedPreKeyId { get; private set; }
 
-    /// <summary>Die Signatur des IdentityKey darüber.</summary>
+    /// <summary>The signature of the identity key over it.</summary>
     public Byte[] SignedPreKeySignature { get; private set; }
 
     /// <summary>
-    /// Der abgelöste Signed PreKey, solange er noch gebraucht wird - oder
-    /// null.
+    /// The superseded signed prekey, as long as it is still needed - or null.
     /// </summary>
     /// <remarks>
-    /// <b>In D63 ausdrücklich aufgeschoben, hier ist er.</b> Eine Nachricht,
-    /// die vor dem Wechsel abgeschickt wurde, nennt den alten Schlüssel; ohne
-    /// ihn wäre sie nicht zu lesen, und der Absender erführe nichts davon.
+    /// <b>Expressly postponed in D63, here it is.</b> A message that was sent
+    /// off before the rotation names the old key; without it, it would not be
+    /// readable, and the sender would learn nothing of that.
     ///
-    /// Aufgehoben wird genau <b>einer</b>, und das ist die Abwägung: Jeder
-    /// aufgehobene alte Schlüssel nimmt ein Stück von dem zurück, wofür es den
-    /// Wechsel gibt - wer ihn stiehlt, öffnet damit die Sitzungen, die er
-    /// eröffnet hat. Einer deckt die Nachrichten ab, die während des Wechsels
-    /// unterwegs waren; zwei deckten nichts weiter ab, was nicht ohnehin
-    /// verloren wäre.
+    /// Exactly <b>one</b> is kept, and that is the trade-off: every kept old key
+    /// takes back a piece of what the rotation exists for - whoever steals it
+    /// opens the sessions it opened. One covers the messages that were under way
+    /// during the rotation; two would cover nothing further that would not be
+    /// lost anyway.
     /// </remarks>
     public Curve25519KeyPair? PreviousSignedPreKey { get; private set; }
 
-    /// <summary>Die Kennung des abgelösten Signed PreKey, oder null.</summary>
+    /// <summary>The identifier of the superseded signed prekey, or null.</summary>
     public UInt32? PreviousSignedPreKeyId { get; private set; }
 
-    /// <summary>Wie viele PreKeys noch vorrätig sind.</summary>
+    /// <summary>How many prekeys are still in stock.</summary>
     public Int32 AvailablePreKeys
     {
         get { lock (_lock) return _preKeys.Count; }
     }
 
     /// <summary>
-    /// Der IdentityKey in Ed25519-Form - so und nur so geht er über die
-    /// Leitung (Abschnitt 5.3.2).
+    /// The identity key in Ed25519 form - that way and only that way it goes
+    /// over the wire (section 5.3.2).
     /// </summary>
     public Byte[] PublicIdentityKey
         => Curve25519.MontgomeryToEdwards(IdentityKey.PublicKey);
 
     /// <summary>
-    /// Der Fingerabdruck, den ein Mensch vergleicht: der öffentliche
-    /// IdentityKey in Ed25519-Form, hexadezimal.
+    /// The fingerprint a human being compares: the public identity key in
+    /// Ed25519 form, hexadecimal.
     /// </summary>
     /// <remarks>
-    /// Über die Ed25519-Form und nicht über die Montgomery-Form, denn nur
-    /// jene geht über die Leitung - die Gegenstelle könnte einen Vergleich
-    /// über die andere gar nicht anstellen.
+    /// Over the Ed25519 form and not over the Montgomery form, for only the
+    /// former goes over the wire - the counterpart could not make a comparison
+    /// over the other one at all.
     /// </remarks>
     public String Fingerprint
         => Convert.ToHexString(PublicIdentityKey).ToLowerInvariant();
@@ -149,12 +146,12 @@ public sealed class OmemoIdentity
     #region Create(...)
 
     /// <summary>
-    /// Legt ein frisches Gerät an: IdentityKey, Signed PreKey samt Signatur
-    /// und <see cref="PreKeyCount"/> PreKeys.
+    /// Creates a fresh device: identity key, signed prekey together with its
+    /// signature and <see cref="PreKeyCount"/> prekeys.
     /// </summary>
     /// <param name="deviceId">
-    /// Die Gerätekennung; ohne Angabe eine zufällige. Sie ist keine
-    /// Geheimnis-, sondern eine Ordnungszahl - sie steht in jeder Device-Liste.
+    /// The device identifier; without a value a random one. It is not a secret
+    /// number but an ordinal - it stands in every device list.
     /// </param>
     public static OmemoIdentity Create(UInt32? deviceId = null)
     {
@@ -162,27 +159,27 @@ public sealed class OmemoIdentity
         var identity      = Curve25519.GenerateKeyPair();
         var signedPreKey  = Curve25519.GenerateKeyPair();
 
-        var eigen = new OmemoIdentity(deviceId ?? ZufaelligeKennung(),
+        var own = new OmemoIdentity(deviceId ?? RandomDeviceId(),
                                       identity,
                                       1,
                                       signedPreKey,
                                       Curve25519.Sign(identity.PrivateKey, signedPreKey.PublicKey));
 
-        eigen.ReplenishPreKeys();
+        own.ReplenishPreKeys();
 
-        return eigen;
+        return own;
 
     }
 
     /// <summary>
-    /// Eine Kennung aus dem Bereich, den Abschnitt 5.3.2 zulässt: 1 bis 2³¹-1.
+    /// An identifier from the range section 5.3.2 permits: 1 to 2³¹-1.
     /// </summary>
     /// <remarks>
-    /// Aus dem kryptographischen Zufallsgenerator und nicht aus einem Zähler:
-    /// Eine fortlaufende Nummer verriete, das wievielte Gerät dieses Kontos
-    /// hier gerade angelegt wird, und die Device-Liste ist öffentlich.
+    /// From the cryptographic random generator and not from a counter: a
+    /// running number would betray how many devices of this account have been
+    /// created so far, and the device list is public.
     /// </remarks>
-    private static UInt32 ZufaelligeKennung()
+    private static UInt32 RandomDeviceId()
         => (UInt32) RandomNumberGenerator.GetInt32(1, Int32.MaxValue);
 
     #endregion
@@ -190,14 +187,13 @@ public sealed class OmemoIdentity
     #region PreKeys
 
     /// <summary>
-    /// Füllt den Vorrat wieder auf <see cref="PreKeyCount"/> auf.
+    /// Fills the stock back up to <see cref="PreKeyCount"/>.
     /// </summary>
     /// <remarks>
-    /// Die Kennungen laufen weiter und werden nicht wiederverwendet. Eine
-    /// wiederverwendete Kennung wäre keine Ordnungszahl mehr, sondern eine
-    /// Verwechslung: Eine Nachricht, die unterwegs liegenblieb und den alten
-    /// PreKey nennt, fände beim Ankommen einen neuen unter derselben Nummer
-    /// und ergäbe eine Sitzung, die es nie gab.
+    /// The identifiers run on and are not reused. A reused identifier would no
+    /// longer be an ordinal but a confusion: a message that was left lying under
+    /// way and names the old prekey would find, on arriving, a new one under the
+    /// same number and would yield a session that never existed.
     /// </remarks>
     public IReadOnlyList<OmemoPreKey> ReplenishPreKeys()
     {
@@ -205,10 +201,10 @@ public sealed class OmemoIdentity
         lock (_lock)
         {
 
-            var naechste = _preKeys.Count == 0 ? 1u : _preKeys.Keys.Max() + 1;
+            var next = _preKeys.Count == 0 ? 1u : _preKeys.Keys.Max() + 1;
 
             while (_preKeys.Count < PreKeyCount)
-                _preKeys[naechste++] = Curve25519.GenerateKeyPair();
+                _preKeys[next++] = Curve25519.GenerateKeyPair();
 
             return PublicPreKeys();
 
@@ -216,25 +212,24 @@ public sealed class OmemoIdentity
 
     }
 
-    /// <summary>Die öffentlichen Teile aller vorrätigen PreKeys.</summary>
+    /// <summary>The public parts of all prekeys in stock.</summary>
     private IReadOnlyList<OmemoPreKey> PublicPreKeys()
         => [.. _preKeys.OrderBy(e => e.Key)
                        .Select(e => new OmemoPreKey(e.Key, e.Value.PublicKey))];
 
     /// <summary>
-    /// Nimmt einen PreKey heraus - und zwar endgültig.
+    /// Takes a prekey out - and for good.
     /// </summary>
     /// <returns>
-    /// Der PreKey, oder null, wenn es ihn nicht (mehr) gibt.
+    /// The prekey, or null when it does not (any longer) exist.
     /// </returns>
     /// <remarks>
-    /// <b>Entnehmen und Löschen sind ein Schritt, und das ist der Kern der
-    /// Sache.</b> Ein PreKey, der zweimal gilt, ergibt zweimal denselben
-    /// Sitzungsschlüssel - und damit ist die Sitzung wiederholbar: Wer eine
-    /// alte erste Nachricht noch einmal einspielt, bekommt eine Antwort, als
-    /// sei sie neu. Deshalb gibt es hier kein „nachsehen" und kein
-    /// „verbrauchen" getrennt; wer den Schlüssel in die Hand bekommt, hat ihn
-    /// damit auch schon aus dem Vorrat genommen.
+    /// <b>Taking out and deleting are one step, and that is the heart of the
+    /// matter.</b> A prekey that holds twice yields the same session key twice -
+    /// and with that the session is replayable: whoever plays an old first
+    /// message in once more gets an answer as though it were new. That is why
+    /// there is no separate "look up" and "use up" here; whoever gets the key in
+    /// hand has thereby already taken it out of the stock.
     /// </remarks>
     public Curve25519KeyPair? TakePreKey(UInt32 id)
     {
@@ -242,10 +237,10 @@ public sealed class OmemoIdentity
         lock (_lock)
         {
 
-            if (!_preKeys.Remove(id, out var paar))
+            if (!_preKeys.Remove(id, out var pair))
                 return null;
 
-            return paar;
+            return pair;
 
         }
 
@@ -256,18 +251,18 @@ public sealed class OmemoIdentity
     #region RotateSignedPreKey()
 
     /// <summary>
-    /// Wechselt den Signed PreKey und unterschreibt den neuen.
+    /// Rotates the signed prekey and signs the new one.
     /// </summary>
     /// <remarks>
-    /// Der abgelöste rückt auf <see cref="PreviousSignedPreKey"/> - genau ein
-    /// Schlüssel weit. Was davor lag, ist damit endgültig fort, und das ist
-    /// der Sinn: Ein aufgehobener alter Schlüssel nimmt ein Stück von dem
-    /// zurück, wofür es den Wechsel überhaupt gibt.
+    /// The superseded one moves up to <see cref="PreviousSignedPreKey"/> -
+    /// exactly one key far. What lay before it is thereby gone for good, and
+    /// that is the point: a kept old key takes back a piece of what the rotation
+    /// exists for at all.
     /// </remarks>
     public void RotateSignedPreKey()
     {
 
-        var neu = Curve25519.GenerateKeyPair();
+        var fresh = Curve25519.GenerateKeyPair();
 
         lock (_lock)
         {
@@ -276,17 +271,18 @@ public sealed class OmemoIdentity
             PreviousSignedPreKeyId  = SignedPreKeyId;
 
             SignedPreKeyId++;
-            SignedPreKey           = neu;
-            SignedPreKeySignature  = Curve25519.Sign(IdentityKey.PrivateKey, neu.PublicKey);
+            SignedPreKey           = fresh;
+            SignedPreKeySignature  = Curve25519.Sign(IdentityKey.PrivateKey, fresh.PublicKey);
 
         }
 
     }
 
     /// <summary>
-    /// Der Signed PreKey zu dieser Kennung - der aktuelle oder der abgelöste.
+    /// The signed prekey for this identifier - the current or the superseded
+    /// one.
     /// </summary>
-    /// <returns>null, wenn die Kennung zu keinem von beiden gehört.</returns>
+    /// <returns>null when the identifier belongs to neither of the two.</returns>
     public Curve25519KeyPair? SignedPreKeyFor(UInt32 id)
     {
 
@@ -302,7 +298,7 @@ public sealed class OmemoIdentity
     #region Export() / Import(state)
 
     /// <summary>
-    /// Das eigene Schlüsselmaterial, wie es abgelegt wird.
+    /// One's own key material as it is stored.
     /// </summary>
     public OmemoIdentityState Export()
     {
@@ -322,20 +318,20 @@ public sealed class OmemoIdentity
     }
 
     /// <summary>
-    /// Stellt abgelegtes Schlüsselmaterial wieder her.
+    /// Restores stored key material.
     /// </summary>
     /// <remarks>
-    /// <b>Die Signatur wird mitgenommen und nicht neu gerechnet.</b> Sie
-    /// liesse sich aus dem IdentityKey jederzeit erneuern - aber XEdDSA
-    /// mischt Zufall in jede Signatur, die neue sähe also anders aus als die
-    /// veröffentlichte. Das Bundle im PEP-Knoten und das Gerät hier wären
-    /// danach uneins, und ein Absender, der beides vergleicht, hielte das für
-    /// einen Austausch.
+    /// <b>The signature is taken along and not recomputed.</b> It could be
+    /// renewed from the identity key at any time - but XEdDSA mixes randomness
+    /// into every signature, so the new one would look different from the
+    /// published one. The bundle in the PEP node and the device here would be at
+    /// odds afterwards, and a sender comparing the two would take that for an
+    /// exchange.
     /// </remarks>
     public static OmemoIdentity Import(OmemoIdentityState state)
     {
 
-        var eigen = new OmemoIdentity(state.DeviceId,
+        var own = new OmemoIdentity(state.DeviceId,
                                       Curve25519.KeyPairFromPrivate(state.IdentityPrivateKey),
                                       state.SignedPreKeyId,
                                       Curve25519.KeyPairFromPrivate(state.SignedPreKeyPrivateKey),
@@ -348,9 +344,9 @@ public sealed class OmemoIdentity
         };
 
         foreach (var pk in state.PreKeys)
-            eigen._preKeys[pk.Id] = Curve25519.KeyPairFromPrivate(pk.PrivateKey);
+            own._preKeys[pk.Id] = Curve25519.KeyPairFromPrivate(pk.PrivateKey);
 
-        return eigen;
+        return own;
 
     }
 
@@ -359,7 +355,7 @@ public sealed class OmemoIdentity
     #region Bundle()
 
     /// <summary>
-    /// Das eigene Bundle, wie es veröffentlicht wird.
+    /// One's own bundle as it is published.
     /// </summary>
     public OmemoBundle Bundle()
     {

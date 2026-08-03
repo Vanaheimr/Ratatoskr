@@ -25,14 +25,14 @@ using System.Text.Json.Serialization;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Ein OMEMO-Speicher im Arbeitsspeicher - für Tests und für Clients, die
-/// nichts behalten wollen.
+/// An OMEMO storage in working memory - for tests and for clients that want to
+/// keep nothing.
 /// </summary>
 /// <remarks>
-/// <b>Er behält nichts über das Programmende hinaus, und das ist keine
-/// Sparfassung, sondern eine Aussage:</b> Wer ihn benutzt, hat bei jedem Start
-/// einen neuen Fingerabdruck. Für einen Test ist das richtig, für einen
-/// Menschen wäre es die Zusicherung, dass jeder Vergleich wertlos ist.
+/// <b>It keeps nothing past the end of the program, and that is no economy
+/// version but a statement:</b> whoever uses it has a new fingerprint at every
+/// start. For a test that is right; for a human being it would be the assurance
+/// that every comparison is worthless.
 /// </remarks>
 public sealed class OmemoMemoryStore : IOmemoStore
 {
@@ -79,27 +79,26 @@ public sealed class OmemoMemoryStore : IOmemoStore
 }
 
 /// <summary>
-/// Ein OMEMO-Speicher in einer JSON-Datei.
+/// An OMEMO storage in a JSON file.
 /// </summary>
 /// <remarks>
-/// Eine Datei, bei jeder Änderung vollständig neu geschrieben - dasselbe
-/// Verfahren wie beim <see cref="Server.FileAccountStore"/> und aus demselben
-/// Grund ausreichend: Es geht um ein Gerät und seine Gesprächspartner, nicht
-/// um einen Server.
+/// One file, written anew in full at every change - the same procedure as with
+/// the <see cref="Server.FileAccountStore"/> and sufficient for the same
+/// reason: this is about one device and its conversation partners, not about a
+/// server.
 ///
-/// Geschrieben wird über eine Nebendatei, die anschliessend an ihren Platz
-/// verschoben wird. Bricht der Vorgang ab, steht die alte Fassung noch
-/// vollständig da. Das ist hier <b>wichtiger als beim Kontenspeicher</b>: Eine
-/// halb geschriebene Sitzungsdatei kostet nicht einen Anmeldeversuch, sondern
-/// jede laufende Sitzung - und damit die Lesbarkeit alles Unterwegs.
+/// It is written by way of a side file that is afterwards moved into its place.
+/// If the process breaks off, the old version still stands there in full. That
+/// is <b>more important here than with the account storage</b>: a half-written
+/// session file costs not one attempt to sign on but every running session -
+/// and with it the readability of everything under way.
 ///
-/// <b>Die Datei ist nicht verschlüsselt.</b> Sie enthält den geheimen
-/// IdentityKey, alle PreKeys und jeden Kettenschlüssel; wer sie liest, liest
-/// die Gespräche mit. Eine Verschlüsselung mit einem Schlüssel, der daneben
-/// läge, wäre keine - und einen, den ein Mensch eingibt, gibt es in dieser
-/// Anwendung nicht. Deshalb steht es hier ausdrücklich, statt durch ein
-/// beruhigendes Verfahren ersetzt zu werden: <b>Die Datei gehört an einen Ort,
-/// an den nur dieser Benutzer kommt.</b>
+/// <b>The file is not encrypted.</b> It contains the secret identity key, all
+/// prekeys and every chain key; whoever reads it reads the conversations along.
+/// An encryption with a key that lay beside it would be none - and one that a
+/// human being types in does not exist in this application. That is why it
+/// stands here expressly instead of being replaced by a reassuring procedure:
+/// <b>the file belongs in a place only this user gets to.</b>
 /// </remarks>
 public sealed class OmemoFileStore : IOmemoStore
 {
@@ -114,17 +113,17 @@ public sealed class OmemoFileStore : IOmemoStore
         DefaultIgnoreCondition  = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private Inhalt _inhalt = new();
+    private Content _content = new();
 
-    /// <summary>Die Gestalt der Datei.</summary>
-    private sealed class Inhalt
+    /// <summary>The shape of the file.</summary>
+    private sealed class Content
     {
         public OmemoIdentityState?        Identity  { get; set; }
-        public List<SitzungsEintrag>      Sessions  { get; set; } = [];
+        public List<SessionEntry>      Sessions  { get; set; } = [];
         public List<OmemoDeviceRecord>    Devices   { get; set; } = [];
     }
 
-    private sealed class SitzungsEintrag
+    private sealed class SessionEntry
     {
         public String        BareJid   { get; set; } = "";
         public UInt32        DeviceId  { get; set; }
@@ -135,7 +134,7 @@ public sealed class OmemoFileStore : IOmemoStore
 
     #region Properties
 
-    /// <summary>Die Datei, in der der Speicher liegt.</summary>
+    /// <summary>The file the storage lies in.</summary>
     public String Path => _path;
 
     #endregion
@@ -143,15 +142,14 @@ public sealed class OmemoFileStore : IOmemoStore
     #region Constructor(s)
 
     /// <summary>
-    /// Legt einen Speicher an der angegebenen Datei an und liest sie, wenn es
-    /// sie schon gibt.
+    /// Creates a storage at the given file and reads it when it already exists.
     /// </summary>
     /// <remarks>
-    /// Eine unlesbare Datei wirft, statt mit einem leeren Speicher
-    /// weiterzumachen. <b>Der bequeme Weg wäre hier der gefährliche:</b> Ein
-    /// Client, der nach einem Lesefehler mit neuen Schlüsseln startet, hat
-    /// seinen Fingerabdruck gewechselt, ohne dass jemand gefragt wurde - und
-    /// die alte Datei wäre beim ersten Ablegen überschrieben.
+    /// An unreadable file throws instead of going on with an empty storage.
+    /// <b>The convenient way would be the dangerous one here:</b> a client that
+    /// starts with new keys after a read error has changed its fingerprint
+    /// without anybody having been asked - and the old file would be
+    /// overwritten at the first storing.
     /// </remarks>
     public OmemoFileStore(String path)
     {
@@ -159,11 +157,11 @@ public sealed class OmemoFileStore : IOmemoStore
         _path = System.IO.Path.GetFullPath(path);
 
         if (File.Exists(_path))
-            _inhalt = JsonSerializer.Deserialize<Inhalt>(File.ReadAllText(_path), _options)
+            _content = JsonSerializer.Deserialize<Content>(File.ReadAllText(_path), _options)
                           ?? throw new InvalidDataException(
-                                 $"Der OMEMO-Speicher {_path} ist leer oder unlesbar. Er wird nicht " +
-                                 "durch einen frischen ersetzt - das wäre ein stiller Wechsel des " +
-                                 "eigenen Fingerabdrucks.");
+                                 $"The OMEMO storage {_path} is empty or unreadable. It is not " +
+                                 "replaced by a fresh one - that would be a silent change of one's " +
+                                 "own fingerprint.");
 
     }
 
@@ -173,7 +171,7 @@ public sealed class OmemoFileStore : IOmemoStore
 
     public OmemoIdentityState? LoadIdentity()
     {
-        lock (_lock) return _inhalt.Identity;
+        lock (_lock) return _content.Identity;
     }
 
     public void SaveIdentity(OmemoIdentityState state)
@@ -181,8 +179,8 @@ public sealed class OmemoFileStore : IOmemoStore
 
         lock (_lock)
         {
-            _inhalt.Identity = state;
-            Schreiben();
+            _content.Identity = state;
+            Write();
         }
 
     }
@@ -191,7 +189,7 @@ public sealed class OmemoFileStore : IOmemoStore
     {
 
         lock (_lock)
-            return _inhalt.Sessions
+            return _content.Sessions
                           .FirstOrDefault(s => s.DeviceId == deviceId &&
                                                String.Equals(s.BareJid, bareJid,
                                                              StringComparison.OrdinalIgnoreCase))
@@ -205,17 +203,17 @@ public sealed class OmemoFileStore : IOmemoStore
         lock (_lock)
         {
 
-            _inhalt.Sessions.RemoveAll(s => s.DeviceId == deviceId &&
+            _content.Sessions.RemoveAll(s => s.DeviceId == deviceId &&
                                             String.Equals(s.BareJid, bareJid,
                                                           StringComparison.OrdinalIgnoreCase));
 
-            _inhalt.Sessions.Add(new SitzungsEintrag {
+            _content.Sessions.Add(new SessionEntry {
                                      BareJid   = bareJid,
                                      DeviceId  = deviceId,
                                      State     = state
                                  });
 
-            Schreiben();
+            Write();
 
         }
 
@@ -223,7 +221,7 @@ public sealed class OmemoFileStore : IOmemoStore
 
     public IReadOnlyList<OmemoDeviceRecord> KnownDevices()
     {
-        lock (_lock) return [.. _inhalt.Devices];
+        lock (_lock) return [.. _content.Devices];
     }
 
     public void SaveDevice(OmemoDeviceRecord record)
@@ -232,13 +230,13 @@ public sealed class OmemoFileStore : IOmemoStore
         lock (_lock)
         {
 
-            _inhalt.Devices.RemoveAll(d => d.DeviceId == record.DeviceId &&
+            _content.Devices.RemoveAll(d => d.DeviceId == record.DeviceId &&
                                            String.Equals(d.BareJid, record.BareJid,
                                                          StringComparison.OrdinalIgnoreCase));
 
-            _inhalt.Devices.Add(record);
+            _content.Devices.Add(record);
 
-            Schreiben();
+            Write();
 
         }
 
@@ -246,23 +244,23 @@ public sealed class OmemoFileStore : IOmemoStore
 
     #endregion
 
-    #region Schreiben()
+    #region Write()
 
     /// <summary>
-    /// Schreibt über eine Nebendatei und verschiebt sie an ihren Platz.
+    /// Writes by way of a side file and moves it into its place.
     /// </summary>
-    private void Schreiben()
+    private void Write()
     {
 
-        var verzeichnis = System.IO.Path.GetDirectoryName(_path);
+        var directory = System.IO.Path.GetDirectoryName(_path);
 
-        if (!String.IsNullOrEmpty(verzeichnis))
-            Directory.CreateDirectory(verzeichnis);
+        if (!String.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
 
-        var neben = _path + ".neu";
+        var sideFile = _path + ".new";
 
-        File.WriteAllText(neben, JsonSerializer.Serialize(_inhalt, _options));
-        File.Move(neben, _path, overwrite: true);
+        File.WriteAllText(sideFile, JsonSerializer.Serialize(_content, _options));
+        File.Move(sideFile, _path, overwrite: true);
 
     }
 

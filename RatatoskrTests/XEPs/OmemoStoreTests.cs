@@ -581,7 +581,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(File.Exists(_datei), Is.True);
-                Assert.That(File.Exists(_datei + ".neu"), Is.False,
+                Assert.That(File.Exists(_datei + ".new"), Is.False,
                             "Die Nebendatei ist liegengeblieben.");
 
                 // Und die Datei ist vollständiges JSON.

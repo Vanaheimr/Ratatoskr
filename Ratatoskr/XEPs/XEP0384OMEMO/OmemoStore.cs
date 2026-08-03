@@ -18,49 +18,49 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Wie dieses Gerät zu einem fremden steht.
+/// How this device stands towards a foreign one.
 /// </summary>
 public enum OmemoTrust
 {
 
-    /// <summary>Noch nicht entschieden - der Mensch hat den Fingerabdruck nie angesehen.</summary>
+    /// <summary>Not decided yet - the human being has never looked at the fingerprint.</summary>
     Undecided,
 
-    /// <summary>Bestätigt.</summary>
+    /// <summary>Confirmed.</summary>
     Trusted,
 
-    /// <summary>Ausdrücklich abgelehnt - an dieses Gerät geht nichts.</summary>
+    /// <summary>Expressly refused - nothing goes to this device.</summary>
     Distrusted
 
 }
 
 /// <summary>
-/// Was beim Wiedersehen eines Geräts herauskommt.
+/// What comes out when a device is seen again.
 /// </summary>
 public enum OmemoIdentityCheck
 {
 
-    /// <summary>Dieses Gerät war noch nie da.</summary>
+    /// <summary>This device has never been here.</summary>
     New,
 
-    /// <summary>Bekannt, und der Schlüssel ist derselbe wie beim letzten Mal.</summary>
+    /// <summary>Known, and the key is the same as last time.</summary>
     Known,
 
     /// <summary>
-    /// Bekannt, aber mit einem <b>anderen</b> Schlüssel als beim letzten Mal.
+    /// Known, but with a <b>different</b> key from last time.
     /// </summary>
     Changed
 
 }
 
 /// <summary>
-/// Was dieses Gerät über ein fremdes weiss.
+/// What this device knows about a foreign one.
 /// </summary>
-/// <param name="BareJid">Wem es gehört.</param>
-/// <param name="DeviceId">Welches Gerät.</param>
-/// <param name="IdentityKey">Sein IdentityKey in Ed25519-Form.</param>
-/// <param name="Trust">Die Entscheidung des Menschen davor.</param>
-/// <param name="FirstSeen">Wann es zum ersten Mal auftauchte.</param>
+/// <param name="BareJid">Whom it belongs to.</param>
+/// <param name="DeviceId">Which device.</param>
+/// <param name="IdentityKey">Its identity key in Ed25519 form.</param>
+/// <param name="Trust">The decision of the human being in front of it.</param>
+/// <param name="FirstSeen">When it turned up for the first time.</param>
 public sealed record OmemoDeviceRecord(String          BareJid,
                                        UInt32          DeviceId,
                                        Byte[]          IdentityKey,
@@ -68,24 +68,23 @@ public sealed record OmemoDeviceRecord(String          BareJid,
                                        DateTimeOffset  FirstSeen)
 {
 
-    /// <summary>Der Fingerabdruck, den ein Mensch vergleicht.</summary>
+    /// <summary>The fingerprint a human being compares.</summary>
     public String Fingerprint
         => Convert.ToHexString(IdentityKey).ToLowerInvariant();
 
 }
 
 /// <summary>
-/// Das eigene Schlüsselmaterial, wie es abgelegt wird - <b>mit den geheimen
-/// Teilen</b>.
+/// One's own key material as it is stored - <b>with the secret parts</b>.
 /// </summary>
-/// <param name="DeviceId">Die eigene Gerätekennung.</param>
-/// <param name="IdentityPrivateKey">Der geheime IdentityKey.</param>
-/// <param name="SignedPreKeyId">Die Kennung des aktuellen Signed PreKey.</param>
-/// <param name="SignedPreKeyPrivateKey">Sein geheimer Teil.</param>
-/// <param name="SignedPreKeySignature">Seine Signatur.</param>
-/// <param name="PreviousSignedPreKeyId">Die Kennung des abgelösten, oder null.</param>
-/// <param name="PreviousSignedPreKeyPrivateKey">Sein geheimer Teil, oder null.</param>
-/// <param name="PreKeys">Die vorrätigen PreKeys mit ihren geheimen Teilen.</param>
+/// <param name="DeviceId">One's own device identifier.</param>
+/// <param name="IdentityPrivateKey">The secret identity key.</param>
+/// <param name="SignedPreKeyId">The identifier of the current signed prekey.</param>
+/// <param name="SignedPreKeyPrivateKey">Its secret part.</param>
+/// <param name="SignedPreKeySignature">Its signature.</param>
+/// <param name="PreviousSignedPreKeyId">The identifier of the superseded one, or null.</param>
+/// <param name="PreviousSignedPreKeyPrivateKey">Its secret part, or null.</param>
+/// <param name="PreKeys">The prekeys in stock with their secret parts.</param>
 public sealed record OmemoIdentityState(UInt32                                  DeviceId,
                                         Byte[]                                  IdentityPrivateKey,
                                         UInt32                                  SignedPreKeyId,
@@ -95,102 +94,102 @@ public sealed record OmemoIdentityState(UInt32                                  
                                         Byte[]?                                 PreviousSignedPreKeyPrivateKey,
                                         IReadOnlyList<OmemoStoredPreKey>        PreKeys);
 
-/// <summary>Ein PreKey mit seinem geheimen Teil.</summary>
+/// <summary>A prekey with its secret part.</summary>
 public sealed record OmemoStoredPreKey(UInt32 Id, Byte[] PrivateKey);
 
 /// <summary>
-/// Eine abgelegte Sitzung: die Ratsche und die Beigabe aus X3DH.
+/// A stored session: the ratchet and the associated data from X3DH.
 /// </summary>
-/// <param name="Ratchet">Der Zustand der beiden Ratschen.</param>
+/// <param name="Ratchet">The state of the two ratchets.</param>
 /// <param name="AssociatedData">
-/// <c>Encode(IK_A) ‖ Encode(IK_B)</c> - beide IdentityKeys, der Anrufende
-/// zuerst.
+/// <c>Encode(IK_A) ‖ Encode(IK_B)</c> - both identity keys, the initiator
+/// first.
 /// </param>
 /// <remarks>
-/// <b>Die Beigabe gehört zur Sitzung und nicht zur Ratsche</b>, deshalb steht
-/// sie hier daneben und nicht im <see cref="RatchetState"/>: Die Ratsche
-/// bekommt sie bei jedem Aufruf gereicht und besitzt sie nicht.
+/// <b>The associated data belongs to the session and not to the ratchet</b>,
+/// which is why it stands here beside it and not in the
+/// <see cref="RatchetState"/>: the ratchet is handed it at every call and does
+/// not own it.
 ///
-/// Abgelegt werden muss sie trotzdem. Sie entsteht einmal beim
-/// Schlüsselaustausch und geht danach in jede Prüfsumme ein; ohne sie liesse
-/// sich eine wiederhergestellte Sitzung zwar fortsetzen, aber keine einzige
-/// Nachricht darin lesen - und der Grund stünde nirgends.
+/// It has to be stored all the same. It comes into being once at the key
+/// exchange and goes into every checksum afterwards; without it a restored
+/// session could indeed be continued, but not a single message in it could be
+/// read - and the reason would stand nowhere.
 /// </remarks>
 public sealed record OmemoSessionState(RatchetState Ratchet, Byte[] AssociatedData);
 
 /// <summary>
-/// Der Speicher, der einen Neustart überdauert.
+/// The storage that outlasts a restart.
 /// </summary>
 /// <remarks>
-/// <b>Ohne ihn ist jede Wiederverbindung ein Vertrauensbruch.</b> Ein neuer
-/// IdentityKey bedeutet einen neuen Fingerabdruck, und jeder Vergleich, den
-/// irgendein Mensch je angestellt hat, ist damit wertlos. Ein Client, der bei
-/// jedem Start neue Schlüssel erzeugt, sieht für seine Kontakte aus wie ein
-/// Angreifer - jedes Mal.
+/// <b>Without it every reconnection is a breach of trust.</b> A new identity
+/// key means a new fingerprint, and every comparison any human being has ever
+/// made is thereby worthless. A client that produces new keys at every start
+/// looks to its contacts like an attacker - every time.
 ///
-/// <b>Und die laufenden Sitzungen müssen mit.</b> Eine neu begonnene Sitzung
-/// hätte einen anderen Wurzelschlüssel; die Gegenstelle bekäme Nachrichten,
-/// deren Prüfsumme nicht stimmt, und das sieht wiederum aus wie ein Angriff.
+/// <b>And the running sessions have to come along.</b> A newly begun session
+/// would have a different root key; the counterpart would get messages whose
+/// checksum is not right, and that in turn looks like an attack.
 ///
-/// Was dieser Speicher enthält, ist ohne Ausnahme geheim: der IdentityKey, die
-/// PreKeys, jeder Kettenschlüssel. <b>Wer ihn liest, liest die Gespräche
-/// mit</b> - die vergangenen nur so weit, wie ihre Schlüssel noch da sind, die
-/// künftigen ganz.
+/// What this storage contains is without exception secret: the identity key,
+/// the prekeys, every chain key. <b>Whoever reads it reads the conversations
+/// along</b> - the past ones only as far as their keys are still there, the
+/// future ones entirely.
 /// </remarks>
 public interface IOmemoStore
 {
 
-    /// <summary>Das eigene Schlüsselmaterial, oder null beim ersten Start.</summary>
+    /// <summary>One's own key material, or null at the first start.</summary>
     OmemoIdentityState? LoadIdentity();
 
-    /// <summary>Legt das eigene Schlüsselmaterial ab.</summary>
+    /// <summary>Stores one's own key material.</summary>
     void SaveIdentity(OmemoIdentityState state);
 
-    /// <summary>Eine abgelegte Sitzung, oder null.</summary>
+    /// <summary>A stored session, or null.</summary>
     OmemoSessionState? LoadSession(String bareJid, UInt32 deviceId);
 
-    /// <summary>Legt eine Sitzung ab und ersetzt eine vorhandene.</summary>
+    /// <summary>Stores a session and replaces an existing one.</summary>
     void SaveSession(String bareJid, UInt32 deviceId, OmemoSessionState state);
 
-    /// <summary>Alle Geräte, von denen dieses hier weiss.</summary>
+    /// <summary>All devices this one knows of.</summary>
     IReadOnlyList<OmemoDeviceRecord> KnownDevices();
 
-    /// <summary>Legt einen Gerätevermerk ab und ersetzt einen vorhandenen.</summary>
+    /// <summary>Stores a device record and replaces an existing one.</summary>
     void SaveDevice(OmemoDeviceRecord record);
 
 }
 
 /// <summary>
-/// Gemeinsames Verhalten aller Speicher - alles, was nicht davon abhängt,
-/// wohin geschrieben wird.
+/// Behaviour shared by all storages - everything that does not depend on where
+/// it is written to.
 /// </summary>
 public static class OmemoStoreExtensions
 {
 
-    #region Identity laden / ablegen
+    #region Loading / storing the identity
 
     /// <summary>
-    /// Das eigene Schlüsselmaterial - aus dem Speicher, oder frisch erzeugt
-    /// und abgelegt.
+    /// One's own key material - out of the storage, or freshly produced and
+    /// stored.
     /// </summary>
     /// <remarks>
-    /// Beides in einem Aufruf, und das ist Absicht: Wer erst lädt und dann bei
-    /// null selbst erzeugt, vergisst früher oder später das Ablegen - und
-    /// merkt es nicht, weil beim nächsten Start wieder etwas erzeugt wird. Der
-    /// Fehler sähe aus wie ein neuer Client, und das ist genau der Fall, den
-    /// dieser Speicher verhindern soll.
+    /// Both in one call, and that is deliberate: whoever loads first and then
+    /// produces it themselves on null forgets the storing sooner or later - and
+    /// does not notice, because at the next start something is produced again.
+    /// The error would look like a new client, and that is exactly the case
+    /// this storage is meant to prevent.
     /// </remarks>
     public static OmemoIdentity LoadOrCreateIdentity(this IOmemoStore store)
     {
 
-        if (store.LoadIdentity() is OmemoIdentityState abgelegt)
-            return OmemoIdentity.Import(abgelegt);
+        if (store.LoadIdentity() is OmemoIdentityState stored)
+            return OmemoIdentity.Import(stored);
 
-        var neu = OmemoIdentity.Create();
+        var fresh = OmemoIdentity.Create();
 
-        store.SaveIdentity(neu.Export());
+        store.SaveIdentity(fresh.Export());
 
-        return neu;
+        return fresh;
 
     }
 
@@ -199,20 +198,19 @@ public static class OmemoStoreExtensions
     #region RecordIdentity(store, bareJid, deviceId, identityKey)
 
     /// <summary>
-    /// Vermerkt den IdentityKey eines fremden Geräts und meldet, ob er neu,
-    /// bekannt oder <b>ein anderer als beim letzten Mal</b> ist.
+    /// Notes down the identity key of a foreign device and reports whether it
+    /// is new, known or <b>a different one from last time</b>.
     /// </summary>
     /// <remarks>
-    /// <b>Ein geänderter Schlüssel wird nie stillschweigend übernommen.</b>
-    /// Dafür gibt es genau zwei Erklärungen: Der Mensch hat sein Gerät neu
-    /// aufgesetzt - oder jemand schiebt sich dazwischen. Von aussen sind die
-    /// beiden nicht zu unterscheiden, und deshalb ist es keine Entscheidung,
-    /// die ein Programm treffen kann.
+    /// <b>A changed key is never taken over silently.</b> There are exactly two
+    /// explanations for it: the human being has set up their device anew - or
+    /// somebody is pushing in between. From outside the two cannot be told
+    /// apart, and that is why it is not a decision a program can make.
     ///
-    /// Der alte Vermerk bleibt in diesem Fall stehen, samt seiner
-    /// Vertrauensentscheidung. Wer ihn überschriebe, machte aus einer
-    /// bestätigten Identität eine unbestätigte, ohne dass es jemandem
-    /// auffiele - und die Warnung wäre nach dem ersten Ansehen fort.
+    /// The old record stays standing in this case, together with its trust
+    /// decision. Whoever overwrote it would turn a confirmed identity into an
+    /// unconfirmed one without anybody noticing - and the warning would be gone
+    /// after the first look.
     /// </remarks>
     public static OmemoIdentityCheck RecordIdentity(this IOmemoStore  store,
                                                     String            bareJid,
@@ -220,12 +218,12 @@ public static class OmemoStoreExtensions
                                                     Byte[]            identityKey)
     {
 
-        var bekannt = store.KnownDevices()
+        var known = store.KnownDevices()
                            .FirstOrDefault(d => d.DeviceId == deviceId &&
                                                 String.Equals(d.BareJid, bareJid,
                                                               StringComparison.OrdinalIgnoreCase));
 
-        if (bekannt is null)
+        if (known is null)
         {
 
             store.SaveDevice(new OmemoDeviceRecord(bareJid,
@@ -238,7 +236,7 @@ public static class OmemoStoreExtensions
 
         }
 
-        return bekannt.IdentityKey.SequenceEqual(identityKey)
+        return known.IdentityKey.SequenceEqual(identityKey)
                    ? OmemoIdentityCheck.Known
                    : OmemoIdentityCheck.Changed;
 
@@ -249,8 +247,8 @@ public static class OmemoStoreExtensions
     #region TrustOf(store, bareJid, deviceId) / SetTrust(...)
 
     /// <summary>
-    /// Wie dieses Gerät zu einem fremden steht - unentschieden, wenn es
-    /// unbekannt ist.
+    /// How this device stands towards a foreign one - undecided when it is
+    /// unknown.
     /// </summary>
     public static OmemoTrust TrustOf(this IOmemoStore store, String bareJid, UInt32 deviceId)
         => store.KnownDevices()
@@ -260,15 +258,14 @@ public static class OmemoStoreExtensions
            ?? OmemoTrust.Undecided;
 
     /// <summary>
-    /// Entscheidet über ein Gerät.
+    /// Decides about a device.
     /// </summary>
-    /// <returns>false, wenn das Gerät unbekannt ist - dann gibt es nichts zu entscheiden.</returns>
+    /// <returns>false when the device is unknown - then there is nothing to decide.</returns>
     /// <remarks>
-    /// Über ein unbekanntes Gerät lässt sich nicht entscheiden, und das ist
-    /// keine Förmlichkeit: Eine Vertrauensentscheidung gilt einem
-    /// <i>Schlüssel</i>, nicht einer Nummer. Wer sie im Voraus für eine
-    /// Gerätekennung träfe, hätte sie für den ersten Schlüssel getroffen, der
-    /// unter dieser Nummer auftaucht - und das kann jeder sein.
+    /// About an unknown device nothing can be decided, and that is no
+    /// formality: a trust decision concerns a <i>key</i>, not a number. Whoever
+    /// made it in advance for a device identifier would have made it for the
+    /// first key that turns up under this number - and that can be anybody.
     /// </remarks>
     public static Boolean SetTrust(this IOmemoStore  store,
                                    String            bareJid,
@@ -276,15 +273,15 @@ public static class OmemoStoreExtensions
                                    OmemoTrust        trust)
     {
 
-        var bekannt = store.KnownDevices()
+        var known = store.KnownDevices()
                            .FirstOrDefault(d => d.DeviceId == deviceId &&
                                                 String.Equals(d.BareJid, bareJid,
                                                               StringComparison.OrdinalIgnoreCase));
 
-        if (bekannt is null)
+        if (known is null)
             return false;
 
-        store.SaveDevice(bekannt with { Trust = trust });
+        store.SaveDevice(known with { Trust = trust });
 
         return true;
 

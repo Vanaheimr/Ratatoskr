@@ -24,47 +24,46 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Ein Gerät in der Geräteliste.
+/// A device in the device list.
 /// </summary>
-/// <param name="Id">Die Gerätekennung.</param>
+/// <param name="Id">The device identifier.</param>
 /// <param name="Label">
-/// Ein Name, den ein Mensch lesen kann - „Telefon", „Rechner im Büro". Er ist
-/// freiwillig und unbeglaubigt.
+/// A name a human being can read - "telephone", "computer in the office". It is
+/// voluntary and unauthenticated.
 /// </param>
 public sealed record OmemoDevice(UInt32 Id, String? Label = null);
 
 /// <summary>
-/// Die Geräteliste eines Kontos (XEP-0384, Abschnitt 5.2).
+/// The device list of an account (XEP-0384, section 5.2).
 /// </summary>
 /// <remarks>
-/// <b>Sie ist öffentlich, und das ist der Preis des Verfahrens.</b> Wer wissen
-/// will, mit wie vielen Geräten jemand am Netz hängt, muss nur diesen Knoten
-/// abfragen. Das lässt sich nicht vermeiden, ohne die Erreichbarkeit
-/// aufzugeben: Ein Absender muss für jedes Gerät verschlüsseln, also muss er
-/// jedes kennen.
+/// <b>It is public, and that is the price of the procedure.</b> Whoever wants
+/// to know with how many devices somebody hangs on the net has only to query
+/// this node. That cannot be avoided without giving up reachability: a sender
+/// has to encrypt for every device, so they have to know every one.
 ///
-/// Die Bezeichnung ist deshalb mit Bedacht zu wählen - „Achims Telefon" steht
-/// für jeden lesbar da, der den Knoten abruft.
+/// The label is therefore to be chosen with care - "Achim's telephone" stands
+/// there readable for everyone who fetches the node.
 /// </remarks>
 public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
 {
 
-    /// <summary>Der PEP-Knoten der Geräteliste.</summary>
+    /// <summary>The PEP node of the device list.</summary>
     public const String Node = "urn:xmpp:omemo:2:devices";
 
     /// <summary>
-    /// Die Kennung des einzigen Eintrags in diesem Knoten.
+    /// The identifier of the only entry in this node.
     /// </summary>
     /// <remarks>
-    /// Ein fester Wert und keine laufende Nummer: Der Knoten trägt genau eine
-    /// Liste, und ein zweiter Eintrag daneben wäre keine zweite Liste, sondern
-    /// eine Unklarheit darüber, welche gilt.
+    /// A fixed value and not a running number: the node carries exactly one
+    /// list, and a second entry beside it would be no second list but an
+    /// unclarity about which one holds.
     /// </remarks>
     public const String ItemId = "current";
 
     #region ToXml() / TryRead(xml, out list)
 
-    /// <summary>Die Liste als XML.</summary>
+    /// <summary>The list as XML.</summary>
     public XElement ToXml()
     {
 
@@ -80,14 +79,14 @@ public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
     }
 
     /// <summary>
-    /// Liest eine Geräteliste.
+    /// Reads a device list.
     /// </summary>
     /// <remarks>
-    /// Ein Gerät ohne lesbare Kennung wird <b>übergangen</b> und nicht zum
-    /// Fehler der ganzen Liste. Der Grund ist die Erreichbarkeit: Eine Liste
-    /// mit einem krummen Eintrag ist immer noch eine Liste, und wer sie ganz
-    /// verwürfe, könnte an keines der übrigen Geräte mehr schreiben. Ein
-    /// einzelner unbrauchbarer Eintrag darf nicht alle anderen mitnehmen.
+    /// A device without a readable identifier is <b>passed over</b> and does not
+    /// become an error of the whole list. The reason is reachability: a list
+    /// with one crooked entry is still a list, and whoever discarded it entirely
+    /// could no longer write to any of the remaining devices. A single unusable
+    /// entry must not take all the others with it.
     /// </remarks>
     public static Boolean TryRead(XElement xml, out OmemoDeviceList? list)
     {
@@ -98,13 +97,13 @@ public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
             xml.Name.NamespaceName != OmemoEncryptedElement.Namespace)
             return false;
 
-        var geraete = new List<OmemoDevice>();
+        var devices = new List<OmemoDevice>();
 
         foreach (var device in xml.Elements().Where(e => e.Name.LocalName == "device"))
             if (UInt32.TryParse(device.Attr("id"), out var id) && id > 0)
-                geraete.Add(new OmemoDevice(id, device.Attr("label")));
+                devices.Add(new OmemoDevice(id, device.Attr("label")));
 
-        list = new OmemoDeviceList(geraete);
+        list = new OmemoDeviceList(devices);
 
         return true;
 
@@ -114,19 +113,19 @@ public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
 
     #region Contains(deviceId) / With(device)
 
-    /// <summary>Steht dieses Gerät in der Liste?</summary>
+    /// <summary>Does this device stand in the list?</summary>
     public Boolean Contains(UInt32 deviceId)
         => Devices.Any(d => d.Id == deviceId);
 
     /// <summary>
-    /// Die Liste mit diesem Gerät - unverändert, wenn es schon darin steht.
+    /// The list with this device - unchanged when it already stands in it.
     /// </summary>
     /// <remarks>
-    /// Ergänzt und ersetzt nicht: Abschnitt 5.2 verlangt vom Client, sich
-    /// wieder einzutragen, wenn er aus der Liste verschwunden ist - <b>ohne
-    /// die anderen zu entfernen</b>. Wer hier eine neue Liste mit nur dem
-    /// eigenen Gerät veröffentlichte, machte aus einem Wiedereintrag eine
-    /// Verdrängung aller anderen Geräte des Menschen.
+    /// Adds to and does not replace: section 5.2 demands of the client that it
+    /// enter itself again when it has vanished from the list - <b>without
+    /// removing the others</b>. Whoever published a new list here with only
+    /// their own device would turn a re-entry into a displacement of all the
+    /// other devices of the human being.
     /// </remarks>
     public OmemoDeviceList With(OmemoDevice device)
         => Contains(device.Id)
@@ -138,28 +137,27 @@ public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
 }
 
 /// <summary>
-/// Die PEP-Seite von OMEMO: Geräteliste und Bundles (XEP-0384, Abschnitt 5.2).
+/// The PEP side of OMEMO: device list and bundles (XEP-0384, section 5.2).
 /// </summary>
 /// <remarks>
-/// <b>Warum die Bundles je Gerät einen eigenen Eintrag bekommen.</b> Der
-/// Knoten <c>urn:xmpp:omemo:2:bundles</c> trägt einen Eintrag pro Gerät, mit
-/// der Gerätekennung als Eintragskennung. So holt ein Absender genau das
-/// Bundle, das er braucht, statt aller - und ein Gerät, das seinen PreKey
-/// verbraucht hat, schreibt nur seinen eigenen Eintrag neu und stört die
-/// anderen nicht.
+/// <b>Why the bundles get an entry of their own per device.</b> The node
+/// <c>urn:xmpp:omemo:2:bundles</c> carries one entry per device, with the
+/// device identifier as the entry identifier. That way a sender fetches exactly
+/// the bundle they need instead of all of them - and a device that has used up
+/// its prekey writes only its own entry anew and does not disturb the others.
 /// </remarks>
 public static class OmemoPep
 {
 
-    /// <summary>Der PEP-Knoten der Bundles.</summary>
+    /// <summary>The PEP node of the bundles.</summary>
     public const String BundlesNode = "urn:xmpp:omemo:2:bundles";
 
-    /// <summary>Der Namespace von XEP-0060.</summary>
+    /// <summary>The namespace of XEP-0060.</summary>
     public const String PubSubNamespace = "http://jabber.org/protocol/pubsub";
 
-    #region Das Bundle als XML
+    #region The bundle as XML
 
-    /// <summary>Ein Bundle als XML (Abschnitt 5.2).</summary>
+    /// <summary>A bundle as XML (section 5.2).</summary>
     public static XElement ToXml(this OmemoBundle bundle)
     {
 
@@ -182,18 +180,18 @@ public static class OmemoPep
     }
 
     /// <summary>
-    /// Liest ein Bundle.
+    /// Reads a bundle.
     /// </summary>
     /// <remarks>
-    /// <b>Hier wird streng gelesen, anders als bei der Geräteliste.</b> Ein
-    /// Bundle mit einem fehlenden Teil ist unbrauchbar - ohne IdentityKey
-    /// lässt sich die Signatur nicht prüfen, ohne Signed PreKey nichts
-    /// vereinbaren. Ein halbes Bundle anzunehmen hiesse, eine Sitzung auf
-    /// etwas aufzubauen, dessen Herkunft niemand geprüft hat.
+    /// <b>Here it is read strictly, unlike with the device list.</b> A bundle
+    /// with a missing part is unusable - without an identity key the signature
+    /// cannot be checked, without a signed prekey nothing can be agreed. To
+    /// accept half a bundle would mean building a session on something whose
+    /// origin nobody has checked.
     ///
-    /// Ein einzelner unlesbarer PreKey nimmt allerdings nicht das ganze Bundle
-    /// mit: Von hundert genügt einer, und die Sitzung kommt sogar ganz ohne
-    /// zustande.
+    /// A single unreadable prekey, however, does not take the whole bundle with
+    /// it: out of a hundred one suffices, and the session even comes about
+    /// entirely without one.
     /// </remarks>
     public static Boolean TryReadBundle(XElement xml, out OmemoBundle? bundle)
     {
@@ -234,31 +232,31 @@ public static class OmemoPep
                 }
                 catch (FormatException)
                 {
-                    // Ein krummer PreKey unter hundert nimmt nicht die
-                    // anderen mit.
+                    // One crooked prekey out of a hundred does not take the
+                    // others with it.
                 }
 
             }
 
-            var gelesen = new OmemoBundle(Convert.FromBase64String(ik),
+            var read = new OmemoBundle(Convert.FromBase64String(ik),
                                           spkId,
                                           Convert.FromBase64String(spk.Value.Trim()),
                                           Convert.FromBase64String(spks),
                                           preKeys);
 
-            // Die Längen gehören hierhin und nicht zum Aufrufer.
+            // The lengths belong here and not with the caller.
             //
-            // Ein leeres <spk/> ist gültiges Base64 und ergibt ein Feld von
-            // null Byte - das kam durch, bis eine überlebende Mutation den
-            // Test dafür erzwang. Weiter unten wäre daraus eine Ausnahme aus
-            // der Kurvenarithmetik geworden, mit einer Meldung, die niemandem
-            // sagt, dass ein Bundle unbrauchbar war.
-            if (gelesen.IdentityKey.Length            != Curve25519.KeyLength ||
-                gelesen.SignedPreKey.Length           != Curve25519.KeyLength ||
-                gelesen.SignedPreKeySignature.Length  != Curve25519.SignatureLength)
+            // An empty <spk/> is valid base64 and yields a field of zero bytes -
+            // that came through until a surviving mutation forced the test for
+            // it. Further down it would have become an exception out of the
+            // curve arithmetic, with a message that tells nobody a bundle was
+            // unusable.
+            if (read.IdentityKey.Length            != Curve25519.KeyLength ||
+                read.SignedPreKey.Length           != Curve25519.KeyLength ||
+                read.SignedPreKeySignature.Length  != Curve25519.SignatureLength)
                 return false;
 
-            bundle = gelesen;
+            bundle = read;
 
             return true;
 
@@ -272,9 +270,9 @@ public static class OmemoPep
 
     #endregion
 
-    #region Die IQs
+    #region The IQs
 
-    /// <summary>Veröffentlicht einen Eintrag in einem eigenen PEP-Knoten.</summary>
+    /// <summary>Publishes an entry in a PEP node of one's own.</summary>
     public static String PublishIq(String id, String node, String itemId, XElement payload)
         => $"<iq type='set' id='{XmlEscaping.Escape(id)}'>" +
            $"<pubsub xmlns='{PubSubNamespace}'>" +
@@ -282,9 +280,9 @@ public static class OmemoPep
            $"<item id='{XmlEscaping.Escape(itemId)}'>{payload}</item>" +
            "</publish>" +
 
-           // Abschnitt 5.2 verlangt ein offenes Zugriffsmodell: Wer
-           // verschlüsselt schreiben will, muss das Bundle lesen können, und
-           // das ist im Zweifel jemand, der noch in keinem Roster steht.
+           // Section 5.2 demands an open access model: whoever wants to write in
+           // encrypted form has to be able to read the bundle, and in case of
+           // doubt that is somebody who stands in no roster yet.
            $"<publish-options><x xmlns='jabber:x:data' type='submit'>" +
            "<field var='FORM_TYPE' type='hidden'>" +
            "<value>http://jabber.org/protocol/pubsub#publish-options</value></field>" +
@@ -293,9 +291,9 @@ public static class OmemoPep
 
            "</pubsub></iq>";
 
-    /// <summary>Holt einen Eintrag aus dem PEP-Knoten eines anderen.</summary>
+    /// <summary>Fetches an entry out of the PEP node of somebody else.</summary>
     /// <param name="itemId">
-    /// Welcher Eintrag; ohne Angabe der zuletzt veröffentlichte.
+    /// Which entry; without a value the one published last.
     /// </param>
     public static String FetchIq(String id, String to, String node, String? itemId = null)
         => $"<iq type='get' id='{XmlEscaping.Escape(id)}' to='{XmlEscaping.Escape(to)}'>" +
