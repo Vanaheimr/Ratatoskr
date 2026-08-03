@@ -24,69 +24,66 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0004: die paar Handgriffe an einem Datenformular, die hier gebraucht
-/// werden.
+/// XEP-0004: the few handles on a data form that are needed here.
 /// </summary>
 /// <remarks>
-/// <b>Kein Formularmodell, nur die gemeinsamen Stellen.</b> Zwei Formulare gibt
-/// es in diesem Haus - die Einstellungen eines Abonnements und die eines
-/// Knotens -, und beide bauen dieselben Felder, lesen denselben Wahrheitswert
-/// und stolpern über dieselben Schreibweisen. Zweimal dasselbe zu schreiben
-/// heisst, es einmal zu ändern und einmal zu vergessen.
+/// <b>No form model, only the shared places.</b> There are two forms in this
+/// house - the settings of a subscription and those of a node -, and both build
+/// the same fields, read the same truth value and stumble over the same
+/// spellings. To write the same thing twice means changing it once and
+/// forgetting it once.
 ///
-/// Was hier <b>nicht</b> steht, ist ein Formularmodell mit Feldtypen und
-/// Prüfregeln. Es gäbe eines zu bauen; gebraucht wird es nicht, und ungenutzte
-/// Fläche ist in diesem Bau kein Guthaben.
+/// What does <b>not</b> stand here is a form model with field types and
+/// validation rules. There would be one to build; it is not needed, and unused
+/// surface is no asset in this building.
 ///
-/// <b>Mehrfachwerte standen bis D92 in derselben Zeile</b> - auch sie wurden
-/// nicht gebraucht. Mit <c>pubsub#roster_groups_allowed</c> gibt es das erste
-/// Feld, das mehrere trägt; ein <c>list-multi</c>, von dem nur der erste Wert
-/// gelesen würde, wäre genau die stille Verkürzung, gegen die dieses Haus
-/// sonst schreibt.
+/// <b>Multiple values stood in the same line until D92</b> - they were not
+/// needed either. With <c>pubsub#roster_groups_allowed</c> there is the first
+/// field that carries several; a <c>list-multi</c> of which only the first
+/// value were read would be exactly the silent shortening this house otherwise
+/// writes against.
 /// </remarks>
 internal static class DataForm
 {
 
-    /// <summary>Der Namensraum der Datenformulare.</summary>
+    /// <summary>The namespace of the data forms.</summary>
     public const String Namespace = "jabber:x:data";
 
     /// <summary>
-    /// Ist das ein Formular dieser Art - <c>form</c>, <c>submit</c>?
+    /// Is this a form of this kind - <c>form</c>, <c>submit</c>?
     /// </summary>
     public static Boolean Is(XElement x, String type)
         => x.Name.NamespaceName == Namespace &&
            x.Name.LocalName     == "x" &&
            x.Attr("type")       == type;
 
-    /// <summary>Die Felder eines Formulars.</summary>
+    /// <summary>The fields of a form.</summary>
     public static IEnumerable<XElement> Fields(XElement x)
         => x.Children(Namespace, "field");
 
     /// <summary>
-    /// Der erste Wert eines Feldes, oder null.
+    /// The first value of a field, or null.
     /// </summary>
     public static String? ValueOf(XElement field)
         => field.Child(Namespace, "value")?.Value;
 
     /// <summary>
-    /// Alle Werte eines Feldes - für <c>list-multi</c>, wo jeder Wert ein
-    /// eigenes <c>&lt;value/&gt;</c> ist.
+    /// All values of a field - for <c>list-multi</c>, where every value is a
+    /// <c>&lt;value/&gt;</c> of its own.
     /// </summary>
     /// <remarks>
-    /// Ein Feld ohne Werte gibt eine leere Liste. Bei einem Mehrfachfeld ist
-    /// das eine Aussage und keine Lücke: <b>keine Auswahl</b>.
+    /// A field without values gives an empty list. With a multi-field that is a
+    /// statement and not a gap: <b>no selection</b>.
     /// </remarks>
     public static IReadOnlyList<String> ValuesOf(XElement field)
         => [.. field.Children(Namespace, "value").Select(v => v.Value)];
 
     /// <summary>
-    /// XEP-0004, Abschnitt 3.3: Ein Wahrheitswert steht als 0/1 oder
-    /// false/true.
+    /// XEP-0004, section 3.3: a truth value stands as 0/1 or false/true.
     /// </summary>
     /// <remarks>
-    /// Beide Schreibweisen zu lesen und nur eine zu schreiben ist kein
-    /// Widerspruch, sondern die übliche Vorsicht: Was hereinkommt, hat ein
-    /// anderer geschrieben.
+    /// To read both spellings and to write only one is no contradiction but the
+    /// usual caution: what comes in was written by somebody else.
     /// </remarks>
     public static Boolean TryBoolean(String? value, out Boolean result)
     {
@@ -110,11 +107,11 @@ internal static class DataForm
 
     }
 
-    /// <summary>Ein Wahrheitswert, wie er geschrieben wird.</summary>
+    /// <summary>A truth value as it is written.</summary>
     public static String Boolean(Boolean value)
         => value ? "1" : "0";
 
-    /// <summary>Ein Feld mit einem Wert.</summary>
+    /// <summary>A field with one value.</summary>
     public static XElement Field(String var, String? type, String? label, String value)
     {
 
@@ -135,12 +132,12 @@ internal static class DataForm
     }
 
     /// <summary>
-    /// Ein Feld mit beliebig vielen Werten - auch mit keinem.
+    /// A field with any number of values - with none as well.
     /// </summary>
     /// <remarks>
-    /// Kein Wert heisst hier „nichts ausgewählt" und nicht „Feld fehlt": Das
-    /// Feld steht im Formular, es ist nur leer. Wer es stattdessen wegliesse,
-    /// sagte „diese Einstellung gibt es nicht" - etwas ganz anderes.
+    /// No value here means "nothing selected" and not "field missing": the
+    /// field stands in the form, it is only empty. Whoever left it out instead
+    /// would say "this setting does not exist" - something else entirely.
     /// </remarks>
     public static XElement MultiField(String var, String? type, String? label, IEnumerable<String> values)
     {
@@ -163,7 +160,7 @@ internal static class DataForm
     }
 
     /// <summary>
-    /// Ein Formular mit seinem <c>FORM_TYPE</c> und den angegebenen Feldern.
+    /// A form with its <c>FORM_TYPE</c> and the given fields.
     /// </summary>
     public static XElement Form(String type, String formType, params XElement[] fields)
     {

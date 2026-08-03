@@ -24,12 +24,13 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0199: XMPP Ping - misst Round-Trip-Zeiten und hält die Verbindung offen.
+/// XEP-0199: XMPP Ping - measures round-trip times and keeps the connection
+/// open.
 /// </summary>
 public sealed class PingManager
 {
 
-    /// <summary>Der Namespace von XEP-0199.</summary>
+    /// <summary>The namespace of XEP-0199.</summary>
     public const string Namespace = "urn:xmpp:ping";
 
     private readonly Func<string, Task> _sendStanza;
@@ -43,10 +44,10 @@ public sealed class PingManager
     public event Action<string>? OnPingTimeout;
 
     /// <summary>
-    /// Der Ping wurde mit einem Stanza-Fehler beantwortet. Das ist etwas
-    /// anderes als ein Timeout: die Gegenstelle war erreichbar, hat aber
-    /// abgelehnt - <c>service-unavailable</c> heisst schlicht, dass sie
-    /// XEP-0199 nicht unterstützt.
+    /// The ping was answered with a stanza error. That is something other than
+    /// a timeout: the other side was reachable but declined -
+    /// <c>service-unavailable</c> simply means that it does not support
+    /// XEP-0199.
     /// </summary>
     public event Action<string, StanzaError>? OnPingError;
 
@@ -56,15 +57,15 @@ public sealed class PingManager
     }
 
     /// <summary>
-    /// Sendet einen Ping und misst die Antwortzeit
+    /// Sends a ping and measures the response time
     /// </summary>
     public async Task<TimeSpan?> PingAsync(string? to = null, CancellationToken ct = default)
     {
         var id = $"ping-{Interlocked.Increment(ref _counter)}";
-        // RunContinuationsAsynchronously: ohne das laufen die Fortsetzungen des
-        // Aufrufers synchron in dem Thread, der die Antwort abliefert - also in
-        // der Empfangsschleife. Beliebiger Anwendercode würde dort das Lesen
-        // weiterer Stanzas aufhalten.
+        // RunContinuationsAsynchronously: without it the continuations of the
+        // caller run synchronously in the thread that delivers the answer - that
+        // is, in the receive loop. Arbitrary user code would hold up the reading
+        // of further stanzas there.
         var tcs = new TaskCompletionSource<TimeSpan?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var sent = DateTime.UtcNow;
 
@@ -92,7 +93,7 @@ public sealed class PingManager
     }
 
     /// <summary>
-    /// Verarbeitet eine Ping-Antwort
+    /// Processes a ping answer
     /// </summary>
     public bool ProcessPong(string id)
     {
@@ -110,11 +111,11 @@ public sealed class PingManager
     }
 
     /// <summary>
-    /// Verarbeitet einen Stanza-Fehler auf einen offenen Ping.
+    /// Processes a stanza error on a pending ping.
     ///
-    /// Ohne diese Behandlung lief ein <c>iq type='error'</c> in ProcessPong und
-    /// wurde als gültige Antwort gewertet - eine abgelehnte Anfrage sah damit
-    /// aus wie eine gemessene Laufzeit.
+    /// Without this handling an <c>iq type='error'</c> ran into ProcessPong and
+    /// was counted as a valid answer - a declined request thereby looked like a
+    /// measured round-trip time.
     /// </summary>
     public bool ProcessError(string id, StanzaError error)
     {
@@ -137,11 +138,11 @@ public sealed class PingManager
     }
 
     /// <summary>
-    /// Beantwortet einen Ping.
+    /// Answers a ping.
     ///
-    /// Ohne 'from' kam die Anfrage vom eigenen Server (RFC 6120,
-    /// Abschnitt 8.1.1.1); die Antwort geht dann ohne 'to' implizit dorthin
-    /// zurück.
+    /// Without a 'from' the request came from one's own server (RFC 6120,
+    /// section 8.1.1.1); the answer then goes back there implicitly, without a
+    /// 'to'.
     /// </summary>
     public Task RespondAsync(string id, string? from = null)
     {
@@ -150,15 +151,15 @@ public sealed class PingManager
     }
 
     /// <summary>
-    /// Prüft ob ein IQ ein Ping ist
+    /// Checks whether an IQ is a ping
     /// </summary>
     /// <summary>
-    /// Prüft, ob ein IQ ein Ping ist.
+    /// Checks whether an IQ is a ping.
     ///
-    /// Die frühere Prüfung suchte wörtlich nach <c>type='get'</c>, also nur mit
-    /// einfachen Anführungszeichen; gegen einen Server mit doppelten wurde der
-    /// Ping nicht erkannt. Den Typ prüft ohnehin der Aufrufer - hier zählt nur
-    /// die Nutzlast.
+    /// The earlier check looked literally for <c>type='get'</c>, that is, only
+    /// with single quotation marks; against a server with double ones the ping
+    /// was not recognised. The type is checked by the caller anyway - here only
+    /// the payload counts.
     /// </summary>
     public static bool IsPing(XElement iq)
         => iq.Child(Namespace, "ping") is not null;

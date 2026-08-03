@@ -25,94 +25,91 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Was mit einer Stanza geschieht, solange der Client sich für inaktiv
-/// erklärt hat (XEP-0352, Abschnitt 3).
+/// What happens to a stanza as long as the client has declared itself inactive
+/// (XEP-0352, section 3).
 /// </summary>
 public enum ClientStateHandling
 {
 
-    /// <summary>Geht sofort hinaus - der Zustand des Clients ändert daran nichts.</summary>
+    /// <summary>Goes out at once - the state of the client changes nothing about that.</summary>
     Immediately,
 
-    /// <summary>Wird zurückgehalten und beim <c>&lt;active/&gt;</c> nachgeliefert.</summary>
+    /// <summary>Is held back and delivered afterwards at the <c>&lt;active/&gt;</c>.</summary>
     Queued,
 
-    /// <summary>Wird fallengelassen und kommt nie an.</summary>
+    /// <summary>Is dropped and never arrives.</summary>
     Discarded
 
 }
 
 /// <summary>
-/// XEP-0352: Client State Indication - der Client sagt, ob ein Mensch
-/// hinsieht.
+/// XEP-0352: Client State Indication - the client says whether a human being is
+/// looking.
 /// </summary>
 /// <remarks>
-/// Zwei Nonzas, keine Antwort (Abschnitt 4.2: „There is no reply from the
-/// server to either of these elements"), und der Server darf daraufhin
-/// Verkehr zurückhalten. Der Sinn ist nicht Sparsamkeit auf der Leitung: Ein
-/// Funkmodem, das für jede Presence-Änderung aufwacht, leert den Akku eines
-/// Telefons, das in der Tasche liegt.
+/// Two nonzas, no answer (section 4.2: "There is no reply from the server to
+/// either of these elements"), and the server may thereupon hold traffic back.
+/// The point is not thrift on the wire: a radio modem that wakes up for every
+/// presence change empties the battery of a telephone lying in a pocket.
 ///
-/// <b>Was zurückgehalten werden darf, entscheidet der Server</b> - die
-/// Spezifikation nennt in Abschnitt 3 nur Beispiele. Diese Klasse hält die
-/// Entscheidung an einer Stelle fest und beantwortet sie als reine Funktion,
-/// damit sie einzeln prüfbar ist und nicht in der Sendeschleife der Sitzung
-/// verschwindet.
+/// <b>What may be held back is decided by the server</b> - the specification
+/// names only examples in section 3. This class holds the decision fast in one
+/// place and answers it as a pure function, so that it is checkable on its own
+/// and does not vanish into the send loop of the session.
 ///
-/// Die Leitlinie dahinter: <b>Zurückgehalten wird nur, was später noch wahr
-/// ist.</b> Eine Presence von vorhin ist überholbar, aber nicht falsch - die
-/// letzte gilt. Ein „schreibt gerade" von vorhin ist nach der Zustellung
-/// schlicht gelogen; deshalb wird es fallengelassen und nicht aufgehoben
-/// (Abschnitt 3: „Discard messages containing only Chat State Notifications
-/// … payloads"). Und alles, worauf ein Absender wartet, geht sofort hinaus.
+/// The guideline behind it: <b>what is held back is only what is still true
+/// later.</b> A presence from before can be superseded, but is not wrong - the
+/// last one holds. A "is typing" from before is, after the delivery, simply a
+/// lie; that is why it is dropped and not kept (section 3: "Discard messages
+/// containing only Chat State Notifications … payloads"). And everything a
+/// sender is waiting on goes out at once.
 /// </remarks>
 public static class ClientStateIndication
 {
 
-    /// <summary>Der Namespace von XEP-0352.</summary>
+    /// <summary>The namespace of XEP-0352.</summary>
     public const String Namespace    = "urn:xmpp:csi:0";
 
-    /// <summary>Die Ankündigung unter den Stream-Features (Abschnitt 4.1).</summary>
+    /// <summary>The announcement among the stream features (section 4.1).</summary>
     public const String FeatureXml   = $"<csi xmlns='{Namespace}'/>";
 
-    /// <summary>„Es sieht wieder jemand hin."</summary>
+    /// <summary>"Somebody is looking again."</summary>
     public const String ActiveXml    = $"<active xmlns='{Namespace}'/>";
 
-    /// <summary>„Das Gerät liegt in der Tasche."</summary>
+    /// <summary>"The device is lying in the pocket."</summary>
     public const String InactiveXml  = $"<inactive xmlns='{Namespace}'/>";
 
     #region HandlingOf(stanza)
 
     /// <summary>
-    /// Wie mit dieser Stanza zu verfahren ist, solange der Client inaktiv ist.
+    /// How this stanza is to be dealt with as long as the client is inactive.
     /// </summary>
     /// <remarks>
-    /// <b>Nonzas und <c>iq</c> gehen sofort hinaus.</b> Ein <c>&lt;a/&gt;</c>
-    /// oder ein Stream-Fehler gehört nicht zum Verkehr, den ein Telefon
-    /// aufschieben möchte, sondern zum Stream selbst. Und ein <c>iq</c> ist
-    /// eine Frage mit Frist: Wer es zurückhält, lässt beim Absender die Zeit
-    /// ablaufen und beantwortet sie danach - die Antwort kommt dann zu einer
-    /// Frage, die niemand mehr stellt.
+    /// <b>Nonzas and <c>iq</c> go out at once.</b> An <c>&lt;a/&gt;</c> or a
+    /// stream error does not belong to the traffic a telephone would like to
+    /// postpone but to the stream itself. And an <c>iq</c> is a question with a
+    /// deadline: whoever holds it back lets the time run out at the sender and
+    /// answers it afterwards - the answer then comes to a question nobody is
+    /// asking any more.
     ///
-    /// <b>Fehler gehen sofort hinaus</b>, in beiden Richtungen und für beide
-    /// Stanza-Arten: Ein Fehler ist die Antwort auf etwas, das der Client
-    /// selbst geschickt hat.
+    /// <b>Errors go out at once</b>, in both directions and for both kinds of
+    /// stanza: an error is the answer to something the client sent itself.
     ///
-    /// <b>Eine Nachricht mit Text ist der Grund, warum das Gerät klingelt.</b>
-    /// Sie zurückzuhalten hiesse, aus einer Verkehrsersparnis eine
-    /// Zustellverzögerung zu machen - und genau dafür ist XEP-0352 nicht da.
+    /// <b>A message with text is the reason the device rings.</b> To hold it
+    /// back would mean turning a saving of traffic into a delay of delivery -
+    /// and that is precisely not what XEP-0352 is there for.
     ///
-    /// Ein <c>&lt;body/&gt;</c> aus lauter Leerzeichen zählt nicht als Text.
-    /// Andersherum gälte jede Nachricht als wichtig, die ein leeres
-    /// <c>&lt;body/&gt;</c> neben ihren Chat States mitführt - und das tun
-    /// Clients tatsächlich.
+    /// A <c>&lt;body/&gt;</c> of nothing but spaces does not count as text. The
+    /// other way round, every message would count as important that carries an
+    /// empty <c>&lt;body/&gt;</c> beside its chat states - and clients do that
+    /// in fact.
     /// </remarks>
     public static ClientStateHandling HandlingOf(String stanza)
     {
 
         var name = StanzaElement.NameOf(stanza);
 
-        // Alles andere - iq und jede Nonza - ist unaufschiebbar.
+        // Everything else - iq and every nonza - is not postponable.
         if (name is not ("message" or "presence"))
             return ClientStateHandling.Immediately;
 
@@ -124,9 +121,9 @@ public static class ClientStateIndication
         }
         catch (XmlException)
         {
-            // Was sich nicht lesen lässt, wird nicht zurückgehalten. Ein
-            // Puffer ist der schlechteste Ort für etwas Unverstandenes: Es
-            // käme später heraus, und niemand wüsste dann noch, warum.
+            // What cannot be read is not held back. A buffer is the worst place
+            // for something not understood: it would come out later, and nobody
+            // would know then why.
             return ClientStateHandling.Immediately;
         }
 
@@ -135,10 +132,9 @@ public static class ClientStateIndication
         if (type == "error")
             return ClientStateHandling.Immediately;
 
-        // Presence: die Anwesenheit selbst ist aufschiebbar, die Frage nach
-        // ihr nicht. Ein <presence type='subscribe'/> wartet auf eine
-        // Entscheidung des Menschen und ist damit dasselbe wie eine
-        // Nachricht - RFC 6121, Abschnitt 3.1.3.
+        // Presence: the presence itself is postponable, the question about it is
+        // not. A <presence type='subscribe'/> waits for a decision of the human
+        // being and is thereby the same as a message - RFC 6121, section 3.1.3.
         if (name == "presence")
             return type is "subscribe" or "subscribed" or "unsubscribe" or "unsubscribed"
                        ? ClientStateHandling.Immediately
@@ -149,17 +145,17 @@ public static class ClientStateIndication
                                               ?.Value))
             return ClientStateHandling.Immediately;
 
-        // Gezählt werden nur die Erweiterungen, also die Kinder in einem
-        // anderen Namensraum als die Stanza selbst. <thread/> steht im
-        // Namensraum der Stanza und gehört keiner Erweiterung; wer es
-        // mitzählte, hielte jede Chat-State-Nachricht mit Thread für eine
-        // Nachricht mit Inhalt - und XEP-0085 empfiehlt genau diese Kombination.
-        var erweiterungen = element.Elements()
+        // What is counted are only the extensions, that is, the children in a
+        // namespace other than the stanza itself. <thread/> stands in the
+        // namespace of the stanza and belongs to no extension; whoever counted
+        // it would take every chat state message with a thread for a message
+        // with content - and XEP-0085 recommends precisely this combination.
+        var extensions = element.Elements()
                                    .Where(e => e.Name.NamespaceName != element.Name.NamespaceName)
                                    .ToList();
 
-        if (erweiterungen.Count > 0 &&
-            erweiterungen.All(e => e.Name.NamespaceName == ChatStateExtensions.Namespace))
+        if (extensions.Count > 0 &&
+            extensions.All(e => e.Name.NamespaceName == ChatStateExtensions.Namespace))
             return ClientStateHandling.Discarded;
 
         return ClientStateHandling.Queued;
@@ -171,25 +167,25 @@ public static class ClientStateIndication
     #region SupersedeKey(stanza)
 
     /// <summary>
-    /// Wodurch diese zurückgehaltene Stanza von einer späteren abgelöst wird -
-    /// oder null, wenn sie durch nichts abgelöst wird.
+    /// By what this held-back stanza is superseded from a later one - or null
+    /// when it is superseded by nothing.
     /// </summary>
     /// <remarks>
-    /// Abschnitt 3 nennt es als erste Massnahme: „Suppress presence updates
-    /// until the client becomes active again. On becoming active, push the
-    /// <b>latest</b> presence from each contact." Ein Kontakt, der in zehn
-    /// Minuten fünfmal zwischen „da" und „weg" wechselt, hinterlässt damit
-    /// eine Presence und nicht fünf.
+    /// Section 3 names it as the first measure: "Suppress presence updates until
+    /// the client becomes active again. On becoming active, push the
+    /// <b>latest</b> presence from each contact." A contact who switches five
+    /// times between "here" and "away" in ten minutes thereby leaves behind one
+    /// presence and not five.
     ///
-    /// Der Schlüssel ist die Full-JID des Absenders und nicht sein Bare-JID:
-    /// Zwei Geräte desselben Menschen sind zwei Anwesenheiten, und die eine
-    /// darf die andere nicht verdrängen - sonst verschwände sein Telefon aus
-    /// der Liste, weil sein Rechner sich abgemeldet hat.
+    /// The key is the full JID of the sender and not their bare JID: two devices
+    /// of the same human being are two presences, and the one must not displace
+    /// the other - otherwise their telephone would vanish from the list because
+    /// their computer has signed off.
     ///
-    /// Verdrängt wird nur unter Gleichen: Eine Abmeldung löst eine Anmeldung
-    /// ab und umgekehrt, denn beide beantworten dieselbe Frage. Was
-    /// <see cref="HandlingOf"/> ohnehin sofort hinausgibt, kommt hier gar
-    /// nicht erst an.
+    /// Displacement happens only among equals: a sign-off supersedes a sign-on
+    /// and the other way round, for both answer the same question. What
+    /// <see cref="HandlingOf"/> gives out at once anyway does not even arrive
+    /// here.
     /// </remarks>
     public static String? SupersedeKey(String stanza)
     {

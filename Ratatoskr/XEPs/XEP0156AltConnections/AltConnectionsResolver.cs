@@ -25,27 +25,27 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0156: Findet den WebSocket-Endpunkt einer Domain über deren
+/// XEP-0156: Finds the WebSocket endpoint of a domain by way of its
 /// <c>host-meta</c>.
 /// </summary>
 /// <remarks>
-/// Zwei Sätze aus dem XEP bestimmen alles Weitere.
+/// Two sentences from the XEP determine everything else.
 ///
-/// Der erste ist eine Rangfolge: „HTTPS queries for host-meta information MUST
-/// be used only as a fallback after the methods specified in RFC 6120 have been
-/// exhausted." Diese Klasse wird deshalb nur gefragt, wenn niemand einen
-/// Endpunkt genannt hat.
+/// The first is an order of precedence: "HTTPS queries for host-meta
+/// information MUST be used only as a fallback after the methods specified in
+/// RFC 6120 have been exhausted." This class is therefore asked only when
+/// nobody has named an endpoint.
 ///
-/// Der zweite ist eine Sicherheitsregel: „host-meta files MUST be fetched only
-/// over HTTPS, and MUST only use connection URLs starting with 'https://' or
-/// 'wss://'." Beide Hälften gehören zusammen. Wer die Auskunft im Klartext
-/// holt, lässt jeden Zwischenmann bestimmen, wohin sich der Client anmeldet;
-/// wer einer sicher geholten Auskunft ein <c>ws://</c> abnimmt, schickt
-/// Benutzer und Passwort anschliessend trotzdem offen durchs Netz.
+/// The second is a security rule: "host-meta files MUST be fetched only over
+/// HTTPS, and MUST only use connection URLs starting with 'https://' or
+/// 'wss://'." The two halves belong together. Whoever fetches the information
+/// in the clear lets every man in the middle determine where the client signs
+/// on; whoever takes a <c>ws://</c> from information fetched securely sends
+/// user and password openly through the net afterwards all the same.
 ///
-/// Der DNS-Weg über <c>_xmppconnect</c>-TXT-Einträge fehlt nicht, er ist
-/// abgeschafft: „A previous version of this XEP defined a DNS method to look up
-/// this info using a TXT _xmppconnect record, this was insecure and has been
+/// The DNS route by way of <c>_xmppconnect</c> TXT records is not missing, it
+/// is abolished: "A previous version of this XEP defined a DNS method to look
+/// up this info using a TXT _xmppconnect record, this was insecure and has been
 /// removed."
 /// </remarks>
 public sealed class AltConnectionsResolver
@@ -53,15 +53,15 @@ public sealed class AltConnectionsResolver
 
     #region Data
 
-    /// <summary>Der Link-Typ des WebSocket-Endpunkts.</summary>
+    /// <summary>The link type of the WebSocket endpoint.</summary>
     public const string WebSocketRel = "urn:xmpp:alt-connections:websocket";
 
     private const string XrdNamespace = "http://docs.oasis-open.org/ns/xri/xrd-1.0";
 
     /// <summary>
-    /// Ein gemeinsamer HttpClient - einer pro Anwendung, nicht einer pro
-    /// Abfrage: Ein neuer je Aufruf verbraucht Sockets, die nach dem Schliessen
-    /// noch minutenlang belegt bleiben.
+    /// One shared HttpClient - one per application, not one per query: a new one
+    /// per call uses up sockets that stay occupied for minutes after the
+    /// closing.
     /// </summary>
     private static readonly HttpClient _httpClient = new();
 
@@ -72,12 +72,12 @@ public sealed class AltConnectionsResolver
     #region Constructor(s)
 
     /// <summary>
-    /// Erzeugt einen Resolver.
+    /// Creates a resolver.
     /// </summary>
     /// <param name="fetch">
-    /// Holt den Inhalt einer Adresse, oder <c>null</c>, wenn es ihn nicht gibt.
-    /// Ohne Angabe wird über HTTPS geladen; eingesetzt wird er von den Tests,
-    /// die den Ablauf ohne Netz prüfen.
+    /// Fetches the content of an address, or <c>null</c> when it does not
+    /// exist. Without a value it is loaded over HTTPS; it is used by the tests,
+    /// which check the sequence without a net.
     /// </param>
     public AltConnectionsResolver(Func<string, CancellationToken, Task<string?>>? fetch = null)
     {
@@ -88,14 +88,14 @@ public sealed class AltConnectionsResolver
 
 
     /// <summary>
-    /// Fragt das <c>host-meta</c> der Domain ab und gibt den ersten
-    /// WebSocket-Endpunkt zurück - oder <c>null</c>, wenn es keinen gibt.
+    /// Queries the <c>host-meta</c> of the domain and gives back the first
+    /// WebSocket endpoint - or <c>null</c> when there is none.
     /// </summary>
     /// <remarks>
-    /// Erst die JSON-Fassung, dann die XML-Fassung. Das XEP kennt beide
-    /// gleichrangig; die Reihenfolge ist eine Wahl und keine Vorschrift.
-    /// Gefragt wird die zweite nur, wenn die erste nichts hergibt - eine
-    /// Domain, die beides ausliefert, kostet damit eine Abfrage statt zwei.
+    /// First the JSON version, then the XML version. The XEP knows both as
+    /// equals; the order is a choice and not a prescription. The second is asked
+    /// only when the first yields nothing - a domain that delivers both thereby
+    /// costs one query instead of two.
     /// </remarks>
     public async Task<string?> DiscoverWebSocketAsync(string             domain,
                                                       CancellationToken  ct   = default)
@@ -103,21 +103,20 @@ public sealed class AltConnectionsResolver
 
         var jrd = await _fetch($"https://{domain}/.well-known/host-meta.json", ct);
 
-        if (jrd is not null && WebSocketEndpointsFromJrd(jrd) is { Count: > 0 } ausJson)
-            return ausJson[0];
+        if (jrd is not null && WebSocketEndpointsFromJrd(jrd) is { Count: > 0 } fromJson)
+            return fromJson[0];
 
         var xrd = await _fetch($"https://{domain}/.well-known/host-meta", ct);
 
-        if (xrd is not null && WebSocketEndpointsFromXrd(xrd) is { Count: > 0 } ausXml)
-            return ausXml[0];
+        if (xrd is not null && WebSocketEndpointsFromXrd(xrd) is { Count: > 0 } fromXml)
+            return fromXml[0];
 
         return null;
 
     }
 
     /// <summary>
-    /// Die WebSocket-Endpunkte aus einem XRD-Dokument, in der vorgefundenen
-    /// Reihenfolge.
+    /// The WebSocket endpoints from an XRD document, in the order found.
     /// </summary>
     public static IReadOnlyList<string> WebSocketEndpointsFromXrd(string xrd)
     {
@@ -125,12 +124,12 @@ public sealed class AltConnectionsResolver
         try
         {
 
-            var wurzel = XDocument.Parse(xrd).Root;
+            var root = XDocument.Parse(xrd).Root;
 
-            if (wurzel is null)
+            if (root is null)
                 return [];
 
-            return [.. wurzel.Elements(XName.Get("Link", XrdNamespace))
+            return [.. root.Elements(XName.Get("Link", XrdNamespace))
                              .Where  (link => link.Attribute("rel")?.Value == WebSocketRel)
                              .Select (link => link.Attribute("href")?.Value)
                              .Where  (IsSecureWebSocket)
@@ -138,11 +137,10 @@ public sealed class AltConnectionsResolver
 
         }
 
-        // Der Inhalt kommt von einem fremden Webserver und kann alles sein:
-        // eine Fehlerseite, eine halbe Datei, HTML. Das ist kein Fehler dieses
-        // Programms, sondern eine Domain ohne brauchbares host-meta - und die
-        // richtige Antwort darauf ist "kein Endpunkt", nicht ein Abbruch des
-        // Verbindungsaufbaus.
+        // The content comes from a foreign web server and can be anything: an
+        // error page, half a file, HTML. That is no error of this program but a
+        // domain without a usable host-meta - and the right answer to it is "no
+        // endpoint", not an abort of the connection setup.
         catch (System.Xml.XmlException)
         {
             return [];
@@ -151,8 +149,7 @@ public sealed class AltConnectionsResolver
     }
 
     /// <summary>
-    /// Die WebSocket-Endpunkte aus einem JRD-Dokument, in der vorgefundenen
-    /// Reihenfolge.
+    /// The WebSocket endpoints from a JRD document, in the order found.
     /// </summary>
     public static IReadOnlyList<string> WebSocketEndpointsFromJrd(string jrd)
     {
@@ -160,15 +157,15 @@ public sealed class AltConnectionsResolver
         try
         {
 
-            using var dokument = JsonDocument.Parse(jrd);
+            using var document = JsonDocument.Parse(jrd);
 
-            if (!dokument.RootElement.TryGetProperty("links", out var links) ||
+            if (!document.RootElement.TryGetProperty("links", out var links) ||
                  links.ValueKind != JsonValueKind.Array)
             {
                 return [];
             }
 
-            var endpunkte = new List<string>();
+            var endpoints = new List<string>();
 
             foreach (var link in links.EnumerateArray())
             {
@@ -181,12 +178,12 @@ public sealed class AltConnectionsResolver
                     rel.GetString() == WebSocketRel &&
                     IsSecureWebSocket(href.GetString()))
                 {
-                    endpunkte.Add(href.GetString()!);
+                    endpoints.Add(href.GetString()!);
                 }
 
             }
 
-            return endpunkte;
+            return endpoints;
 
         }
 
@@ -199,14 +196,14 @@ public sealed class AltConnectionsResolver
 
 
     /// <summary>
-    /// Zeigt diese Adresse auf einen TLS-geschützten WebSocket?
+    /// Does this address point at a TLS-protected WebSocket?
     /// </summary>
     /// <remarks>
-    /// Das XEP lässt <c>https://</c> und <c>wss://</c> zu; <c>https://</c>
-    /// gehört zu BOSH (XEP-0124), das dieser Client nicht spricht. Bliebe es
-    /// hier stehen, käme es als WebSocket-Endpunkt zurück und der
-    /// Verbindungsaufbau scheiterte an einer Adresse, die gar nicht dafür
-    /// gedacht war.
+    /// The XEP permits <c>https://</c> and <c>wss://</c>; <c>https://</c>
+    /// belongs to BOSH (XEP-0124), which this client does not speak. If it
+    /// stayed here, it would come back as a WebSocket endpoint and the
+    /// connection setup would founder on an address that was not meant for it at
+    /// all.
     /// </remarks>
     private static bool IsSecureWebSocket(string? href)
 
@@ -215,27 +212,27 @@ public sealed class AltConnectionsResolver
 
 
     /// <summary>
-    /// Lädt eine Adresse über HTTPS. Alles, was dabei schiefgeht, ist eine
-    /// Domain ohne <c>host-meta</c> und kein Fehler.
+    /// Loads an address over HTTPS. Everything that goes wrong in the process is
+    /// a domain without a <c>host-meta</c> and no error.
     /// </summary>
     private static async Task<string?> FetchOverHttpsAsync(string             uri,
                                                            CancellationToken  ct)
     {
 
-        // Die Sicherheitsregel des XEPs, hier und nicht erst beim Ergebnis:
-        // Was über http:// käme, dürfte gar nicht erst gelesen werden.
+        // The security rule of the XEP, here and not only at the result: what
+        // came over http:// must not even be read.
         if (!uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return null;
 
         try
         {
 
-            var antwort = await _httpClient.GetAsync(uri, ct);
+            var response = await _httpClient.GetAsync(uri, ct);
 
-            if (!antwort.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
                 return null;
 
-            return await antwort.Content.ReadAsStringAsync(ct);
+            return await response.Content.ReadAsStringAsync(ct);
 
         }
 

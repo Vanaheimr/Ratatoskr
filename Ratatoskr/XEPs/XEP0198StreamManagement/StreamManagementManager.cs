@@ -27,28 +27,28 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0198: Stream Management - zählt Stanzas, holt Acks ein und
-/// ermöglicht (prinzipiell) Stream Resumption.
+/// XEP-0198: Stream Management - counts stanzas, collects acks and makes stream
+/// resumption possible (in principle).
 /// </summary>
 public sealed class StreamManagementManager
 {
 
-    /// <summary>Der Namespace von XEP-0198.</summary>
+    /// <summary>The namespace of XEP-0198.</summary>
     public const string Namespace = "urn:xmpp:sm:3";
 
     private readonly Func<string, Task> _sendStanza;
     private readonly ILogger _logger;
 
     /// <summary>
-    /// Läuft gerade eine Aushandlung, wartet hier <see cref="NegotiateAsync"/>
-    /// auf <c>&lt;enabled/&gt;</c> oder <c>&lt;failed/&gt;</c>.
+    /// While a negotiation is running, <see cref="NegotiateAsync"/> waits here
+    /// for <c>&lt;enabled/&gt;</c> or <c>&lt;failed/&gt;</c>.
     /// </summary>
     private TaskCompletionSource<bool>? _negotiation;
 
     private bool _enabled;
-    private uint _inbound;       // Empfangene Stanzas
-    private uint _outbound;      // Gesendete Stanzas
-    private uint _lastAcked;     // Letzte bestätigte
+    private uint _inbound;       // stanzas received
+    private uint _outbound;      // stanzas sent
+    private uint _lastAcked;     // last acknowledged
 
     private readonly Queue<(uint Seq, string Stanza, DateTime Sent)> _unacked = new();
     private readonly object _lock = new();
@@ -64,14 +64,14 @@ public sealed class StreamManagementManager
     public int UnackedCount { get { lock (_lock) return _unacked.Count; } }
 
     /// <summary>
-    /// Der zuletzt vom Gegenüber gemeldete Zählerstand (<c>h</c>).
+    /// The counter reading (<c>h</c>) last reported by the other side.
     /// </summary>
     /// <remarks>
-    /// Dass die Warteschlange leerläuft, heisst nur, dass das gemeldete
-    /// <c>h</c> mindestens so gross war wie unsere Sequenznummern. Eine Seite,
-    /// die zu <i>wenig</i> zählt, bliebe damit unentdeckt - ihr <c>h</c> wäre
-    /// zu gross, und alles sähe in Ordnung aus. Erst der Vergleich mit
-    /// <see cref="OutboundCount"/> trennt Übereinstimmung von blosser Duldung.
+    /// That the queue runs empty only means that the reported <c>h</c> was at
+    /// least as large as our sequence numbers. A side that counts too <i>few</i>
+    /// would thereby stay undiscovered - its <c>h</c> would be too large, and
+    /// everything would look in order. Only the comparison with
+    /// <see cref="OutboundCount"/> separates agreement from mere toleration.
     /// </remarks>
     public uint LastAcknowledged { get { lock (_lock) return _lastAcked; } }
 
@@ -86,7 +86,7 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Aktiviert Stream Management nach Bind
+    /// Activates stream management after the bind
     /// </summary>
     public Task EnableAsync(bool requestResume = true)
     {
@@ -95,23 +95,23 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Sendet <c>&lt;enable/&gt;</c> und wartet auf die Antwort des Servers.
+    /// Sends <c>&lt;enable/&gt;</c> and waits for the answer of the server.
     /// </summary>
     /// <remarks>
-    /// Die Antwort kommt über die normale Empfangsschleife herein, nicht über
-    /// einen eigenen Lesevorgang. Der Aufbau las früher selbst vom Socket und
-    /// verwarf dabei bis zu zehn Rahmen, die nicht nach Stream Management
-    /// aussahen - darunter Nachrichten und Presence.
+    /// The answer comes in through the normal receive loop, not through a
+    /// reading of its own. The setup used to read from the socket itself and
+    /// discarded up to ten frames in the process that did not look like stream
+    /// management - among them messages and presence.
     /// </remarks>
-    /// <returns>true, wenn der Server mit <c>&lt;enabled/&gt;</c> geantwortet hat.</returns>
+    /// <returns>true when the server has answered with <c>&lt;enabled/&gt;</c>.</returns>
     public async Task<bool> NegotiateAsync(bool               requestResume  = false,
                                            TimeSpan?          timeout        = null,
                                            CancellationToken  ct             = default)
     {
 
-        // RunContinuationsAsynchronously: die Antwort trifft im Thread der
-        // Empfangsschleife ein; ohne das liefe alles Wartende dort weiter und
-        // hielte das Lesen der nächsten Stanzas auf.
+        // RunContinuationsAsynchronously: the answer arrives in the thread of
+        // the receive loop; without it everything waiting would run on there and
+        // hold up the reading of the next stanzas.
         var negotiation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         Interlocked.Exchange(ref _negotiation, negotiation);
@@ -129,7 +129,7 @@ public sealed class StreamManagementManager
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("Keine Antwort auf <enable/> - Stream Management bleibt aus");
+            _logger.LogWarning("No answer to <enable/> - stream management stays off");
             return false;
         }
         finally
@@ -140,7 +140,7 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Verarbeitet <c>&lt;enabled/&gt;</c> vom Server
+    /// Processes <c>&lt;enabled/&gt;</c> from the server
     /// </summary>
     public void ProcessEnabled(string xml)
     {
@@ -156,27 +156,27 @@ public sealed class StreamManagementManager
         _resumable = xml.Contains("resume='true'") || xml.Contains("resume=\"true\"");
 
         if (_resumable)
-            _logger.LogInformation("Stream Management aktiviert (Resume-ID: {ResumeIdPrefix}...)",
+            _logger.LogInformation("Stream management activated (resume id: {ResumeIdPrefix}...)",
                                    _resumeId?[..Math.Min(8, _resumeId?.Length ?? 0)]);
         else
-            _logger.LogInformation("Stream Management aktiviert (ohne Resume)");
+            _logger.LogInformation("Stream management activated (without resume)");
 
         _negotiation?.TrySetResult(true);
     }
 
     /// <summary>
-    /// Versucht Stream zu resumen
+    /// Tries to resume the stream
     /// </summary>
     public Task ResumeAsync()
     {
         if (!CanResume)
-            throw new InvalidOperationException("Stream kann nicht resumed werden");
+            throw new InvalidOperationException("This stream cannot be resumed");
 
         return _sendStanza($"<resume xmlns='urn:xmpp:sm:3' h='{_inbound}' previd='{_resumeId}'/>");
     }
 
     /// <summary>
-    /// Verarbeitet <c>&lt;resumed/&gt;</c>
+    /// Processes <c>&lt;resumed/&gt;</c>
     /// </summary>
     public void ProcessResumed(string xml)
     {
@@ -192,31 +192,30 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Verarbeitet <c>&lt;failed/&gt;</c>
+    /// Processes <c>&lt;failed/&gt;</c>
     /// </summary>
     /// <param name="xml">
-    /// Der Rahmen selbst, sofern zur Hand - er kann ein <c>h</c> tragen.
-    /// Ohne ihn bleibt es bei „alles Offene ist verloren".
+    /// The frame itself, if at hand - it can carry an <c>h</c>. Without it, it
+    /// stays at "everything pending is lost".
     /// </param>
     public void ProcessFailed(string? xml = null)
     {
-        // Gilt für beides: eine abgelehnte Aushandlung und ein
-        // fehlgeschlagenes Resume.
+        // Holds for both: a refused negotiation and a failed resume.
         _negotiation?.TrySetResult(false);
 
-        // XEP-0198 Abschnitt 5: Nennt der Server einen Stand, gilt bis dorthin
-        // dasselbe wie bei jedem <a h='…'/> - verarbeitet ist verarbeitet, und
-        // zwar unabhängig davon, dass der Stream selbst nicht weitergeht.
+        // XEP-0198 section 5: if the server names a state, the same holds up to
+        // there as with every <a h='…'/> - processed is processed, and that
+        // independently of the stream itself not going on.
         //
-        // Ohne diesen Schritt gilt jede unbestätigte Stanza als verloren, auch
-        // die längst zugestellte: Der Server bestätigt nur auf Nachfrage, und
-        // wer gerade abgerissen ist, hat nicht mehr nachgefragt. Abschnitt 4
-        // empfiehlt, Verlorenes erneut zu schicken - auf dieser Grundlage
-        // stellte das alles ein zweites Mal zu.
+        // Without this step every unacknowledged stanza counts as lost, even the
+        // one long since delivered: the server acknowledges only on request, and
+        // whoever has just been cut off did not ask any more. Section 4
+        // recommends sending what is lost again - on that basis this delivered
+        // everything a second time.
         //
-        // Über ProcessAck und nicht über einen eigenen Vergleich: die
-        // Modulo-Arithmetik des überlaufenden Zählers steht dort, und zwei
-        // Auffassungen derselben Rechnung sind eine zu viel.
+        // By way of ProcessAck and not by way of a comparison of its own: the
+        // modulo arithmetic of the overflowing counter stands there, and two
+        // conceptions of the same computation are one too many.
         if (xml is not null)
             ProcessAck(xml);
 
@@ -232,38 +231,37 @@ public sealed class StreamManagementManager
 
         if (lost.Count > 0)
         {
-            _logger.LogWarning("Stream Resume fehlgeschlagen - {LostCount} Stanzas verloren", lost.Count);
+            _logger.LogWarning("Stream resume failed - {LostCount} stanzas lost", lost.Count);
             OnStanzasLost?.Invoke(lost);
         }
     }
 
     /// <summary>
-    /// Prüft, ob eine Stanza mitgezählt werden muss.
+    /// Checks whether a stanza has to be counted.
     ///
-    /// XEP-0198 Abschnitt 2 zählt ausschließlich die drei Stanza-Typen
-    /// <c>message</c>, <c>presence</c> und <c>iq</c>. Nonzas - also
+    /// XEP-0198 section 2 counts exclusively the three stanza types
+    /// <c>message</c>, <c>presence</c> and <c>iq</c>. Nonzas - that is,
     /// <c>&lt;enable/&gt;</c>, <c>&lt;r/&gt;</c>, <c>&lt;a/&gt;</c>,
-    /// <c>&lt;open/&gt;</c>, SASL-Elemente und so weiter - zählen nicht.
-    /// Zählt eine Seite falsch, laufen die Zähler auseinander und der
-    /// Gegenüber wertet das <c>h</c> als Protokollverletzung.
+    /// <c>&lt;open/&gt;</c>, SASL elements and so on - do not count. If one side
+    /// counts wrongly, the counters run apart and the other side takes the
+    /// <c>h</c> for a protocol violation.
     ///
-    /// Die Lesung des Elementnamens steht seit D26 in
-    /// <see cref="StanzaElement"/> - sie war hier zuerst richtig, wurde
-    /// anderswo aber geraten. Ein Haus, zwei Auffassungen davon, was ein
-    /// <c>&lt;iq&gt;</c> ist: Der Zähler nahm <c>&lt;iqbogus/&gt;</c> nicht
-    /// mit, die Weiche schon.
+    /// The reading of the element name has stood in <see cref="StanzaElement"/>
+    /// since D26 - it was right here first, but was guessed at elsewhere. One
+    /// house, two conceptions of what an <c>&lt;iq&gt;</c> is: the counter did
+    /// not take <c>&lt;iqbogus/&gt;</c> along, the switch did.
     /// </summary>
     public static bool IsCountableStanza(string xml)
 
         => StanzaElement.IsStanza(xml);
 
     /// <summary>
-    /// Trackt eine ausgehende Stanza.
+    /// Tracks an outgoing stanza.
     ///
-    /// Der Aufrufer muss dies erst nach dem erfolgreichen Senden tun und
-    /// dabei die Sendereihenfolge einhalten - die Sequenznummern müssen der
-    /// Reihenfolge auf der Leitung entsprechen, sonst bestätigt ein
-    /// <c>&lt;a h='...'/&gt;</c> die falschen Stanzas.
+    /// The caller has to do this only after the successful sending and has to
+    /// keep to the send order in the process - the sequence numbers have to
+    /// correspond to the order on the wire, otherwise an
+    /// <c>&lt;a h='...'/&gt;</c> acknowledges the wrong stanzas.
     /// </summary>
     public void TrackOutgoing(string stanza)
     {
@@ -271,29 +269,29 @@ public sealed class StreamManagementManager
 
         lock (_lock)
         {
-            // 32-Bit-Zähler mit Überlauf auf 0 (XEP-0198, Abschnitt 4).
+            // 32-bit counter with overflow to 0 (XEP-0198, section 4).
             _outbound = unchecked(_outbound + 1);
             _unacked.Enqueue((_outbound, stanza, DateTime.UtcNow));
         }
     }
 
     /// <summary>
-    /// Trackt eine eingehende Stanza.
+    /// Tracks an incoming stanza.
     ///
-    /// Muss auf jedem Empfangspfad laufen - auch für Stanzas, die noch in der
-    /// Aufbauphase direkt gelesen werden. Fehlen sie, meldet
-    /// <c>&lt;a h='...'/&gt;</c> einen zu kleinen Wert.
+    /// Has to run on every receive path - also for stanzas that are still read
+    /// directly during the setup phase. If they are missing,
+    /// <c>&lt;a h='...'/&gt;</c> reports a value that is too small.
     /// </summary>
     public void TrackIncoming(string stanza)
     {
         if (!_enabled || !IsCountableStanza(stanza)) return;
 
-        // 32-Bit-Zähler mit Überlauf auf 0 (XEP-0198, Abschnitt 4).
+        // 32-bit counter with overflow to 0 (XEP-0198, section 4).
         Interlocked.Increment(ref _inbound);
     }
 
     /// <summary>
-    /// Fordert Ack vom Server an
+    /// Requests an ack from the server
     /// </summary>
     public Task RequestAckAsync()
     {
@@ -302,7 +300,7 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Sendet Ack an Server
+    /// Sends an ack to the server
     /// </summary>
     public Task SendAckAsync()
     {
@@ -311,7 +309,7 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Verarbeitet <c>&lt;a/&gt;</c> (Ack) vom Server
+    /// Processes <c>&lt;a/&gt;</c> (ack) from the server
     /// </summary>
     public void ProcessAck(string xml)
     {
@@ -323,15 +321,14 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Gilt die Stanza mit dieser Sequenznummer als bestätigt, wenn der
-    /// Gegenüber <c>h</c> meldet?
+    /// Does the stanza with this sequence number count as acknowledged when the
+    /// other side reports <c>h</c>?
     ///
-    /// Ein schlichtes <c>Seq &lt;= h</c> wäre falsch: der Zähler ist nach
-    /// XEP-0198 Abschnitt 4 ein 32-Bit-Wert, der nach 2^32-1 auf 0 überläuft.
-    /// Direkt nach einem Überlauf ist h dann kleiner als die Sequenznummern
-    /// der noch offenen Stanzas, und diese blieben für immer unbestätigt in
-    /// der Queue liegen. Verglichen wird deshalb der Abstand in
-    /// Modulo-Arithmetik.
+    /// A plain <c>Seq &lt;= h</c> would be wrong: per XEP-0198 section 4 the
+    /// counter is a 32-bit value that overflows to 0 after 2^32-1. Right after
+    /// an overflow h is then smaller than the sequence numbers of the stanzas
+    /// still pending, and these would lie unacknowledged in the queue for ever.
+    /// What is compared is therefore the distance in modulo arithmetic.
     /// </summary>
     internal static bool IsAcknowledged(uint seq, uint h)
         => unchecked(h - seq) < 0x8000_0000u;
@@ -357,12 +354,12 @@ public sealed class StreamManagementManager
     }
 
     /// <summary>
-    /// Verarbeitet <c>&lt;r/&gt;</c> (Ack-Request) vom Server
+    /// Processes <c>&lt;r/&gt;</c> (ack request) from the server
     /// </summary>
     public Task ProcessRequestAsync() => SendAckAsync();
 
     /// <summary>
-    /// Gibt unbestätigte Stanzas zurück (für Resend nach Failed)
+    /// Gives back unacknowledged stanzas (for a resend after failed)
     /// </summary>
     public List<string> GetUnackedStanzas()
     {

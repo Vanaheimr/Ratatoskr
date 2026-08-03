@@ -334,7 +334,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(caps.GetCachedInfo($"{Knoten}#{ver}"), Is.Null);
                 Assert.That(gemeldet, Has.Count.EqualTo(1));
 
-                Assert.That(abgelehnt.Any(g => g.Contains("kein hash-Attribut", StringComparison.Ordinal)),
+                Assert.That(abgelehnt.Any(g => g.Contains("no hash attribute", StringComparison.Ordinal)),
                             Is.True,
                             $"Die Altform muss als solche benannt werden. Gemeldet wurde: " +
                             $"{String.Join(" | ", abgelehnt)}");

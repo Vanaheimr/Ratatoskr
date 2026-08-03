@@ -26,22 +26,22 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0115: Entity Capabilities - kürzt wiederholte disco#info-Abfragen
-/// durch einen Hash der eigenen bzw. fremden Feature-Liste ab.
+/// XEP-0115: Entity Capabilities - shortens repeated disco#info queries by way
+/// of a hash of one's own or a foreign feature list.
 /// </summary>
 public sealed class EntityCapsManager
 {
 
-    /// <summary>Der Namespace von XEP-0115.</summary>
+    /// <summary>The namespace of XEP-0115.</summary>
     public const string Namespace = "http://jabber.org/protocol/caps";
 
     /// <summary>
-    /// Der einzige Hash-Algorithmus, den dieser Client nachrechnen kann
-    /// (XEP-0115, Abschnitt 5.1).
+    /// The only hash algorithm this client can recompute (XEP-0115,
+    /// section 5.1).
     /// </summary>
     public const string Sha1Algorithm = "sha-1";
 
-    /// <summary>Der Namespace der Datenformulare (XEP-0004).</summary>
+    /// <summary>The namespace of the data forms (XEP-0004).</summary>
     private const string DataFormNamespace = "jabber:x:data";
 
     private readonly DiscoManager _disco;
@@ -53,16 +53,16 @@ public sealed class EntityCapsManager
     public event Action<string, DiscoInfo>? OnCapsDiscovered;
 
     /// <summary>
-    /// Eine disco#info-Antwort wurde nicht in den Cache übernommen, weil sie
-    /// den angekündigten Verification String nicht belegt. Der zweite
-    /// Parameter nennt den Grund.
+    /// A disco#info answer was not taken into the cache because it does not
+    /// substantiate the announced verification string. The second parameter
+    /// names the reason.
     /// </summary>
     /// <remarks>
-    /// Die Antwort selbst wird trotzdem über <see cref="OnCapsDiscovered"/>
-    /// gemeldet: Sie ist das, was diese Entity über sich sagt, und genau das
-    /// hätte auch eine gewöhnliche disco#info-Abfrage ergeben. Verweigert wird
-    /// nur das Bündeln - sie unter <c>node#ver</c> abzulegen und damit
-    /// jedem anderen zuzuschreiben, der dasselbe Paar ankündigt.
+    /// The answer itself is reported through <see cref="OnCapsDiscovered"/> all
+    /// the same: it is what this entity says about itself, and precisely that is
+    /// what an ordinary disco#info query would have yielded too. What is refused
+    /// is only the bundling - to store it under <c>node#ver</c> and thereby
+    /// ascribe it to everybody else who announces the same pair.
     /// </remarks>
     public event Action<string, string>? OnCapsRejected;
 
@@ -72,28 +72,27 @@ public sealed class EntityCapsManager
     }
 
     /// <summary>
-    /// Berechnet den Verification String (SHA-1 Hash der Features)
+    /// Computes the verification string (SHA-1 hash of the features)
     /// </summary>
     /// <remarks>
-    /// Die eigenen Datenformulare gehen mit ein - sie stehen ja auch in der
-    /// eigenen disco#info-Antwort. Blieben sie hier aussen vor, kündigte
-    /// dieser Client einen Hash an, den seine eigene Antwort nicht ergibt, und
-    /// jede Gegenstelle, die nach XEP-0115, Abschnitt 5.4 nachrechnet, hielte
-    /// ihn für einen Fälscher.
+    /// One's own data forms go into it - they stand in one's own disco#info
+    /// answer after all. If they stayed out here, this client would announce a
+    /// hash its own answer does not yield, and every other side that recomputes
+    /// it per XEP-0115, section 5.4 would take it for a forger.
     /// </remarks>
     public string CalculateVerificationString()
         => VerificationString(_disco.LocalIdentities, _disco.LocalFeatures, _disco.LocalForms);
 
     /// <summary>
-    /// Der Verification String nach XEP-0115, Abschnitt 5.1, über beliebige
-    /// Angaben.
+    /// The verification string per XEP-0115, section 5.1, over arbitrary
+    /// information.
     /// </summary>
     /// <remarks>
-    /// Die Rechnung war bis dahin nur auf die eigenen Angaben anwendbar - und
-    /// damit war der Hash ein Wert, den dieser Client zwar erzeugt, aber nie
-    /// nachprüft. Genau das Nachprüfen ist der Zweck des Verfahrens: Der
-    /// <c>ver</c>-Wert ist keine Kennung, die eine Entity sich aussucht,
-    /// sondern der Hash über das, was sie auf disco#info antwortet.
+    /// The computation was until then applicable only to one's own information -
+    /// and with that the hash was a value this client produces but never checks.
+    /// Precisely the checking is the purpose of the procedure: the <c>ver</c>
+    /// value is not an identifier an entity picks for itself but the hash over
+    /// what it answers to disco#info.
     /// </remarks>
     public static string VerificationString(IEnumerable<DiscoIdentity>  Identities,
                                             IEnumerable<string>         Features,
@@ -102,11 +101,11 @@ public sealed class EntityCapsManager
 
         var sb = new StringBuilder();
 
-        // Identitäten als category/type/xml:lang/name - jeder Schrägstrich steht
-        // auch ohne Wert da (XEP-0115, Abschnitt 5.1). Sortiert wird über genau
-        // die Zeichenkette, die auch ausgegeben wird: Weil '/' (0x2F) unter allen
-        // Zeichen liegt, die in Kategorie, Typ und Sprache vorkommen, fällt das
-        // mit der im XEP verlangten Sortierung über die vier Felder zusammen.
+        // Identities as category/type/xml:lang/name - every slash stands there
+        // even without a value (XEP-0115, section 5.1). Sorted over exactly the
+        // string that is also emitted: because '/' (0x2F) lies below all the
+        // characters that occur in category, type and language, that coincides
+        // with the sorting over the four fields the XEP demands.
         foreach (var identity in Identities
                                      .Select(id => $"{id.Category}/{id.Type}/{id.Language ?? ""}/{id.Name ?? ""}")
                                      .Order(StringComparer.Ordinal))
@@ -114,18 +113,17 @@ public sealed class EntityCapsManager
             sb.Append(identity).Append('<');
         }
 
-        // Features sortiert - XEP-0115, Abschnitt 5.1 verlangt Oktett-Reihenfolge,
-        // nicht den kulturabhängigen Standardvergleich ('B' 0x42 vor 'a' 0x61).
+        // Features sorted - XEP-0115, section 5.1 demands octet order, not the
+        // culture-dependent default comparison ('B' 0x42 before 'a' 0x61).
         foreach (var feature in Features.Order(StringComparer.Ordinal))
         {
             sb.Append($"{feature}<");
         }
 
-        // XEP-0128-Datenformulare, sortiert nach ihrem FORM_TYPE. Formulare
-        // ohne gültiges FORM_TYPE bleiben aussen vor - XEP-0115, Abschnitt 5.4
-        // sagt ausdrücklich "ignore the form but continue processing", und das
-        // ist der Unterschied ums Ganze: Sie machen die Antwort nicht ungültig,
-        // sie zählen nur nicht mit.
+        // XEP-0128 data forms, sorted by their FORM_TYPE. Forms without a valid
+        // FORM_TYPE stay out - XEP-0115, section 5.4 says expressly "ignore the
+        // form but continue processing", and that is the difference that matters:
+        // they do not make the answer invalid, they only do not count.
         foreach (var form in (Forms ?? [])
                                  .Where  (f => f.FormType is not null)
                                  .OrderBy(f => f.FormType, StringComparer.Ordinal))
@@ -153,7 +151,7 @@ public sealed class EntityCapsManager
     }
 
     /// <summary>
-    /// Erzeugt das <c>&lt;c/&gt;</c> Element für Presence
+    /// Creates the <c>&lt;c/&gt;</c> element for presence
     /// </summary>
     public string GetCapsElement()
     {
@@ -162,21 +160,20 @@ public sealed class EntityCapsManager
     }
 
     /// <summary>
-    /// Bezeichnet dieser disco-Node diese Entity in ihrem <b>heutigen</b>
-    /// Stand?
+    /// Does this disco node denote this entity in its <b>present</b> state?
     /// </summary>
     /// <remarks>
-    /// Zwei Formen zählen. <c>node#ver</c> ist die aus XEP-0115,
-    /// Abschnitt 6.2: Wer unser <c>&lt;c/&gt;</c> in einer Presence gesehen
-    /// hat, fragt genau so. Der blanke Node ohne <c>#ver</c> zählt ebenfalls -
-    /// dort steht "SHOULD", nicht "MUST", und wer nur den Node nennt, fragt
-    /// nach dieser Entity, ohne einen Stand festzunageln.
+    /// Two forms count. <c>node#ver</c> is the one from XEP-0115, section 6.2:
+    /// whoever has seen our <c>&lt;c/&gt;</c> in a presence asks exactly that
+    /// way. The bare node without <c>#ver</c> counts likewise - there it says
+    /// "SHOULD", not "MUST", and whoever names only the node asks about this
+    /// entity without nailing down a state.
     ///
-    /// Ein <b>anderes</b> <c>ver</c> zählt nicht, auch nicht ein früher einmal
-    /// eigenes. Es fragt nach der Merkmalsliste von damals, und die gibt es
-    /// hier nicht mehr. Wer darauf die heutige schickt, beantwortet eine andere
-    /// Frage als die gestellte: Der Frager rechnet nach Abschnitt 5.4 den
-    /// angekündigten Hash gegen die Antwort und bekommt einen anderen heraus.
+    /// A <b>different</b> <c>ver</c> does not count, not even one that was once
+    /// our own. It asks about the feature list of back then, and that does not
+    /// exist here any more. Whoever sends today's in answer to it answers a
+    /// different question than the one asked: the asker recomputes the announced
+    /// hash against the answer per section 5.4 and gets a different one out.
     /// </remarks>
     public bool IsOwnNode(string node)
 
@@ -184,31 +181,30 @@ public sealed class EntityCapsManager
            node == $"{Node}#{CalculateVerificationString()}";
 
     /// <summary>
-    /// Verarbeitet ein caps-Element aus Presence.
+    /// Processes a caps element from presence.
     /// </summary>
     /// <remarks>
-    /// XEP-0115, Abschnitt 5.4: Die Antwort wird erst dann unter
-    /// <c>node#ver</c> abgelegt, wenn ihr Hash den angekündigten Wert
-    /// tatsächlich ergibt.
+    /// XEP-0115, section 5.4: the answer is stored under <c>node#ver</c> only
+    /// once its hash actually yields the announced value.
     ///
-    /// Ohne diese Prüfung war der Cache vergiftbar, und zwar von jedem, dessen
-    /// Presence hier ankommt. Die Bewegung ist kurz: Der Angreifer kündigt in
-    /// seiner Presence das <c>node#ver</c>-Paar eines verbreiteten Clients an,
-    /// antwortet auf die folgende disco#info-Abfrage aber mit einer Liste
-    /// seiner Wahl. Unter diesem Paar liegt fortan seine Liste - und
-    /// ausgeliefert wird sie an jeden weiteren Kontakt, der dasselbe Paar
-    /// ankündigt, ohne dass der je gefragt würde. Der Angreifer bestimmt damit,
-    /// was dieser Client über Dritte glaubt: welche Verschlüsselung sie können,
-    /// ob sie Empfangsbestätigungen verstehen, was sich ihnen schicken lässt.
+    /// Without this check the cache was poisonable, and by everyone whose
+    /// presence arrives here. The move is short: the attacker announces in their
+    /// presence the <c>node#ver</c> pair of a widespread client, but answers the
+    /// following disco#info query with a list of their choosing. Under this pair
+    /// their list lies from then on - and it is delivered to every further
+    /// contact who announces the same pair, without that one ever being asked.
+    /// The attacker thereby determines what this client believes about third
+    /// parties: which encryption they can do, whether they understand delivery
+    /// receipts, what can be sent to them.
     ///
-    /// Der <c>ver</c>-Wert ist genau dagegen gebaut - er ist der Hash über die
-    /// Antwort, nicht eine frei gewählte Kennung. Man muss ihn nur nachrechnen.
+    /// The <c>ver</c> value is built precisely against that - it is the hash over
+    /// the answer, not a freely chosen identifier. One only has to recompute it.
     /// </remarks>
     /// <param name="hash">
-    /// Der Algorithmus aus dem <c>hash</c>-Attribut. Fehlt er oder ist er ein
-    /// anderer als <c>sha-1</c>, ist der <c>ver</c>-Wert nicht nachrechenbar
-    /// (bei der Altform aus XEP-0115 vor Version 1.4 ist er eine
-    /// Versionsnummer) - abgefragt wird dann noch, abgelegt nicht mehr.
+    /// The algorithm from the <c>hash</c> attribute. If it is missing or is one
+    /// other than <c>sha-1</c>, the <c>ver</c> value is not recomputable (with
+    /// the legacy form from XEP-0115 before version 1.4 it is a version number) -
+    /// it is then still queried, but no longer stored.
     /// </param>
     public async Task ProcessCapsAsync(string             from,
                                        string             node,
@@ -227,14 +223,14 @@ public sealed class EntityCapsManager
             }
         }
 
-        // Noch nicht im Cache - disco#info abfragen
+        // Not in the cache yet - query disco#info
         var info = await _disco.QueryInfoAsync(from, cacheKey, ct: ct);
 
         if (info is null)
             return;
 
-        if (VerificationFailure(info, ver, hash) is string grund)
-            OnCapsRejected?.Invoke(from, grund);
+        if (VerificationFailure(info, ver, hash) is string reason)
+            OnCapsRejected?.Invoke(from, reason);
 
         else
             lock (_lock)
@@ -246,77 +242,76 @@ public sealed class EntityCapsManager
     }
 
     /// <summary>
-    /// Der Grund, aus dem diese Antwort den angekündigten Verification String
-    /// nicht belegt - oder null, wenn sie ihn belegt.
+    /// The reason why this answer does not substantiate the announced
+    /// verification string - or null when it does substantiate it.
     /// </summary>
     private static string? VerificationFailure(DiscoInfo Info, string Ver, string? Hash)
     {
 
         if (Hash is null)
-            return "Das caps-Element trägt kein hash-Attribut (Altform vor XEP-0115 1.4); " +
-                   "der ver-Wert ist damit kein Hash und nicht nachrechenbar.";
+            return "The caps element carries no hash attribute (legacy form before XEP-0115 1.4); " +
+                   "the ver value is therefore no hash and cannot be recomputed.";
 
         if (Hash != Sha1Algorithm)
-            return $"Unbekannter Hash-Algorithmus '{Hash}'; nachrechnen lässt sich nur {Sha1Algorithm}.";
+            return $"Unknown hash algorithm '{Hash}'; only {Sha1Algorithm} can be recomputed.";
 
-        if (IllFormed(Info) is string mangel)
-            return mangel;
+        if (IllFormed(Info) is string defect)
+            return defect;
 
-        var errechnet = VerificationString(Info.Identities, Info.Features, Info.Forms);
+        var computed = VerificationString(Info.Identities, Info.Features, Info.Forms);
 
-        if (!String.Equals(errechnet, Ver, StringComparison.Ordinal))
-            return $"Der Hash der Antwort ist {errechnet}, angekündigt war {Ver}.";
+        if (!String.Equals(computed, Ver, StringComparison.Ordinal))
+            return $"The hash of the answer is {computed}, announced was {Ver}.";
 
         return null;
 
     }
 
     /// <summary>
-    /// Die Antwort ist in sich mehrdeutig (XEP-0115, Abschnitt 5.4) - oder
-    /// null, wenn sie es nicht ist.
+    /// The answer is ambiguous in itself (XEP-0115, section 5.4) - or null when
+    /// it is not.
     /// </summary>
     /// <remarks>
-    /// Diese drei Regeln sind keine Formstrenge. Der Verification String
-    /// entsteht dadurch, dass eine Antwort in genau eine Zeichenkette
-    /// überführt wird; wo Doppelungen stehen, gibt es mehr als eine solche
-    /// Zeichenkette, und damit lässt sich zu einem gegebenen Hash eine zweite
-    /// Antwort bauen. Das XEP verlangt deshalb, die ganze Antwort zu verwerfen,
-    /// statt sich für eine Lesart zu entscheiden.
+    /// These three rules are no formal strictness. The verification string comes
+    /// into being by an answer being carried over into exactly one string; where
+    /// duplications stand, there is more than one such string, and with that a
+    /// second answer can be built to a given hash. The XEP therefore demands
+    /// discarding the whole answer instead of deciding on one reading.
     /// </remarks>
     private static string? IllFormed(DiscoInfo Info)
     {
 
         if (Info.Identities.Count != Info.Identities.Distinct().Count())
-            return "Die Antwort führt dieselbe Identität mehrfach auf.";
+            return "The answer lists the same identity several times.";
 
         if (Info.Features.Count != Info.Features.Distinct(StringComparer.Ordinal).Count())
-            return "Die Antwort führt dasselbe Feature mehrfach auf.";
+            return "The answer lists the same feature several times.";
 
-        // Ein FORM_TYPE mit mehreren verschiedenen Werten - welcher davon soll
-        // das Formular einsortieren?
+        // A FORM_TYPE with several different values - which of them is supposed
+        // to sort the form?
         foreach (var form in Info.Forms)
         {
 
-            var werte = form.FormTypeField?.Values.Distinct(StringComparer.Ordinal).ToList();
+            var values = form.FormTypeField?.Values.Distinct(StringComparer.Ordinal).ToList();
 
-            if (werte is not null && werte.Count > 1)
-                return $"Ein Datenformular trägt {werte.Count} verschiedene FORM_TYPE-Werte.";
+            if (values is not null && values.Count > 1)
+                return $"A data form carries {values.Count} different FORM_TYPE values.";
 
         }
 
-        var typen = Info.Forms.Select(f => f.FormType)
+        var types = Info.Forms.Select(f => f.FormType)
                               .Where (t => t is not null)
                               .ToList();
 
-        if (typen.Count != typen.Distinct(StringComparer.Ordinal).Count())
-            return "Die Antwort enthält mehrere Datenformulare mit demselben FORM_TYPE.";
+        if (types.Count != types.Distinct(StringComparer.Ordinal).Count())
+            return "The answer contains several data forms with the same FORM_TYPE.";
 
         return null;
 
     }
 
     /// <summary>
-    /// Prüft ob ein JID ein Feature unterstützt (aus Cache)
+    /// Checks whether a JID supports a feature (from the cache)
     /// </summary>
     public DiscoInfo? GetCachedInfo(string verString)
     {
@@ -327,11 +322,11 @@ public sealed class EntityCapsManager
     }
 
     /// <summary>
-    /// Extrahiert Caps aus einer Presence.
+    /// Extracts caps out of a presence.
     ///
-    /// Gesucht wird unter den direkten Kindelementen im Caps-Namespace. Das
-    /// frühere Muster fand ein <c>&lt;c/&gt;</c> irgendwo in der Stanza und
-    /// verlangte ein unpräfigiertes Element.
+    /// What is sought are the direct child elements in the caps namespace. The
+    /// earlier pattern found a <c>&lt;c/&gt;</c> anywhere in the stanza and
+    /// demanded an unprefixed element.
     /// </summary>
     public static (string Node, string Ver, string? Hash)? ParseCaps(XElement presence)
     {
