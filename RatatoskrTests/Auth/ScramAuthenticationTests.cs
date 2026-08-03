@@ -27,27 +27,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// SCRAM zwischen echtem Client und echtem Server (RFC 5802, RFC 7677).
+    /// SCRAM between a real client and a real server (RFC 5802, RFC 7677).
     ///
-    /// Der Client beherrschte SCRAM von Anfang an, aber der Testserver bot nur
-    /// PLAIN an - der ganze Pfad war deshalb nur gegen die Testvektoren aus dem
-    /// RFC gepr\u00FCft, nie im Gespräch. Insbesondere die zweite Hälfte, in der der
-    /// Client die Signatur des Servers pr\u00FCft, hatte keinen einzigen Test, der
-    /// sie beim Versagen erwischt hätte.
+    /// The client spoke SCRAM from the beginning, but the test server offered
+    /// only PLAIN - the whole path was therefore checked only against the test
+    /// vectors from the RFC, never in conversation. The second half in
+    /// particular, in which the client checks the signature of the server, had
+    /// not a single test that would have caught it failing.
     ///
-    /// Jetzt spricht der Server SCRAM, und weil der Client von sich aus den
-    /// stärksten angebotenen Mechanismus wählt, läuft die gesamte \u00FCbrige Suite
-    /// ebenfalls dar\u00FCber.
+    /// Now the server speaks SCRAM, and because the client picks the strongest
+    /// mechanism offered of its own accord, the whole rest of the suite runs
+    /// over it as well.
     /// </summary>
     [TestFixture]
     public class ScramAuthenticationTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein Client, der nach einem Fehlschlag nicht zwanzigmal neu
-        /// aufbaut - die Frage ist beim ersten Versuch beantwortet.
+        /// A client that does not rebuild the connection twenty times after a
+        /// failure - the question is answered at the first attempt.
         /// </summary>
         private XMPPClient SingleAttemptClient(String localPart = "alice",
                                                String password  = "pw")
@@ -69,8 +69,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Client_ChoosesScramSha256()
 
         /// <summary>
-        /// Bietet der Server alles an, nimmt der Client den stärksten
-        /// Mechanismus - und schickt insbesondere kein Passwort mehr.
+        /// If the server offers everything, the client takes the strongest
+        /// mechanism - and in particular sends no password any more.
         /// </summary>
         [Test]
         public async Task Client_ChoosesScramSha256()
@@ -84,11 +84,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(session.Received.Any(f => f.Contains("mechanism='SCRAM-SHA-256'", StringComparison.Ordinal)),
                             Is.True,
-                            "Der Client muss SCRAM-SHA-256 wählen, wenn es angeboten wird.");
+                            "The client must choose SCRAM-SHA-256 when it is offered.");
 
                 Assert.That(session.Received.Any(f => f.Contains("mechanism='PLAIN'", StringComparison.Ordinal)),
                             Is.False,
-                            "Neben SCRAM darf PLAIN nicht mehr vorkommen.");
+                            "Alongside SCRAM, PLAIN must not occur any more.");
 
             });
 
@@ -99,8 +99,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ScramSha1_IsUsedWhenItIsAllThereIs()
 
         /// <summary>
-        /// Der schwächere Mechanismus muss ebenfalls funktionieren - ein
-        /// Server, der nur SCRAM-SHA-1 kann, ist der Normalfall im Bestand.
+        /// The weaker mechanism has to work as well - a server that can do
+        /// nothing but SCRAM-SHA-1 is the normal case out there.
         /// </summary>
         [Test]
         public async Task ScramSha1_IsUsedWhenItIsAllThereIs()
@@ -126,8 +126,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PlainOnly_StillWorks()
 
         /// <summary>
-        /// Und PLAIN auch weiterhin - der Pfad ist jetzt der Ausnahmefall und
-        /// bliebe sonst ungetestet.
+        /// And PLAIN too, still - that path is the exception now and would
+        /// otherwise go untested.
         /// </summary>
         [Test]
         public async Task PlainOnly_StillWorks()
@@ -153,13 +153,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WrongPassword_IsRejected()
 
         /// <summary>
-        /// Die Gegenprobe zur Anmeldung: mit falschem Passwort kommt der
-        /// Client nicht durch.
+        /// The counter-check to the login: with a wrong password the client
+        /// does not get through.
         /// </summary>
         /// <remarks>
-        /// Bei SCRAM merkt das der Server erst an der client-final-message -
-        /// das Passwort selbst geht nie \u00FCber die Leitung, nur ein Beweis, dass
-        /// der Client es kennt.
+        /// With SCRAM the server notices that only at the client-final-message
+        /// - the password itself never goes over the wire, only a proof that
+        /// the client knows it.
         /// </remarks>
         [Test]
         public async Task WrongPassword_IsRejected()
@@ -167,7 +167,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            var client  = SingleAttemptClient(password: "falsch");
+            var client  = SingleAttemptClient(password: "wrong");
             var errors  = new List<String>();
 
             client.OnError += e => errors.Add(e);
@@ -187,13 +187,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnknownAccount_IsRejected()
 
         /// <summary>
-        /// Ein Konto, das es nicht gibt, ebenso.
+        /// An account that does not exist likewise.
         /// </summary>
         [Test]
         public async Task UnknownAccount_IsRejected()
         {
 
-            var client = CreateClient("niemand");
+            var client = CreateClient("nobody");
             client.Connection.MaxReconnectAttempts = 0;
 
             var errors = new List<String>();
@@ -214,9 +214,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Success_CarriesTheServerSignature()
 
         /// <summary>
-        /// Das <c>&lt;success/&gt;</c> trägt die server-final-message
-        /// (RFC 5802, Abschnitt 3) - ohne sie hätte der Client nichts zu
-        /// pr\u00FCfen.
+        /// The <c>&lt;success/&gt;</c> carries the server-final-message
+        /// (RFC 5802, section 3) - without it the client would have nothing to
+        /// check.
         /// </summary>
         [Test]
         public async Task Success_CarriesTheServerSignature()
@@ -227,17 +227,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var success = session.Sent.FirstOrDefault(f => f.StartsWith("<success", StringComparison.Ordinal));
 
-            Assert.That(success, Is.Not.Null, "Kein <success/> gefunden.");
+            Assert.That(success, Is.Not.Null, "No <success/> found.");
 
             var payload = success!.Replace("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>", "")
                                   .Replace("</success>", "");
 
-            Assert.That(payload, Is.Not.Empty, "Das <success/> kam ohne server-final-message.");
+            Assert.That(payload, Is.Not.Empty, "The <success/> came without a server-final-message.");
 
-            var entpackt = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            var unpacked = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
 
-            Assert.That(entpackt, Does.StartWith("v="),
-                        $"Die server-final-message muss mit v= beginnen, war aber: {entpackt}");
+            Assert.That(unpacked, Does.StartWith("v="),
+                        $"The server-final-message must begin with v=, but was: {unpacked}");
 
         }
 
@@ -246,15 +246,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CorruptedServerSignature_IsRefused()
 
         /// <summary>
-        /// Der Kern: eine falsche Serversignatur muss den Client die Anmeldung
-        /// verweigern lassen.
+        /// The heart of it: a wrong server signature must make the client
+        /// refuse the login.
         /// </summary>
         /// <remarks>
-        /// Genau das ist die zweite Hälfte von SCRAM. Ein Zwischenmann, der
-        /// das Passwort nicht kennt, kann den Client zwar zu einer
-        /// client-final-message bewegen, aber diese Signatur nicht erzeugen.
-        /// Wer sie nicht pr\u00FCft, hat sich einseitig statt gegenseitig
-        /// authentifiziert.
+        /// That is exactly the second half of SCRAM. A man in the middle who
+        /// does not know the password can indeed move the client to a
+        /// client-final-message, but cannot produce this signature. Whoever
+        /// does not check it has authenticated one-sidedly instead of
+        /// mutually.
         /// </remarks>
         [Test]
         public async Task CorruptedServerSignature_IsRefused()
@@ -272,11 +272,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(client.IsConnected, Is.False,
-                            "Bei falscher Serversignatur darf keine Verbindung zustande kommen.");
+                            "With a wrong server signature no connection may come about.");
 
-                Assert.That(errors.Any(e => e.Contains("Signatur", StringComparison.OrdinalIgnoreCase)),
+                Assert.That(errors.Any(e => e.Contains("signature", StringComparison.OrdinalIgnoreCase)),
                             Is.True,
-                            $"Der Grund muss benannt werden. Gemeldet wurde: {String.Join(" | ", errors)}");
+                            $"The reason has to be named. Reported was: {String.Join(" | ", errors)}");
             });
 
         }
@@ -286,8 +286,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MissingServerSignature_IsRefused()
 
         /// <summary>
-        /// Und eine fehlende ebenso - der verlockendere Fehler, weil ein
-        /// leeres <c>&lt;success/&gt;</c> wie ein Erfolg aussieht.
+        /// And a missing one likewise - the more tempting mistake, because an
+        /// empty <c>&lt;success/&gt;</c> looks like a success.
         /// </summary>
         [Test]
         public async Task MissingServerSignature_IsRefused()
@@ -305,7 +305,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(client.IsConnected, Is.False,
-                            "Ohne Serversignatur darf keine Verbindung zustande kommen.");
+                            "Without a server signature no connection may come about.");
 
                 Assert.That(errors, Is.Not.Empty);
             });
@@ -317,58 +317,60 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADifferentlyComposedPassword_StillMatches()
 
         /// <summary>
-        /// Dasselbe Passwort, anders zusammengesetzt, muss dieselbe Anmeldung
-        /// ergeben — \u00FCber SCRAM wie \u00FCber PLAIN.
+        /// The same password, put together differently, must give the same
+        /// login — over SCRAM as over PLAIN.
         /// </summary>
         /// <remarks>
-        /// Ein <c>\u00FC</c> kommt je nach Tastatur und Betriebssystem als ein
-        /// Zeichen an oder als <c>u</c> mit angehängten zwei Punkten. F\u00FCr den
-        /// Menschen davor ist das dasselbe Passwort; f\u00FCr einen Byte-Vergleich
-        /// nicht. Genau daf\u00FCr steht SASLprep vor der Schl\u00FCsselableitung — und
-        /// solange es nur aus einem NFKC bestand, hing es zusätzlich am
-        /// Mechanismus: SCRAM normalisierte, PLAIN gar nicht.
+        /// A <c>u</c> with a diaeresis arrives, depending on keyboard and
+        /// operating system, as one character or as <c>u</c> with two dots
+        /// appended. For the person in front of it that is the same password;
+        /// for a byte comparison it is not. That is exactly what SASLprep
+        /// stands before the key derivation for — and as long as it consisted
+        /// only of an NFKC, it hung on the mechanism as well: SCRAM normalised,
+        /// PLAIN not at all.
         /// </remarks>
         [Test]
         public async Task ADifferentlyComposedPassword_StillMatches()
         {
 
-            // Einmal zusammengesetzt, einmal zerlegt (u + kombinierendes Trema).
-            const String zusammengesetzt  = "Gr\u00FCße-42";
-            const String zerlegt          = "Gru\u0308ße-42";
+            // Once put together, once taken apart (u + combining diaeresis).
+            const String composed    = "Gr\u00FCße-42";
+            const String decomposed  = "Gru\u0308ße-42";
 
-            Server.AddAccount("alice", zusammengesetzt);
+            Server.AddAccount("alice", composed);
 
-            var ueberScram = CreateClient("alice", password: zerlegt);
-            await ueberScram.ConnectAsync();
+            var overScram = CreateClient("alice", password: decomposed);
+            await overScram.ConnectAsync();
 
-            Assert.That(ueberScram.IsConnected, Is.True,
-                        "Über SCRAM muss die zerlegte Schreibweise passen.");
+            Assert.That(overScram.IsConnected, Is.True,
+                        "Over SCRAM the taken-apart spelling must fit.");
 
-            // Und dasselbe noch einmal, wenn der Server nur PLAIN anbietet.
+            // And the same again when the server offers PLAIN only.
             Server.OfferedSaslMechanisms.Clear();
             Server.OfferedSaslMechanisms.Add("PLAIN");
 
-            var ueberPlain = CreateClient("alice", password: zerlegt);
-            ueberPlain.Connection.Resource = "zweite";
-            await ueberPlain.ConnectAsync();
+            var overPlain = CreateClient("alice", password: decomposed);
+            overPlain.Connection.Resource = "second";
+            await overPlain.ConnectAsync();
 
-            Assert.That(ueberPlain.IsConnected, Is.True,
-                        "Über PLAIN ebenso - sonst hinge es am Mechanismus.");
+            Assert.That(overPlain.IsConnected, Is.True,
+                        "Over PLAIN just the same - otherwise it would hang on the mechanism.");
 
-            // Und hinausgegangen ist die vorbereitete Fassung.
+            // And what went out is the prepared spelling.
             //
-            // Dass die Anmeldung gelingt, belegt das nämlich nicht: Der Server
-            // bereitet vor, was bei ihm ankommt, und käme deshalb auch mit der
-            // zerlegten Fassung zurecht. Geprüft werden muss, was auf der
-            // Leitung steht - sonst bliebe die Client-Hälfte ungedeckt, und ein
-            // Server, der selbst nicht vorbereitet, liesse uns nicht mehr herein.
-            var sitzung   = Server.SessionOf(ueberPlain.FullJid)!;
-            var erwartet  = Convert.ToBase64String(
-                                System.Text.Encoding.UTF8.GetBytes($"\0alice\0{zusammengesetzt}"));
+            // That the login succeeds does not vouch for it: the server
+            // prepares what arrives at its end, and would therefore cope with
+            // the taken-apart spelling too. What has to be checked is what
+            // stands on the wire - otherwise the client half would stay
+            // uncovered, and a server that does not prepare itself would no
+            // longer let us in.
+            var session   = Server.SessionOf(overPlain.FullJid)!;
+            var expected  = Convert.ToBase64String(
+                                System.Text.Encoding.UTF8.GetBytes($"\0alice\0{composed}"));
 
-            Assert.That(sitzung.Received.Any(f => f.Contains(erwartet, StringComparison.Ordinal)),
+            Assert.That(session.Received.Any(f => f.Contains(expected, StringComparison.Ordinal)),
                         Is.True,
-                        "Das <auth/> muss das nach SASLprep vorbereitete Passwort tragen.");
+                        "The <auth/> must carry the password prepared by SASLprep.");
 
         }
 
@@ -377,14 +379,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnusablePassword_IsRejectedAndDoesNotThrow()
 
         /// <summary>
-        /// Ein Passwort, das sich nicht nach SASLprep vorbereiten lässt, ist
-        /// ein Fehlversuch — und kein Serverfehler.
+        /// A password that cannot be prepared by SASLprep is a failed attempt —
+        /// and not a server error.
         /// </summary>
         /// <remarks>
-        /// Der Weg dahin f\u00FChrt \u00FCber die Leitung: Was in einem
-        /// PLAIN-<c>&lt;auth/&gt;</c> steht, bestimmt die Gegenstelle, und ein
-        /// Steuerzeichen darin darf den Server nicht umwerfen. Die Pr\u00FCfung
-        /// wandert deshalb bewusst in ein <c>false</c> statt in eine Ausnahme.
+        /// The way there leads over the wire: what stands in a PLAIN
+        /// <c>&lt;auth/&gt;</c> is decided by the counterpart, and a control
+        /// character in it must not knock the server over. The check therefore
+        /// goes deliberately into a <c>false</c> instead of into an exception.
         /// </remarks>
         [Test]
         public async Task AnUnusablePassword_IsRejectedAndDoesNotThrow()
@@ -394,18 +396,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferedSaslMechanisms.Clear();
             Server.OfferedSaslMechanisms.Add("PLAIN");
 
-            var konto = Server.GetAccount($"alice@{Server.Domain}")!;
+            var account = Server.GetAccount($"alice@{Server.Domain}")!;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(() => konto.Credentials.Verify("pw\u0007"), Throws.Nothing,
-                            "Ein unbrauchbares Passwort darf keine Ausnahme auslösen.");
+                Assert.That(() => account.Credentials.Verify("pw\u0007"), Throws.Nothing,
+                            "An unusable password must not raise an exception.");
 
-                Assert.That(konto.Credentials.Verify("pw\u0007"), Is.False);
+                Assert.That(account.Credentials.Verify("pw\u0007"), Is.False);
 
-                // Das richtige Passwort geht weiterhin durch.
-                Assert.That(konto.Credentials.Verify("pw"), Is.True);
+                // The right password still goes through.
+                Assert.That(account.Credentials.Verify("pw"), Is.True);
 
             });
 
@@ -418,38 +420,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePasswordNeverGoesOverTheWire()
 
         /// <summary>
-        /// Die Zusage, f\u00FCr die SCRAM \u00FCberhaupt da ist: das Passwort taucht in
-        /// keinem gesendeten Frame auf.
+        /// The promise SCRAM is there for at all: the password turns up in no
+        /// sent frame.
         /// </summary>
         /// <remarks>
-        /// Gepr\u00FCft wird gegen ein auffälliges Passwort, damit ein zufälliges
-        /// Vorkommen in einem Base64-Block ausgeschlossen ist.
+        /// Checked against a conspicuous password, so that a chance occurrence
+        /// inside a base64 block is ruled out.
         /// </remarks>
         [Test]
         public async Task ThePasswordNeverGoesOverTheWire()
         {
 
-            const String passwort = "Zwiebelfisch-Quastenflosser-42";
+            const String password = "Pilcrow-Coelacanth-42";
 
-            Server.AddAccount("alice", passwort);
+            Server.AddAccount("alice", password);
 
-            var client = CreateClient("alice", password: passwort);
+            var client = CreateClient("alice", password: password);
             await client.ConnectAsync();
 
             var session = Server.SessionOf(client.FullJid)!;
 
-            var imKlartext = session.Received.Where(f => f.Contains(passwort, StringComparison.Ordinal)).ToList();
+            var inPlainText = session.Received.Where(f => f.Contains(password, StringComparison.Ordinal)).ToList();
 
-            // Und dasselbe f\u00FCr die Base64-Fassung, wie PLAIN sie schicken w\u00FCrde.
+            // And the same for the base64 form, as PLAIN would send it.
             var base64 = Convert.ToBase64String(
-                             System.Text.Encoding.UTF8.GetBytes($"\0alice\0{passwort}"));
+                             System.Text.Encoding.UTF8.GetBytes($"\0alice\0{password}"));
 
-            var kodiert = session.Received.Where(f => f.Contains(base64, StringComparison.Ordinal)).ToList();
+            var encoded = session.Received.Where(f => f.Contains(base64, StringComparison.Ordinal)).ToList();
 
             Assert.Multiple(() =>
             {
-                Assert.That(imKlartext, Is.Empty, "Das Passwort stand im Klartext in einem Frame.");
-                Assert.That(kodiert,    Is.Empty, "Das Passwort stand als PLAIN-Nutzlast in einem Frame.");
+                Assert.That(inPlainText, Is.Empty, "The password stood in the clear in a frame.");
+                Assert.That(encoded,     Is.Empty, "The password stood as a PLAIN payload in a frame.");
             });
 
         }

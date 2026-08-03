@@ -31,35 +31,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6120, Abschnitt 13.11 („Directory Harvesting"): Der Server soll
-    /// nicht verraten, ob es ein Konto gibt — „not reveal whether or not an
+    /// RFC 6120, section 13.11 ("Directory Harvesting"): the server shall not
+    /// give away whether an account exists — "not reveal whether or not an
     /// account exists at a server when an entity attempts to authenticate".
     /// </summary>
     /// <remarks>
-    /// Der Fehlerwert allein reicht dafür nicht. <c>&lt;not-authorized/&gt;</c>
-    /// deckt beide Fälle ausdrücklich ab (Abschnitt 6.5.10: „this might
-    /// include, but is not limited to, the case in which the user does not
-    /// exist"), und genau den schickte der Server auch schon vorher in beiden
-    /// Fällen. Verraten hat ihn der <b>Ablauf</b>: Ein bestehendes Konto bekam
-    /// auf seine erste Nachricht eine Aufforderung und scheiterte erst an der
-    /// zweiten, ein unbekanntes scheiterte sofort. Eine Runde Unterschied, und
-    /// jede Namensliste ist in einem Durchgang sortiert.
+    /// The error value alone is not enough for that. <c>&lt;not-authorized/&gt;</c>
+    /// expressly covers both cases (section 6.5.10: "this might include, but is
+    /// not limited to, the case in which the user does not exist"), and the
+    /// server did send exactly that in both cases before as well. What gave it
+    /// away was the <b>course of events</b>: an existing account got a
+    /// challenge to its first message and failed only at the second, an unknown
+    /// one failed at once. One round of difference, and any list of names is
+    /// sorted in a single pass.
     ///
-    /// Deshalb prüfen diese Tests nicht, <i>dass</i> abgewiesen wird — das tun
-    /// die Tests in <see cref="ScramAuthenticationTests"/> —, sondern dass
-    /// beide Abweisungen gleich aussehen.
+    /// These tests therefore do not check <i>that</i> a login is refused - the
+    /// tests in <see cref="ScramAuthenticationTests"/> do that - but that both
+    /// refusals look alike.
     /// </remarks>
     [TestFixture]
     public class AccountEnumerationTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein Client, der genau einen Versuch macht - die Frage ist beim
-        /// ersten beantwortet, und jeder weitere legte eine zweite Sitzung an.
+        /// A client that makes exactly one attempt - the question is answered
+        /// at the first, and every further one would open a second session.
         /// </summary>
-        private XMPPClient Einzelversuch(String localPart, String password = "pw")
+        private XMPPClient SingleAttempt(String localPart, String password = "pw")
         {
 
             var client = CreateClient(localPart, password: password);
@@ -69,13 +69,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Die Namen der Elemente, die der Server geschickt hat.</summary>
-        private static IReadOnlyList<String> Elementfolge(XMPPSession session)
+        /// <summary>The names of the elements the server has sent.</summary>
+        private static IReadOnlyList<String> ElementSequence(XMPPSession session)
             => [.. session.Sent.Select(f => Regex.Match(f, @"^\s*<([\w:.-]+)").Groups[1].Value)];
 
         /// <summary>
-        /// Die server-first-message aus dem <c>&lt;challenge/&gt;</c> einer
-        /// Sitzung, im Klartext.
+        /// The server-first-message from the <c>&lt;challenge/&gt;</c> of a
+        /// session, in the clear.
         /// </summary>
         private static String ServerFirst(XMPPSession session)
         {
@@ -83,18 +83,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var challenge = session.Sent.FirstOrDefault(f => f.StartsWith("<challenge", StringComparison.Ordinal));
 
             Assert.That(challenge, Is.Not.Null,
-                        "Der Server hat gar nicht erst aufgefordert.");
+                        "The server did not even challenge.");
 
-            var nutzlast = Regex.Match(challenge!, @"<challenge[^>]*>([^<]*)</challenge>").Groups[1].Value;
+            var payload = Regex.Match(challenge!, @"<challenge[^>]*>([^<]*)</challenge>").Groups[1].Value;
 
-            return Encoding.UTF8.GetString(Convert.FromBase64String(nutzlast));
+            return Encoding.UTF8.GetString(Convert.FromBase64String(payload));
 
         }
 
-        /// <summary>Liest ein Attribut der server-first-message.</summary>
-        private static String Wert(String nachricht, String name)
-            => nachricht.Split(',')
-                        .First(teil => teil.StartsWith($"{name}=", StringComparison.Ordinal))
+        /// <summary>Reads an attribute of the server-first-message.</summary>
+        private static String ValueOf(String message, String name)
+            => message.Split(',')
+                        .First(part => part.StartsWith($"{name}=", StringComparison.Ordinal))
                         [(name.Length + 1)..];
 
         #endregion
@@ -103,15 +103,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownAccount_LooksLikeAWrongPassword()
 
         /// <summary>
-        /// Ein Name ohne Konto und ein Konto mit falschem Passwort ergeben
-        /// denselben Ablauf.
+        /// A name without an account and an account with a wrong password
+        /// produce the same course of events.
         /// </summary>
         /// <remarks>
-        /// Verglichen wird die Folge der Elemente, die der Server geschickt
-        /// hat, nicht ihr Inhalt: Nonce und Salt sind verschieden und sollen
-        /// es sein. Gleich sein muss, <b>wie viele</b> Schritte es waren und
-        /// <b>welche</b> - denn daran und nicht am Fehlerwort liess sich die
-        /// Frage bisher beantworten.
+        /// What is compared is the sequence of elements the server has sent,
+        /// not their content: nonce and salt are different and are meant to be.
+        /// What has to be the same is <b>how many</b> steps there were and
+        /// <b>which</b> - because that, and not the error word, is what the
+        /// question could be answered by until now.
         /// </remarks>
         [Test]
         public async Task AnUnknownAccount_LooksLikeAWrongPassword()
@@ -119,32 +119,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            await FailingConnectAsync(Einzelversuch("alice", "falsch"));
-            await FailingConnectAsync(Einzelversuch("niemand"));
+            await FailingConnectAsync(SingleAttempt("alice", "wrong"));
+            await FailingConnectAsync(SingleAttempt("nobody"));
 
-            var sitzungen = Server.AllSessions;
+            var sessions = Server.AllSessions;
 
-            Assert.That(sitzungen, Has.Count.EqualTo(2),
-                        "Erwartet werden genau zwei Anläufe, sonst vergleicht der Test das Falsche.");
+            Assert.That(sessions, Has.Count.EqualTo(2),
+                        "Exactly two runs are expected, otherwise the test compares the wrong thing.");
 
-            var mitKonto  = Elementfolge(sitzungen[0]);
-            var ohneKonto = Elementfolge(sitzungen[1]);
+            var withAccount  = ElementSequence(sessions[0]);
+            var withoutAccount = ElementSequence(sessions[1]);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(ohneKonto, Is.EqualTo(mitKonto),
-                            $"Der Ablauf verrät, ob es das Konto gibt: {String.Join(", ", ohneKonto)} " +
-                            $"statt {String.Join(", ", mitKonto)}");
+                Assert.That(withoutAccount, Is.EqualTo(withAccount),
+                            $"The course of events gives away whether the account exists: {String.Join(", ", withoutAccount)} " +
+                            $"instead of {String.Join(", ", withAccount)}");
 
-                // Ohne das bestünde der Test auch dann, wenn beide Seiten
-                // sofort scheiterten - gleich wäre der Ablauf dann auch.
-                Assert.That(mitKonto, Does.Contain("challenge"),
-                            "Ohne Aufforderung ist der Vergleich ohne Aussage.");
+                // Without this the test would pass even if both sides failed at
+                // once - the course of events would be the same then too.
+                Assert.That(withAccount, Does.Contain("challenge"),
+                            "Without a challenge the comparison says nothing.");
 
-                Assert.That(sitzungen[1].Sent.Any(f => f.Contains("not-authorized", StringComparison.Ordinal)),
+                Assert.That(sessions[1].Sent.Any(f => f.Contains("not-authorized", StringComparison.Ordinal)),
                             Is.True,
-                            "Am Ende steht die Abweisung, und zwar dieselbe.");
+                            "At the end stands the refusal, and the same one at that.");
 
             });
 
@@ -155,30 +155,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSaltOfAnUnknownAccount_StaysTheSame()
 
         /// <summary>
-        /// Zweimal derselbe unbekannte Name, zweimal dasselbe Salt.
+        /// Twice the same unknown name, twice the same salt.
         /// </summary>
         /// <remarks>
-        /// Der Teil, den ein zufälliges Salt verdorben hätte: Das Salt eines
-        /// bestehenden Kontos steht fest. Ein erfundenes, das bei jedem Versuch
-        /// anders ausfällt, beantwortet die Frage genauso zuverlässig wie ein
-        /// sofortiger Fehlschlag - man muss nur zweimal fragen.
+        /// The part a random salt would have spoiled: the salt of an existing
+        /// account is fixed. An invented one that comes out differently at
+        /// every attempt answers the question just as reliably as an immediate
+        /// failure - one only has to ask twice.
         /// </remarks>
         [Test]
         public async Task TheSaltOfAnUnknownAccount_StaysTheSame()
         {
 
-            await FailingConnectAsync(Einzelversuch("niemand"));
-            await FailingConnectAsync(Einzelversuch("niemand"));
+            await FailingConnectAsync(SingleAttempt("nobody"));
+            await FailingConnectAsync(SingleAttempt("nobody"));
 
-            var sitzungen = Server.AllSessions;
+            var sessions = Server.AllSessions;
 
-            Assert.That(sitzungen, Has.Count.EqualTo(2));
+            Assert.That(sessions, Has.Count.EqualTo(2));
 
-            var erste  = ServerFirst(sitzungen[0]);
-            var zweite = ServerFirst(sitzungen[1]);
+            var first  = ServerFirst(sessions[0]);
+            var second = ServerFirst(sessions[1]);
 
-            Assert.That(Wert(zweite, "s"), Is.EqualTo(Wert(erste, "s")),
-                        "Ein wechselndes Salt ist selbst die Auskunft.");
+            Assert.That(ValueOf(second, "s"), Is.EqualTo(ValueOf(first, "s")),
+                        "A changing salt is itself the information.");
 
         }
 
@@ -187,28 +187,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoUnknownAccounts_GetDifferentSalts()
 
         /// <summary>
-        /// Zwei unbekannte Namen bekommen verschiedene Salts.
+        /// Two unknown names get different salts.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum vorigen Test, und ohne sie wäre ein festes,
-        /// eingebautes Salt eine bestandene Lösung. Es wäre die schlechteste
-        /// von allen: Zwei Namen mit demselben Salt gibt es unter echten Konten
-        /// nicht, ein Treffer wäre also sofort als erfunden erkannt.
+        /// The counter-check to the previous test, and without it a fixed,
+        /// built-in salt would be a passing solution. It would be the worst of
+        /// all: two names with the same salt do not occur among real accounts,
+        /// so a hit would be recognised as invented at once.
         /// </remarks>
         [Test]
         public async Task TwoUnknownAccounts_GetDifferentSalts()
         {
 
-            await FailingConnectAsync(Einzelversuch("niemand"));
-            await FailingConnectAsync(Einzelversuch("auchnicht"));
+            await FailingConnectAsync(SingleAttempt("nobody"));
+            await FailingConnectAsync(SingleAttempt("neither"));
 
-            var sitzungen = Server.AllSessions;
+            var sessions = Server.AllSessions;
 
-            Assert.That(sitzungen, Has.Count.EqualTo(2));
+            Assert.That(sessions, Has.Count.EqualTo(2));
 
-            Assert.That(Wert(ServerFirst(sitzungen[1]), "s"),
-                        Is.Not.EqualTo(Wert(ServerFirst(sitzungen[0]), "s")),
-                        "Ein für alle gleiches Salt verrät genauso viel.");
+            Assert.That(ValueOf(ServerFirst(sessions[1]), "s"),
+                        Is.Not.EqualTo(ValueOf(ServerFirst(sessions[0]), "s")),
+                        "One salt for all gives away just as much.");
 
         }
 
@@ -217,21 +217,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheStore_BothRecipientsAreTold()
 
         /// <summary>
-        /// Ist die Ablage aus, bekommt der Absender für ein unbekanntes Konto
-        /// dieselbe Antwort wie für ein bekanntes, das gerade nicht zusieht.
+        /// With the store switched off, the sender gets the same answer for an
+        /// unknown account as for a known one that happens not to be looking.
         /// </summary>
         /// <remarks>
-        /// RFC 6121, Abschnitt 8.5.1 lässt für ein Konto, das es nicht gibt,
-        /// die Wahl zwischen <c>&lt;service-unavailable/&gt;</c> und
-        /// Schweigen. <b>Die Wahl ist aber keine freie</b>: Sie muss dieselbe
-        /// sein wie für ein vorhandenes, abwesendes Konto - sonst beantwortet
-        /// sie die Frage „gibt es dieses Konto?", und zwar auf dem bequemsten
-        /// Weg, den es gibt: eine Nachricht schicken und hinsehen, ob etwas
-        /// zurückkommt.
+        /// RFC 6121, section 8.5.1 leaves the choice, for an account that does
+        /// not exist, between <c>&lt;service-unavailable/&gt;</c> and silence.
+        /// <b>But the choice is not a free one</b>: it has to be the same as
+        /// for an existing, absent account - otherwise it answers the question
+        /// "does this account exist?", and by the most convenient way there is:
+        /// send a message and see whether anything comes back.
         ///
-        /// Genau daran fiel die Behandlung bisher auseinander. Das unbekannte
-        /// Konto wurde stillschweigend verworfen, das vorhandene bekam bei
-        /// abgeschalteter Ablage einen Fehler.
+        /// That is exactly where the handling fell apart until now. The unknown
+        /// account was discarded in silence, the existing one got an error when
+        /// the store was switched off.
         /// </remarks>
         [Test]
         public async Task WithoutTheStore_BothRecipientsAreTold()
@@ -241,26 +240,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             var alice   = await ConnectClientAsync();
-            var fehler  = new List<String>();
+            var errors  = new List<String>();
 
-            alice.Connection.OnStanzaError += (from, e) => { lock (fehler) fehler.Add($"{from}|{e.Condition}"); };
+            alice.Connection.OnStanzaError += (from, e) => { lock (errors) errors.Add($"{from}|{e.Condition}"); };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}",     "An ein Konto, das es gibt");
-            await alice.SendMessageAsync($"niemand@{Server.Domain}", "An eines, das es nicht gibt");
+            await alice.SendMessageAsync($"bob@{Server.Domain}",    "To an account that exists");
+            await alice.SendMessageAsync($"nobody@{Server.Domain}", "To one that does not");
 
-            await WaitFor(() => { lock (fehler) return fehler.Count == 2; },
-                          "zwei Ablehnungen beim Absender");
+            await WaitFor(() => { lock (errors) return errors.Count == 2; },
+                          "two refusals at the sender");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(fehler[0].Split('|')[1], Is.EqualTo("service-unavailable"));
+                Assert.That(errors[0].Split('|')[1], Is.EqualTo("service-unavailable"));
 
-                Assert.That(fehler[1].Split('|')[1], Is.EqualTo(fehler[0].Split('|')[1]),
-                            "Zwei verschiedene Antworten sortieren die Namen.");
+                Assert.That(errors[1].Split('|')[1], Is.EqualTo(errors[0].Split('|')[1]),
+                            "Two different answers sort the names.");
 
-                Assert.That(Server.GetAccount($"niemand@{Server.Domain}"), Is.Null,
-                            "Für die Antwort wurde ein Konto angelegt.");
+                Assert.That(Server.GetAccount($"nobody@{Server.Domain}"), Is.Null,
+                            "An account was created for the sake of the answer.");
 
             });
 
@@ -271,18 +270,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithTheStore_NeitherRecipientIsTold()
 
         /// <summary>
-        /// Ist die Ablage an, schweigt der Server in beiden Fällen.
+        /// With the store switched on, the server stays silent in both cases.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe, und sie ist die wichtigere: „Antworte einfach immer
-        /// mit <c>&lt;service-unavailable/&gt;</c>" wäre die naheliegende
-        /// Lösung und träfe genau daneben. Bei eingeschalteter Ablage - der
-        /// Vorgabe - bekäme das vorhandene Konto dann Schweigen und das
-        /// unbekannte einen Fehler, und die Frage wäre wieder beantwortet, nur
-        /// andersherum.
+        /// The counter-check, and it is the more important one: "just always
+        /// answer with <c>&lt;service-unavailable/&gt;</c>" would be the
+        /// obvious solution and would miss by exactly as much. With the store
+        /// switched on - the default - the existing account would then get
+        /// silence and the unknown one an error, and the question would be
+        /// answered again, only the other way round.
         ///
-        /// Das Schweigen ist hier keines aus Verlegenheit: Für das vorhandene
-        /// Konto liegt die Nachricht in der Ablage, und das lässt sich prüfen.
+        /// The silence here is not one of embarrassment: for the existing
+        /// account the message lies in the store, and that can be checked.
         /// </remarks>
         [Test]
         public async Task WithTheStore_NeitherRecipientIsTold()
@@ -291,18 +290,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             var alice   = await ConnectClientAsync();
-            var fehler  = new List<String>();
+            var errors  = new List<String>();
 
-            alice.Connection.OnStanzaError += (from, e) => { lock (fehler) fehler.Add(e.Condition); };
+            alice.Connection.OnStanzaError += (from, e) => { lock (errors) errors.Add(e.Condition); };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}",     "Wird abgelegt");
-            await alice.SendMessageAsync($"niemand@{Server.Domain}", "Wird verworfen");
+            await alice.SendMessageAsync($"bob@{Server.Domain}",    "Will be stored");
+            await alice.SendMessageAsync($"nobody@{Server.Domain}", "Will be discarded");
 
             await WaitFor(() => Server.GetAccount($"bob@{Server.Domain}")!.OfflineMessages.Count == 1,
-                          "die abgelegte Nachricht für das vorhandene Konto");
+                          "the stored message for the existing account");
 
-            await WaitAgainst(() => { lock (fehler) return fehler.Count > 0; },
-                              "eine Ablehnung, obwohl die Ablage an ist");
+            await WaitAgainst(() => { lock (errors) return errors.Count > 0; },
+                              "a refusal even though the store is on");
 
         }
 
@@ -311,16 +310,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFullStore_RefusesForBothAlike()
 
         /// <summary>
-        /// Nimmt die Ablage nichts mehr an, gilt das auch für das Konto, das
-        /// es nicht gibt.
+        /// If the store takes nothing more, that goes for the account that does
+        /// not exist as well.
         /// </summary>
         /// <remarks>
-        /// Der Fall, an dem sich „tu so, als sei abgelegt worden" von „frag
-        /// nach, ob es passt" unterscheidet. Bei <c>MaxStoredOfflineMessages =
-        /// 0</c> nimmt eine <i>leere</i> Ablage nichts an - ein vorhandenes
-        /// Konto bekommt also einen Fehler, und ein unbekanntes muss ihn
-        /// ebenso bekommen. Eine Behandlung, die für Unbekannte immer
-        /// „abgelegt" meldet, fiele genau hier auseinander.
+        /// The case in which "pretend it was stored" differs from "ask whether
+        /// it fits". With <c>MaxStoredOfflineMessages = 0</c> an <i>empty</i>
+        /// store takes nothing - so an existing account gets an error, and an
+        /// unknown one has to get it just the same. A handling that always
+        /// reports "stored" for unknown accounts would fall apart exactly here.
         /// </remarks>
         [Test]
         public async Task AFullStore_RefusesForBothAlike()
@@ -330,17 +328,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             var alice   = await ConnectClientAsync();
-            var fehler  = new List<String>();
+            var errors  = new List<String>();
 
-            alice.Connection.OnStanzaError += (from, e) => { lock (fehler) fehler.Add(e.Condition); };
+            alice.Connection.OnStanzaError += (from, e) => { lock (errors) errors.Add(e.Condition); };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}",     "Passt nicht mehr");
-            await alice.SendMessageAsync($"niemand@{Server.Domain}", "Passt auch nicht");
+            await alice.SendMessageAsync($"bob@{Server.Domain}",    "Does not fit any more");
+            await alice.SendMessageAsync($"nobody@{Server.Domain}", "Does not fit either");
 
-            await WaitFor(() => { lock (fehler) return fehler.Count == 2; },
-                          "zwei Ablehnungen bei voller Ablage");
+            await WaitFor(() => { lock (errors) return errors.Count == 2; },
+                          "two refusals with a full store");
 
-            Assert.That(fehler, Is.All.EqualTo("service-unavailable"));
+            Assert.That(errors, Is.All.EqualTo("service-unavailable"));
 
         }
 
@@ -349,13 +347,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheInventedSalt_LooksLikeARealOne()
 
         /// <summary>
-        /// Länge des Salts und Iterationszahl sind dieselben wie bei einem
-        /// bestehenden Konto.
+        /// The length of the salt and the iteration count are the same as with
+        /// an existing account.
         /// </summary>
         /// <remarks>
-        /// Was am erfundenen Salt anders wäre, wäre wieder ein
-        /// Erkennungszeichen - die Iterationszahl steht offen in der
-        /// server-first-message, und die Salt-Länge ist abzuzählen.
+        /// Whatever was different about the invented salt would be a mark of
+        /// recognition again - the iteration count stands openly in the
+        /// server-first-message, and the length of the salt can be counted.
         /// </remarks>
         [Test]
         public async Task TheInventedSalt_LooksLikeARealOne()
@@ -363,25 +361,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            await FailingConnectAsync(Einzelversuch("alice", "falsch"));
-            await FailingConnectAsync(Einzelversuch("niemand"));
+            await FailingConnectAsync(SingleAttempt("alice", "wrong"));
+            await FailingConnectAsync(SingleAttempt("nobody"));
 
-            var sitzungen = Server.AllSessions;
+            var sessions = Server.AllSessions;
 
-            Assert.That(sitzungen, Has.Count.EqualTo(2));
+            Assert.That(sessions, Has.Count.EqualTo(2));
 
-            var echt      = ServerFirst(sitzungen[0]);
-            var erfunden  = ServerFirst(sitzungen[1]);
+            var real      = ServerFirst(sessions[0]);
+            var invented  = ServerFirst(sessions[1]);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Wert(erfunden, "i"), Is.EqualTo(Wert(echt, "i")),
-                            "Die Iterationszahl unterscheidet die beiden.");
+                Assert.That(ValueOf(invented, "i"), Is.EqualTo(ValueOf(real, "i")),
+                            "The iteration count tells the two apart.");
 
-                Assert.That(Convert.FromBase64String(Wert(erfunden, "s")).Length,
-                            Is.EqualTo(Convert.FromBase64String(Wert(echt, "s")).Length),
-                            "Die Länge des Salts unterscheidet die beiden.");
+                Assert.That(Convert.FromBase64String(ValueOf(invented, "s")).Length,
+                            Is.EqualTo(Convert.FromBase64String(ValueOf(real, "s")).Length),
+                            "The length of the salt tells the two apart.");
 
             });
 

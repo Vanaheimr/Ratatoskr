@@ -31,18 +31,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Prüfungen, die der Server im SCRAM-Austausch vornimmt - direkt
-    /// gegen <c>SCRAMExchange</c> statt über eine Verbindung.
+    /// The checks the server makes in the SCRAM exchange - straight against
+    /// <c>SCRAMExchange</c> instead of over a connection.
     ///
-    /// Das ist nötig, weil ein echter Client sie nicht auslöst: er schickt
-    /// immer die richtige Nonce und den richtigen GS2-Header, und ein falscher
-    /// Beweis fällt ihm selbst schon an der Serversignatur auf. Über eine
-    /// Verbindung geprüft, bestünden diese Fälle deshalb aus dem falschen
-    /// Grund - genau das ist mir bei der ersten Fassung passiert: der Server
-    /// nahm jeden Beweis an und die Integrationstests blieben trotzdem grün.
+    /// That is necessary because a real client does not trigger them: it always
+    /// sends the right nonce and the right GS2 header, and a wrong proof it
+    /// notices itself at the server signature. Checked over a connection, these
+    /// cases would therefore pass for the wrong reason - which is exactly what
+    /// happened to me with the first version: the server took every proof and
+    /// the integration tests stayed green all the same.
     ///
-    /// Die client-final-message wird hier aus den Formeln von RFC 5802,
-    /// Abschnitt 3 gebaut, unabhängig von beiden Implementierungen.
+    /// The client-final-message is built here from the formulas of RFC 5802,
+    /// section 3, independently of both implementations.
     /// </summary>
     [TestFixture]
     public class ScramExchangeTests
@@ -50,7 +50,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private const String Passwort = "geheim";
+        private const String Password = "secret";
 
         private XMPPAccount _account = null!;
 
@@ -59,31 +59,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp
 
         [SetUp]
-        public void KontoAnlegen()
+        public void CreateAccount()
         {
-            _account = new XMPPAccount("alice@localhost", Passwort);
+            _account = new XMPPAccount("alice@localhost", Password);
         }
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Der Serverschlüssel für die erfundenen Zugangsdaten. Fest, damit
-        /// der Test nachrechnen kann, was der Server ableiten würde.
+        /// The server secret for the invented credentials. Fixed, so that the
+        /// test can recompute what the server would derive.
         /// </summary>
-        private static readonly Byte[] Serverschluessel =
-            Encoding.UTF8.GetBytes("Serverschluessel für die Testsammlung");
+        private static readonly Byte[] ServerSecret =
+            Encoding.UTF8.GetBytes("server secret for the test collection");
 
         /// <summary>
-        /// Erfundene Zugangsdaten für einen Namen ohne Konto - dasselbe, was
-        /// der Server einsetzt (RFC 6120, Abschnitt 13.11).
+        /// Invented credentials for a name without an account - the same thing
+        /// the server puts in (RFC 6120, section 13.11).
         /// </summary>
-        private static XMPPCredentials Erfunden(String user)
-            => XMPPCredentials.Decoy(user, Serverschluessel);
+        private static XMPPCredentials Invented(String user)
+            => XMPPCredentials.Decoy(user, ServerSecret);
 
-        /// <summary>Beginnt einen Austausch mit einer festen Client-Nonce.</summary>
-        private SCRAMExchange Beginn(String clientNonce = "clientnonce")
+        /// <summary>Begins an exchange with a fixed client nonce.</summary>
+        private SCRAMExchange StartExchange(String clientNonce = "clientnonce")
         {
 
             var clientFirst = $"n,,n=alice,r={clientNonce}";
@@ -92,36 +92,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                Convert.ToBase64String(Encoding.UTF8.GetBytes(clientFirst)),
                                SCRAMMechanism.ScramSha256,
                                user => user == "alice" ? _account : null,
-                               Erfunden);
+                               Invented);
 
-            Assert.That(exchange, Is.Not.Null, "Der Austausch hätte beginnen müssen.");
+            Assert.That(exchange, Is.Not.Null, "The exchange should have begun.");
 
             return exchange!;
 
         }
 
-        /// <summary>Die server-first-message im Klartext.</summary>
+        /// <summary>The server-first-message in the clear.</summary>
         private static String ServerFirst(SCRAMExchange exchange)
             => Encoding.UTF8.GetString(Convert.FromBase64String(exchange.Challenge));
 
         /// <summary>
-        /// Baut eine client-final-message nach RFC 5802, Abschnitt 3 - mit
-        /// allen Stellschrauben, an denen die Tests drehen wollen.
+        /// Builds a client-final-message after RFC 5802, section 3 - with all
+        /// the adjusting screws the tests want to turn.
         /// </summary>
         private static String ClientFinal(String   clientFirstBare,
                                           String   serverFirst,
-                                          String   passwort,
+                                          String   password,
                                           String?  nonce        = null,
                                           String?  gs2Header    = null)
         {
 
-            var salt        = Convert.FromBase64String(Wert(serverFirst, "s"));
-            var iterations  = Int32.Parse(Wert(serverFirst, "i"));
+            var salt        = Convert.FromBase64String(ValueOf(serverFirst, "s"));
+            var iterations  = Int32.Parse(ValueOf(serverFirst, "i"));
 
-            nonce      ??= Wert(serverFirst, "r");
+            nonce      ??= ValueOf(serverFirst, "r");
             gs2Header  ??= "n,,";
 
-            var saltedPassword = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(passwort),
+            var saltedPassword = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password),
                                                            salt,
                                                            iterations,
                                                            HashAlgorithmName.SHA256,
@@ -130,24 +130,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var clientKey  = HMACSHA256.HashData(saltedPassword, "Client Key"u8.ToArray());
             var storedKey  = SHA256.HashData(clientKey);
 
-            var ohneBeweis = $"c={Convert.ToBase64String(Encoding.UTF8.GetBytes(gs2Header))},r={nonce}";
+            var withoutProof = $"c={Convert.ToBase64String(Encoding.UTF8.GetBytes(gs2Header))},r={nonce}";
 
-            var authMessage      = $"{clientFirstBare},{serverFirst},{ohneBeweis}";
+            var authMessage      = $"{clientFirstBare},{serverFirst},{withoutProof}";
             var clientSignature  = HMACSHA256.HashData(storedKey, Encoding.UTF8.GetBytes(authMessage));
 
-            var beweis = new Byte[clientKey.Length];
-            for (var i = 0; i < beweis.Length; i++)
-                beweis[i] = (Byte) (clientKey[i] ^ clientSignature[i]);
+            var proof = new Byte[clientKey.Length];
+            for (var i = 0; i < proof.Length; i++)
+                proof[i] = (Byte) (clientKey[i] ^ clientSignature[i]);
 
             return Convert.ToBase64String(
-                       Encoding.UTF8.GetBytes($"{ohneBeweis},p={Convert.ToBase64String(beweis)}"));
+                       Encoding.UTF8.GetBytes($"{withoutProof},p={Convert.ToBase64String(proof)}"));
 
         }
 
-        /// <summary>Liest ein Attribut, verankert am Anfang oder hinter einem Komma.</summary>
-        private static String Wert(String nachricht, String name)
-            => nachricht.Split(',')
-                        .First(teil => teil.StartsWith($"{name}=", StringComparison.Ordinal))
+        /// <summary>Reads an attribute, anchored at the start or behind a comma.</summary>
+        private static String ValueOf(String message, String name)
+            => message.Split(',')
+                        .First(part => part.StartsWith($"{name}=", StringComparison.Ordinal))
                         [(name.Length + 1)..];
 
         #endregion
@@ -156,22 +156,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CorrectProof_IsAccepted()
 
         /// <summary>
-        /// Der richtige Beweis wird angenommen, und die Antwort ist die
-        /// server-final-message mit der Serversignatur.
+        /// The right proof is accepted, and the answer is the
+        /// server-final-message with the server signature.
         /// </summary>
         [Test]
         public void CorrectProof_IsAccepted()
         {
 
-            var exchange     = Beginn();
+            var exchange     = StartExchange();
             var serverFirst  = ServerFirst(exchange);
 
-            var ergebnis = exchange.Complete(
-                               ClientFinal("n=alice,r=clientnonce", serverFirst, Passwort));
+            var result = exchange.Complete(
+                               ClientFinal("n=alice,r=clientnonce", serverFirst, Password));
 
-            Assert.That(ergebnis, Is.Not.Null, "Der richtige Beweis muss durchgehen.");
+            Assert.That(result, Is.Not.Null, "The right proof has to go through.");
 
-            var serverFinal = Encoding.UTF8.GetString(Convert.FromBase64String(ergebnis!));
+            var serverFinal = Encoding.UTF8.GetString(Convert.FromBase64String(result!));
 
             Assert.That(serverFinal, Does.StartWith("v="));
 
@@ -182,26 +182,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WrongPassword_IsRejectedByTheServer()
 
         /// <summary>
-        /// Der Fall, den die Integrationstests <b>nicht</b> abdecken: der
-        /// Server selbst muss einen falschen Beweis zurückweisen.
+        /// The case the integration tests do <b>not</b> cover: the server
+        /// itself has to turn a wrong proof away.
         /// </summary>
         /// <remarks>
-        /// Über eine echte Verbindung scheitert eine Anmeldung mit falschem
-        /// Passwort ohnehin, weil der Client die Serversignatur nicht
-        /// bestätigt bekommt. Nimmt der Server jeden Beweis an, bleibt das
-        /// unbemerkt - hier nicht.
+        /// Over a real connection a login with a wrong password fails anyway,
+        /// because the client does not get the server signature confirmed. If
+        /// the server takes every proof, that goes unnoticed - not here.
         /// </remarks>
         [Test]
         public void WrongPassword_IsRejectedByTheServer()
         {
 
-            var exchange     = Beginn();
+            var exchange     = StartExchange();
             var serverFirst  = ServerFirst(exchange);
 
-            var ergebnis = exchange.Complete(
-                               ClientFinal("n=alice,r=clientnonce", serverFirst, "falsch"));
+            var result = exchange.Complete(
+                               ClientFinal("n=alice,r=clientnonce", serverFirst, "wrong"));
 
-            Assert.That(ergebnis, Is.Null, "Ein falscher Beweis darf nicht angenommen werden.");
+            Assert.That(result, Is.Null, "A wrong proof must not be accepted.");
 
         }
 
@@ -210,25 +209,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ForeignNonce_IsRejected()
 
         /// <summary>
-        /// Die Nonce des Servers muss zurückgespiegelt werden. Ohne diese
-        /// Prüfung liesse sich eine mitgeschnittene client-final-message
-        /// wiedereinspielen.
+        /// The nonce of the server has to be mirrored back. Without this check
+        /// a recorded client-final-message could be replayed.
         /// </summary>
         [Test]
         public void ForeignNonce_IsRejected()
         {
 
-            var exchange     = Beginn();
+            var exchange     = StartExchange();
             var serverFirst  = ServerFirst(exchange);
 
-            // Ein vollständig gültiger Beweis - nur zu einer anderen Nonce.
-            var ergebnis = exchange.Complete(
+            // A completely valid proof - only to a different nonce.
+            var result = exchange.Complete(
                                ClientFinal("n=alice,r=clientnonce",
                                            serverFirst,
-                                           Passwort,
-                                           nonce: "eine-voellig-andere-nonce"));
+                                           Password,
+                                           nonce: "a-completely-different-nonce"));
 
-            Assert.That(ergebnis, Is.Null, "Eine fremde Nonce darf nicht durchgehen.");
+            Assert.That(result, Is.Null, "A foreign nonce must not go through.");
 
         }
 
@@ -237,29 +235,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ChangedGs2Header_IsRejected()
 
         /// <summary>
-        /// Der gemeldete GS2-Header muss der geschickte sein (RFC 5802,
-        /// Abschnitt 6).
+        /// The GS2 header reported has to be the one that was sent (RFC 5802,
+        /// section 6).
         /// </summary>
         /// <remarks>
-        /// Sonst könnte ein Zwischenmann dem Client vorspiegeln, der Server
-        /// beherrsche kein Channel Binding, und die Verbindung so auf die
-        /// schwächere Variante herunterhandeln, ohne dass es jemandem
-        /// auffiele.
+        /// Otherwise a man in the middle could make the client believe the
+        /// server cannot do channel binding, and thereby haggle the connection
+        /// down to the weaker variant without anyone noticing.
         /// </remarks>
         [Test]
         public void ChangedGs2Header_IsRejected()
         {
 
-            var exchange     = Beginn();
+            var exchange     = StartExchange();
             var serverFirst  = ServerFirst(exchange);
 
-            var ergebnis = exchange.Complete(
+            var result = exchange.Complete(
                                ClientFinal("n=alice,r=clientnonce",
                                            serverFirst,
-                                           Passwort,
+                                           Password,
                                            gs2Header: "y,,"));
 
-            Assert.That(ergebnis, Is.Null, "Ein abweichender GS2-Header darf nicht durchgehen.");
+            Assert.That(result, Is.Null, "A deviating GS2 header must not go through.");
 
         }
 
@@ -268,65 +265,65 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnknownUser_DoesNotStart()
 
         /// <summary>
-        /// Ein unbekanntes Konto lässt den Austausch trotzdem beginnen - mit
-        /// erfundenen, aber gleichbleibenden Zugangsdaten.
+        /// An unknown account lets the exchange begin all the same - with
+        /// invented but unchanging credentials.
         /// </summary>
         /// <remarks>
-        /// Hier stand das Gegenteil, samt Begründung: „RFC 5802, Abschnitt 7
-        /// empfiehlt stattdessen, mit einem erfundenen Salt weiterzumachen …
-        /// bewusst nicht gemacht". Beide Hälften waren falsch. Abschnitt 7 des
-        /// RFC 5802 ist die formale Syntax, und der ganze RFC empfiehlt dazu
-        /// nichts; er führt im Gegenteil ein <c>unknown-user</c> als
-        /// Fehlerwert. Die Empfehlung steht in <b>RFC 6120, Abschnitt
-        /// 13.11</b> („Directory Harvesting"): „not reveal whether or not an
-        /// account exists at a server when an entity attempts to
-        /// authenticate".
+        /// The opposite stood here, reasons and all: "RFC 5802, section 7
+        /// recommends carrying on with an invented salt instead … deliberately
+        /// not done". Both halves were wrong. Section 7 of RFC 5802 is the
+        /// formal syntax, and the RFC as a whole recommends nothing of the
+        /// sort; on the contrary it lists an <c>unknown-user</c> as an error
+        /// value. The recommendation stands in <b>RFC 6120, section 13.11</b>
+        /// ("Directory Harvesting"): "not reveal whether or not an account
+        /// exists at a server when an entity attempts to authenticate".
         ///
-        /// Ein sofortiger Fehlschlag verriet das unabhängig vom Fehlerwort -
-        /// die Auskunft steckte im Ablauf: eine Runde statt zweien.
+        /// An immediate failure gave that away regardless of the error word -
+        /// the information sat in the course of events: one round instead of
+        /// two.
         /// </remarks>
         [Test]
         public void UnknownUser_StartsAnyway()
         {
 
-            SCRAMExchange? Versuch(String benutzer)
+            SCRAMExchange? Attempt(String name)
                 => SCRAMExchange.Begin(
-                       Convert.ToBase64String(Encoding.UTF8.GetBytes($"n,,n={benutzer},r=clientnonce")),
+                       Convert.ToBase64String(Encoding.UTF8.GetBytes($"n,,n={name},r=clientnonce")),
                        SCRAMMechanism.ScramSha256,
                        user => user == "alice" ? _account : null,
-                       Erfunden);
+                       Invented);
 
-            var ersterVersuch   = Versuch("niemand");
-            var zweiterVersuch  = Versuch("niemand");
-            var andererName     = Versuch("auchnicht");
+            var firstAttempt   = Attempt("nobody");
+            var secondAttempt  = Attempt("nobody");
+            var otherName      = Attempt("neither");
 
-            Assert.That(ersterVersuch,  Is.Not.Null, "Der Austausch hätte beginnen müssen.");
-            Assert.That(zweiterVersuch, Is.Not.Null);
-            Assert.That(andererName,    Is.Not.Null);
+            Assert.That(firstAttempt,  Is.Not.Null, "The exchange should have begun.");
+            Assert.That(secondAttempt, Is.Not.Null);
+            Assert.That(otherName,     Is.Not.Null);
 
-            var erste   = ServerFirst(ersterVersuch!);
-            var zweite  = ServerFirst(zweiterVersuch!);
-            var andere  = ServerFirst(andererName!);
+            var first   = ServerFirst(firstAttempt!);
+            var second  = ServerFirst(secondAttempt!);
+            var other   = ServerFirst(otherName!);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(ersterVersuch!.Account, Is.Null,
-                            "Ein Konto gibt es nicht - der Austausch läuft nur zum Schein.");
+                Assert.That(firstAttempt!.Account, Is.Null,
+                            "There is no account - the exchange runs for appearance only.");
 
-                Assert.That(Wert(zweite, "s"), Is.EqualTo(Wert(erste, "s")),
-                            "Ein Salt, das sich bei jedem Versuch ändert, ist selbst die Auskunft.");
+                Assert.That(ValueOf(second, "s"), Is.EqualTo(ValueOf(first, "s")),
+                            "A salt that changes at every attempt is itself the information.");
 
-                Assert.That(Wert(andere, "s"), Is.Not.EqualTo(Wert(erste, "s")),
-                            "Ein für alle gleiches Salt ebenso.");
+                Assert.That(ValueOf(other, "s"), Is.Not.EqualTo(ValueOf(first, "s")),
+                            "One salt for all likewise.");
 
-                Assert.That(Wert(erste, "i"),
+                Assert.That(ValueOf(first, "i"),
                             Is.EqualTo(_account.Credentials.IterationCount.ToString()),
-                            "Eine abweichende Iterationszahl wäre wieder ein Erkennungszeichen.");
+                            "A deviating iteration count would be a mark of recognition again.");
 
-                Assert.That(Convert.FromBase64String(Wert(erste, "s")).Length,
+                Assert.That(Convert.FromBase64String(ValueOf(first, "s")).Length,
                             Is.EqualTo(_account.Credentials.Salt.Length),
-                            "Und eine abweichende Salt-Länge auch.");
+                            "And a deviating salt length too.");
 
             });
 
@@ -337,26 +334,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AValidProof_IsNotEnoughWithoutAnAccount()
 
         /// <summary>
-        /// Selbst ein stimmiger Beweis meldet niemanden an, wenn hinter dem
-        /// Namen kein Konto steht.
+        /// Even a proof that adds up logs nobody in if there is no account
+        /// behind the name.
         /// </summary>
         /// <remarks>
-        /// Der Fall ist über die Leitung nicht herstellbar: Die erfundenen
-        /// Schlüssel stammen aus dem Serverschlüssel, und wer den nicht kennt,
-        /// bringt keinen passenden Beweis zustande. Hier bekommt der Austausch
-        /// deshalb die <b>echten</b> Zugangsdaten als erfundene untergeschoben
-        /// - der Beweis stimmt dann, und der Austausch muss ihn trotzdem
-        /// abweisen.
+        /// The case cannot be brought about over the wire: the invented keys
+        /// come from the server secret, and whoever does not know it cannot
+        /// produce a matching proof. Here the exchange is therefore slipped the
+        /// <b>real</b> credentials as invented ones - the proof then adds up,
+        /// and the exchange has to turn it away all the same.
         ///
-        /// Ohne diesen Test wäre die Sicherung in <c>Complete</c> eine
-        /// Behauptung: Sie fällt in keinem anderen Test auf, und ihr Preis
-        /// wäre eine Anmeldung ohne Konto.
+        /// Without this test the safeguard in <c>Complete</c> would be an
+        /// assertion: it shows up in no other test, and its price would be a
+        /// login without an account.
         /// </remarks>
         [Test]
         public void AValidProof_IsNotEnoughWithoutAnAccount()
         {
 
-            const String clientFirstBare = "n=niemand,r=clientnonce";
+            const String clientFirstBare = "n=nobody,r=clientnonce";
 
             var exchange = SCRAMExchange.Begin(
                                Convert.ToBase64String(Encoding.UTF8.GetBytes($"n,,{clientFirstBare}")),
@@ -367,13 +363,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(exchange, Is.Not.Null);
 
             var serverFirst  = ServerFirst(exchange!);
-            var clientFinal  = ClientFinal(clientFirstBare, serverFirst, Passwort);
+            var clientFinal  = ClientFinal(clientFirstBare, serverFirst, Password);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(exchange!.Complete(clientFinal), Is.Null,
-                            "Ein Beweis ohne Konto dahinter darf nicht durchkommen.");
+                            "A proof with no account behind it must not get through.");
 
                 Assert.That(exchange.Account, Is.Null);
 
@@ -386,31 +382,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EscapedUsername_IsUnescaped()
 
         /// <summary>
-        /// RFC 5802: im Benutzernamen steht <c>=2C</c> für ein Komma und
-        /// <c>=3D</c> für ein Gleichheitszeichen.
+        /// RFC 5802: in the user name <c>=2C</c> stands for a comma and
+        /// <c>=3D</c> for an equals sign.
         /// </summary>
         /// <remarks>
-        /// Die Reihenfolge beim Auflösen ist nicht beliebig. Wer zuerst
-        /// <c>=3D</c> ersetzt, macht aus dem übertragenen <c>=3D2C</c> - also
-        /// dem Text "=2C" - erst "=2C" und dann fälschlich ein Komma.
+        /// The order of the unescaping is not free. Whoever replaces <c>=3D</c>
+        /// first turns the transmitted <c>=3D2C</c> - that is, the text "=2C" -
+        /// into "=2C" first and then wrongly into a comma.
         /// </remarks>
         [Test]
         public void EscapedUsername_IsUnescaped()
         {
 
-            var konto     = new XMPPAccount("a,b=c@localhost", Passwort);
-            var gesucht   = new List<String>();
+            var account   = new XMPPAccount("a,b=c@localhost", Password);
+            var lookedUp  = new List<String>();
 
             var exchange = SCRAMExchange.Begin(
                                Convert.ToBase64String(Encoding.UTF8.GetBytes("n,,n=a=2Cb=3Dc,r=nonce")),
                                SCRAMMechanism.ScramSha256,
-                               user => { gesucht.Add(user); return konto; },
-                               Erfunden);
+                               user => { lookedUp.Add(user); return account; },
+                               Invented);
 
             Assert.Multiple(() =>
             {
                 Assert.That(exchange, Is.Not.Null);
-                Assert.That(gesucht,  Is.EqualTo(new[] { "a,b=c" }));
+                Assert.That(lookedUp,  Is.EqualTo(new[] { "a,b=c" }));
             });
 
         }
@@ -420,8 +416,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MalformedMessages_AreRejected()
 
         /// <summary>
-        /// Unsinn darf nicht in eine Ausnahme laufen, sondern in eine
-        /// Ablehnung.
+        /// Nonsense must not run into an exception, but into a refusal.
         /// </summary>
         [Test]
         public void MalformedMessages_AreRejected()
@@ -430,27 +425,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(SCRAMExchange.Begin("kein-base64!!", SCRAMMechanism.ScramSha256, _ => _account, Erfunden),
-                            Is.Null, "Kein Base64.");
+                Assert.That(SCRAMExchange.Begin("not-base64!!", SCRAMMechanism.ScramSha256, _ => _account, Invented),
+                            Is.Null, "No base64.");
 
-                Assert.That(SCRAMExchange.Begin(Base64("n,,"), SCRAMMechanism.ScramSha256, _ => _account, Erfunden),
-                            Is.Null, "Kein Benutzername und keine Nonce.");
+                Assert.That(SCRAMExchange.Begin(Base64("n,,"), SCRAMMechanism.ScramSha256, _ => _account, Invented),
+                            Is.Null, "No user name and no nonce.");
 
-                Assert.That(SCRAMExchange.Begin(Base64("n=alice,r=x"), SCRAMMechanism.ScramSha256, _ => _account, Erfunden),
-                            Is.Null, "Kein GS2-Header.");
+                Assert.That(SCRAMExchange.Begin(Base64("n=alice,r=x"), SCRAMMechanism.ScramSha256, _ => _account, Invented),
+                            Is.Null, "No GS2 header.");
 
-                Assert.That(SCRAMExchange.Begin(Base64("n,,r=x"), SCRAMMechanism.ScramSha256, _ => _account, Erfunden),
-                            Is.Null, "Kein Benutzername.");
+                Assert.That(SCRAMExchange.Begin(Base64("n,,r=x"), SCRAMMechanism.ScramSha256, _ => _account, Invented),
+                            Is.Null, "No user name.");
 
             });
 
-            var exchange = Beginn();
+            var exchange = StartExchange();
 
             Assert.Multiple(() =>
             {
-                Assert.That(exchange.Complete("kein-base64!!"), Is.Null, "Kein Base64.");
-                Assert.That(exchange.Complete(Base64("c=biws,r=nonce")), Is.Null, "Kein Beweis.");
-                Assert.That(exchange.Complete(Base64("c=biws,p=zu-kurz")), Is.Null, "Keine Nonce.");
+                Assert.That(exchange.Complete("not-base64!!"), Is.Null, "No base64.");
+                Assert.That(exchange.Complete(Base64("c=biws,r=nonce")), Is.Null, "No proof.");
+                Assert.That(exchange.Complete(Base64("c=biws,p=too-short")), Is.Null, "No nonce.");
             });
 
         }

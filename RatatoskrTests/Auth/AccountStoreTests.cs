@@ -28,11 +28,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Konten und Roster, die einen Serverstart überdauern.
+    /// Accounts and rosters that outlive a server start.
     ///
-    /// Sie lebten im Speicher einer <c>XMPPServer</c>-Instanz und waren beim
-    /// Beenden weg. Damit war der Server auf Tests festgelegt - ein Betrieb
-    /// hätte nach jedem Neustart eine leere Kontenliste gehabt.
+    /// They lived in the memory of an <c>XMPPServer</c> instance and were gone
+    /// when it ended. That pinned the server to tests - in service it would
+    /// have had an empty account list after every restart.
     /// </summary>
     [TestFixture]
     public class AccountStoreTests
@@ -40,8 +40,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private String _verzeichnis = null!;
-        private String _datei = null!;
+        private String _directory = null!;
+        private String _file = null!;
         private readonly InternalErrorGuard _guard = new();
 
         #endregion
@@ -49,23 +49,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void EigenesVerzeichnis()
+        public void OwnDirectory()
         {
 
-            _verzeichnis = Path.Combine(Path.GetTempPath(),
-                                        $"jabber-konten-{Guid.NewGuid():N}");
+            _directory = Path.Combine(Path.GetTempPath(),
+                                        $"jabber-accounts-{Guid.NewGuid():N}");
 
-            _datei = Path.Combine(_verzeichnis, "konten.json");
+            _file = Path.Combine(_directory, "accounts.json");
 
             _guard.Reset();
 
         }
 
         [TearDown]
-        public void Aufraeumen()
+        public void CleanUp()
         {
-            try { Directory.Delete(_verzeichnis, recursive: true); }
-            catch { /* im Teardown egal */ }
+            try { Directory.Delete(_directory, recursive: true); }
+            catch { /* never mind in the teardown */ }
 
             _guard.AssertClean();
 
@@ -77,21 +77,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MissingFile_IsAnEmptyStore()
 
         /// <summary>
-        /// Ein Speicher auf eine Datei, die es noch nicht gibt, ist leer und
-        /// kein Fehler - sonst müsste jeder erste Start von Hand vorbereitet
-        /// werden.
+        /// A store onto a file that does not exist yet is empty and not an
+        /// error - otherwise every first start would have to be prepared by
+        /// hand.
         /// </summary>
         [Test]
         public void MissingFile_IsAnEmptyStore()
         {
 
-            var store = new FileAccountStore(_datei);
+            var store = new FileAccountStore(_file);
 
             Assert.Multiple(() =>
             {
                 Assert.That(store.Load(),          Is.Empty);
-                Assert.That(File.Exists(_datei),   Is.False,
-                            "Blosses Lesen darf die Datei nicht anlegen.");
+                Assert.That(File.Exists(_file),   Is.False,
+                            "Merely reading must not create the file.");
             });
 
         }
@@ -101,25 +101,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SavedAccount_ComesBack()
 
         /// <summary>
-        /// Der Kern: ein gespeichertes Konto lässt sich wieder einlesen, und
-        /// die Anmeldung funktioniert danach noch.
+        /// The heart of it: a saved account can be read back in, and the login
+        /// still works afterwards.
         /// </summary>
         [Test]
         public void SavedAccount_ComesBack()
         {
 
-            new FileAccountStore(_datei).Save(new XMPPAccount("alice@localhost", "geheim"));
+            new FileAccountStore(_file).Save(new XMPPAccount("alice@localhost", "secret"));
 
-            var gelesen = new FileAccountStore(_datei).Load().ToList();
+            var loaded = new FileAccountStore(_file).Load().ToList();
 
-            Assert.That(gelesen, Has.Count.EqualTo(1));
+            Assert.That(loaded, Has.Count.EqualTo(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(gelesen[0].BareJid,                       Is.EqualTo("alice@localhost"));
-                Assert.That(gelesen[0].Credentials.Verify("geheim"),  Is.True,
-                            "Nach dem Einlesen muss die Anmeldung noch gehen.");
-                Assert.That(gelesen[0].Credentials.Verify("falsch"),  Is.False);
+                Assert.That(loaded[0].BareJid,                       Is.EqualTo("alice@localhost"));
+                Assert.That(loaded[0].Credentials.Verify("secret"),  Is.True,
+                            "After reading back in the login must still work.");
+                Assert.That(loaded[0].Credentials.Verify("wrong"),  Is.False);
             });
 
         }
@@ -129,40 +129,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ScramKeys_SurviveTheRoundTrip()
 
         /// <summary>
-        /// Auch die SCRAM-Schlüssel müssen unverändert zurückkommen - sonst
-        /// ginge zwar PLAIN weiter, aber jede SCRAM-Anmeldung schlüge nach
-        /// einem Neustart fehl.
+        /// The SCRAM keys too must come back unchanged - otherwise PLAIN would
+        /// carry on working, but every SCRAM login would fail after a restart.
         /// </summary>
         /// <remarks>
-        /// Der Fall wäre leicht zu übersehen: die Suite prüft Anmeldungen
-        /// überwiegend gegen frisch angelegte Konten, und das
-        /// Salt-Roundtripping allein genügt nicht, weil die Schlüssel
-        /// gespeichert und nicht neu abgeleitet werden.
+        /// The case would be easy to miss: the suite checks logins mostly
+        /// against freshly created accounts, and the salt round-tripping alone
+        /// is not enough, because the keys are stored and not derived afresh.
         /// </remarks>
         [Test]
         public void ScramKeys_SurviveTheRoundTrip()
         {
 
-            var original = new XMPPAccount("alice@localhost", "geheim");
+            var original = new XMPPAccount("alice@localhost", "secret");
 
-            new FileAccountStore(_datei).Save(original);
+            new FileAccountStore(_file).Save(original);
 
-            var gelesen = new FileAccountStore(_datei).Load().Single();
+            var loaded = new FileAccountStore(_file).Load().Single();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen.Credentials.Salt,            Is.EqualTo(original.Credentials.Salt));
-                Assert.That(gelesen.Credentials.IterationCount,  Is.EqualTo(original.Credentials.IterationCount));
+                Assert.That(loaded.Credentials.Salt,            Is.EqualTo(original.Credentials.Salt));
+                Assert.That(loaded.Credentials.IterationCount,  Is.EqualTo(original.Credentials.IterationCount));
 
-                foreach (var mechanismus in Enum.GetValues<SCRAMMechanism>())
+                foreach (var mechanism in Enum.GetValues<SCRAMMechanism>())
                 {
-                    Assert.That(gelesen.Credentials.KeysOf(mechanismus).StoredKey,
-                                Is.EqualTo(original.Credentials.KeysOf(mechanismus).StoredKey),
-                                $"StoredKey für {mechanismus}.");
-                    Assert.That(gelesen.Credentials.KeysOf(mechanismus).ServerKey,
-                                Is.EqualTo(original.Credentials.KeysOf(mechanismus).ServerKey),
-                                $"ServerKey für {mechanismus}.");
+                    Assert.That(loaded.Credentials.KeysOf(mechanism).StoredKey,
+                                Is.EqualTo(original.Credentials.KeysOf(mechanism).StoredKey),
+                                $"StoredKey for {mechanism}.");
+                    Assert.That(loaded.Credentials.KeysOf(mechanism).ServerKey,
+                                Is.EqualTo(original.Credentials.KeysOf(mechanism).ServerKey),
+                                $"ServerKey for {mechanism}.");
                 }
 
             });
@@ -174,37 +172,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Roster_SurvivesTheRoundTrip()
 
         /// <summary>
-        /// Der Roster gehört zum Konto und muss mit - samt
-        /// Subscription-Zustand und offener Anfrage.
+        /// The roster belongs to the account and has to come along - subscription
+        /// state and open request included.
         /// </summary>
         [Test]
         public void Roster_SurvivesTheRoundTrip()
         {
 
-            var account = new XMPPAccount("alice@localhost", "geheim");
+            var account = new XMPPAccount("alice@localhost", "secret");
 
             account.SetRosterEntry(new RosterEntry("bob@localhost",     "Bob",  "both"));
             account.SetRosterEntry(new RosterEntry("carol@localhost",   null,   "none", "subscribe"));
 
-            new FileAccountStore(_datei).Save(account);
+            new FileAccountStore(_file).Save(account);
 
-            var gelesen = new FileAccountStore(_datei).Load().Single();
+            var loaded = new FileAccountStore(_file).Load().Single();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen.Roster, Has.Count.EqualTo(2));
+                Assert.That(loaded.Roster, Has.Count.EqualTo(2));
 
-                var bob = gelesen.Roster.Single(e => e.Jid == "bob@localhost");
+                var bob = loaded.Roster.Single(e => e.Jid == "bob@localhost");
                 Assert.That(bob.Name,          Is.EqualTo("Bob"));
                 Assert.That(bob.Subscription,  Is.EqualTo("both"));
                 Assert.That(bob.Ask,           Is.Null);
 
-                var carol = gelesen.Roster.Single(e => e.Jid == "carol@localhost");
+                var carol = loaded.Roster.Single(e => e.Jid == "carol@localhost");
                 Assert.That(carol.Name,          Is.Null);
                 Assert.That(carol.Subscription,  Is.EqualTo("none"));
                 Assert.That(carol.Ask,           Is.EqualTo("subscribe"),
-                            "Eine offene Anfrage darf beim Neustart nicht verlorengehen.");
+                            "An open request must not be lost across a restart.");
 
             });
 
@@ -215,24 +213,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PendingRequestsAndPreApprovals_SurviveTheRoundTrip()
 
         /// <summary>
-        /// Aufbewahrte Anfragen (RFC 6121, Abschnitt 3.1.3) und Vormerkungen
-        /// (Abschnitt 3.4) gehören ebenso zum Konto.
+        /// Kept requests (RFC 6121, section 3.1.3) and pre-approvals
+        /// (section 3.4) belong to the account just as much.
         /// </summary>
         /// <remarks>
-        /// Der Abschnitt verlangt, eine Anfrage zuzustellen, sobald der Kontakt
-        /// sich das nächste Mal anmeldet - ohne dass ein Serverneustart
-        /// dazwischen etwas ändern dürfte. Ginge sie dabei verloren, hiesse
-        /// "aufbewahrt" nur "bis zum nächsten Neustart", und der Antragsteller
-        /// wartete weiter auf eine Antwort, die niemand mehr geben kann.
+        /// The section demands that a request be delivered as soon as the
+        /// contact logs in the next time - without a server restart in between
+        /// being allowed to change anything. Were it lost in the process,
+        /// "kept" would mean only "until the next restart", and the applicant
+        /// would go on waiting for an answer nobody can give any more.
         ///
-        /// Aufbewahrt wird die vollständige Stanza, nicht nur der Absender -
-        /// deshalb wird hier eine mit erweitertem Inhalt geschrieben.
+        /// What is kept is the complete stanza, not just the sender - which is
+        /// why one with extended content is written here.
         /// </remarks>
         [Test]
         public void PendingRequestsAndPreApprovals_SurviveTheRoundTrip()
         {
 
-            var account = new XMPPAccount("alice@localhost", "geheim");
+            var account = new XMPPAccount("alice@localhost", "secret");
 
             account.SetRosterEntry(new RosterEntry("dave@localhost", null, "none",
                                                    Approved: true));
@@ -240,25 +238,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             account.RememberSubscriptionRequest(
                 "carol@localhost",
                 "<presence from='carol@localhost' to='alice@localhost' type='subscribe'>" +
-                "<status>Wir kennen uns vom Bahnsteig</status></presence>");
+                "<status>We know each other from the platform</status></presence>");
 
-            new FileAccountStore(_datei).Save(account);
+            new FileAccountStore(_file).Save(account);
 
-            var gelesen = new FileAccountStore(_datei).Load().Single();
+            var loaded = new FileAccountStore(_file).Load().Single();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen.Roster.Single(e => e.Jid == "dave@localhost").Approved,
+                Assert.That(loaded.Roster.Single(e => e.Jid == "dave@localhost").Approved,
                             Is.True,
-                            "Eine Vormerkung darf beim Neustart nicht verlorengehen.");
+                            "A pre-approval must not be lost across a restart.");
 
-                Assert.That(gelesen.PendingSubscriptionRequests.Keys,
+                Assert.That(loaded.PendingSubscriptionRequests.Keys,
                             Is.EquivalentTo(new[] { "carol@localhost" }));
 
-                Assert.That(gelesen.PendingSubscriptionRequests["carol@localhost"],
-                            Does.Contain("Wir kennen uns vom Bahnsteig"),
-                            "Aufbewahrt wird die vollständige Stanza samt erweitertem Inhalt.");
+                Assert.That(loaded.PendingSubscriptionRequests["carol@localhost"],
+                            Does.Contain("We know each other from the platform"),
+                            "What is kept is the complete stanza, extended content and all.");
 
             });
 
@@ -269,47 +267,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOfflineStore_SurvivesTheRoundTrip()
 
         /// <summary>
-        /// Die Offline-Ablage (RFC 6121, Abschnitt 8.5.2.2.1) gehört ebenso zum
-        /// Konto - samt Reihenfolge und Eingangszeitpunkt.
+        /// The offline store (RFC 6121, section 8.5.2.2.1) belongs to the
+        /// account just as much - order and time of arrival included.
         /// </summary>
         /// <remarks>
-        /// Ein Absender, dessen Nachricht der Server angenommen hat, statt sie
-        /// mit <c>&lt;service-unavailable/&gt;</c> abzuweisen, darf sich darauf
-        /// verlassen, dass sie ankommt. Ginge sie beim Neustart verloren, wäre
-        /// die Annahme ein leeres Versprechen - und niemand könnte den Verlust
-        /// bemerken, denn der Absender hat seine Bestätigung schon.
+        /// A sender whose message the server accepted, instead of refusing it
+        /// with <c>&lt;service-unavailable/&gt;</c>, may rely on it arriving.
+        /// Were it lost across a restart, the acceptance would be an empty
+        /// promise - and nobody could notice the loss, because the sender
+        /// already has their acknowledgement.
         ///
-        /// Der Zeitpunkt gehört dazu: Ohne ihn trüge die nachgereichte
-        /// Nachricht nach einem Neustart einen falschen oder keinen
-        /// XEP-0203-Stempel und behauptete damit, sie sei von jetzt.
+        /// The time belongs to it: without it the message handed on after a
+        /// restart would carry a wrong XEP-0203 stamp or none at all, and would
+        /// thereby claim to be from now.
         /// </remarks>
         [Test]
         public void TheOfflineStore_SurvivesTheRoundTrip()
         {
 
-            var account    = new XMPPAccount("alice@localhost", "geheim");
-            var zeitpunkt  = new DateTimeOffset(2026, 7, 29, 14, 5, 9, TimeSpan.Zero);
+            var account    = new XMPPAccount("alice@localhost", "secret");
+            var arrivedAt  = new DateTimeOffset(2026, 7, 29, 14, 5, 9, TimeSpan.Zero);
 
             account.StoreOfflineMessage("<message from='bob@localhost' to='alice@localhost' type='chat'>" +
-                                        "<body>Erste</body></message>",
-                                        zeitpunkt);
+                                        "<body>First</body></message>",
+                                        arrivedAt);
 
             account.StoreOfflineMessage("<message from='bob@localhost' to='alice@localhost' type='chat'>" +
-                                        "<body>Zweite</body></message>",
-                                        zeitpunkt.AddMinutes(3));
+                                        "<body>Second</body></message>",
+                                        arrivedAt.AddMinutes(3));
 
-            new FileAccountStore(_datei).Save(account);
+            new FileAccountStore(_file).Save(account);
 
-            var gelesen = new FileAccountStore(_datei).Load().Single().OfflineMessages;
+            var loaded = new FileAccountStore(_file).Load().Single().OfflineMessages;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen,                Has.Count.EqualTo(2));
-                Assert.That(gelesen[0].Stanza,      Does.Contain("Erste"));
-                Assert.That(gelesen[1].Stanza,      Does.Contain("Zweite"),
-                            "Die Reihenfolge des Eingangs übersteht den Neustart.");
-                Assert.That(gelesen[0].StoredAt,    Is.EqualTo(zeitpunkt));
+                Assert.That(loaded,                Has.Count.EqualTo(2));
+                Assert.That(loaded[0].Stanza,      Does.Contain("First"));
+                Assert.That(loaded[1].Stanza,      Does.Contain("Second"),
+                            "The order of arrival survives the restart.");
+                Assert.That(loaded[0].StoredAt,    Is.EqualTo(arrivedAt));
 
             });
 
@@ -320,27 +318,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SavingTwice_DoesNotDuplicate()
 
         /// <summary>
-        /// Zweimal dasselbe Konto speichern ergibt einen Eintrag, keinen
-        /// zweiten - <c>Save</c> heisst anlegen <b>oder</b> fortschreiben.
+        /// Saving the same account twice makes one entry, not a second -
+        /// <c>Save</c> means create <b>or</b> carry forward.
         /// </summary>
         [Test]
         public void SavingTwice_DoesNotDuplicate()
         {
 
-            var store    = new FileAccountStore(_datei);
-            var account  = new XMPPAccount("alice@localhost", "geheim");
+            var store    = new FileAccountStore(_file);
+            var account  = new XMPPAccount("alice@localhost", "secret");
 
             store.Save(account);
 
             account.SetRosterEntry(new RosterEntry("bob@localhost"));
             store.Save(account);
 
-            var gelesen = store.Load().ToList();
+            var loaded = store.Load().ToList();
 
             Assert.Multiple(() =>
             {
-                Assert.That(gelesen,             Has.Count.EqualTo(1));
-                Assert.That(gelesen[0].Roster,   Has.Count.EqualTo(1));
+                Assert.That(loaded,             Has.Count.EqualTo(1));
+                Assert.That(loaded[0].Roster,   Has.Count.EqualTo(1));
             });
 
         }
@@ -350,20 +348,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DeletedAccount_IsGone()
 
         /// <summary>
-        /// Löschen entfernt genau ein Konto, und ein unbekannter JID ist kein
-        /// Fehler.
+        /// Deleting removes exactly one account, and an unknown JID is not an
+        /// error.
         /// </summary>
         [Test]
         public void DeletedAccount_IsGone()
         {
 
-            var store = new FileAccountStore(_datei);
+            var store = new FileAccountStore(_file);
 
-            store.Save(new XMPPAccount("alice@localhost", "geheim"));
-            store.Save(new XMPPAccount("bob@localhost",   "geheim"));
+            store.Save(new XMPPAccount("alice@localhost", "secret"));
+            store.Save(new XMPPAccount("bob@localhost",   "secret"));
 
             store.Delete("alice@localhost");
-            store.Delete("gibtesnicht@localhost");
+            store.Delete("doesnotexist@localhost");
 
             Assert.That(store.Load().Select(a => a.BareJid),
                         Is.EqualTo(new[] { "bob@localhost" }));
@@ -375,25 +373,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFile_ContainsNoPassword()
 
         /// <summary>
-        /// Die Zusage, an der alles hängt: in der Datei steht das Passwort
-        /// nicht - weder im Klartext noch als Base64.
+        /// The promise everything hangs on: the password is not in the file -
+        /// neither in the clear nor as base64.
         /// </summary>
         [Test]
         public void TheFile_ContainsNoPassword()
         {
 
-            const String passwort = "Zwiebelfisch-Quastenflosser-42";
+            const String password = "Pilcrow-Coelacanth-42";
 
-            new FileAccountStore(_datei).Save(new XMPPAccount("alice@localhost", passwort));
+            new FileAccountStore(_file).Save(new XMPPAccount("alice@localhost", password));
 
-            var inhalt = File.ReadAllText(_datei);
+            var content = File.ReadAllText(_file);
 
-            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(passwort));
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password));
 
             Assert.Multiple(() =>
             {
-                Assert.That(inhalt, Does.Not.Contain(passwort), "Passwort im Klartext in der Datei.");
-                Assert.That(inhalt, Does.Not.Contain(base64),   "Passwort als Base64 in der Datei.");
+                Assert.That(content, Does.Not.Contain(password), "Password in the clear in the file.");
+                Assert.That(content, Does.Not.Contain(base64),   "Password as base64 in the file.");
             });
 
         }
@@ -403,28 +401,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Server_LoadsExistingAccountsOnStart()
 
         /// <summary>
-        /// Und der Server benutzt das auch: ein Konto aus einer früheren
-        /// Instanz ist nach dem Neustart wieder da.
+        /// And the server makes use of it: an account from an earlier instance
+        /// is there again after the restart.
         /// </summary>
         [Test]
         public async Task Server_LoadsExistingAccountsOnStart()
         {
 
-            await using (var erster = _guard.Watched(new XMPPServer(accountStore: new FileAccountStore(_datei),
+            await using (var first = _guard.Watched(new XMPPServer(accountStore: new FileAccountStore(_file),
                                                             useTLS:       false)))
             {
-                erster.AddAccount("alice", "geheim");
+                first.AddAccount("alice", "secret");
             }
 
-            await using var zweiter = _guard.Watched(new XMPPServer(accountStore: new FileAccountStore(_datei),
+            await using var second = _guard.Watched(new XMPPServer(accountStore: new FileAccountStore(_file),
                                                             useTLS:       false));
 
-            var account = zweiter.GetAccount("alice@localhost");
+            var account = second.GetAccount("alice@localhost");
 
             Assert.Multiple(() =>
             {
                 Assert.That(account,                               Is.Not.Null);
-                Assert.That(account!.Credentials.Verify("geheim"), Is.True);
+                Assert.That(account!.Credentials.Verify("secret"), Is.True);
             });
 
         }
@@ -434,28 +432,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Server_PersistsRosterChanges()
 
         /// <summary>
-        /// Roster-Änderungen am laufenden Server landen im Speicher, ohne dass
-        /// jemand sie ausdrücklich sichern müsste.
+        /// Roster changes on the running server land in the store, without
+        /// anyone having to save them expressly.
         /// </summary>
         /// <remarks>
-        /// Das ist die eigentliche Fehlerquelle bei so einer Umstellung: das
-        /// Anlegen eines Kontos vergisst niemand zu speichern, eine
-        /// Roster-Änderung mitten im Subscription-Handshake schon.
+        /// That is the real source of error in a change like this one: nobody
+        /// forgets to save the creation of an account, but a roster change in
+        /// the middle of the subscription handshake is another matter.
         /// </remarks>
         [Test]
         public async Task Server_PersistsRosterChanges()
         {
 
-            await using var server = _guard.Watched(new XMPPServer(accountStore: new FileAccountStore(_datei),
+            await using var server = _guard.Watched(new XMPPServer(accountStore: new FileAccountStore(_file),
                                                            useTLS:       false));
 
-            var account = server.AddAccount("alice", "geheim");
+            var account = server.AddAccount("alice", "secret");
 
             account.SetRosterEntry(new RosterEntry("bob@localhost", "Bob", "both"));
 
-            var gelesen = new FileAccountStore(_datei).Load().Single();
+            var loaded = new FileAccountStore(_file).Load().Single();
 
-            Assert.That(gelesen.Roster.Select(e => e.Jid),
+            Assert.That(loaded.Roster.Select(e => e.Jid),
                         Is.EqualTo(new[] { "bob@localhost" }));
 
         }
@@ -465,23 +463,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region InMemoryStore_IsTheDefault()
 
         /// <summary>
-        /// Ohne Angabe bleibt alles wie bisher: im Speicher, und beim Beenden
-        /// weg.
+        /// Without a store given, everything stays as it was: in memory, and
+        /// gone when it ends.
         /// </summary>
         [Test]
         public async Task InMemoryStore_IsTheDefault()
         {
 
-            await using var erster = _guard.Watched(new XMPPServer(useTLS: false));
-            erster.AddAccount("alice", "geheim");
+            await using var first = _guard.Watched(new XMPPServer(useTLS: false));
+            first.AddAccount("alice", "secret");
 
-            await using var zweiter = _guard.Watched(new XMPPServer(useTLS: false));
+            await using var second = _guard.Watched(new XMPPServer(useTLS: false));
 
             Assert.Multiple(() =>
             {
-                Assert.That(erster.GetAccount("alice@localhost"),  Is.Not.Null);
-                Assert.That(zweiter.GetAccount("alice@localhost"), Is.Null,
-                            "Ein zweiter Server darf die Konten des ersten nicht sehen.");
+                Assert.That(first.GetAccount("alice@localhost"),  Is.Not.Null);
+                Assert.That(second.GetAccount("alice@localhost"), Is.Null,
+                            "A second server must not see the accounts of the first.");
             });
 
         }
