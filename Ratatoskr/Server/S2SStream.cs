@@ -25,31 +25,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
 
     /// <summary>
-    /// Ein Server-zu-Server-Stream - die Protokollschicht zwischen zwei
-    /// Servern, ohne Transport darunter.
+    /// A server-to-server stream - the protocol layer between two servers,
+    /// without a transport underneath.
     /// </summary>
     /// <remarks>
-    /// Diese Klasse kennt weder Sockets noch WebSocket-Rahmen: sie bekommt
-    /// eingehende Rahmen als Zeichenketten gereicht und schickt ausgehende über
-    /// eine Funktion hinaus. Genau deshalb steht sie zuerst - TCP und WebSocket
-    /// sind darunter nur zwei Rahmungen derselben Schicht, und was sie
-    /// gemeinsam haben (Handshake, Absenderprüfung, Stream-Fehler,
-    /// Lebenszyklus) soll nicht zweimal entstehen.
+    /// This class knows neither sockets nor WebSocket frames: it gets incoming
+    /// frames handed to it as strings and sends outgoing ones out through a
+    /// function. That is precisely why it comes first - TCP and WebSocket are
+    /// only two framings of the same layer beneath it, and what they have in
+    /// common (handshake, sender check, stream errors, life cycle) shall not
+    /// come into being twice.
     ///
-    /// <b>Der Stream ist gerichtet</b>, wie RFC 6120, Abschnitt 4.1 es
-    /// beschreibt: über ihn fliessen Stanzas nur vom Initiator zum Empfänger.
-    /// Wer antworten will, baut seinen eigenen Stream in die Gegenrichtung
-    /// auf. Das ist der Grund, warum ein Stream ohne
-    /// <c>deliverStanza</c>-Funktion eingehende Stanzas nicht etwa zustellt,
-    /// sondern über <see cref="OnStanzaRefused"/> meldet und verwirft. Beides
-    /// über eine Verbindung zu führen wäre XEP-0288 (Bidirectional Server-to-
-    /// Server Connections) und müsste ausgehandelt werden.
+    /// <b>The stream is directed</b>, as RFC 6120, section 4.1 describes it:
+    /// over it stanzas flow only from the initiator to the receiver. Whoever
+    /// wants to answer establishes their own stream in the opposite direction.
+    /// That is the reason why a stream without a <c>deliverStanza</c> function
+    /// does not deliver incoming stanzas but reports them through
+    /// <see cref="OnStanzaRefused"/> and discards them. Conducting both over
+    /// one connection would be XEP-0288 (Bidirectional Server-to-Server
+    /// Connections) and would have to be negotiated.
     ///
-    /// <b>Was diese Schicht nicht leistet:</b> sie <i>glaubt</i> der
-    /// Gegenstelle ihre Domain. Das <c>from</c> im <c>&lt;open/&gt;</c> ist
-    /// eine Behauptung; belegt wird sie erst durch Dialback (XEP-0220) oder
-    /// SASL-EXTERNAL. Bis dahin ist ein echter Transport hier genau so viel
-    /// wert wie <see cref="DirectServerLinks"/> - nur eben über ein Netz.
+    /// <b>What this layer does not achieve:</b> it <i>believes</i> the peer its
+    /// domain. The <c>from</c> in the <c>&lt;open/&gt;</c> is a claim; it is
+    /// only proven by dialback (XEP-0220) or SASL-EXTERNAL. Until then a real
+    /// transport is worth exactly as much here as
+    /// <see cref="DirectServerLinks"/> - only over a network.
     /// </remarks>
     public sealed class S2SStream
     {
@@ -61,73 +61,72 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private readonly Lock                                             dataLock  = new();
 
         /// <summary>
-        /// Das Dialback-Geheimnis dieses Servers, oder null. Gebraucht in zwei
-        /// Rollen: der aufbauende Server erzeugt damit seinen Schlüssel, der
-        /// autoritative rechnet ihn damit nach.
+        /// The dialback secret of this server, or null. Needed in two roles:
+        /// the establishing server produces its key with it, the authoritative
+        /// one recomputes it with it.
         /// </summary>
         private readonly String? secret;
 
-        /// <summary>Wie dieser Stream eingepackt ist.</summary>
+        /// <summary>How this stream is wrapped.</summary>
         private readonly IS2SFraming framing;
 
         /// <summary>
-        /// Prüft, ob das im TLS-Handshake vorgelegte Zertifikat der
-        /// Gegenstelle für die genannte Domain sprechen darf. Null, wenn
-        /// SASL-EXTERNAL für diesen Stream nicht in Frage kommt - etwa weil
-        /// es gar kein Zertifikat gibt.
+        /// Checks whether the certificate the peer presented in the TLS
+        /// handshake may speak for the domain named. Null when SASL-EXTERNAL is
+        /// out of the question for this stream - because there is no
+        /// certificate at all, for instance.
         /// </summary>
         private readonly Func<String, Boolean>? externalIdentity;
 
         /// <summary>
-        /// Darf dieser Stream sich per SASL-EXTERNAL ausweisen? Nur wenn ein
-        /// eigenes Zertifikat vorgelegt wurde.
+        /// May this stream identify itself through SASL-EXTERNAL? Only when a
+        /// certificate of our own was presented.
         /// </summary>
         private readonly Boolean canOfferExternal;
 
         /// <summary>
-        /// Soll XEP-0288 versucht (Initiator) beziehungsweise angeboten
-        /// (Empfänger) werden?
+        /// Shall XEP-0288 be attempted (initiator) resp. offered (receiver)?
         /// </summary>
         private readonly Boolean bidi;
 
         /// <summary>
-        /// Lässt einen vorgelegten Dialback-Schlüssel beim autoritativen Server
-        /// der Absenderdomain prüfen - Parameter sind Absenderdomain,
-        /// Stream-ID und Schlüssel.
+        /// Has a dialback key that was presented checked at the authoritative
+        /// server of the sender domain - the parameters are the sender domain,
+        /// the stream ID and the key.
         /// </summary>
         /// <remarks>
-        /// Steht hier als Funktion und nicht als Implementierung, weil die
-        /// Prüfung eine <b>zweite Verbindung</b> braucht und diese Schicht
-        /// keine aufbauen kann. Genau an dieser Stelle entscheidet sich, ob
-        /// Dialback etwas wert ist: die Adresse, an die gefragt wird, darf
-        /// nicht von dem stammen, der gerade geprüft werden soll.
+        /// Stands here as a function and not as an implementation, because the
+        /// check needs a <b>second connection</b> and this layer cannot
+        /// establish one. It is at exactly this point that it is decided
+        /// whether dialback is worth anything: the address that is asked must
+        /// not come from whoever is currently to be checked.
         /// </remarks>
         private readonly Func<String, String, String, Task<Boolean>>? verifyKey;
 
         /// <summary>
-        /// Wird erfüllt, sobald Dialback durch ist - und abgebrochen, wenn der
-        /// Stream vorher endet.
+        /// Is fulfilled as soon as dialback is through - and cancelled when the
+        /// stream ends beforehand.
         /// </summary>
         private readonly TaskCompletionSource dialbackDone =
             new (TaskCreationOptions.RunContinuationsAsynchronously);
 
         /// <summary>
-        /// Wird erfüllt, sobald der Stream offen <b>und</b> ausgewiesen ist.
+        /// Is fulfilled as soon as the stream is open <b>and</b> identified.
         /// </summary>
         /// <remarks>
-        /// Beides einzeln abzuwarten reicht nicht. Nach erfolgreichem SASL
-        /// fängt der Stream von vorn an (RFC 6120, Abschnitt 6.4.6): einen
-        /// Augenblick lang ist er ausgewiesen und trotzdem nicht offen. Wer
-        /// dann sendet, verliert die Stanza - und zwar lautlos, weil der
-        /// Stream weder geschlossen noch fehlerhaft ist.
+        /// Waiting for both separately does not suffice. After a successful
+        /// SASL the stream starts over (RFC 6120, section 6.4.6): for a moment
+        /// it is identified and nevertheless not open. Whoever sends then loses
+        /// the stanza - and silently at that, because the stream is neither
+        /// closed nor faulty.
         /// </remarks>
         private readonly TaskCompletionSource ready =
             new (TaskCreationOptions.RunContinuationsAsynchronously);
 
         /// <summary>
-        /// Wird erfüllt, sobald der Handshake steht - und abgebrochen, wenn der
-        /// Stream vorher endet, damit niemand auf ein <c>&lt;open/&gt;</c>
-        /// wartet, das nicht mehr kommen kann.
+        /// Is fulfilled as soon as the handshake stands - and cancelled when
+        /// the stream ends beforehand, so that nobody waits for an
+        /// <c>&lt;open/&gt;</c> that cannot come any more.
         /// </summary>
         private readonly TaskCompletionSource openHandshake =
             new (TaskCreationOptions.RunContinuationsAsynchronously);
@@ -136,88 +135,87 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>Der Namensraum der WebSocket-Rahmung (RFC 7395, Abschnitt 3.1).</summary>
+        /// <summary>The namespace of the WebSocket framing (RFC 7395, section 3.1).</summary>
         public const String FramingNamespace = WebSocketFraming.Namespace;
 
-        /// <summary>Der Namensraum der Stream-Ebene (RFC 6120, Abschnitt 4.8.2).</summary>
+        /// <summary>The namespace of the stream layer (RFC 6120, section 4.8.2).</summary>
         public const String StreamNamespace = "http://etherx.jabber.org/streams";
 
-        /// <summary>Der Namensraum der Stream-Fehlerbedingungen (RFC 6120, Abschnitt 4.9.2).</summary>
+        /// <summary>The namespace of the stream error conditions (RFC 6120, section 4.9.2).</summary>
         public const String StreamErrorNamespace = "urn:ietf:params:xml:ns:xmpp-streams";
 
-        /// <summary>XEP-0288: der Namensraum des <c>&lt;bidi/&gt;</c>-Elements.</summary>
+        /// <summary>XEP-0288: the namespace of the <c>&lt;bidi/&gt;</c> element.</summary>
         public const String BidiNamespace = "urn:xmpp:bidi";
 
-        /// <summary>XEP-0288: der Namensraum der Ankündigung in den Features.</summary>
+        /// <summary>XEP-0288: the namespace of the announcement in the features.</summary>
         public const String BidiFeatureNamespace = "urn:xmpp:features:bidi";
 
         /// <summary>
-        /// XEP-0288: trägt dieser Stream beide Richtungen?
+        /// XEP-0288: does this stream carry both directions?
         /// </summary>
         /// <remarks>
-        /// Ohne die Erweiterung ist eine S2S-Verbindung einseitig (RFC 6120,
-        /// Abschnitt 4.1): wer eine Stanza bekommt, beantwortet sie über eine
-        /// <b>eigene</b> Verbindung zur Absenderdomain. Das setzt voraus, dass
-        /// er die Gegenstelle erreichen kann - hinter NAT, hinter einer
-        /// Firewall oder ohne DNS-Eintrag kann er das nicht, und die Antwort
-        /// geht verloren. Genau daran scheiterte der Rückweg im Lauf gegen
-        /// Prosody.
+        /// Without the extension an S2S connection is one-sided (RFC 6120,
+        /// section 4.1): whoever gets a stanza answers it over a connection of
+        /// their <b>own</b> to the sender domain. That presupposes that they
+        /// can reach the peer - behind NAT, behind a firewall or without a DNS
+        /// entry they cannot, and the answer is lost. That is exactly what the
+        /// return path failed on in the run against Prosody.
         ///
-        /// Ist Bidi ausgehandelt, trägt dieselbe Verbindung beide Richtungen.
+        /// If bidi is negotiated, the same connection carries both directions.
         /// </remarks>
         public Boolean BidiEnabled { get; private set; }
 
-        /// <summary>Die eigene Domain.</summary>
+        /// <summary>Our own domain.</summary>
         public String LocalDomain { get; }
 
         /// <summary>
-        /// Die Domain der Gegenstelle. Beim Initiator von Anfang an bekannt,
-        /// beim Empfänger erst nach ihrem <c>&lt;open/&gt;</c> - und dann als
-        /// Behauptung, nicht als Beleg.
+        /// The domain of the peer. Known from the start at the initiator, at
+        /// the receiver only after their <c>&lt;open/&gt;</c> - and then as a
+        /// claim, not as proof.
         /// </summary>
         public String? RemoteDomain { get; private set; }
 
-        /// <summary>Hat dieser Server den Stream aufgebaut?</summary>
+        /// <summary>Did this server establish the stream?</summary>
         public Boolean IsInitiator { get; }
 
         /// <summary>
-        /// Die Kennung des Streams. Der Empfänger vergibt sie, der Initiator
-        /// liest sie aus dem <c>&lt;open/&gt;</c> der Gegenseite (RFC 7395,
-        /// Abschnitt 3.4). Dialback hängt daran.
+        /// The identifier of the stream. The receiver hands it out, the
+        /// initiator reads it from the <c>&lt;open/&gt;</c> of the other side
+        /// (RFC 7395, section 3.4). Dialback hangs on it.
         /// </summary>
         public String? StreamId { get; private set; }
 
-        /// <summary>Steht der Handshake?</summary>
+        /// <summary>Does the handshake stand?</summary>
         public Boolean IsOpen { get; private set; }
 
-        /// <summary>Ist der Stream beendet?</summary>
+        /// <summary>Has the stream ended?</summary>
         public Boolean IsClosed { get; private set; }
 
         /// <summary>
-        /// Verlangt dieser Stream Dialback, bevor Stanzas fliessen dürfen?
+        /// Does this stream demand dialback before stanzas may flow?
         /// </summary>
         /// <remarks>
-        /// XEP-0220, Abschnitt 1: der annehmende Server "does not process XMPP
+        /// XEP-0220, section 1: the accepting server "does not process XMPP
         /// stanzas over the connection until it has verified the initiating
-        /// server's identity". Ohne Dialback bleibt es beim Stand von S4b-2:
-        /// die Domain der Gegenstelle ist behauptet, nicht belegt. Ein
-        /// Transport, der das ohne Ersatz abschaltet, macht genau das Loch
-        /// auf, gegen das die Absenderprüfung existiert - zulässig ist es nur
-        /// dort, wo die Identität anders feststeht (SASL-EXTERNAL) oder wo
-        /// gar kein Netz dazwischen liegt.
+        /// server's identity". Without dialback it stays at the state of S4b-2:
+        /// the domain of the peer is claimed, not proven. A transport that
+        /// switches this off without a substitute opens exactly the hole the
+        /// sender check exists against - it is permissible only where the
+        /// identity is settled otherwise (SASL-EXTERNAL) or where there is no
+        /// network in between at all.
         /// </remarks>
         public Boolean RequiresDialback { get; }
 
         /// <summary>
-        /// Ist die Domain der Gegenstelle belegt? Bei einem Stream ohne
-        /// Dialback bleibt das dauerhaft false - dann ist
-        /// <see cref="RequiresDialback"/> ebenfalls false und niemand fragt.
+        /// Is the domain of the peer proven? With a stream without dialback
+        /// this stays false permanently - then
+        /// <see cref="RequiresDialback"/> is false too and nobody asks.
         /// </summary>
         public Boolean IsAuthenticated { get; private set; }
 
         /// <summary>
-        /// Womit die Domain der Gegenstelle belegt wurde, oder null solange
-        /// sie es nicht ist.
+        /// What the domain of the peer was proven with, or null as long as it
+        /// is not.
         /// </summary>
         public String? AuthenticatedBy { get; private set; }
 
@@ -226,23 +224,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Events
 
         /// <summary>
-        /// Eine eingehende Stanza wurde nicht zugestellt - mit dem Grund.
+        /// An incoming stanza was not delivered - with the reason.
         /// </summary>
         public event Action<String>? OnStanzaRefused;
 
         /// <summary>
-        /// Der Stream ist beendet, mit dem Grund oder null bei einem
-        /// ordentlichen <c>&lt;close/&gt;</c>.
+        /// The stream has ended, with the reason or null on a proper
+        /// <c>&lt;close/&gt;</c>.
         /// </summary>
         public event Action<String?>? OnClosed;
 
         /// <summary>
-        /// Der Stream fängt von vorn an (RFC 6120, Abschnitt 6.4.6).
+        /// The stream starts over (RFC 6120, section 6.4.6).
         /// </summary>
         /// <remarks>
-        /// Der Transport muss darauf reagieren: was den Strom in Elemente
-        /// zerlegt, hat den bisherigen Stream-Kopf gesehen und würde den
-        /// neuen sonst für ein Kindelement halten.
+        /// The transport has to react to it: whatever takes the stream apart
+        /// into elements has seen the stream header so far and would otherwise
+        /// take the new one for a child element.
         /// </remarks>
         public event Action? OnRestart;
 
@@ -285,24 +283,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (static) Initiate(localDomain, remoteDomain, sendFrame, secret)
 
         /// <summary>
-        /// Der ausgehende Stream: er trägt Stanzas hinaus und nimmt keine
-        /// entgegen.
+        /// The outgoing stream: it carries stanzas out and takes none in.
         /// </summary>
-        /// <param name="localDomain">Die eigene Domain.</param>
-        /// <param name="remoteDomain">Die Domain, zu der aufgebaut wird.</param>
-        /// <param name="sendFrame">Schickt einen Rahmen über den Transport.</param>
+        /// <param name="localDomain">Our own domain.</param>
+        /// <param name="remoteDomain">The domain that is being established to.</param>
+        /// <param name="sendFrame">Sends a frame over the transport.</param>
         /// <param name="secret">
-        /// Das eigene Dialback-Geheimnis. Ist es gesetzt, weist sich dieser
-        /// Stream nach dem Handshake von sich aus mit
-        /// <c>&lt;db:result/&gt;</c> aus und trägt erst danach Stanzas.
+        /// Our own dialback secret. If it is set, this stream identifies itself
+        /// of its own accord after the handshake with
+        /// <c>&lt;db:result/&gt;</c> and only carries stanzas afterwards.
         /// </param>
         /// <param name="deliverStanza">
-        /// Nur für XEP-0288: wohin eingehende Stanzas gehen, sobald Bidi
-        /// ausgehandelt ist. Ohne Bidi nimmt ein ausgehender Stream keine
-        /// entgegen, und diese Funktion wird nie gerufen.
+        /// Only for XEP-0288: where incoming stanzas go as soon as bidi is
+        /// negotiated. Without bidi an outgoing stream takes none in, and this
+        /// function is never called.
         /// </param>
         /// <param name="useBidi">
-        /// XEP-0288 versuchen, wenn die Gegenstelle es ankündigt.
+        /// Attempt XEP-0288 when the peer announces it.
         /// </param>
         public static S2SStream Initiate(String                                           localDomain,
                                          String                                           remoteDomain,
@@ -331,28 +328,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (static) Accept(localDomain, sendFrame, deliverStanza, secret, verifyKey)
 
         /// <summary>
-        /// Der eingehende Stream: er nimmt Stanzas entgegen und schickt selbst
-        /// nur Stream-Ebene.
+        /// The incoming stream: it takes stanzas in and itself sends only the
+        /// stream layer.
         /// </summary>
-        /// <param name="localDomain">Die eigene Domain.</param>
-        /// <param name="sendFrame">Schickt einen Rahmen über den Transport.</param>
+        /// <param name="localDomain">Our own domain.</param>
+        /// <param name="sendFrame">Sends a frame over the transport.</param>
         /// <param name="deliverStanza">
-        /// Übergibt eine eingehende Stanza samt der Domain, für die die
-        /// Gegenstelle sprechen darf, an das Routing.
+        /// Hands an incoming stanza, together with the domain the peer may
+        /// speak for, to the routing.
         /// </param>
         /// <param name="secret">
-        /// Das eigene Dialback-Geheimnis - gebraucht in der Rolle des
-        /// autoritativen Servers, um einen fremden
-        /// <c>&lt;db:verify/&gt;</c> nachzurechnen.
+        /// Our own dialback secret - needed in the role of the authoritative
+        /// server, to recompute a foreign <c>&lt;db:verify/&gt;</c>.
         /// </param>
         /// <param name="verifyKey">
-        /// Lässt einen vorgelegten Schlüssel beim autoritativen Server der
-        /// Absenderdomain prüfen. Ist sie gesetzt, verlangt dieser Stream
-        /// Dialback, bevor er Stanzas annimmt.
+        /// Has a key that was presented checked at the authoritative server of
+        /// the sender domain. If it is set, this stream demands dialback before
+        /// it accepts stanzas.
         /// </param>
         /// <param name="offerBidi">
-        /// XEP-0288 in den Features ankündigen und ein
-        /// <c>&lt;bidi/&gt;</c> der Gegenstelle annehmen.
+        /// Announce XEP-0288 in the features and accept a
+        /// <c>&lt;bidi/&gt;</c> of the peer.
         /// </param>
         public static S2SStream Accept(String                                          localDomain,
                                        Func<String, CancellationToken, Task>           sendFrame,
@@ -381,15 +377,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (static) InitiateVerification(localDomain, remoteDomain, sendFrame)
 
         /// <summary>
-        /// Der kurzlebige Stream, über den ein annehmender Server einen
-        /// Dialback-Schlüssel beim autoritativen Server nachfragt
-        /// (XEP-0220, Schritt 2 und 3).
+        /// The short-lived stream over which an accepting server queries a
+        /// dialback key at the authoritative server (XEP-0220, steps 2 and 3).
         /// </summary>
         /// <remarks>
-        /// Eigene Rolle und nicht bloss ein <see cref="Initiate"/> ohne
-        /// Geheimnis: über ihn geht nie eine Stanza, er weist sich nicht aus
-        /// und er gehört in keinen Verbindungs-Cache. Er wird aufgebaut,
-        /// stellt eine Frage, bekommt eine Antwort und ist wieder weg.
+        /// A role of its own and not merely an <see cref="Initiate"/> without a
+        /// secret: no stanza ever goes over it, it does not identify itself and
+        /// it belongs in no connection cache. It is established, asks a
+        /// question, gets an answer and is gone again.
         /// </remarks>
         public static S2SStream InitiateVerification(String                                localDomain,
                                                      String                                remoteDomain,
@@ -415,14 +410,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region OpenAsync(CancellationToken)
 
         /// <summary>
-        /// Schickt den Stream-Kopf. Nur der Initiator fängt an.
+        /// Sends the stream header. Only the initiator begins.
         /// </summary>
         public Task OpenAsync(CancellationToken cancellationToken = default)
         {
 
             if (!IsInitiator)
                 throw new InvalidOperationException(
-                          "Nur der Initiator öffnet den Stream; der Empfänger antwortet auf das <open/>.");
+                          "Only the initiator opens the stream; the receiver answers the <open/>.");
 
             return sendFrame(framing.StreamOpen(LocalDomain, RemoteDomain, null),
                              cancellationToken);
@@ -434,9 +429,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region WaitUntilOpenAsync(Timeout, CancellationToken)
 
         /// <summary>
-        /// Wartet auf das <c>&lt;open/&gt;</c> der Gegenstelle.
+        /// Waits for the <c>&lt;open/&gt;</c> of the peer.
         /// </summary>
-        /// <returns>false bei Zeitüberschreitung oder wenn der Stream vorher endete.</returns>
+        /// <returns>false on a timeout or when the stream ended beforehand.</returns>
         public async Task<Boolean> WaitUntilOpenAsync(TimeSpan           Timeout,
                                                       CancellationToken  cancellationToken = default)
         {
@@ -458,8 +453,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region WaitUntilReadyAsync(Timeout, CancellationToken)
 
         /// <summary>
-        /// Wartet, bis über den Stream tatsächlich gesendet werden darf -
-        /// offen und, falls verlangt, ausgewiesen.
+        /// Waits until sending over the stream is actually permitted - open
+        /// and, if demanded, identified.
         /// </summary>
         public async Task<Boolean> WaitUntilReadyAsync(TimeSpan           Timeout,
                                                        CancellationToken  cancellationToken = default)
@@ -482,9 +477,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region ProcessFrameAsync(frame, CancellationToken)
 
         /// <summary>
-        /// Verarbeitet einen eingehenden Rahmen.
+        /// Processes an incoming frame.
         /// </summary>
-        /// <returns>false, wenn der Rahmen nicht verstanden wurde.</returns>
+        /// <returns>false when the frame was not understood.</returns>
         public async Task<Boolean> ProcessFrameAsync(String             frame,
                                                      CancellationToken  cancellationToken = default)
         {
@@ -499,22 +494,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return true;
             }
 
-            // RFC 6120, Abschnitt 4.9: nach einem Stream-Fehler ist der Stream
-            // tot; eine Antwort darauf gibt es nicht.
+            // RFC 6120, section 4.9: after a stream error the stream is dead;
+            // there is no answer to it.
             if (StanzaElement.Is(frame, "error") ||
                 frame.Contains(StreamErrorNamespace, StringComparison.Ordinal))
             {
-                MarkClosed($"Stream-Fehler der Gegenstelle: {frame}");
+                MarkClosed($"Stream error of the peer: {frame}");
                 return true;
             }
 
-            // Die Features des Empfängers. Dass Dialback angeboten wird, steht
-            // dort drin; verlangt wird es hier aber unabhängig davon, weil ein
-            // Angreifer die Ankündigung schlicht weglassen könnte.
-            // Der Elementname trägt hier auch das Präfix ab: Ein Server darf
-            // seine Features als <stream:features/> oder als <features/>
-            // schicken, je nachdem, woran er den Streams-Namensraum gebunden
-            // hat (RFC 6120, Abschnitt 4.8.1). Beides ist dasselbe Element.
+            // The features of the receiver. That dialback is offered stands in
+            // there; it is demanded here independently of that, though, because
+            // an attacker could simply leave the announcement out.
+            // The element name takes the prefix along here too: a server may
+            // send its features as <stream:features/> or as <features/>,
+            // depending on what it bound the streams namespace to (RFC 6120,
+            // section 4.8.1). Both are the same element.
             if (StanzaElement.Is(frame, "features"))
                 return await ProcessFeaturesAsync(frame, cancellationToken);
 
@@ -545,31 +540,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (StanzaElement.IsStanza(frame))
                 return await ProcessStanzaAsync(frame, cancellationToken);
 
-            // Ein Rahmen ohne Element ist kein unbekanntes Element, sondern gar
-            // keines - Abschnitt 4.9.3.24 spricht von „a first-level child of
-            // the stream that is not supported", und ein leerer Rahmen ist kein
-            // Kind. Über TCP kommt so etwas nicht einmal an: SkipProlog im
-            // Zerleger schluckt Leerraum, XML-Deklarationen und Kommentare, und
-            // Leerraum als Keepalive ist ausdrücklich erlaubt (Abschnitt
-            // 4.6.1). Über WebSocket wird jeder Frame durchgereicht.
+            // A frame without an element is not an unknown element but none at
+            // all - section 4.9.3.24 speaks of "a first-level child of the
+            // stream that is not supported", and an empty frame is no child.
+            // Over TCP such a thing does not even arrive: SkipProlog in the
+            // splitter swallows whitespace, XML declarations and comments, and
+            // whitespace as a keepalive is explicitly permitted (section
+            // 4.6.1). Over WebSocket every frame is passed through.
             if (StanzaElement.NameOf(frame) is null)
                 return false;
 
-            // RFC 6120, Abschnitt 4.9.3.24, wie auf der Client-Verbindung seit
+            // RFC 6120, section 4.9.3.24, as on the client connection since
             // D26.
             //
-            // Bis hierher blieb ein unbekanntes Element liegen, und das war
-            // eine offen vermerkte Lücke und keine Nachlässigkeit: Auf dem
-            // Client-Stream sprechen beide Seiten dasselbe, hier steht eine
-            // fremde Implementierung gegenüber. Einen Stream abzubrechen, weil
-            // man ein Element nicht kennt, wäre gegenüber Prosody oder ejabberd
-            // eine Wette gewesen.
+            // Until now an unknown element stayed lying here, and that was an
+            // openly noted gap and no carelessness: on the client stream both
+            // sides speak the same thing, here a foreign implementation stands
+            // opposite. Breaking a stream off because one does not know an
+            // element would have been a bet against Prosody or ejabberd.
             //
-            // Gemessen wurde deshalb zuerst: über den vollen Lauf gegen beide
-            // Gegenstellen, ausgehend wie eingehend, fiel kein einziger Rahmen
-            // bis hierher durch - und der Fühler dafür hat nachweislich
-            // angeschlagen, sonst hiesse „nichts gemessen" nur „nicht
-            // hingesehen".
+            // It was therefore measured first: over the full run against both
+            // peers, outgoing as well as incoming, not a single frame fell
+            // through to here - and the feeler for it demonstrably struck,
+            // otherwise "measured nothing" would only mean "did not look".
             await SendStreamErrorAsync("unsupported-stanza-type",
                                        cancellationToken: cancellationToken);
 
@@ -582,9 +575,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region SendStanzaAsync(stanza, CancellationToken)
 
         /// <summary>
-        /// Schickt eine Stanza über den Stream.
+        /// Sends a stanza over the stream.
         /// </summary>
-        /// <returns>false, wenn der Stream nicht (mehr) offen ist.</returns>
+        /// <returns>false when the stream is not (any longer) open.</returns>
         public async Task<Boolean> SendStanzaAsync(String             stanza,
                                                    CancellationToken  cancellationToken = default)
         {
@@ -595,8 +588,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (!IsOpen || IsClosed)
                     return false;
 
-                // Ein Stream, der sich noch nicht ausgewiesen hat, trägt
-                // nichts. Die Gegenstelle würde es ohnehin verwerfen.
+                // A stream that has not identified itself yet carries nothing.
+                // The peer would discard it anyway.
                 if (RequiresDialback && !IsAuthenticated)
                     return false;
 
@@ -613,11 +606,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region WaitUntilAuthenticatedAsync(Timeout, CancellationToken)
 
         /// <summary>
-        /// Wartet, bis Dialback durch ist.
+        /// Waits until dialback is through.
         /// </summary>
         /// <returns>
-        /// true auch dann sofort, wenn dieser Stream gar kein Dialback
-        /// verlangt - dann gibt es nichts zu warten.
+        /// true right away also when this stream demands no dialback at all -
+        /// then there is nothing to wait for.
         /// </returns>
         public async Task<Boolean> WaitUntilAuthenticatedAsync(TimeSpan           Timeout,
                                                                CancellationToken  cancellationToken = default)
@@ -643,7 +636,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region CloseAsync(CancellationToken)
 
         /// <summary>
-        /// Beendet den Stream ordentlich (RFC 7395, Abschnitt 3.6).
+        /// Ends the stream properly (RFC 7395, section 3.6).
         /// </summary>
         public async Task CloseAsync(CancellationToken cancellationToken = default)
         {
@@ -660,7 +653,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Die Verbindung ist schon weg - das Ergebnis ist dasselbe.
+                // The connection is already gone - the result is the same.
             }
 
             MarkClosed(null);
@@ -672,10 +665,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region SendStreamErrorAsync(condition, text, CancellationToken)
 
         /// <summary>
-        /// Beendet den Stream mit einem Fehler (RFC 6120, Abschnitt 4.9).
+        /// Ends the stream with an error (RFC 6120, section 4.9).
         /// </summary>
-        /// <param name="condition">Bedingung aus Abschnitt 4.9.3, etwa <c>invalid-from</c>.</param>
-        /// <param name="text">Optionaler erläuternder Text.</param>
+        /// <param name="condition">A condition from section 4.9.3, such as <c>invalid-from</c>.</param>
+        /// <param name="text">Optional explanatory text.</param>
         public async Task SendStreamErrorAsync(String             condition,
                                                String?            text                = null,
                                                CancellationToken  cancellationToken   = default)
@@ -694,7 +687,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
             catch (Exception)
             {
-                // Auch ein ungehörter Fehler beendet den Stream.
+                // An unheard error ends the stream too.
             }
 
             MarkClosed(condition);
@@ -707,15 +700,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) ProcessOpenAsync(frame, CancellationToken)
 
         /// <summary>
-        /// Der Stream-Kopf der Gegenstelle (RFC 7395, Abschnitt 3.4 bzw.
-        /// RFC 6120, Abschnitt 4.7).
+        /// The stream header of the peer (RFC 7395, section 3.4 resp.
+        /// RFC 6120, section 4.7).
         /// </summary>
         /// <remarks>
-        /// Die Attribute werden gelesen, nicht geparst. Über TCP ist der
-        /// Stream-Kopf ein <b>offenes</b> Tag und damit für sich genommen kein
-        /// wohlgeformtes XML - <see cref="XElement.Parse(String)"/> stand hier
-        /// zuerst und hätte jede TCP-Verbindung mit
-        /// <c>&lt;bad-format/&gt;</c> abgewiesen.
+        /// The attributes are read, not parsed. Over TCP the stream header is
+        /// an <b>open</b> tag and thereby, taken by itself, not well-formed XML
+        /// - <see cref="XElement.Parse(String)"/> stood here first and would
+        /// have refused every TCP connection with
+        /// <c>&lt;bad-format/&gt;</c>.
         /// </remarks>
         private async Task<Boolean> ProcessOpenAsync(String             frame,
                                                      CancellationToken  cancellationToken)
@@ -728,43 +721,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (IsInitiator)
             {
 
-                // Die Gegenstelle muss sich als die Domain ausgeben, zu der wir
-                // aufgebaut haben. Nennt sie eine andere, ist entweder die
-                // Adresse falsch oder jemand sitzt dazwischen - in beiden
-                // Fällen ist der Stream nichts wert.
+                // The peer has to give itself out as the domain we established
+                // to. If it names another one, either the address is wrong or
+                // somebody is sitting in between - in both cases the stream is
+                // worth nothing.
                 if (from is not null &&
                     !String.Equals(from, RemoteDomain, StringComparison.OrdinalIgnoreCase))
                 {
                     await SendStreamErrorAsync("invalid-from",
-                                               $"Erwartet wurde '{RemoteDomain}', geantwortet hat '{from}'.",
+                                               $"Expected was '{RemoteDomain}', the answer came from '{from}'.",
                                                cancellationToken);
                     return false;
                 }
 
                 MarkOpen(id);
 
-                // Nach einem SASL-Neustart ist der Stream schon ausgewiesen;
-                // dann steht der zweite Stream-Kopf nur noch für den
-                // Neuanfang und es ist nichts mehr auszuhandeln.
+                // After a SASL restart the stream is already identified; then
+                // the second stream header only stands for the new beginning
+                // and there is nothing left to negotiate.
                 if (IsAuthenticated)
                     return true;
 
-                // Kommt SASL-EXTERNAL in Frage, wird das Angebot der
-                // Gegenstelle abgewartet - es steht in den Features, die
-                // gleich folgen.
+                // If SASL-EXTERNAL is a possibility, the offer of the peer is
+                // waited for - it stands in the features, which follow in a
+                // moment.
                 //
-                // Für XEP-0288 gilt dasselbe, und zwar auch dann, wenn nur
-                // Dialback in Frage kommt: ob Bidi angeboten wird, steht
-                // ebenfalls erst in den Features, und das <bidi/> muss *vor*
-                // dem <db:result/> hinausgehen (XEP-0288, Abschnitt 4). Der
-                // unaufgeforderte Dialback aus XEP-0220 wandert deshalb nach
+                // The same holds for XEP-0288, and that even when only dialback
+                // is a possibility: whether bidi is offered likewise only
+                // stands in the features, and the <bidi/> has to go out
+                // *before* the <db:result/> (XEP-0288, section 4). The
+                // unsolicited dialback from XEP-0220 therefore moves to
                 // ProcessFeaturesAsync.
                 if (canOfferExternal || bidi)
                     return true;
 
-                // XEP-0220, Schritt 1: sich unaufgefordert ausweisen. Der
-                // Schlüssel bindet an die Stream-ID, die die Gegenstelle
-                // gerade vergeben hat.
+                // XEP-0220, step 1: identify oneself unsolicited. The key binds
+                // to the stream ID the peer has just handed out.
                 if (RequiresDialback && secret is not null && StreamId is not null)
                     await sendFrame(
                               $"<db:result xmlns:db='{DialbackKey.Namespace}' " +
@@ -778,24 +770,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
-            // Empfänger: ohne 'from' wissen wir nicht, für wen die Gegenstelle
-            // sprechen will, und die Absenderprüfung hätte nichts, woran sie
-            // sich halten könnte.
+            // Receiver: without a 'from' we do not know who the peer wants to
+            // speak for, and the sender check would have nothing to hold on to.
             if (String.IsNullOrEmpty(from))
             {
                 await SendStreamErrorAsync("improper-addressing",
-                                           "Dem <open/> fehlt das 'from'.",
+                                           "The <open/> is missing its 'from'.",
                                            cancellationToken);
                 return false;
             }
 
-            // RFC 6120, Abschnitt 4.9.3.6: ein 'to', das dieser Server nicht
-            // bedient, ist <host-unknown/>.
+            // RFC 6120, section 4.9.3.6: a 'to' this server does not serve is
+            // <host-unknown/>.
             if (to is not null &&
                 !String.Equals(to, LocalDomain, StringComparison.OrdinalIgnoreCase))
             {
                 await SendStreamErrorAsync("host-unknown",
-                                           $"Dieser Server bedient '{LocalDomain}', nicht '{to}'.",
+                                           $"This server serves '{LocalDomain}', not '{to}'.",
                                            cancellationToken);
                 return false;
             }
@@ -807,46 +798,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             await sendFrame(framing.StreamOpen(LocalDomain, from, streamId),
                             cancellationToken);
 
-            // RFC 6120, Abschnitt 4.3.2 verlangt die Features. Verlangt wird
-            // Dialback aber unabhängig davon, ob es hier angekündigt steht -
-            // eine Ankündigung, auf die man sich verlässt, könnte ein
-            // Angreifer einfach weglassen.
-            // SASL-EXTERNAL nur anbieten, wenn ein Zertifikat der Gegenstelle
-            // vorliegt, das überhaupt geprüft werden könnte - sonst wäre das
-            // Angebot eine Einladung in eine Sackgasse.
-            var bietetExternal = externalIdentity is not null && !IsAuthenticated;
+            // RFC 6120, section 4.3.2 demands the features. Dialback is
+            // demanded independently of whether it stands announced here,
+            // though - an announcement one relies on could simply be left out
+            // by an attacker.
+            // Only offer SASL-EXTERNAL when a certificate of the peer is on
+            // hand that could be checked at all - otherwise the offer would be
+            // an invitation into a dead end.
+            var offersExternal = externalIdentity is not null && !IsAuthenticated;
 
             await sendFrame(
                       $"<stream:features xmlns:stream='{StreamNamespace}'>" +
-                      (bietetExternal
+                      (offersExternal
                            ? $"<mechanisms xmlns='{SaslNamespace}'><mechanism>EXTERNAL</mechanism></mechanisms>"
                            : "") +
                       (RequiresDialback && !IsAuthenticated
                            ? "<dialback xmlns='urn:xmpp:features:dialback'><required/></dialback>"
                            : "") +
-                      // XEP-0288, Abschnitt 3: angekündigt wird vor *und* nach
-                      // TLS. Ist Bidi bereits ausgehandelt, entfällt die
-                      // Ankündigung - ein zweites <bidi/> hätte nichts mehr zu
-                      // sagen.
+                      // XEP-0288, section 3: it is announced before *and* after
+                      // TLS. If bidi is already negotiated, the announcement is
+                      // omitted - a second <bidi/> would have nothing left to
+                      // say.
                       //
-                      // Zwei Formen, und die zweite ist eine Zumutung mit
-                      // Beleg: ejabberd 24.12 greift die Form der XEP nicht
-                      // auf. Seine annehmende Seite kündigt selbst
-                      // urn:xmpp:bidi an (siehe KuendigtBidiAn), und seine
-                      // aufbauende Seite sucht offenbar dasselbe. Kündigen wir
-                      // nur die XEP-Form an, nimmt es unsere Rückrichtung
-                      // nicht - beobachtet, nicht vermutet: mit beiden Formen
-                      // nimmt es sie.
+                      // Two forms, and the second is an imposition with
+                      // evidence: ejabberd 24.12 does not pick up the form of
+                      // the XEP. Its accepting side itself announces
+                      // urn:xmpp:bidi (see AnnouncesBidi), and its establishing
+                      // side apparently looks for the same. If we announce only
+                      // the XEP form, it does not take our return direction -
+                      // observed, not assumed: with both forms it takes it.
                       //
-                      // In P6 stand hier die Gegenthese, aus ejabberds
-                      // *master* geschlossen, wo es behoben ist. Die
-                      // ausgelieferte Fassung verhält sich anders, und darauf
-                      // kommt es an.
+                      // In P6 the counter-thesis stood here, concluded from
+                      // ejabberd's *master*, where it is fixed. The version
+                      // shipped behaves differently, and that is what matters.
                       //
-                      // Auf dem Draht ist das eindeutig: das Freischalt-Element
-                      // heisst in beiden Lesarten urn:xmpp:bidi, es gibt also
-                      // nur eine Antwort. Wer nur die XEP-Form kennt,
-                      // übergeht das zweite Element als unbekanntes Feature.
+                      // On the wire this is unambiguous: the enabling element
+                      // is called urn:xmpp:bidi in both readings, so there is
+                      // only one answer. Whoever knows only the XEP form passes
+                      // over the second element as an unknown feature.
                       (bidi && !BidiEnabled
                            ? $"<bidi xmlns='{BidiFeatureNamespace}'/>" +
                              $"<bidi xmlns='{BidiNamespace}'/>"
@@ -862,14 +851,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #endregion
 
-        #region SASL-EXTERNAL (RFC 6120, Abschnitt 6; XEP-0178)
+        #region SASL-EXTERNAL (RFC 6120, section 6; XEP-0178)
 
-        /// <summary>Der Namensraum der SASL-Aushandlung.</summary>
+        /// <summary>The namespace of the SASL negotiation.</summary>
         public const String SaslNamespace = "urn:ietf:params:xml:ns:xmpp-sasl";
 
         /// <summary>
-        /// Die Features der Gegenstelle - hier entscheidet der aufbauende
-        /// Server, ob er SASL-EXTERNAL versucht oder auf Dialback zurückfällt.
+        /// The features of the peer - here the establishing server decides
+        /// whether it attempts SASL-EXTERNAL or falls back on dialback.
         /// </summary>
         private async Task<Boolean> ProcessFeaturesAsync(String             frame,
                                                          CancellationToken  cancellationToken)
@@ -878,27 +867,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (!IsInitiator || IsAuthenticated)
                 return true;
 
-            // XEP-0288, Abschnitt 4: das <bidi/> geht *vor* SASL oder
-            // Dialback hinaus. Danach wäre es zu spät - die Gegenstelle hat
-            // dann bereits entschieden, wie sie antwortet.
+            // XEP-0288, section 4: the <bidi/> goes out *before* SASL or
+            // dialback. Afterwards it would be too late - the peer has decided
+            // by then how it answers.
             //
-            // Nach TLS ist hier ohnehin: diesen Stream gibt es erst, wenn der
-            // Transport die Verschlüsselung hinter sich hat (XEP-0288
-            // verlangt genau diese Reihenfolge).
-            if (bidi && !BidiEnabled && KuendigtBidiAn(frame))
+            // After TLS it is here anyway: this stream only exists once the
+            // transport has the encryption behind it (XEP-0288 demands exactly
+            // this order).
+            if (bidi && !BidiEnabled && AnnouncesBidi(frame))
             {
                 await sendFrame($"<bidi xmlns='{BidiNamespace}'/>", cancellationToken);
                 BidiEnabled = true;
             }
 
-            var bietetExternal = frame.Contains(SaslNamespace, StringComparison.Ordinal) &&
+            var offersExternal = frame.Contains(SaslNamespace, StringComparison.Ordinal) &&
                                  frame.Contains("EXTERNAL",    StringComparison.Ordinal);
 
-            if (canOfferExternal && bietetExternal)
+            if (canOfferExternal && offersExternal)
             {
 
-                // RFC 6120, Abschnitt 6.4.2: die authzid ist die Identität, für
-                // die gesprochen werden soll - Base64, wie jede SASL-Nutzlast.
+                // RFC 6120, section 6.4.2: the authzid is the identity that is
+                // to be spoken for - base64, like every SASL payload.
                 var authzid = Convert.ToBase64String(
                                   System.Text.Encoding.UTF8.GetBytes(LocalDomain));
 
@@ -910,7 +899,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
-            // Kein EXTERNAL - dann der andere Weg, sofern vorgesehen.
+            // No EXTERNAL - then the other way, if it is intended.
             if (RequiresDialback && secret is not null && StreamId is not null)
                 await sendFrame(
                           $"<db:result xmlns:db='{DialbackKey.Namespace}' " +
@@ -925,69 +914,67 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Steht in diesen Features ein Bidi-Angebot?
+        /// Does a bidi offer stand in these features?
         /// </summary>
         /// <remarks>
-        /// XEP-0288 vergibt zwei Namensräume und meint zwei verschiedene
-        /// Dinge damit: <see cref="BidiFeatureNamespace"/> für die
-        /// Ankündigung, <see cref="BidiNamespace"/> für das Element, mit dem
-        /// der aufbauende Server sie annimmt. Angekündigt wird der erste -
-        /// Prosody hält sich daran, und wir tun es auch.
+        /// XEP-0288 hands out two namespaces and means two different things by
+        /// them: <see cref="BidiFeatureNamespace"/> for the announcement,
+        /// <see cref="BidiNamespace"/> for the element the establishing server
+        /// accepts it with. Announced is the first - Prosody keeps to that, and
+        /// so do we.
         ///
-        /// ejabberd 24.12 nicht: seine annehmende Seite legt das
-        /// <i>Freischalt</i>-Element in die Features. Upstream ist das
-        /// inzwischen behoben, in den ausgelieferten Fassungen steht es noch,
-        /// und sie sind zahlreich.
+        /// ejabberd 24.12 does not: its accepting side puts the
+        /// <i>enabling</i> element into the features. Upstream that is fixed by
+        /// now, in the versions shipped it still stands, and they are
+        /// numerous.
         ///
-        /// Deshalb hier beide Formen - aber nur beim Lesen. Was wir selbst
-        /// ankündigen, bleibt die Form der XEP; ejabberds aufbauende Seite
-        /// sucht genau die und versteht uns. Wer beim Lesen streng bliebe,
-        /// bekäme keinen Fehler, sondern eine Verbindung, die stillschweigend
-        /// einseitig ist - und deren Antworten dann an einer Firewall hängen
-        /// bleiben, aus keinem im Protokoll sichtbaren Grund.
+        /// Hence both forms here - but only when reading. What we announce
+        /// ourselves stays the form of the XEP; ejabberd's establishing side
+        /// looks for exactly that one and understands us. Whoever stayed strict
+        /// when reading would get no error but a connection that is silently
+        /// one-sided - and whose answers then hang at a firewall, for no reason
+        /// visible in the protocol.
         /// </remarks>
-        private static Boolean KuendigtBidiAn(String features)
+        private static Boolean AnnouncesBidi(String features)
 
             => features.Contains(BidiFeatureNamespace, StringComparison.Ordinal) ||
                features.Contains(BidiNamespace,        StringComparison.Ordinal);
 
         /// <summary>
-        /// <c>&lt;auth mechanism='EXTERNAL'/&gt;</c> auf der annehmenden
-        /// Seite: das Zertifikat muss die behauptete Domain decken.
+        /// <c>&lt;auth mechanism='EXTERNAL'/&gt;</c> on the accepting side: the
+        /// certificate has to cover the domain claimed.
         /// </summary>
         /// <remarks>
-        /// Hier liegt der ganze Unterschied zu Dialback. Dort wird die Domain
-        /// belegt, indem bei einer hinterlegten Adresse nachgefragt wird; hier,
-        /// indem das im TLS-Handshake vorgelegte Zertifikat gelesen wird. Kein
-        /// zweiter Verbindungsaufbau - dafür hängt alles an
+        /// Here lies the whole difference to dialback. There the domain is
+        /// proven by asking back at an address on record; here by reading the
+        /// certificate presented in the TLS handshake. No second connection -
+        /// but then everything hangs on
         /// <see cref="CertificateIdentity"/>.
         ///
-        /// Eine leere authzid (<c>=</c>) ist zulässig und heisst: nimm die
-        /// Identität aus dem Zertifikat. Weil ein Zertifikat für mehrere
-        /// Domains gelten kann, wird sie hier auf das <c>from</c> des
-        /// Stream-Kopfs bezogen - eine andere Wahl gäbe es nicht, ohne zu
-        /// raten.
+        /// An empty authzid (<c>=</c>) is permissible and means: take the
+        /// identity from the certificate. Because a certificate can hold for
+        /// several domains, it is related here to the <c>from</c> of the stream
+        /// header - there would be no other choice without guessing.
         /// </remarks>
         /// <summary>
-        /// RFC 6120, Abschnitt 6.4.4: Die Gegenstelle bricht die
-        /// SASL-Aushandlung ab.
+        /// RFC 6120, section 6.4.4: The peer breaks the SASL negotiation off.
         /// </summary>
         /// <remarks>
-        /// Ein vorgesehener Schritt und kein Protokollverstoss - deshalb ein
-        /// SASL-Fehlschlag und kein Stream-Fehler, und deshalb bleibt der
-        /// Stream stehen. Zu verwerfen ist hier nichts: SASL-EXTERNAL ist ein
-        /// einziger Zug, es gibt keinen halben Austausch wie bei SCRAM.
+        /// An intended step and no protocol violation - hence a SASL failure
+        /// and not a stream error, and hence the stream stays standing. There
+        /// is nothing to discard here: SASL-EXTERNAL is a single move, there is
+        /// no half exchange as with SCRAM.
         ///
-        /// Diese Lücke ist in D27 entstanden: Vor der Strenge blieb ein
-        /// <c>&lt;abort/&gt;</c> hier liegen, danach beendete es den Stream.
-        /// Wer eine Weiche streng macht, erbt jede Antwort, die sie noch nicht
-        /// kennt.
+        /// This gap came into being in D27: before the strictness an
+        /// <c>&lt;abort/&gt;</c> stayed lying here, afterwards it ended the
+        /// stream. Whoever makes a switch strict inherits every answer it does
+        /// not know yet.
         /// </remarks>
         private async Task<Boolean> ProcessSaslAbortAsync(CancellationToken cancellationToken)
         {
 
-            // Wer selbst angewählt hat, bekommt keinen Abbruch geschickt - er
-            // wäre der, der ihn schickt.
+            // Whoever dialled themselves gets no abort sent to them - they
+            // would be the one sending it.
             if (IsInitiator)
                 return false;
 
@@ -1005,9 +992,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (IsInitiator)
                 return false;
 
-            var mechanismus = Attr(frame, "mechanism");
+            var mechanism = Attr(frame, "mechanism");
 
-            if (externalIdentity is null || mechanismus != "EXTERNAL")
+            if (externalIdentity is null || mechanism != "EXTERNAL")
             {
 
                 await sendFrame(
@@ -1018,15 +1005,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
-            var behauptet = RemoteDomain;
-            var nutzlast  = Body(frame);
+            var claimed = RemoteDomain;
+            var payload = Body(frame);
 
-            if (nutzlast is not null && nutzlast != "=")
+            if (payload is not null && payload != "=")
             {
 
                 try
                 {
-                    behauptet = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(nutzlast));
+                    claimed = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
                 }
                 catch (FormatException)
                 {
@@ -1041,27 +1028,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
-            // Wer sich für eine andere Domain ausweist, als der Stream-Kopf
-            // nennt, bekommt nichts - sonst liesse sich der Stream nachträglich
-            // auf eine zweite Identität umschreiben.
-            if (behauptet is null ||
-                !String.Equals(behauptet, RemoteDomain, StringComparison.OrdinalIgnoreCase) ||
-                !externalIdentity(behauptet))
+            // Whoever identifies themselves as a domain other than the one the
+            // stream header names gets nothing - otherwise the stream could be
+            // rewritten onto a second identity after the fact.
+            if (claimed is null ||
+                !String.Equals(claimed, RemoteDomain, StringComparison.OrdinalIgnoreCase) ||
+                !externalIdentity(claimed))
             {
 
                 await sendFrame(
                           $"<failure xmlns='{SaslNamespace}'><not-authorized/></failure>",
                           cancellationToken);
 
-                OnStanzaRefused?.Invoke($"SASL-EXTERNAL für '{behauptet ?? "(ohne)"}' abgelehnt");
+                OnStanzaRefused?.Invoke($"SASL-EXTERNAL for '{claimed ?? "(none)"}' refused");
 
                 return true;
 
             }
 
-            // Reihenfolge zählt: erst den Neustart vormerken, dann den
-            // Ausweis. Andersherum meldete sich der Stream für einen
-            // Augenblick als benutzbar, obwohl sein neuer Kopf noch aussteht.
+            // The order counts: first note the restart down, then the
+            // identification. The other way round the stream would report
+            // itself usable for a moment although its new header is still
+            // outstanding.
             ReopenForRestart();
             MarkAuthenticated("SASL-EXTERNAL");
 
@@ -1072,8 +1060,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// <c>&lt;success/&gt;</c> auf der aufbauenden Seite: Stream neu
-        /// öffnen (RFC 6120, Abschnitt 6.4.6).
+        /// <c>&lt;success/&gt;</c> on the establishing side: open the stream
+        /// anew (RFC 6120, section 6.4.6).
         /// </summary>
         private async Task<Boolean> ProcessSaslSuccessAsync(CancellationToken cancellationToken)
         {
@@ -1091,21 +1079,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// <c>&lt;failure/&gt;</c>: SASL ist gescheitert. Ein Rückfall auf
-        /// Dialback findet <b>nicht</b> statt.
+        /// <c>&lt;failure/&gt;</c>: SASL has failed. A fallback to dialback
+        /// does <b>not</b> take place.
         /// </summary>
         /// <remarks>
-        /// Das ist eine Festlegung und keine Auslassung. Wer sich per
-        /// Zertifikat ausweisen wollte und abgelehnt wurde, hat ein Problem,
-        /// das ein zweiter Anlauf mit einem schwächeren Verfahren nicht löst -
-        /// er verdeckt es nur. RFC 6120, Abschnitt 6.4.5 erlaubt zwar weitere
-        /// Versuche; hier endet der Stream.
+        /// That is a decision and no omission. Whoever wanted to identify
+        /// themselves by certificate and was refused has a problem that a
+        /// second attempt with a weaker procedure does not solve - it only
+        /// covers it up. RFC 6120, section 6.4.5 does permit further attempts;
+        /// here the stream ends.
         /// </remarks>
         private async Task<Boolean> ProcessSaslFailureAsync(CancellationToken cancellationToken)
         {
 
             await SendStreamErrorAsync("not-authorized",
-                                       "SASL-EXTERNAL wurde abgelehnt.",
+                                       "SASL-EXTERNAL was refused.",
                                        cancellationToken);
 
             return true;
@@ -1117,8 +1105,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) ProcessDialbackResultAsync(frame, CancellationToken)
 
         /// <summary>
-        /// <c>&lt;db:result/&gt;</c> - XEP-0220, Schritt 1 beim Empfänger und
-        /// Schritt 4 beim Aufbauenden.
+        /// <c>&lt;db:result/&gt;</c> - XEP-0220, step 1 at the receiver and
+        /// step 4 at the establishing side.
         /// </summary>
         private async Task<Boolean> ProcessDialbackResultAsync(String             frame,
                                                                CancellationToken  cancellationToken)
@@ -1126,7 +1114,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var type = Attr(frame, "type");
 
-            // Schritt 4: die Antwort auf den eigenen Schlüssel.
+            // Step 4: the answer to one's own key.
             if (IsInitiator)
             {
 
@@ -1136,22 +1124,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     return true;
                 }
 
-                // XEP-0220, Abschnitt 2.1.3: ohne gültiges Dialback darf über
-                // diesen Stream nichts laufen.
+                // XEP-0220, section 2.1.3: without a valid dialback nothing may
+                // run over this stream.
                 await SendStreamErrorAsync(
                           "not-authorized",
-                          $"Die Gegenstelle hat den Dialback-Schlüssel mit '{type ?? "(ohne Typ)"}' abgelehnt.",
+                          $"The peer refused the dialback key with '{type ?? "(without a type)"}'.",
                           cancellationToken);
 
                 return true;
 
             }
 
-            // Schritt 1: die Gegenstelle legt ihren Schlüssel vor.
+            // Step 1: the peer presents its key.
             if (verifyKey is null)
             {
-                // Dieser Stream verlangt kein Dialback - dann kann er es auch
-                // nicht prüfen und tut nicht so, als hätte er es getan.
+                // This stream demands no dialback - then it cannot check it
+                // either and does not act as though it had.
                 return true;
             }
 
@@ -1162,19 +1150,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (senderDomain is null || key is null)
             {
                 await SendStreamErrorAsync("improper-addressing",
-                                           "Dem <db:result/> fehlt das 'from' oder der Schlüssel.",
+                                           "The <db:result/> is missing its 'from' or the key.",
                                            cancellationToken);
                 return false;
             }
 
-            // Die Gegenstelle darf sich nicht für eine andere Domain
-            // ausweisen, als sie im <open/> genannt hat - sonst liesse sich
-            // über einen einmal aufgebauten Stream nachträglich eine zweite
-            // Identität nachschieben.
+            // The peer must not identify itself as a domain other than the one
+            // it named in the <open/> - otherwise a second identity could be
+            // pushed in after the fact over a stream once established.
             if (!String.Equals(senderDomain, RemoteDomain, StringComparison.OrdinalIgnoreCase))
             {
                 await SendStreamErrorAsync("invalid-from",
-                                           $"Der Stream gehört zu '{RemoteDomain}', nicht zu '{senderDomain}'.",
+                                           $"The stream belongs to '{RemoteDomain}', not to '{senderDomain}'.",
                                            cancellationToken);
                 return false;
             }
@@ -1183,36 +1170,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 !String.Equals(targetDomain, LocalDomain, StringComparison.OrdinalIgnoreCase))
             {
                 await SendStreamErrorAsync("host-unknown",
-                                           $"Dieser Server bedient '{LocalDomain}', nicht '{targetDomain}'.",
+                                           $"This server serves '{LocalDomain}', not '{targetDomain}'.",
                                            cancellationToken);
                 return false;
             }
 
-            var gueltig = false;
+            var valid = false;
 
             try
             {
-                gueltig = await verifyKey(senderDomain, StreamId ?? "", key);
+                valid = await verifyKey(senderDomain, StreamId ?? "", key);
             }
             catch (Exception)
             {
-                // Der autoritative Server war nicht zu erreichen. XEP-0220,
-                // Abschnitt 2.4 nennt dafür <remote-server-timeout/>; hier
-                // reicht "nicht gültig", die Antwort unten sagt es.
+                // The authoritative server was not reachable. XEP-0220,
+                // section 2.4 names <remote-server-timeout/> for that; here
+                // "not valid" suffices, the answer below says it.
             }
 
             await sendFrame(
                       $"<db:result xmlns:db='{DialbackKey.Namespace}' " +
                       $"from='{XmlEscaping.Escape(LocalDomain)}' " +
                       $"to='{XmlEscaping.Escape(senderDomain)}' " +
-                      $"type='{(gueltig ? "valid" : "invalid")}'/>",
+                      $"type='{(valid ? "valid" : "invalid")}'/>",
                       cancellationToken);
 
-            if (gueltig)
+            if (valid)
                 MarkAuthenticated();
 
             else
-                OnStanzaRefused?.Invoke($"Dialback für '{senderDomain}' fehlgeschlagen");
+                OnStanzaRefused?.Invoke($"Dialback for '{senderDomain}' failed");
 
             return true;
 
@@ -1223,17 +1210,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) ProcessDialbackVerifyAsync(frame, CancellationToken)
 
         /// <summary>
-        /// <c>&lt;db:verify/&gt;</c> - XEP-0220, Schritt 2 und 3 in der Rolle
-        /// des autoritativen Servers.
+        /// <c>&lt;db:verify/&gt;</c> - XEP-0220, steps 2 and 3 in the role of
+        /// the authoritative server.
         /// </summary>
         /// <remarks>
-        /// Hier rechnet der Server nach, ob <b>er selbst</b> diesen Schlüssel
-        /// hätte ausstellen können. Er merkt sich dafür nichts: aus
-        /// Zieldomain, eigener Domain und Stream-ID ergibt sich der Schlüssel
-        /// jedesmal neu. Ein Angreifer, der sich für diese Domain ausgibt,
-        /// scheitert daran, dass die Frage bei ihm nie ankommt - sie geht an
-        /// die Adresse, die der prüfende Server für diese Domain hinterlegt
-        /// hat.
+        /// Here the server recomputes whether <b>it itself</b> could have
+        /// issued this key. It remembers nothing for that: from the target
+        /// domain, its own domain and the stream ID the key follows anew every
+        /// time. An attacker who gives themselves out as this domain fails
+        /// because the question never reaches them - it goes to the address the
+        /// checking server has on record for this domain.
         /// </remarks>
         private async Task<Boolean> ProcessDialbackVerifyAsync(String             frame,
                                                                CancellationToken  cancellationToken)
@@ -1241,7 +1227,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var type = Attr(frame, "type");
 
-            // Schritt 3: die Antwort auf die eigene Nachfrage.
+            // Step 3: the answer to one's own query.
             if (type is not null)
             {
 
@@ -1251,8 +1237,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
-            // Schritt 2: jemand fragt nach einem Schlüssel, den wir
-            // ausgestellt haben sollen.
+            // Step 2: somebody asks about a key we are supposed to have issued.
             var targetDomain  = Attr(frame, "from");
             var ownDomain     = Attr(frame, "to");
             var streamId      = Attr(frame, "id");
@@ -1261,7 +1246,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (targetDomain is null || streamId is null || key is null)
             {
                 await SendStreamErrorAsync("improper-addressing",
-                                           "Dem <db:verify/> fehlt 'from', 'id' oder der Schlüssel.",
+                                           "The <db:verify/> is missing its 'from', 'id' or the key.",
                                            cancellationToken);
                 return false;
             }
@@ -1270,20 +1255,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 !String.Equals(ownDomain, LocalDomain, StringComparison.OrdinalIgnoreCase))
             {
                 await SendStreamErrorAsync("host-unknown",
-                                           $"Dieser Server bedient '{LocalDomain}', nicht '{ownDomain}'.",
+                                           $"This server serves '{LocalDomain}', not '{ownDomain}'.",
                                            cancellationToken);
                 return false;
             }
 
-            var gueltig = secret is not null &&
-                          DialbackKey.Verify(secret, targetDomain, LocalDomain, streamId, key);
+            var valid = secret is not null &&
+                        DialbackKey.Verify(secret, targetDomain, LocalDomain, streamId, key);
 
             await sendFrame(
                       $"<db:verify xmlns:db='{DialbackKey.Namespace}' " +
                       $"from='{XmlEscaping.Escape(LocalDomain)}' " +
                       $"to='{XmlEscaping.Escape(targetDomain)}' " +
                       $"id='{XmlEscaping.Escape(streamId)}' " +
-                      $"type='{(gueltig ? "valid" : "invalid")}'/>",
+                      $"type='{(valid ? "valid" : "invalid")}'/>",
                       cancellationToken);
 
             return true;
@@ -1295,15 +1280,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region RequestVerificationAsync(targetDomain, streamId, key, Timeout, CancellationToken)
 
         /// <summary>
-        /// Fragt den autoritativen Server, ob er diesen Schlüssel ausgestellt
-        /// hat (XEP-0220, Schritt 2).
+        /// Asks the authoritative server whether it issued this key (XEP-0220,
+        /// step 2).
         /// </summary>
         /// <param name="targetDomain">
-        /// Die Domain des annehmenden Servers - also die eigene. Sie geht als
-        /// <c>from</c> hinaus, so verlangt es der normative Text zu Schritt 2.
+        /// The domain of the accepting server - that is, our own. It goes out
+        /// as the <c>from</c>, as the normative text on step 2 demands.
         /// </param>
-        /// <param name="streamId">Die Stream-ID, an die der Schlüssel gebunden ist.</param>
-        /// <param name="key">Der vorgelegte Schlüssel.</param>
+        /// <param name="streamId">The stream ID the key is bound to.</param>
+        /// <param name="key">The key that was presented.</param>
         public async Task<Boolean> RequestVerificationAsync(String             targetDomain,
                                                             String             streamId,
                                                             String             key,
@@ -1341,12 +1326,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private static) IsDialback(frame, name) / Attr(xml, name) / Body(xml)
 
         /// <summary>
-        /// Ist der Rahmen ein Dialback-Element des angegebenen Namens?
+        /// Is the frame a dialback element of the given name?
         /// </summary>
         /// <remarks>
-        /// XEP-0220 schreibt durchweg das Präfix <c>db:</c>; die Variante mit
-        /// Vorgabe-Namensraum wird trotzdem erkannt, weil sie ebenso gültig
-        /// ist.
+        /// XEP-0220 writes the prefix <c>db:</c> throughout; the variant with a
+        /// default namespace is recognised all the same, because it is just as
+        /// valid.
         /// </remarks>
         private static Boolean IsDialback(String frame, String name)
 
@@ -1355,15 +1340,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 frame.Contains(DialbackKey.Namespace, StringComparison.Ordinal));
 
         /// <summary>
-        /// Liest ein Attribut aus einem Rahmen.
+        /// Reads an attribute out of a frame.
         /// </summary>
         /// <remarks>
-        /// Über einen regulären Ausdruck und nicht über
-        /// <see cref="XElement.Parse(String)"/>: die Dialback-Elemente tragen
-        /// ein Präfix, und ob die Gegenstelle es auf dem Element selbst
-        /// deklariert, steht ihr frei. Über TCP hängt die Deklaration am
-        /// Stream-Root und der Rahmen wäre allein gar nicht wohlgeformt - das
-        /// muss diese Schicht aushalten, sie soll ja beide Rahmungen tragen.
+        /// Through a regular expression and not through
+        /// <see cref="XElement.Parse(String)"/>: the dialback elements carry a
+        /// prefix, and whether the peer declares it on the element itself is up
+        /// to them. Over TCP the declaration hangs on the stream root and the
+        /// frame would not be well-formed on its own at all - this layer has to
+        /// bear that, it is meant to carry both framings after all.
         /// </remarks>
         internal static String? Attr(String xml, String name)
         {
@@ -1376,7 +1361,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Der Textinhalt eines Rahmens, ohne umgebenden Leerraum.</summary>
+        /// <summary>The text content of a frame, without surrounding whitespace.</summary>
         private static String? Body(String xml)
         {
 
@@ -1393,20 +1378,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region (private) ProcessBidi(frame)
 
         /// <summary>
-        /// XEP-0288, Abschnitt 4: die Gegenstelle schaltet die Rückrichtung
-        /// frei.
+        /// XEP-0288, section 4: the peer enables the return direction.
         /// </summary>
         /// <remarks>
-        /// Nur der Empfänger nimmt ein <c>&lt;bidi/&gt;</c> entgegen. Beim
-        /// Initiator wäre es verkehrt herum - er hat es selbst geschickt, und
-        /// eines zurück hiesse, die Gegenstelle wollte über <i>unseren</i>
-        /// ausgehenden Stream ihrerseits etwas freischalten, was der Abschnitt
-        /// nicht vorsieht.
+        /// Only the receiver takes a <c>&lt;bidi/&gt;</c> in. At the initiator
+        /// it would be the wrong way round - it sent one itself, and one coming
+        /// back would mean the peer wanted to enable something over <i>our</i>
+        /// outgoing stream in its turn, which the section does not provide for.
         ///
-        /// Angenommen wird es auch dann, wenn die Ankündigung gar nicht
-        /// erbeten war (<c>bidi</c> aus): dann wird es <b>nicht</b>
-        /// freigeschaltet. Ein Angreifer könnte sonst eine Rückrichtung
-        /// erzwingen, die dieser Server nie angeboten hat.
+        /// It is taken in even when the announcement was not asked for at all
+        /// (<c>bidi</c> off): then it is <b>not</b> enabled. An attacker could
+        /// otherwise force a return direction this server never offered.
         /// </remarks>
         private Boolean ProcessBidi(String frame)
         {
@@ -1416,7 +1398,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (!bidi)
             {
-                OnStanzaRefused?.Invoke("<bidi/> ohne Ankündigung");
+                OnStanzaRefused?.Invoke("<bidi/> without an announcement");
                 return false;
             }
 
@@ -1431,31 +1413,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region SendStanzaOverBidiAsync(stanza, CancellationToken)
 
         /// <summary>
-        /// Schickt eine Stanza über die Rückrichtung eines eingehenden Streams
+        /// Sends a stanza over the return direction of an incoming stream
         /// (XEP-0288).
         /// </summary>
         /// <returns>
-        /// false, wenn dieser Stream die Rückrichtung nicht tragen darf - dann
-        /// bleibt nur der gewöhnliche Weg über eine eigene Verbindung.
+        /// false when this stream may not carry the return direction - then
+        /// only the ordinary way over a connection of our own remains.
         /// </returns>
         /// <remarks>
-        /// Zwei Bedingungen aus Abschnitt 4, und beide sind Sicherungen, keine
-        /// Formalitäten:
+        /// Two conditions from section 4, and both are safeguards, not
+        /// formalities:
         /// <list type="bullet">
         ///   <item>
         ///     <i>"The receiving server MUST NOT send stanzas to the peer
         ///     before it has authenticated via SASL, or the peer's identity has
-        ///     been verified via Server Dialback."</i> Wer noch nicht belegt
-        ///     hat, wer er ist, bekommt auch nichts - sonst liesse sich mit
-        ///     einer blossen Behauptung fremde Post abholen.
+        ///     been verified via Server Dialback."</i> Whoever has not proven
+        ///     who they are gets nothing either - otherwise someone else's post
+        ///     could be collected with a mere claim.
         ///   </item>
         ///   <item>
         ///     <i>"The receiving server MUST only send stanzas for which it has
         ///     been authenticated - in the case of TLS/SASL based
         ///     authentication, this is the value of the stream's 'to'
-        ///     attribute."</i> Das <c>to</c> des eingehenden Stream-Kopfs ist
-        ///     unsere eigene Domain; für eine andere zu sprechen wäre hier
-        ///     genauso falsch wie umgekehrt.
+        ///     attribute."</i> The <c>to</c> of the incoming stream header is
+        ///     our own domain; speaking for another one would be just as wrong
+        ///     here as the other way round.
         ///   </item>
         /// </list>
         /// </remarks>
@@ -1473,10 +1455,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var from = Attr(stanza, "from");
 
-            if (from is not null && !GehoertZuLocalDomain(from))
+            if (from is not null && !BelongsToLocalDomain(from))
             {
                 OnStanzaRefused?.Invoke(
-                    $"'{from}' gehört nicht zu '{LocalDomain}' - nicht über die Rückrichtung");
+                    $"'{from}' does not belong to '{LocalDomain}' - not over the return direction");
                 return false;
             }
 
@@ -1487,17 +1469,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
-        /// Sucht unter eingehenden Streams einen, der die Rückrichtung zu
-        /// dieser Domain trägt, und schickt die Stanza dort hinaus.
+        /// Searches among incoming streams for one that carries the return
+        /// direction to this domain, and sends the stanza out there.
         /// </summary>
-        /// <returns>true, wenn einer sie genommen hat.</returns>
+        /// <returns>true when one of them took it.</returns>
         /// <remarks>
-        /// Hier und nicht in den Transporten, obwohl beide dasselbe brauchen:
-        /// der Abgleich der Domain ist die Stelle, an der eine Stanza an die
-        /// falsche Gegenstelle geraten kann, und zwei Fassungen davon wären
-        /// zwei Gelegenheiten dafür. Beim ersten Mutationslauf ist genau diese
-        /// Regel durchgerutscht - sie hatte keinen Test, weil an jedem Aufbau
-        /// nur eine Gegenstelle hing.
+        /// Here and not in the transports, although both need the same thing:
+        /// the matching of the domain is the place where a stanza can end up at
+        /// the wrong peer, and two versions of it would be two opportunities
+        /// for that. In the first mutation run exactly this rule slipped
+        /// through - it had no test, because only one peer hung on every setup.
         /// </remarks>
         internal static async Task<Boolean> TryDeliverOverBidiAsync(IEnumerable<S2SStream>  inboundStreams,
                                                                     String                  remoteDomain,
@@ -1511,9 +1492,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (!String.Equals(stream.RemoteDomain, remoteDomain, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                // Ob der Stream die Rückrichtung überhaupt tragen darf,
-                // entscheidet er selbst - dort stehen die Bedingungen aus
-                // XEP-0288, Abschnitt 4.
+                // Whether the stream may carry the return direction at all it
+                // decides itself - there stand the conditions from XEP-0288,
+                // section 4.
                 if (await stream.SendStanzaOverBidiAsync(stanza, cancellationToken))
                     return true;
 
@@ -1523,17 +1504,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        private Boolean GehoertZuLocalDomain(String jid)
+        private Boolean BelongsToLocalDomain(String jid)
         {
 
             var at      = jid.IndexOf('@');
-            var ohne    = at >= 0 ? jid[(at + 1)..] : jid;
-            var schraeg = ohne.IndexOf('/');
+            var domain  = at >= 0 ? jid[(at + 1)..] : jid;
+            var slash   = domain.IndexOf('/');
 
-            if (schraeg >= 0)
-                ohne = ohne[..schraeg];
+            if (slash >= 0)
+                domain = domain[..slash];
 
-            return String.Equals(ohne, LocalDomain, StringComparison.OrdinalIgnoreCase);
+            return String.Equals(domain, LocalDomain, StringComparison.OrdinalIgnoreCase);
 
         }
 
@@ -1547,37 +1528,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (!IsOpen)
             {
-                // RFC 6120, Abschnitt 4.9.3.12: Stanzas vor dem Stream-Kopf
-                // gibt es nicht.
+                // RFC 6120, section 4.9.3.12: stanzas before the stream header
+                // do not exist.
                 await SendStreamErrorAsync("not-well-formed",
-                                           "Eine Stanza vor dem <open/>.",
+                                           "A stanza before the <open/>.",
                                            cancellationToken);
                 return false;
             }
 
-            // Ein ausgehender Stream trägt nur in eine Richtung (RFC 6120,
-            // Abschnitt 4.1) - es sei denn, XEP-0288 ist ausgehandelt. Dann
-            // haben *wir* die Rückrichtung erbeten, und was darüber kommt,
-            // gehört hierher.
+            // An outgoing stream carries in one direction only (RFC 6120,
+            // section 4.1) - unless XEP-0288 is negotiated. Then *we* asked for
+            // the return direction, and what comes over it belongs here.
             if (IsInitiator && !BidiEnabled)
             {
-                OnStanzaRefused?.Invoke("Stanza auf einem ausgehenden Stream");
+                OnStanzaRefused?.Invoke("A stanza on an outgoing stream");
                 return false;
             }
 
             if (deliverStanza is null)
             {
-                OnStanzaRefused?.Invoke("Kein Empfänger für eingehende Stanzas");
+                OnStanzaRefused?.Invoke("No recipient for incoming stanzas");
                 return false;
             }
 
-            // XEP-0220, Abschnitt 1: bis die Identität belegt ist, wird über
-            // die Verbindung keine Stanza verarbeitet. Das ist die Zeile, die
-            // Dialback überhaupt erst zu einer Sicherung macht - ohne sie
-            // liefe der Austausch mit, ohne etwas zu entscheiden.
+            // XEP-0220, section 1: until the identity is proven, no stanza is
+            // processed over the connection. That is the line that makes
+            // dialback a safeguard in the first place - without it the exchange
+            // would run along without deciding anything.
             if (RequiresDialback && !IsAuthenticated)
             {
-                OnStanzaRefused?.Invoke("Stanza vor abgeschlossenem Dialback");
+                OnStanzaRefused?.Invoke("A stanza before dialback was completed");
                 return false;
             }
 
@@ -1588,21 +1568,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             OnStanzaRefused?.Invoke(result.ToString());
 
-            // RFC 6120, Abschnitt 8.1.1.1: bei einem 'from', für das die
-            // Gegenstelle nicht sprechen darf, endet der Stream. Der Grund ist
-            // nicht Strenge um ihrer selbst willen - wer einmal im Namen einer
-            // fremden Domain schreibt, tut es beim nächsten Versuch wieder, und
-            // eine einzelne verworfene Stanza hielte ihn nicht auf. Die
-            // übrigen Ablehnungen betreffen nur die eine Stanza.
-            // Ein 'from', das gar kein JID ist, gehört in dieselbe Zeile:
-            // Abschnitt 8.1.1.1 nennt beides ungültig, und der Grund trägt
-            // genauso - wer einmal etwas ohne Adresse schickt, tut es wieder.
+            // RFC 6120, section 8.1.1.1: with a 'from' the peer may not speak
+            // for, the stream ends. The reason is not strictness for its own
+            // sake - whoever writes once in the name of a foreign domain does
+            // it again on the next attempt, and a single discarded stanza would
+            // not stop them. The other refusals concern only the one stanza.
+            // A 'from' that is not a JID at all belongs in the same line:
+            // section 8.1.1.1 calls both invalid, and the reason carries just
+            // as well - whoever sends something without an address once does it
+            // again.
             if (result is RemoteStanzaResult.ForeignSender
                        or RemoteStanzaResult.MalformedSender)
                 await SendStreamErrorAsync("invalid-from",
                                            result == RemoteStanzaResult.ForeignSender
-                                               ? $"'{RemoteDomain}' darf nicht für eine fremde Domain sprechen."
-                                               : "Das 'from' der Stanza ist kein JID.",
+                                               ? $"'{RemoteDomain}' must not speak for a foreign domain."
+                                               : "The 'from' of the stanza is not a JID.",
                                            cancellationToken);
 
             return false;
@@ -1614,9 +1594,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Abort(reason)
 
         /// <summary>
-        /// Beendet den Stream, ohne einen Rahmen zu schicken - für den Fall,
-        /// dass der Transport selbst schon weg ist und ein
-        /// <c>&lt;close/&gt;</c> ohnehin niemanden mehr erreichte.
+        /// Ends the stream without sending a frame - for the case that the
+        /// transport itself is already gone and a <c>&lt;close/&gt;</c> would
+        /// reach nobody anyway.
         /// </summary>
         internal void Abort(String? reason)
             => MarkClosed(reason);
@@ -1647,7 +1627,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        private void MarkAuthenticated(String wodurch = "Dialback")
+        private void MarkAuthenticated(String by = "Dialback")
         {
 
             lock (dataLock)
@@ -1657,30 +1637,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     return;
 
                 IsAuthenticated  = true;
-                AuthenticatedBy  = wodurch;
+                AuthenticatedBy  = by;
 
             }
 
             dialbackDone.TrySetResult();
 
-            // Nur wenn der Stream nicht gerade neu anfängt - sonst meldet er
-            // sich benutzbar, während sein Kopf noch aussteht.
+            // Only when the stream is not starting over just now - otherwise it
+            // reports itself usable while its header is still outstanding.
             if (IsOpen)
                 ready.TrySetResult();
 
         }
 
         /// <summary>
-        /// Setzt den Stream auf "noch nicht geöffnet" zurück, ohne das
-        /// Erreichte preiszugeben.
+        /// Resets the stream to "not opened yet" without giving up what has
+        /// been reached.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 6.4.6: nach erfolgreichem SASL beginnt der
-        /// Stream von vorn - neuer Stream-Kopf, neue Stream-ID. Was
-        /// <b>nicht</b> zurückgesetzt wird, ist die Feststellung, wer die
-        /// Gegenstelle ist: die stammt aus dem Zertifikat und nicht aus dem
-        /// Stream, und sie noch einmal zu erfragen hiesse, sie noch einmal
-        /// erraten zu lassen.
+        /// RFC 6120, section 6.4.6: after a successful SASL the stream begins
+        /// over - a new stream header, a new stream ID. What is <b>not</b>
+        /// reset is the finding of who the peer is: that comes from the
+        /// certificate and not from the stream, and asking for it once more
+        /// would mean letting it be guessed once more.
         /// </remarks>
         private void ReopenForRestart()
         {
@@ -1714,9 +1693,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
-            // Wer auf den Handshake wartet, soll nicht ins Zeitlimit laufen,
-            // wenn schon feststeht, dass er nicht mehr kommt. Dasselbe gilt
-            // für Dialback und für eine offene Verifikationsanfrage.
+            // Whoever waits for the handshake shall not run into the time limit
+            // when it is already settled that it is not coming any more. The
+            // same holds for dialback and for an open verification query.
             openHandshake.TrySetCanceled();
             dialbackDone.TrySetCanceled();
             ready.TrySetCanceled();
@@ -1731,8 +1710,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         public override String ToString()
 
-            => $"{(IsInitiator ? "→" : "←")} {LocalDomain} / {RemoteDomain ?? "(unbekannt)"}" +
-               (IsClosed ? " (beendet)" : IsOpen ? " (offen)" : " (im Aufbau)");
+            => $"{(IsInitiator ? "→" : "←")} {LocalDomain} / {RemoteDomain ?? "(unknown)"}" +
+               (IsClosed ? " (ended)" : IsOpen ? " (open)" : " (being established)");
 
     }
 
