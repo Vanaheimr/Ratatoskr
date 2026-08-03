@@ -32,15 +32,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// SASL-EXTERNAL über echte Sockets: zwei Server weisen sich mit ihren
-    /// Zertifikaten aus, statt sich per Dialback rückzufragen.
+    /// SASL-EXTERNAL over real sockets: two servers identify themselves with
+    /// their certificates instead of asking back by dialback.
     /// </summary>
     /// <remarks>
-    /// Der sichtbare Unterschied zu Dialback ist die <b>fehlende</b> zweite
-    /// Verbindung. Dialback braucht je Richtung einen Rückruf beim autoritativen
-    /// Server; SASL-EXTERNAL liest das Zertifikat, das im TLS-Handshake ohnehin
-    /// vorlag. Genau daran lässt sich auch von aussen erkennen, welches
-    /// Verfahren gegriffen hat - und darauf beruht der erste Test hier.
+    /// The visible difference to dialback is the <b>missing</b> second
+    /// connection. Dialback needs one call back at the authoritative server per
+    /// direction; SASL-EXTERNAL reads the certificate that lay there in the TLS
+    /// handshake anyway. That is also what makes it possible to tell from the
+    /// outside which procedure took hold - and the first test here rests on
+    /// that.
     /// </remarks>
     [TestFixture]
     public class SaslExternalTests
@@ -48,10 +49,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private XMPPServer _links = null!;
-        private XMPPServer _rechts = null!;
-        private TcpServerLinks _linksLinks = null!;
-        private TcpServerLinks _rechtsLinks = null!;
+        private XMPPServer _left = null!;
+        private XMPPServer _right = null!;
+        private TcpServerLinks _leftLinks = null!;
+        private TcpServerLinks _rightLinks = null!;
         private readonly List<XMPPClient> _clients = [];
         private readonly InternalErrorGuard _guard = new();
 
@@ -60,38 +61,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SetUp / TearDown
 
         [SetUp]
-        public void ZweiServer()
+        public void TwoServers()
         {
 
-            // Die Wache an beide: Ein Fehler auf dem einen Server entsteht oft
-            // durch eine Stanza, die der andere geschickt hat.
+            // The watch on both: an error on the one server often arises from a
+            // stanza the other one sent.
             _guard.Reset();
 
-            _links   = _guard.Watched(new XMPPServer("left.example"));
-            _rechts  = _guard.Watched(new XMPPServer("right.example"));
+            _left   = _guard.Watched(new XMPPServer("left.example"));
+            _right  = _guard.Watched(new XMPPServer("right.example"));
 
-            _links.Start();
-            _rechts.Start();
+            _left.Start();
+            _right.Start();
 
         }
 
         [TearDown]
-        public async Task Abraeumen()
+        public async Task CleanUp()
         {
 
             foreach (var client in _clients)
             {
                 try { await client.DisposeAsync(); }
-                catch { /* im Teardown egal */ }
+                catch { /* never mind in the teardown */ }
             }
 
             _clients.Clear();
 
-            if (_linksLinks  is not null) await _linksLinks.DisposeAsync();
-            if (_rechtsLinks is not null) await _rechtsLinks.DisposeAsync();
+            if (_leftLinks  is not null) await _leftLinks.DisposeAsync();
+            if (_rightLinks is not null) await _rightLinks.DisposeAsync();
 
-            await _links.DisposeAsync();
-            await _rechts.DisposeAsync();
+            await _left.DisposeAsync();
+            await _right.DisposeAsync();
 
             _guard.AssertClean();
 
@@ -99,18 +100,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Verkabelt beide Server, wahlweise mit SASL-EXTERNAL.</summary>
-        private void Verkabeln(Boolean mitExternal)
+        /// <summary>Wires both servers together, optionally with SASL-EXTERNAL.</summary>
+        private void Wire(Boolean withExternal)
         {
 
-            TcpServerLinks.Connect(_links, _rechts,
+            TcpServerLinks.Connect(_left, _right,
                                    TcpTlsMode.StartTls,
-                                   useSaslExternal: mitExternal);
+                                   useSaslExternal: withExternal);
 
-            _linksLinks   = (TcpServerLinks) _links.ServerLinks!;
-            _rechtsLinks  = (TcpServerLinks) _rechts.ServerLinks!;
+            _leftLinks   = (TcpServerLinks) _left.ServerLinks!;
+            _rightLinks  = (TcpServerLinks) _right.ServerLinks!;
 
         }
 
@@ -138,10 +139,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        private static async Task WarteAuf(Func<Boolean> bedingung, String was)
+        private static async Task WaitFor(Func<Boolean> condition, String what)
         {
-            Assert.That(await XMPPServer.WaitUntilAsync(bedingung),
-                        Is.True, $"Zeitüberschreitung beim Warten auf: {was}");
+            Assert.That(await XMPPServer.WaitUntilAsync(condition),
+                        Is.True, $"Timeout while waiting for: {what}");
         }
 
         #endregion
@@ -150,44 +151,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessageCrossesTheBoundaryWithoutDialback()
 
         /// <summary>
-        /// Der Kern: die Nachricht kommt an, und die Domain wurde über das
-        /// Zertifikat belegt statt über eine Rückfrage.
+        /// The heart of it: the message arrives, and the domain was vouched for
+        /// by the certificate instead of by a question back.
         /// </summary>
         /// <remarks>
-        /// Gemessen wird, wie oft die Gegenstelle einen Dialback-Schlüssel
-        /// nachgefragt hat - die einzige von aussen sichtbare Spur, die die
-        /// beiden Verfahren unterscheidet. Die Zahl der Verbindungen taugt
-        /// dafür <b>nicht</b>: über die Grenze läuft noch anderes, unter
-        /// anderem Bobs automatische Empfangsbestätigung, die ihrerseits eine
-        /// Verbindung in die Gegenrichtung aufbaut. Eine erste Fassung dieses
-        /// Tests zählte Verbindungen und schlug genau daran fehl.
+        /// What is measured is how often the counterpart asked after a dialback
+        /// key - the only trace visible from the outside that tells the two
+        /// procedures apart. The number of connections is <b>no</b> good for
+        /// that: other things cross the boundary too, among them Bob's
+        /// automatic delivery receipt, which for its part builds a connection
+        /// in the opposite direction. A first version of this test counted
+        /// connections and failed on exactly that.
         /// </remarks>
         [Test]
         public async Task MessageCrossesTheBoundaryWithoutDialback()
         {
 
-            Verkabeln(mitExternal: true);
+            Wire(withExternal: true);
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo per Zertifikat!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello by certificate!");
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht auf dem anderen Server");
+            await WaitFor(() => received.Count > 0, "the message on the other server");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(empfangen[0].Body,        Is.EqualTo("Hallo per Zertifikat!"));
-                Assert.That(empfangen[0].FromBareJid, Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].Body,        Is.EqualTo("Hello by certificate!"));
+                Assert.That(received[0].FromBareJid, Is.EqualTo("alice@left.example"));
 
-                Assert.That(_rechtsLinks.DialbackVerificationCount, Is.Zero,
-                            "Mit SASL-EXTERNAL darf die Gegenstelle nicht zurückfragen.");
-                Assert.That(_linksLinks.DialbackVerificationCount, Is.Zero);
+                Assert.That(_rightLinks.DialbackVerificationCount, Is.Zero,
+                            "With SASL-EXTERNAL the counterpart must not ask back.");
+                Assert.That(_leftLinks.DialbackVerificationCount, Is.Zero);
             });
 
         }
@@ -197,32 +198,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutExternal_DialbackCallsBack()
 
         /// <summary>
-        /// Die Gegenprobe: ohne SASL-EXTERNAL kommt genau die Rückfrage, die
-        /// oben ausbleiben muss.
+        /// The counter-check: without SASL-EXTERNAL comes exactly the question
+        /// back that has to stay away above.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test bewiese der vorige nichts: eine Null bei den
-        /// eingehenden Verbindungen wäre auch dann zu sehen, wenn schlicht
-        /// niemand je zurückruft.
+        /// Without this test the previous one would prove nothing: a zero in
+        /// the incoming connections would also be seen if simply nobody ever
+        /// called back.
         /// </remarks>
         [Test]
         public async Task WithoutExternal_DialbackCallsBack()
         {
 
-            Verkabeln(mitExternal: false);
+            Wire(withExternal: false);
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Hallo per Dialback!");
+            await alice.SendMessageAsync(bob.BareJid, "Hello by dialback!");
 
-            await WarteAuf(() => empfangen.Count > 0, "die Nachricht auf dem anderen Server");
+            await WaitFor(() => received.Count > 0, "the message on the other server");
 
-            await WarteAuf(() => _rechtsLinks.DialbackVerificationCount > 0,
-                           "die Dialback-Rückfrage von right.example");
+            await WaitFor(() => _rightLinks.DialbackVerificationCount > 0,
+                           "the dialback question back from right.example");
 
         }
 
@@ -234,24 +235,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheAnswerFindsItsWayBack()
         {
 
-            Verkabeln(mitExternal: true);
+            Wire(withExternal: true);
 
-            var alice = await ConnectAsync(_links,  "alice");
-            var bob   = await ConnectAsync(_rechts, "bob");
+            var alice = await ConnectAsync(_left,  "alice");
+            var bob   = await ConnectAsync(_right, "bob");
 
-            var beiBob    = new List<XMPPMessage>();
-            var beiAlice  = new List<XMPPMessage>();
+            var atBob    = new List<XMPPMessage>();
+            var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => beiBob.Add(m);
-            alice.OnMessage  += m => beiAlice.Add(m);
+            bob.OnMessage    += m => atBob.Add(m);
+            alice.OnMessage  += m => atAlice.Add(m);
 
-            await alice.SendMessageAsync(bob.BareJid, "Frage");
-            await WarteAuf(() => beiBob.Count > 0, "die Frage bei Bob");
+            await alice.SendMessageAsync(bob.BareJid, "Question");
+            await WaitFor(() => atBob.Count > 0, "the question at Bob");
 
-            await bob.SendMessageAsync(beiBob[0].FromBareJid, "Antwort");
-            await WarteAuf(() => beiAlice.Count > 0, "die Antwort bei Alice");
+            await bob.SendMessageAsync(atBob[0].FromBareJid, "Answer");
+            await WaitFor(() => atAlice.Count > 0, "the answer at Alice");
 
-            Assert.That(beiAlice[0].Body, Is.EqualTo("Antwort"));
+            Assert.That(atAlice[0].Body, Is.EqualTo("Answer"));
 
         }
 
@@ -260,82 +261,80 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ACertificateForAnotherDomain_GetsNothingThrough()
 
         /// <summary>
-        /// Wer sich als <c>left.example</c> ausgibt, aber ein Zertifikat für
-        /// <c>schwindler.example</c> vorlegt, kommt nicht durch.
+        /// Whoever gives themselves out as <c>left.example</c> but presents a
+        /// certificate for <c>impostor.example</c> does not get through.
         /// </summary>
         /// <remarks>
-        /// Der Stream wird hier von Hand geführt, und das ist nötig: mit
-        /// <see cref="TcpServerLinks"/> gebaut hätte der Angreifer immer ein
-        /// Zertifikat, das zu seiner Domain passt - und dann wäre sein
-        /// Durchkommen richtig und kein Fehler. Eine erste Fassung dieses
-        /// Tests machte genau das und schlug fehl, weil sie das erlaubte
-        /// Verhalten für einen Angriff hielt.
+        /// The stream is driven by hand here, and that is necessary: built with
+        /// <see cref="TcpServerLinks"/> the attacker would always have a
+        /// certificate matching their domain - and then getting through would
+        /// be right and no fault. A first version of this test did exactly that
+        /// and failed, because it took the permitted behaviour for an attack.
         ///
-        /// Geprüft wird damit, dass der Transport die Zertifikatsprüfung
-        /// wirklich verdrahtet hat. Dass die Prüfung selbst richtig
-        /// entscheidet, steht in
+        /// What is checked is that the transport really has the certificate
+        /// check wired up. That the check itself decides rightly stands in
         /// <c>S2SStreamTests.ACertificateThatDoesNotCoverTheDomain_IsRefused</c>
-        /// und in <see cref="CertificateIdentityTests"/>.
+        /// and in <see cref="CertificateIdentityTests"/>.
         /// </remarks>
         [Test]
         public async Task ACertificateForAnotherDomain_GetsNothingThrough()
         {
 
-            Verkabeln(mitExternal: true);
+            Wire(withExternal: true);
 
-            var bob = await ConnectAsync(_rechts, "bob");
+            var bob = await ConnectAsync(_right, "bob");
 
-            var empfangen = new List<XMPPMessage>();
-            bob.OnMessage += m => empfangen.Add(m);
+            var received = new List<XMPPMessage>();
+            bob.OnMessage += m => received.Add(m);
 
-            // Nur als Zertifikatslieferant: dieser Server heisst
-            // schwindler.example, und sein Zertifikat sagt das auch.
-            await using var schwindler = _guard.Watched(new XMPPServer("schwindler.example"));
+            // Only as a supplier of certificates: this server is called
+            // impostor.example, and its certificate says so too.
+            await using var impostor = _guard.Watched(new XMPPServer("impostor.example"));
 
             using var client = new TcpClient();
-            await client.ConnectAsync(System.Net.IPAddress.Loopback, _rechtsLinks.Port);
+            await client.ConnectAsync(System.Net.IPAddress.Loopback, _rightLinks.Port);
 
-            var netz    = client.GetStream();
-            var puffer  = new Byte[8192];
+            var net     = client.GetStream();
+            var buffer  = new Byte[8192];
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
-            async Task Roh(String text)
-                => await netz.WriteAsync(Encoding.UTF8.GetBytes(text), cts.Token);
+            async Task Raw(String text)
+                => await net.WriteAsync(Encoding.UTF8.GetBytes(text), cts.Token);
 
-            async Task<String> RohLiesBis(String was)
+            async Task<String> RawReadUntil(String what)
             {
-                var alles = "";
-                while (!alles.Contains(was, StringComparison.Ordinal))
+                var all = "";
+                while (!all.Contains(what, StringComparison.Ordinal))
                 {
-                    var n = await netz.ReadAsync(puffer, cts.Token);
+                    var n = await net.ReadAsync(buffer, cts.Token);
                     if (n <= 0) break;
-                    alles += Encoding.UTF8.GetString(puffer, 0, n);
+                    all += Encoding.UTF8.GetString(buffer, 0, n);
                 }
-                return alles;
+                return all;
             }
 
-            const String Kopf = "<stream:stream xmlns='jabber:server' " +
+            const String Header = "<stream:stream xmlns='jabber:server' " +
                                 "xmlns:stream='http://etherx.jabber.org/streams' " +
                                 "xmlns:db='jabber:server:dialback' " +
                                 "from='left.example' to='right.example' version='1.0'>";
 
-            await Roh(Kopf);
-            await RohLiesBis("urn:ietf:params:xml:ns:xmpp-tls");
-            await Roh("<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
-            await RohLiesBis("proceed");
+            await Raw(Header);
+            await RawReadUntil("urn:ietf:params:xml:ns:xmpp-tls");
+            await Raw("<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>");
+            await RawReadUntil("proceed");
 
-            await using var tls = new SslStream(netz,
+            await using var tls = new SslStream(net,
                                                 leaveInnerStreamOpen: false,
-                                                userCertificateValidationCallback: _rechts.IsOwnCertificate);
+                                                userCertificateValidationCallback: _right.IsOwnCertificate);
 
             await tls.AuthenticateAsClientAsync(
                       new SslClientAuthenticationOptions {
                           TargetHost          = "right.example",
-                          ClientCertificates  = [schwindler.Certificate!]
+                          ClientCertificates  = [impostor.Certificate!]
                       },
                       cts.Token);
 
-            var gelesen = new StringBuilder();
+            var read = new StringBuilder();
 
             _ = Task.Run(async () =>
             {
@@ -346,44 +345,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                     {
                         var n = await tls.ReadAsync(p2);
                         if (n <= 0) break;
-                        lock (gelesen) gelesen.Append(Encoding.UTF8.GetString(p2, 0, n));
+                        lock (read) read.Append(Encoding.UTF8.GetString(p2, 0, n));
                     }
                 }
-                catch (Exception) { /* Verbindung zu - erwartet */ }
+                catch (Exception) { /* connection closed - expected */ }
             });
 
-            async Task Sende(String text)
+            async Task Send(String text)
                 => await tls.WriteAsync(Encoding.UTF8.GetBytes(text), cts.Token);
 
-            Boolean Sah(String text)
+            Boolean Saw(String text)
             {
-                lock (gelesen) return gelesen.ToString().Contains(text, StringComparison.Ordinal);
+                lock (read) return read.ToString().Contains(text, StringComparison.Ordinal);
             }
 
-            // Nach STARTTLS faengt der Stream von vorn an - weiterhin unter
-            // dem fremden Namen.
-            await Sende(Kopf);
+            // After STARTTLS the stream starts from the beginning again - still
+            // under the foreign name.
+            await Send(Header);
 
-            await WarteAuf(() => Sah("EXTERNAL"), "das SASL-Angebot");
+            await WaitFor(() => Saw("EXTERNAL"), "the SASL offer");
 
             var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("left.example"));
 
-            await Sende($"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>{authzid}</auth>");
+            await Send($"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>{authzid}</auth>");
 
-            await WarteAuf(() => Sah("failure") || Sah("success"), "die SASL-Antwort");
+            await WaitFor(() => Saw("failure") || Saw("success"), "the SASL answer");
 
-            await Sende($"<message from='wer@left.example' to='{bob.BareJid}' type='chat'>" +
-                        "<body>Durchgerutscht?</body></message>");
+            await Send($"<message from='who@left.example' to='{bob.BareJid}' type='chat'>" +
+                        "<body>Slipped through?</body></message>");
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Sah("not-authorized"), Is.True,
-                            "Ein Zertifikat fuer eine andere Domain darf nicht ausreichen.");
-                Assert.That(Sah("<success"), Is.False);
-                Assert.That(empfangen, Is.Empty,
-                            "Die Stanza darf den Client nicht erreichen.");
+                Assert.That(Saw("not-authorized"), Is.True,
+                            "A certificate for another domain must not be enough.");
+                Assert.That(Saw("<success"), Is.False);
+                Assert.That(received, Is.Empty,
+                            "The stanza must not reach the client.");
             });
 
         }

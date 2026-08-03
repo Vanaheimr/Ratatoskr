@@ -27,20 +27,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// SASLprep (RFC 4013), zuerst gegen die Beispieltabelle aus Abschnitt 3.
+    /// SASLprep (RFC 4013), first against the example table from section 3.
     /// </summary>
     /// <remarks>
-    /// Sieben Zeilen, die alle vier Schritte des Profils abdecken: Abbildung,
-    /// Normalisierung, Verbote und die Bidi-Pruefung. Sie sind der Grund, warum
-    /// sich diese Umsetzung nicht selbst benotet - die Tabellen dahinter
-    /// stammen aus RFC 3454 und sind von <c>tools/stringprep/generate.py</c>
-    /// daraus erzeugt.
+    /// Seven lines that cover all four steps of the profile: mapping,
+    /// normalisation, prohibitions and the bidi check. They are the reason this
+    /// implementation does not mark its own homework - the tables behind it
+    /// come from RFC 3454 and are generated from it by
+    /// <c>tools/stringprep/generate.py</c>.
     ///
-    /// Jedes geprüfte Zeichen steht als Escape-Sequenz da und nicht als es
-    /// selbst. Die halbe Sammlung besteht aus Zeichen, die unsichtbar sind oder
-    /// die Schreibrichtung umkehren; als Literal im Quelltext wäre nicht zu
-    /// sehen, was eigentlich geprüft wird - und beim Bearbeiten ginge es
-    /// unbemerkt verloren. (Diese Datei hat genau das einmal vorgeführt.)
+    /// Every character checked stands there as an escape sequence and not as
+    /// itself. Half the collection consists of characters that are invisible or
+    /// that turn the writing direction around; as a literal in the source it
+    /// would not be visible what is actually being checked - and while editing
+    /// it would be lost unnoticed. (This file demonstrated exactly that once.)
     /// </remarks>
     [TestFixture]
     public class SaslPrepTests
@@ -48,7 +48,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        // Die Zeichen, um die es geht - benannt statt eingesetzt.
+        // The characters at issue - named rather than inserted.
         private const String SoftHyphen        = "\u00AD";
         private const String FeminineOrdinal   = "ª";
         private const String RomanNine         = "Ⅸ";
@@ -66,7 +66,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc4013_ExampleTable()
 
         /// <summary>
-        /// Die Beispieltabelle aus RFC 4013, Abschnitt 3, Zeile für Zeile.
+        /// The example table from RFC 4013, section 3, line by line.
         /// </summary>
         [Test]
         public void Rfc4013_ExampleTable()
@@ -75,26 +75,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                // 1: SOFT HYPHEN faellt weg
+                // 1: SOFT HYPHEN falls away
                 Assert.That(SaslPrep.Prepare("I" + SoftHyphen + "X"), Is.EqualTo("IX"));
 
-                // 2: unveraendert
+                // 2: unchanged
                 Assert.That(SaslPrep.Prepare("user"), Is.EqualTo("user"));
 
-                // 3: Gross- und Kleinschreibung bleibt - passt also nicht auf 2
+                // 3: upper and lower case stay - so this does not match 2
                 Assert.That(SaslPrep.Prepare("USER"), Is.EqualTo("USER"));
 
-                // 4: NFKC bildet das feminine Ordinalzeichen auf ein a ab
+                // 4: NFKC maps the feminine ordinal onto an a
                 Assert.That(SaslPrep.Prepare(FeminineOrdinal), Is.EqualTo("a"));
 
-                // 5: NFKC zerlegt die roemische Neun - passt danach auf 1
+                // 5: NFKC takes the roman nine apart - after which it matches 1
                 Assert.That(SaslPrep.Prepare(RomanNine), Is.EqualTo("IX"));
 
-                // 6: verbotenes Zeichen
+                // 6: prohibited character
                 Assert.That(() => SaslPrep.Prepare(Bell),
                             Throws.TypeOf<AuthenticationException>());
 
-                // 7: Bidi - arabisches Alef, dann die Ziffer Eins
+                // 7: bidi - arabic alef, then the digit one
                 Assert.That(() => SaslPrep.Prepare(ArabicAlef + "1"),
                             Throws.TypeOf<AuthenticationException>());
 
@@ -107,13 +107,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NonAsciiSpaces_BecomeAnOrdinarySpace()
 
         /// <summary>
-        /// RFC 4013, Abschnitt 2.1: Leerzeichen ausserhalb von ASCII werden zu
-        /// U+0020.
+        /// RFC 4013, section 2.1: spaces outside ASCII become U+0020.
         /// </summary>
         /// <remarks>
-        /// Der Fall aus dem Alltag: Ein geschütztes Leerzeichen sieht aus wie
-        /// ein gewöhnliches und entsteht auf manchen Tastaturen von selbst.
-        /// Ohne diese Abbildung wären es zwei verschiedene Passwörter.
+        /// The everyday case: a non-breaking space looks like an ordinary one
+        /// and arises by itself on some keyboards. Without this mapping they
+        /// would be two different passwords.
         /// </remarks>
         [Test]
         public void NonAsciiSpaces_BecomeAnOrdinarySpace()
@@ -133,18 +132,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region UnassignedCodePoints_AreRefused()
 
         /// <summary>
-        /// RFC 4013, Abschnitt 2.5: Was in Unicode 3.2 nicht zugewiesen war,
-        /// gehört nicht in ein gespeichertes Passwort.
+        /// RFC 4013, section 2.5: what was unassigned in Unicode 3.2 does not
+        /// belong in a stored password.
         /// </summary>
         /// <remarks>
-        /// Der Grund ist nicht Pedanterie: Ein Codepoint ohne festgelegte
-        /// Bedeutung kann später eine bekommen, und dann normalisieren ihn zwei
-        /// Gegenstellen verschieden. Wer ihn heute in sein Passwort nimmt, hat
-        /// morgen ein anderes.
+        /// The reason is not pedantry: a code point without a settled meaning
+        /// can be given one later, and then two counterparts normalise it
+        /// differently. Whoever takes it into their password today has a
+        /// different one tomorrow.
         ///
-        /// U+0221 belegt zugleich, dass die Tabelle wirklich auf Unicode 3.2
-        /// festgeschrieben ist und nicht aus der laufenden .NET-Fassung stammt:
-        /// Dort ist er längst ein lateinischer Kleinbuchstabe.
+        /// U+0221 vouches at the same time for the table really being nailed to
+        /// Unicode 3.2 and not coming from the running .NET version: there it
+        /// has long been a latin small letter.
         /// </remarks>
         [Test]
         public void UnassignedCodePoints_AreRefused()
@@ -156,7 +155,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(() => SaslPrep.Prepare("a" + Unassigned32 + "b"),
                             Throws.TypeOf<AuthenticationException>());
 
-                // Als Abfrage-Zeichenkette ist er zulässig.
+                // As a query string it is admissible.
                 Assert.That(SaslPrep.Prepare("a" + Unassigned32 + "b", AllowUnassigned: true),
                             Is.EqualTo("a" + Unassigned32 + "b"));
 
@@ -169,30 +168,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ProhibitedCharacters_AreRefused()
 
         /// <summary>
-        /// Ein Querschnitt durch die Verbotstabellen C.2 bis C.9.
+        /// A cross-section through the prohibition tables C.2 to C.9.
         /// </summary>
         [Test]
         public void ProhibitedCharacters_AreRefused()
         {
 
-            var verboten = new (String Name, String Eingabe)[]
+            var prohibited = new (String Name, String Input)[]
             {
-                ("ASCII-Steuerzeichen (C.2.1)",     "a\u0000b"),
-                ("Steuerzeichen (C.2.2)",           "a\u0080b"),
-                ("Private Use (C.3)",               "a\uE000b"),
-                ("Nicht-Zeichen (C.4)",             "a\uFDD0b"),
-                ("fuer Klartext ungeeignet (C.6)",  "a\uFFFCb"),
-                ("kanonisch ungeeignet (C.7)",      "a\u2FF0b"),
-                ("Darstellung aendernd (C.8)",      "a\u202Ab"),
-                ("Tagging (C.9)",                   "a\U000E0001b")
+                ("ASCII control characters (C.2.1)",   "a\u0000b"),
+                ("control characters (C.2.2)",         "a\u0080b"),
+                ("private use (C.3)",                  "a\uE000b"),
+                ("non-characters (C.4)",               "a\uFDD0b"),
+                ("inappropriate for plain text (C.6)", "a\uFFFCb"),
+                ("canonically inappropriate (C.7)",    "a\u2FF0b"),
+                ("changing the display (C.8)",         "a\u202Ab"),
+                ("tagging (C.9)",                      "a\U000E0001b")
             };
 
             Assert.Multiple(() =>
             {
-                foreach (var (name, eingabe) in verboten)
-                    Assert.That(() => SaslPrep.Prepare(eingabe),
+                foreach (var (name, input) in prohibited)
+                    Assert.That(() => SaslPrep.Prepare(input),
                                 Throws.TypeOf<AuthenticationException>(),
-                                $"Durchgelassen: {name}.");
+                                $"Let through: {name}.");
             });
 
         }
@@ -202,12 +201,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ALoneSurrogate_IsRefused()
 
         /// <summary>
-        /// Ein alleinstehendes Surrogat ist ein halbes Zeichen (Tabelle C.5).
+        /// A lone surrogate is half a character (table C.5).
         /// </summary>
         /// <remarks>
-        /// Der Weg über <c>EnumerateRunes</c> hätte es stillschweigend durch
-        /// U+FFFD ersetzt - und damit zwei verschiedene Eingaben auf dasselbe
-        /// Passwort geführt.
+        /// The way through <c>EnumerateRunes</c> would have replaced it in
+        /// silence by U+FFFD - and thereby led two different inputs to the same
+        /// password.
         /// </remarks>
         [Test]
         public void ALoneSurrogate_IsRefused()
@@ -222,7 +221,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(() => SaslPrep.Prepare("a\uDC00b"),
                             Throws.TypeOf<AuthenticationException>());
 
-                // Das vollstaendige Paar dagegen ist ein gewoehnliches Zeichen.
+                // The complete pair, by contrast, is an ordinary character.
                 Assert.That(SaslPrep.Prepare("a\U00010330b"),
                             Is.EqualTo("a\U00010330b"));
 
@@ -235,12 +234,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region BidiRules()
 
         /// <summary>
-        /// RFC 3454, Abschnitt 6: die beiden Regeln für Schreibrichtungen.
+        /// RFC 3454, section 6: the two rules for writing directions.
         /// </summary>
         /// <remarks>
-        /// Eine Zeichenkette aus beiden Richtungen wird je nach Umgebung
-        /// verschieden angezeigt - wer sie liest, sieht nicht zwingend, was
-        /// darin steht.
+        /// A string made of both directions is displayed differently depending
+        /// on its surroundings - whoever reads it does not necessarily see what
+        /// stands in it.
         /// </remarks>
         [Test]
         public void BidiRules()
@@ -249,33 +248,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                // Durchgehend rechtslaeufig: zulaessig.
+                // Right-to-left throughout: admissible.
                 Assert.That(SaslPrep.Prepare(ArabicAlef + ArabicBeh),
                             Is.EqualTo(ArabicAlef + ArabicBeh));
 
-                // Durchgehend linkslaeufig: zulaessig.
+                // Left-to-right throughout: admissible.
                 Assert.That(SaslPrep.Prepare("abc"), Is.EqualTo("abc"));
 
-                // Regel 2: beide Richtungen zusammen.
+                // Rule 2: both directions together.
                 Assert.That(() => SaslPrep.Prepare(ArabicAlef + "a" + ArabicBeh),
                             Throws.TypeOf<AuthenticationException>(),
-                            "Arabisch mit lateinischem Buchstaben dazwischen.");
+                            "Arabic with a latin letter in between.");
 
                 Assert.That(() => SaslPrep.Prepare(HebrewAlef + "a" + HebrewAlef),
                             Throws.TypeOf<AuthenticationException>(),
-                            "Hebraeisch mit lateinischem Buchstaben dazwischen.");
+                            "Hebrew with a latin letter in between.");
 
-                // Regel 3: beginnt rechtslaeufig, endet nicht rechtslaeufig.
+                // Rule 3: begins right-to-left, does not end right-to-left.
                 Assert.That(() => SaslPrep.Prepare(ArabicAlef + "1"),
                             Throws.TypeOf<AuthenticationException>());
 
-                // Und umgekehrt.
+                // And the other way round.
                 Assert.That(() => SaslPrep.Prepare("1" + ArabicAlef),
                             Throws.TypeOf<AuthenticationException>());
 
-                // Ziffern zwischen rechtslaeufigen Zeichen sind dagegen in
-                // Ordnung: Sie stehen weder in D.1 noch in D.2, und Anfang und
-                // Ende stimmen.
+                // Digits between right-to-left characters, by contrast, are in
+                // order: they stand neither in D.1 nor in D.2, and the
+                // beginning and the end are right.
                 Assert.That(SaslPrep.Prepare(ArabicAlef + "1" + ArabicBeh),
                             Is.EqualTo(ArabicAlef + "1" + ArabicBeh));
 
@@ -288,36 +287,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Prepare_IsIdempotent()
 
         /// <summary>
-        /// Zweimal vorbereiten ändert nichts mehr.
+        /// Preparing twice changes nothing further.
         /// </summary>
         /// <remarks>
-        /// Das ist die Eigenschaft, von der alles Übrige abhängt: Der Server
-        /// legt den Schlüssel einer vorbereiteten Zeichenkette ab, der Client
-        /// bereitet bei jeder Anmeldung neu vor. Wäre das Verfahren nicht
-        /// idempotent, liefen die beiden mit jedem Durchgang weiter
-        /// auseinander.
+        /// That is the property everything else hangs on: the server stores the
+        /// key of a prepared string, the client prepares afresh at every login.
+        /// Were the procedure not idempotent, the two would drift further apart
+        /// with every pass.
         /// </remarks>
         [Test]
         public void Prepare_IsIdempotent()
         {
 
-            var eingaben = new[] {
+            var inputs = new[] {
                 "user",
                 "I" + SoftHyphen + "X",
                 RomanNine,
                 "a" + NoBreakSpace + "b",
-                "Zwiebelfisch",
+                "ordinary",
                 ArabicAlef + ArabicBeh,
                 "groß"
             };
 
             Assert.Multiple(() =>
             {
-                foreach (var eingabe in eingaben)
+                foreach (var input in inputs)
                 {
-                    var einmal = SaslPrep.Prepare(eingabe);
-                    Assert.That(SaslPrep.Prepare(einmal), Is.EqualTo(einmal),
-                                $"Nicht idempotent: {eingabe}");
+                    var once = SaslPrep.Prepare(input);
+                    Assert.That(SaslPrep.Prepare(once), Is.EqualTo(once),
+                                $"Not idempotent: {input}");
                 }
             });
 
@@ -328,8 +326,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheEmptyString_StaysEmpty()
 
         /// <summary>
-        /// Die leere Zeichenkette geht unbeanstandet durch - insbesondere
-        /// stolpert die Bidi-Prüfung nicht über das fehlende erste Zeichen.
+        /// The empty string goes through without complaint - in particular the
+        /// bidi check does not stumble over the missing first character.
         /// </summary>
         [Test]
         public void TheEmptyString_StaysEmpty()

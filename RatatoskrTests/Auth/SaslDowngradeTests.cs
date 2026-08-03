@@ -27,45 +27,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Der SASL-Downgrade: Der Server bietet plötzlich weniger an als beim
-    /// letzten Mal.
+    /// The SASL downgrade: the server suddenly offers less than it did last
+    /// time.
     /// </summary>
     /// <remarks>
-    /// Der Client nahm bisher, was angekündigt wurde. Das ist bequem und für
-    /// den ehrlichen Server auch richtig - nur ist die Ankündigung nicht
-    /// authentifiziert. Ein Zwischenmann streicht die SCRAM-Angebote aus den
-    /// Features, übrig bleibt PLAIN, und der Client schickt das Passwort
-    /// selbst statt eines Beweises, dass er es kennt.
+    /// The client used to take whatever was announced. That is convenient, and
+    /// for an honest server it is also right - only the announcement is not
+    /// authenticated. A man in the middle strikes the SCRAM offers out of the
+    /// features, PLAIN is what remains, and the client sends the password
+    /// itself instead of a proof that it knows it.
     ///
-    /// Der Angriff braucht dafür nicht den ersten Verbindungsaufbau: Der
-    /// Client kommt nach jedem Abriss von allein wieder, und ein Abriss lässt
-    /// sich erzwingen. Genau diese zweite Anmeldung ist es, die hier gedeckt
-    /// wird - der Testserver spielt den Zwischenmann, indem er seine
-    /// Mechanismen zwischen den beiden Verbindungen ändert.
+    /// The attack does not need the first connect for that: the client comes
+    /// back of its own accord after every break, and a break can be brought
+    /// about. It is precisely this second login that is covered here - the test
+    /// server plays the man in the middle by changing its mechanisms between
+    /// the two connections.
     /// </remarks>
     [TestFixture]
     public class SaslDowngradeTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Zählt, wie oft die Verbindung seit dem Anmelden in
-        /// <see cref="ConnectionState.Connected"/> gegangen ist.
+        /// Counts how often the connection has gone into
+        /// <see cref="ConnectionState.Connected"/> since the login.
         /// </summary>
         /// <remarks>
-        /// Gezählt statt abgefragt: Ein <c>WaitFor(() =&gt; client.IsConnected)</c>
-        /// wäre schon erfüllt, bevor der Abriss überhaupt bemerkt wurde, und
-        /// bewiese dann nichts über den zweiten Aufbau.
+        /// Counted rather than asked: a <c>WaitFor(() =&gt; client.IsConnected)</c>
+        /// would already be met before the break was even noticed, and would
+        /// then prove nothing about the second connect.
         /// </remarks>
         private static Func<Int32> CountReconnects(XMPPClient client)
         {
 
             var count = 0;
 
-            client.Connection.OnStateChanged += (alt, neu) =>
+            client.Connection.OnStateChanged += (oldState, newState) =>
             {
-                if (neu == ConnectionState.Connected)
+                if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref count);
             };
 
@@ -73,7 +73,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Alles, was der Server je an <c>&lt;auth/&gt;</c> gesehen hat.</summary>
+        /// <summary>Everything the server has ever seen by way of <c>&lt;auth/&gt;</c>.</summary>
         private Boolean SawAuthWith(String mechanism)
 
             => Server.AllReceived.Any(f => f.Contains($"mechanism='{mechanism}'", StringComparison.Ordinal));
@@ -84,8 +84,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AWeakerServerOnTheSecondConnect_IsRefused()
 
         /// <summary>
-        /// Der Kern: Was beim ersten Mal über SCRAM lief, darf beim zweiten
-        /// nicht über PLAIN laufen.
+        /// The heart of it: what ran over SCRAM the first time must not run
+        /// over PLAIN the second.
         /// </summary>
         [Test]
         public async Task AWeakerServerOnTheSecondConnect_IsRefused()
@@ -94,31 +94,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
 
             Assert.That(client.Connection.PinnedSaslMechanism, Is.EqualTo("SCRAM-SHA-256"),
-                        "Vorbedingung: die erste Anmeldung muss über SCRAM-SHA-256 gelaufen sein.");
+                        "Precondition: the first login must have run over SCRAM-SHA-256.");
 
             var errors = new List<String>();
             client.OnError += e => errors.Add(e);
 
-            // Ab jetzt bietet der Server nur noch PLAIN an.
+            // From now on the server offers nothing but PLAIN.
             Server.OfferedSaslMechanisms.Clear();
             Server.OfferedSaslMechanisms.Add("PLAIN");
 
             client.KillConnection();
 
-            await WaitFor(() => errors.Count > 0, "die Ablehnung des Downgrades");
+            await WaitFor(() => errors.Count > 0, "the refusal of the downgrade");
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(client.IsConnected, Is.False,
-                            "Nach einem Downgrade darf keine Verbindung zustande kommen.");
+                            "After a downgrade no connection may come about.");
 
                 Assert.That(errors.Any(e => e.Contains("Downgrade", StringComparison.OrdinalIgnoreCase)),
                             Is.True,
-                            $"Der Grund muss benannt werden. Gemeldet wurde: {String.Join(" | ", errors)}");
+                            $"The reason has to be named. Reported was: {String.Join(" | ", errors)}");
 
                 Assert.That(SawAuthWith("PLAIN"), Is.False,
-                            "Es darf gar kein <auth/> über PLAIN hinausgegangen sein.");
+                            "No <auth/> at all may have gone out over PLAIN.");
 
             });
 
@@ -129,23 +129,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRefusalHappensBeforeThePasswordGoesOut()
 
         /// <summary>
-        /// Und zwar, bevor der erste Rahmen hinausgeht - bei PLAIN steht das
-        /// Passwort in genau diesem <c>&lt;auth/&gt;</c>.
+        /// And before the first frame goes out, at that - with PLAIN the
+        /// password sits in exactly this <c>&lt;auth/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Eine Prüfung, die erst die Antwort des Servers ansieht, käme zu
-        /// spät: Der Zwischenmann hätte, worauf er aus war, und die Anmeldung
-        /// danach abzubrechen nähme es ihm nicht wieder ab.
+        /// A check that first looks at the server's answer would come too late:
+        /// the man in the middle would have what he was after, and breaking off
+        /// the login afterwards would not take it back off him.
         /// </remarks>
         [Test]
         public async Task TheRefusalHappensBeforeThePasswordGoesOut()
         {
 
-            const String passwort = "Zwiebelfisch-Quastenflosser-42";
+            const String password = "Pilcrow-Coelacanth-42";
 
-            Server.AddAccount("alice", passwort);
+            Server.AddAccount("alice", password);
 
-            var client = CreateClient("alice", password: passwort);
+            var client = CreateClient("alice", password: password);
             await client.ConnectAsync();
 
             var errors = new List<String>();
@@ -156,21 +156,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             client.KillConnection();
 
-            await WaitFor(() => errors.Count > 0, "die Ablehnung des Downgrades");
+            await WaitFor(() => errors.Count > 0, "the refusal of the downgrade");
 
             var base64 = Convert.ToBase64String(
-                             System.Text.Encoding.UTF8.GetBytes($"\0alice\0{passwort}"));
+                             System.Text.Encoding.UTF8.GetBytes($"\0alice\0{password}"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Server.AllReceived.Any(f => f.Contains(passwort, StringComparison.Ordinal)),
+                Assert.That(Server.AllReceived.Any(f => f.Contains(password, StringComparison.Ordinal)),
                             Is.False,
-                            "Das Passwort stand im Klartext in einem Frame.");
+                            "The password stood in the clear in a frame.");
 
                 Assert.That(Server.AllReceived.Any(f => f.Contains(base64, StringComparison.Ordinal)),
                             Is.False,
-                            "Das Passwort ging als PLAIN-Nutzlast hinaus, bevor das Downgrade auffiel.");
+                            "The password went out as a PLAIN payload before the downgrade was noticed.");
 
             });
 
@@ -181,12 +181,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnchangedServerOnTheSecondConnect_IsAccepted()
 
         /// <summary>
-        /// Die Gegenprobe: Bleibt das Angebot gleich, kommt der Client ganz
-        /// normal wieder.
+        /// The counter-check: if the offer stays the same, the client comes
+        /// back quite normally.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn die Untergrenze jeden
-        /// zweiten Verbindungsaufbau abwiese.
+        /// Without it the collection would pass even if the lower bound refused
+        /// every second connect.
         /// </remarks>
         [Test]
         public async Task AnUnchangedServerOnTheSecondConnect_IsAccepted()
@@ -200,7 +200,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             client.KillConnection();
 
-            await WaitFor(() => reconnects() >= 1, "die zweite Anmeldung");
+            await WaitFor(() => reconnects() >= 1, "the second login");
 
             Assert.Multiple(() =>
             {
@@ -210,7 +210,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(client.Connection.PinnedSaslMechanism, Is.EqualTo("SCRAM-SHA-256"));
 
                 Assert.That(errors, Is.Empty,
-                            $"Gemeldet wurde: {String.Join(" | ", errors)}");
+                            $"Reported was: {String.Join(" | ", errors)}");
 
             });
 
@@ -221,13 +221,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStrongerServerOnTheSecondConnect_IsAccepted()
 
         /// <summary>
-        /// Nach oben ist die Untergrenze offen: Ein Server, der SCRAM-SHA-256
-        /// nachrüstet, darf nicht daran scheitern, dass beim letzten Mal
-        /// SCRAM-SHA-1 lief.
+        /// Upwards the lower bound is open: a server that adds SCRAM-SHA-256
+        /// must not fail because SCRAM-SHA-1 was in use last time.
         /// </summary>
         /// <remarks>
-        /// Eine Anheftung, die auf Gleichheit statt auf Stärke prüft, wäre
-        /// kürzer zu schreiben und würde hier scheitern.
+        /// A pinning that checks for equality instead of for strength would be
+        /// shorter to write and would fail here.
         /// </remarks>
         [Test]
         public async Task AStrongerServerOnTheSecondConnect_IsAccepted()
@@ -240,13 +239,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var reconnects   = CountReconnects(client);
 
             Assert.That(client.Connection.PinnedSaslMechanism, Is.EqualTo("SCRAM-SHA-1"),
-                        "Vorbedingung: die erste Anmeldung muss über SCRAM-SHA-1 gelaufen sein.");
+                        "Precondition: the first login must have run over SCRAM-SHA-1.");
 
             Server.OfferedSaslMechanisms.Add("SCRAM-SHA-256");
 
             client.KillConnection();
 
-            await WaitFor(() => reconnects() >= 1, "die zweite Anmeldung");
+            await WaitFor(() => reconnects() >= 1, "the second login");
 
             Assert.Multiple(() =>
             {
@@ -254,7 +253,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(client.IsConnected, Is.True);
 
                 Assert.That(client.Connection.PinnedSaslMechanism, Is.EqualTo("SCRAM-SHA-256"),
-                            "Die Anheftung muss dem stärkeren Angebot folgen.");
+                            "The pinning has to follow the stronger offer.");
 
                 Assert.That(SawAuthWith("SCRAM-SHA-256"), Is.True);
 
@@ -267,12 +266,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheMinimumHoldsOnTheVeryFirstConnect()
 
         /// <summary>
-        /// Die gesetzte Untergrenze wirkt ohne jede vorige Anmeldung.
+        /// The lower bound that was set takes effect without any previous
+        /// login.
         /// </summary>
         /// <remarks>
-        /// Die Anheftung ist ein Trust-On-First-Use und schützt den ersten
-        /// Verbindungsaufbau naturgemäss nicht. Wer weiss, was sein Server
-        /// kann, sagt es - und braucht kein erstes Mal.
+        /// The pinning is a trust on first use and by its nature does not
+        /// protect the first connect. Whoever knows what their server can do
+        /// says so - and needs no first time.
         /// </remarks>
         [Test]
         public async Task TheMinimumHoldsOnTheVeryFirstConnect()
@@ -296,7 +296,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(client.IsConnected, Is.False,
-                            "Unter der verlangten Untergrenze darf keine Verbindung zustande kommen.");
+                            "Below the demanded lower bound no connection may come about.");
 
                 Assert.That(SawAuthWith("PLAIN"), Is.False);
 
@@ -311,7 +311,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheMinimumIsMetByAStrongerServer()
 
         /// <summary>
-        /// Und die Gegenprobe dazu: Erfüllt der Server sie, ändert sie nichts.
+        /// And the counter-check to it: if the server meets it, it changes
+        /// nothing.
         /// </summary>
         [Test]
         public async Task TheMinimumIsMetByAStrongerServer()
@@ -337,14 +338,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownMinimum_IsRefusedAtTheSetter()
 
         /// <summary>
-        /// Ein Mechanismusname, den der Client nicht kennt, wird beim Setzen
-        /// abgewiesen.
+        /// A mechanism name the client does not know is refused when it is set.
         /// </summary>
         /// <remarks>
-        /// Sonst wäre der Tippfehler die gefährlichste Eingabe: Ein unbekannter
-        /// Name hat die Stärke 0, und eine Untergrenze von 0 verlangt gar
-        /// nichts. Der Aufrufer bekäme lautlos das Gegenteil dessen, was er
-        /// hinschrieb.
+        /// Otherwise the typo would be the most dangerous input of all: an
+        /// unknown name has strength 0, and a lower bound of 0 demands nothing
+        /// at all. The caller would silently get the opposite of what they
+        /// wrote down.
         /// </remarks>
         [Test]
         public void AnUnknownMinimum_IsRefusedAtTheSetter()

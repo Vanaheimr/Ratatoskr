@@ -32,44 +32,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6120, Abschnitt 6.4.4: Bricht der Client die SASL-Aushandlung mit
-    /// <c>&lt;abort/&gt;</c> ab, antwortet der Server mit
-    /// <c>&lt;failure&gt;&lt;aborted/&gt;&lt;/failure&gt;</c> — und der Stream
-    /// bleibt stehen.
+    /// RFC 6120, section 6.4.4: if the client breaks off the SASL negotiation
+    /// with <c>&lt;abort/&gt;</c>, the server answers with
+    /// <c>&lt;failure&gt;&lt;aborted/&gt;&lt;/failure&gt;</c> — and the stream
+    /// stays up.
     /// </summary>
     /// <remarks>
-    /// Seit D26 beendete ein <c>&lt;abort/&gt;</c> den Stream mit
-    /// <c>&lt;unsupported-stanza-type/&gt;</c>. Wörtlich war das nicht falsch —
-    /// der Server unterstützte das Element nicht —, aber es ist die schlechtere
-    /// von zwei Antworten: Der Abbruch ist ein <b>vorgesehener</b> Schritt der
-    /// Aushandlung, kein Protokollverstoss. Wer ihn mit dem Ende des Streams
-    /// beantwortet, zwingt den Client zu einer neuen Verbindung für etwas, das
-    /// der RFC ausdrücklich innerhalb der bestehenden vorsieht.
+    /// Since D26 an <c>&lt;abort/&gt;</c> ended the stream with
+    /// <c>&lt;unsupported-stanza-type/&gt;</c>. Word for word that was not
+    /// wrong — the server did not support the element — but it is the worse of
+    /// two answers: breaking off is an <b>intended</b> step of the negotiation,
+    /// not a protocol violation. Whoever answers it with the end of the stream
+    /// forces the client into a new connection for something the RFC expressly
+    /// provides for within the existing one.
     ///
-    /// Geprüft wird über einen rohen <see cref="ClientWebSocket"/> und nicht
-    /// über <see cref="XMPPClient"/>: Der Abbruch gehört <b>mitten</b> in die
-    /// Aushandlung, und dort führt der richtige Client sein eigenes Gespräch.
-    /// Nur von Hand lässt sich ein halb begonnener SCRAM-Austausch überhaupt
-    /// herstellen.
+    /// Checked through a raw <see cref="ClientWebSocket"/> and not through
+    /// <see cref="XMPPClient"/>: breaking off belongs <b>in the middle</b> of
+    /// the negotiation, and there the real client holds a conversation of its
+    /// own. Only by hand can a half-begun SCRAM exchange be brought about at
+    /// all.
     /// </remarks>
     [TestFixture]
     public class SaslAbortTests : AXMPPTests
     {
 
-        #region Roher Client
+        #region Raw client
 
         /// <summary>
-        /// Ein Client für die Aushandlungsphase — ohne eigene Meinung darüber,
-        /// was als Nächstes zu tun ist.
+        /// A client for the negotiation phase — with no opinion of its own
+        /// about what to do next.
         /// </summary>
-        private sealed class RoherClient : IAsyncDisposable
+        private sealed class RawClient : IAsyncDisposable
         {
 
             private readonly ClientWebSocket _socket = new();
 
-            public List<String> Empfangen { get; } = [];
+            public List<String> Received { get; } = [];
 
-            public async Task VerbindeAsync(XMPPServer server)
+            public async Task ConnectAsync(XMPPServer server)
             {
 
                 _socket.Options.AddSubProtocol("xmpp");
@@ -77,58 +77,58 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 await _socket.ConnectAsync(new Uri(server.Uri), CancellationToken.None);
 
-                _ = LiesAsync();
+                _ = ReadAsync();
 
             }
 
-            public async Task SendeAsync(String rahmen)
-                => await _socket.SendAsync(Encoding.UTF8.GetBytes(rahmen),
+            public async Task SendAsync(String frame)
+                => await _socket.SendAsync(Encoding.UTF8.GetBytes(frame),
                                            WebSocketMessageType.Text, true, CancellationToken.None);
 
-            private async Task LiesAsync()
+            private async Task ReadAsync()
             {
 
-                var puffer = new Byte[16384];
+                var buffer = new Byte[16384];
 
                 try
                 {
                     while (_socket.State == WebSocketState.Open)
                     {
 
-                        var ergebnis = await _socket.ReceiveAsync(puffer, CancellationToken.None);
+                        var result = await _socket.ReceiveAsync(buffer, CancellationToken.None);
 
-                        if (ergebnis.MessageType == WebSocketMessageType.Close)
+                        if (result.MessageType == WebSocketMessageType.Close)
                             break;
 
-                        lock (Empfangen)
-                            Empfangen.Add(Encoding.UTF8.GetString(puffer, 0, ergebnis.Count));
+                        lock (Received)
+                            Received.Add(Encoding.UTF8.GetString(buffer, 0, result.Count));
 
                     }
                 }
                 catch (Exception)
                 {
-                    // Verbindung zu - je nach Test der erwartete Ausgang.
+                    // Connection closed - depending on the test the expected outcome.
                 }
 
             }
 
-            public Boolean Sah(String text)
+            public Boolean Saw(String text)
             {
-                lock (Empfangen)
-                    return Empfangen.Any(f => f.Contains(text, StringComparison.Ordinal));
+                lock (Received)
+                    return Received.Any(f => f.Contains(text, StringComparison.Ordinal));
             }
 
-            public Int32 Anzahl
+            public Int32 Count
             {
-                get { lock (Empfangen) return Empfangen.Count; }
+                get { lock (Received) return Received.Count; }
             }
 
-            public Boolean IstOffen
+            public Boolean IsOpen
                 => _socket.State == WebSocketState.Open;
 
             public ValueTask DisposeAsync()
             {
-                try { _socket.Dispose(); } catch { /* egal */ }
+                try { _socket.Dispose(); } catch { /* never mind */ }
                 return ValueTask.CompletedTask;
             }
 
@@ -136,14 +136,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private const String SaslNamespace = "urn:ietf:params:xml:ns:xmpp-sasl";
 
-        private readonly List<RoherClient> _clients = [];
+        private readonly List<RawClient> _clients = [];
 
         [TearDown]
-        public async Task RoheAbraeumen()
+        public async Task DisposeRawClients()
         {
 
             foreach (var c in _clients)
@@ -153,37 +153,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Ein verbundener roher Client mit eröffnetem Stream.</summary>
-        private async Task<RoherClient> EroeffnetAsync()
+        /// <summary>A connected raw client with an opened stream.</summary>
+        private async Task<RawClient> OpenedAsync()
         {
 
             Server.AddAccount("alice");
 
-            var client = new RoherClient();
+            var client = new RawClient();
             _clients.Add(client);
 
-            await client.VerbindeAsync(Server);
+            await client.ConnectAsync(Server);
 
-            await client.SendeAsync(
+            await client.SendAsync(
                       "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
                       $"to='{Server.Domain}' version='1.0'/>");
 
-            await WaitFor(() => client.Sah("mechanisms"), "die Features des Servers");
+            await WaitFor(() => client.Saw("mechanisms"), "the features of the server");
 
             return client;
 
         }
 
-        /// <summary>Der Inhalt des zuletzt empfangenen Elements dieses Namens.</summary>
-        private static String Inhalt(RoherClient client, String element)
+        /// <summary>The content of the last received element of this name.</summary>
+        private static String ContentOf(RawClient client, String element)
         {
 
-            lock (client.Empfangen)
+            lock (client.Received)
             {
 
-                var rahmen = client.Empfangen.Last(f => f.Contains($"<{element}", StringComparison.Ordinal));
+                var frame = client.Received.Last(f => f.Contains($"<{element}", StringComparison.Ordinal));
 
-                return Regex.Match(rahmen, $@"<{element}[^>]*>([^<]*)</{element}>").Groups[1].Value;
+                return Regex.Match(frame, $@"<{element}[^>]*>([^<]*)</{element}>").Groups[1].Value;
 
             }
 
@@ -195,39 +195,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAbort_IsAnsweredWithAborted()
 
         /// <summary>
-        /// Der Kern: Auf <c>&lt;abort/&gt;</c> folgt
-        /// <c>&lt;failure&gt;&lt;aborted/&gt;&lt;/failure&gt;</c> und kein
-        /// Stream-Fehler.
+        /// The heart of it: <c>&lt;abort/&gt;</c> is followed by
+        /// <c>&lt;failure&gt;&lt;aborted/&gt;&lt;/failure&gt;</c> and by no
+        /// stream error.
         /// </summary>
         [Test]
         public async Task AnAbort_IsAnsweredWithAborted()
         {
 
-            var client = await EroeffnetAsync();
+            var client = await OpenedAsync();
 
             var scram = new SCRAMAuthenticator("alice", "pw", SCRAMMechanism.ScramSha256);
 
-            await client.SendeAsync(
+            await client.SendAsync(
                       $"<auth xmlns='{SaslNamespace}' mechanism='SCRAM-SHA-256'>" +
                       $"{scram.CreateClientFirstMessage()}</auth>");
 
-            await WaitFor(() => client.Sah("<challenge"), "die Challenge des Servers");
+            await WaitFor(() => client.Saw("<challenge"), "the challenge of the server");
 
-            await client.SendeAsync($"<abort xmlns='{SaslNamespace}'/>");
+            await client.SendAsync($"<abort xmlns='{SaslNamespace}'/>");
 
-            await WaitFor(() => client.Sah("<aborted"), "die Antwort auf den Abbruch");
+            await WaitFor(() => client.Saw("<aborted"), "the answer to the abort");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(client.Sah("<failure"), Is.True,
-                            "Der Abbruch wird mit einem SASL-Fehlschlag beantwortet.");
+                Assert.That(client.Saw("<failure"), Is.True,
+                            "The abort is answered with a SASL failure.");
 
-                Assert.That(client.Sah("unsupported-stanza-type"), Is.False,
-                            "Und ausdrücklich nicht mit einem Stream-Fehler.");
+                Assert.That(client.Saw("unsupported-stanza-type"), Is.False,
+                            "And expressly not with a stream error.");
 
-                Assert.That(client.IstOffen, Is.True,
-                            "Der Abbruch beendet die Aushandlung, nicht den Stream.");
+                Assert.That(client.IsOpen, Is.True,
+                            "The abort ends the negotiation, not the stream.");
 
             });
 
@@ -238,63 +238,62 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAbort_DiscardsTheHalfFinishedExchange()
 
         /// <summary>
-        /// Der abgebrochene SCRAM-Austausch ist weg — eine danach
-        /// nachgereichte <c>&lt;response/&gt;</c> gehört zu nichts mehr.
+        /// The broken-off SCRAM exchange is gone — a <c>&lt;response/&gt;</c>
+        /// handed in afterwards belongs to nothing any more.
         /// </summary>
         /// <remarks>
-        /// Das ist der eigentliche Inhalt eines Abbruchs. Bliebe die halbe
-        /// Aushandlung liegen, könnte sie mit einer später nachgeschobenen
-        /// Antwort noch zu Ende geführt werden — der Abbruch wäre dann eine
-        /// Höflichkeitsfloskel und keine Aussage.
+        /// That is what breaking off actually amounts to. Were the half
+        /// negotiation left lying about, it could still be carried through with
+        /// an answer pushed in later — the abort would then be a courtesy and
+        /// not a statement.
         ///
-        /// Die nachgeschobene Antwort ist deshalb eine <b>gültige</b>, gebaut
-        /// mit dem echten <see cref="SCRAMAuthenticator"/> des Clients. Das ist
-        /// der Kern dieses Tests und war zuerst falsch: Mit einer unsinnigen
-        /// Antwort kommt <c>not-authorized</c> zurück, ob der Austausch nun
-        /// verworfen wurde oder nicht — beide Welten geben dieselbe Antwort,
-        /// und der Test prüfte nichts. Erst eine Antwort, die <b>durchginge</b>,
-        /// trennt die Fälle: Sie führt entweder zu <c>&lt;success/&gt;</c> oder
-        /// zu einer Absage.
+        /// The answer pushed in later is therefore a <b>valid</b> one, built
+        /// with the client's real <see cref="SCRAMAuthenticator"/>. That is the
+        /// heart of this test and was wrong at first: with a nonsensical answer
+        /// <c>not-authorized</c> comes back whether the exchange was discarded
+        /// or not — both worlds give the same answer, and the test checked
+        /// nothing. Only an answer that <b>would go through</b> tells the cases
+        /// apart: it leads either to <c>&lt;success/&gt;</c> or to a refusal.
         /// </remarks>
         [Test]
         public async Task AnAbort_DiscardsTheHalfFinishedExchange()
         {
 
-            var client = await EroeffnetAsync();
+            var client = await OpenedAsync();
 
             var scram = new SCRAMAuthenticator("alice", "pw", SCRAMMechanism.ScramSha256);
 
-            await client.SendeAsync(
+            await client.SendAsync(
                       $"<auth xmlns='{SaslNamespace}' mechanism='SCRAM-SHA-256'>" +
                       $"{scram.CreateClientFirstMessage()}</auth>");
 
-            await WaitFor(() => client.Sah("<challenge"), "die Challenge des Servers");
+            await WaitFor(() => client.Saw("<challenge"), "the challenge of the server");
 
-            var challenge = Inhalt(client, "challenge");
+            var challenge = ContentOf(client, "challenge");
 
-            await client.SendeAsync($"<abort xmlns='{SaslNamespace}'/>");
+            await client.SendAsync($"<abort xmlns='{SaslNamespace}'/>");
 
-            await WaitFor(() => client.Sah("<aborted"), "die Antwort auf den Abbruch");
+            await WaitFor(() => client.Saw("<aborted"), "the answer to the abort");
 
-            var vorher = client.Anzahl;
+            var before = client.Count;
 
-            // Diese Antwort wäre richtig gewesen - hätte der Abbruch nicht
-            // dazwischengelegen.
-            await client.SendeAsync(
+            // This answer would have been right - had the abort not come in
+            // between.
+            await client.SendAsync(
                       $"<response xmlns='{SaslNamespace}'>" +
                       $"{scram.ProcessServerFirstMessage(challenge)}</response>");
 
-            await WaitFor(() => client.Anzahl > vorher, "die Antwort auf die verspätete response");
+            await WaitFor(() => client.Count > before, "the answer to the belated response");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(client.Sah("<success"), Is.False,
-                            "Der abgebrochene Austausch darf nicht nachträglich " +
-                            "zu Ende geführt werden.");
+                Assert.That(client.Saw("<success"), Is.False,
+                            "The broken-off exchange must not be carried " +
+                            "through after the fact.");
 
-                Assert.That(client.Sah("not-authorized"), Is.True,
-                            "Eine response ohne laufenden Austausch gehört zu keiner Aushandlung.");
+                Assert.That(client.Saw("not-authorized"), Is.True,
+                            "A response without a running exchange belongs to no negotiation.");
 
             });
 
@@ -305,13 +304,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AfterAnAbort_ANewNegotiationStillWorks()
 
         /// <summary>
-        /// Und der Stream taugt danach noch: Ein zweiter Anlauf führt zum
-        /// Erfolg.
+        /// And the stream is still good for something afterwards: a second run
+        /// leads to success.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum Kern. „Kein Stream-Fehler" allein wäre auch
-        /// erfüllt, wenn der Server nach dem Abbruch gar nichts mehr annähme —
-        /// dann wäre der Stream formal offen und praktisch tot.
+        /// The counter-check to the heart of it. "No stream error" on its own
+        /// would also be met if the server accepted nothing at all after the
+        /// abort — the stream would then be formally open and practically dead.
         /// </remarks>
         [Test]
         public async Task AfterAnAbort_ANewNegotiationStillWorks()
@@ -320,18 +319,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferedSaslMechanisms.Clear();
             Server.OfferedSaslMechanisms.Add("PLAIN");
 
-            var client = await EroeffnetAsync();
+            var client = await OpenedAsync();
 
-            await client.SendeAsync($"<abort xmlns='{SaslNamespace}'/>");
+            await client.SendAsync($"<abort xmlns='{SaslNamespace}'/>");
 
-            await WaitFor(() => client.Sah("<aborted"), "die Antwort auf den Abbruch");
+            await WaitFor(() => client.Saw("<aborted"), "the answer to the abort");
 
-            var geheim = Convert.ToBase64String(Encoding.UTF8.GetBytes("\0alice\0pw"));
+            var secret = Convert.ToBase64String(Encoding.UTF8.GetBytes("\0alice\0pw"));
 
-            await client.SendeAsync(
-                      $"<auth xmlns='{SaslNamespace}' mechanism='PLAIN'>{geheim}</auth>");
+            await client.SendAsync(
+                      $"<auth xmlns='{SaslNamespace}' mechanism='PLAIN'>{secret}</auth>");
 
-            await WaitFor(() => client.Sah("<success"), "die Anmeldung im zweiten Anlauf");
+            await WaitFor(() => client.Saw("<success"), "the login on the second run");
 
         }
 
