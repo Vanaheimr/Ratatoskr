@@ -29,18 +29,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die S2S-Protokollschicht, geprüft ohne Transport darunter.
+    /// The S2S protocol layer, checked without a transport underneath.
     /// </summary>
     /// <remarks>
-    /// Kein Socket, kein Server, keine Zeitfenster: die Rahmen gehen in eine
-    /// Liste und kommen aus einer Zeichenkette. Genau darum geht es - was
-    /// TCP und WebSocket gemeinsam haben, soll auch gemeinsam geprüft sein und
-    /// nicht zweimal über den Umweg eines Transports.
+    /// No socket, no server, no time windows: the frames go into a list and
+    /// come out of a string. Precisely that is the point - what TCP and
+    /// WebSocket have in common shall be checked in common as well and not
+    /// twice over the detour of a transport.
     ///
-    /// Die Handshakes werden von Hand gebaut statt über eine zweite
-    /// <see cref="S2SStream"/>-Instanz. Liessen sich beide Rollen gegeneinander
-    /// laufen, prüfte der Test nur, dass die Klasse zu sich selbst passt -
-    /// ein Fehler in ihrer Vorstellung von RFC 7395 bliebe unsichtbar.
+    /// The handshakes are built by hand instead of over a second
+    /// <see cref="S2SStream"/> instance. Could both roles be let run against
+    /// each other, the test would only check that the class fits itself - an
+    /// error in its idea of RFC 7395 would stay invisible.
     /// </remarks>
     [TestFixture]
     public class S2SStreamTests
@@ -48,57 +48,57 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private List<String> _gesendet = null!;
+        private List<String> _sent = null!;
 
         #endregion
 
         #region SetUp
 
         [SetUp]
-        public void Leeren()
+        public void Clear()
         {
-            _gesendet = [];
+            _sent = [];
         }
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private Task Senden(String frame, CancellationToken _)
+        private Task Send(String frame, CancellationToken _)
         {
-            _gesendet.Add(frame);
+            _sent.Add(frame);
             return Task.CompletedTask;
         }
 
-        /// <summary>Ein eingehender Stream, der alles annimmt.</summary>
-        private S2SStream Eingehend(List<String>? zugestellt = null)
+        /// <summary>An inbound stream that takes everything in.</summary>
+        private S2SStream Incoming(List<String>? delivered = null)
 
             => S2SStream.Accept(
                    "right.example",
-                   Senden,
+                   Send,
                    (peer, stanza) =>
                    {
-                       zugestellt?.Add(stanza);
+                       delivered?.Add(stanza);
                        return Task.FromResult(RemoteStanzaResult.Accepted);
                    });
 
-        /// <summary>Ein eingehender Stream, der mit einem festen Urteil antwortet.</summary>
-        private S2SStream EingehendMit(RemoteStanzaResult urteil)
+        /// <summary>An inbound stream that answers with a fixed verdict.</summary>
+        private S2SStream IncomingWith(RemoteStanzaResult verdict)
 
             => S2SStream.Accept(
                    "right.example",
-                   Senden,
-                   (_, _) => Task.FromResult(urteil));
+                   Send,
+                   (_, _) => Task.FromResult(verdict));
 
-        private static String OpenVon(String from, String? to = "right.example", String? id = null)
+        private static String OpenFrom(String from, String? to = "right.example", String? id = null)
 
             => $"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' from='{from}'" +
                (to is not null ? $" to='{to}'" : "") +
                (id is not null ? $" id='{id}'" : "") +
                " version='1.0'/>";
 
-        private Boolean Gesendet(String enthaelt)
-            => _gesendet.Any(f => f.Contains(enthaelt, StringComparison.Ordinal));
+        private Boolean WasSent(String contains)
+            => _sent.Any(f => f.Contains(contains, StringComparison.Ordinal));
 
         #endregion
 
@@ -106,23 +106,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheInitiatorSendsItsDomainInTheStreamHeader()
 
         /// <summary>
-        /// Der Stream-Kopf des Initiators nennt beide Domains (RFC 7395,
-        /// Abschnitt 3.4).
+        /// The stream header of the initiator names both domains (RFC 7395,
+        /// section 3.4).
         /// </summary>
         [Test]
         public async Task TheInitiatorSendsItsDomainInTheStreamHeader()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
 
             Assert.Multiple(() =>
             {
-                Assert.That(_gesendet, Has.Count.EqualTo(1));
-                Assert.That(_gesendet[0], Does.Contain("urn:ietf:params:xml:ns:xmpp-framing"));
-                Assert.That(_gesendet[0], Does.Contain("from='left.example'"));
-                Assert.That(_gesendet[0], Does.Contain("to='right.example'"));
+                Assert.That(_sent, Has.Count.EqualTo(1));
+                Assert.That(_sent[0], Does.Contain("urn:ietf:params:xml:ns:xmpp-framing"));
+                Assert.That(_sent[0], Does.Contain("from='left.example'"));
+                Assert.That(_sent[0], Does.Contain("to='right.example'"));
             });
 
         }
@@ -132,30 +132,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheResponderAnswersWithAStreamIdAndFeatures()
 
         /// <summary>
-        /// Der Empfänger vergibt die Stream-ID (RFC 7395, Abschnitt 3.4) und
-        /// schickt seine Features (RFC 6120, Abschnitt 4.3.2).
+        /// The recipient hands out the stream id (RFC 7395, section 3.4) and
+        /// sends its features (RFC 6120, section 4.3.2).
         /// </summary>
         /// <remarks>
-        /// An der Stream-ID hängt später Dialback - sie ist nicht Beiwerk,
-        /// sondern der Anker der einzigen Prüfung, die die Domain der
-        /// Gegenstelle belegen kann.
+        /// On the stream id dialback hangs later - it is no accessory but the
+        /// anchor of the only check that can establish the domain of the far
+        /// end.
         /// </remarks>
         [Test]
         public async Task TheResponderAnswersWithAStreamIdAndFeatures()
         {
 
-            var stream = Eingehend();
+            var stream = Incoming();
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             Assert.Multiple(() =>
             {
                 Assert.That(stream.IsOpen,       Is.True);
                 Assert.That(stream.RemoteDomain, Is.EqualTo("left.example"));
                 Assert.That(stream.StreamId,     Is.Not.Null.And.Not.Empty);
-                Assert.That(Gesendet($"id='{stream.StreamId}'"), Is.True,
-                            "Die vergebene Kennung muss auch hinausgehen.");
-                Assert.That(Gesendet("stream:features"), Is.True);
+                Assert.That(WasSent($"id='{stream.StreamId}'"), Is.True,
+                            "The identifier handed out has to go out as well.");
+                Assert.That(WasSent("stream:features"), Is.True);
             });
 
         }
@@ -165,20 +165,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStreamHeaderForAnotherHost_IsRefused()
 
         /// <summary>
-        /// Ein <c>to</c>, das dieser Server nicht bedient, ist
-        /// <c>&lt;host-unknown/&gt;</c> (RFC 6120, Abschnitt 4.9.3.6).
+        /// A <c>to</c> that this server does not serve is
+        /// <c>&lt;host-unknown/&gt;</c> (RFC 6120, section 4.9.3.6).
         /// </summary>
         [Test]
         public async Task AStreamHeaderForAnotherHost_IsRefused()
         {
 
-            var stream = Eingehend();
+            var stream = Incoming();
 
-            await stream.ProcessFrameAsync(OpenVon("left.example", to: "ganzwoanders.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example", to: "faraway.example"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("host-unknown"), Is.True);
+                Assert.That(WasSent("host-unknown"), Is.True);
                 Assert.That(stream.IsOpen,            Is.False);
                 Assert.That(stream.IsClosed,          Is.True);
             });
@@ -190,21 +190,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStreamHeaderWithoutFrom_IsRefused()
 
         /// <summary>
-        /// Ohne <c>from</c> hätte die Absenderprüfung nichts, woran sie sich
-        /// halten könnte - dann gibt es gar keinen Stream.
+        /// Without a <c>from</c> the sender check would have nothing to hold on
+        /// to - then there is no stream at all.
         /// </summary>
         [Test]
         public async Task AStreamHeaderWithoutFrom_IsRefused()
         {
 
-            var stream = Eingehend();
+            var stream = Incoming();
 
             await stream.ProcessFrameAsync(
                       "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='right.example' version='1.0'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("improper-addressing"), Is.True);
+                Assert.That(WasSent("improper-addressing"), Is.True);
                 Assert.That(stream.IsOpen,                   Is.False);
                 Assert.That(stream.RemoteDomain,             Is.Null);
             });
@@ -216,26 +216,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheInitiatorRefusesAnAnswerFromAnotherDomain()
 
         /// <summary>
-        /// Wer sich als jemand anders meldet, als angewählt wurde, bekommt
-        /// keinen Stream.
+        /// Whoever answers as somebody other than the one dialled gets no
+        /// stream.
         /// </summary>
         /// <remarks>
-        /// Ohne diese Prüfung wäre die Adresse der Gegenstelle das einzige,
-        /// worauf der Initiator sich verlässt - und die kommt aus einer
-        /// Konfigurationsdatei oder später aus dem DNS.
+        /// Without this check the address of the far end would be the only
+        /// thing the initiator relies on - and that comes out of a
+        /// configuration file or later out of the DNS.
         /// </remarks>
         [Test]
         public async Task TheInitiatorRefusesAnAnswerFromAnotherDomain()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("boese.example", to: "left.example", id: "abc"));
+            await stream.ProcessFrameAsync(OpenFrom("evil.example", to: "left.example", id: "abc"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("invalid-from"), Is.True);
+                Assert.That(WasSent("invalid-from"), Is.True);
                 Assert.That(stream.IsOpen,            Is.False);
                 Assert.That(stream.IsClosed,          Is.True);
             });
@@ -247,16 +247,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheInitiatorTakesTheStreamIdFromTheAnswer()
 
         /// <summary>
-        /// Die Kennung vergibt der Empfänger; der Initiator übernimmt sie.
+        /// The identifier is handed out by the recipient; the initiator takes
+        /// it over.
         /// </summary>
         [Test]
         public async Task TheInitiatorTakesTheStreamIdFromTheAnswer()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-4711"));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-4711"));
 
             Assert.Multiple(() =>
             {
@@ -271,21 +272,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStanzaBeforeTheStreamHeader_EndsTheStream()
 
         /// <summary>
-        /// Vor dem <c>&lt;open/&gt;</c> gibt es keine Stanzas.
+        /// Before the <c>&lt;open/&gt;</c> there are no stanzas.
         /// </summary>
         [Test]
         public async Task AStanzaBeforeTheStreamHeader_EndsTheStream()
         {
 
-            var zugestellt = new List<String>();
-            var stream     = Eingehend(zugestellt);
+            var delivered = new List<String>();
+            var stream    = Incoming(delivered);
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='bob@right.example'><body>Hello</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(zugestellt,    Is.Empty, "Ohne Stream darf nichts zugestellt werden.");
+                Assert.That(delivered,    Is.Empty, "Without a stream nothing may be delivered.");
                 Assert.That(stream.IsClosed, Is.True);
             });
 
@@ -296,26 +297,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAcceptedStanza_ReachesTheRouting()
 
         /// <summary>
-        /// Der Normalfall: nach dem Handshake geht die Stanza samt der Domain
-        /// der Gegenstelle ans Routing.
+        /// The normal case: after the handshake the stanza goes to the routing
+        /// together with the domain of the far end.
         /// </summary>
         [Test]
         public async Task AnAcceptedStanza_ReachesTheRouting()
         {
 
-            var zugestellt = new List<String>();
-            var stream     = Eingehend(zugestellt);
+            var delivered = new List<String>();
+            var stream    = Incoming(delivered);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            var verstanden = await stream.ProcessFrameAsync(
-                                 "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
+            var understood = await stream.ProcessFrameAsync(
+                                 "<message from='alice@left.example' to='bob@right.example'><body>Hello</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(verstanden, Is.True);
-                Assert.That(zugestellt, Has.Count.EqualTo(1));
-                Assert.That(zugestellt[0], Does.Contain("Hallo"));
+                Assert.That(understood, Is.True);
+                Assert.That(delivered, Has.Count.EqualTo(1));
+                Assert.That(delivered[0], Does.Contain("Hello"));
             });
 
         }
@@ -325,34 +326,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AForeignSender_EndsTheStream()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 8.1.1.1: ein <c>from</c>, für das die
-        /// Gegenstelle nicht sprechen darf, beendet den Stream mit
-        /// <c>&lt;invalid-from/&gt;</c>.
+        /// RFC 6120, section 8.1.1.1: a <c>from</c> the far end may not speak
+        /// for ends the stream with <c>&lt;invalid-from/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Das ist der eine Punkt, an dem der echte Transport mehr kann als
-        /// <see cref="DirectServerLinks"/>: dort wurde die Stanza verworfen und
-        /// die Gegenstelle konnte es beliebig oft wieder versuchen. Hier ist
-        /// danach die Verbindung zu.
+        /// That is the one point at which the real transport can do more than
+        /// <see cref="DirectServerLinks"/>: there the stanza was discarded and
+        /// the far end could try again as often as it liked. Here the
+        /// connection is shut afterwards.
         /// </remarks>
         [Test]
         public async Task AForeignSender_EndsTheStream()
         {
 
-            var stream = EingehendMit(RemoteStanzaResult.ForeignSender);
+            var stream = IncomingWith(RemoteStanzaResult.ForeignSender);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            var abgelehnt = new List<String>();
-            stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            stream.OnStanzaRefused += reason => refused.Add(reason);
 
             await stream.ProcessFrameAsync(
-                      "<message from='chef@bank.example' to='bob@right.example'><body>Überweisen Sie.</body></message>");
+                      "<message from='boss@bank.example' to='bob@right.example'><body>Transfer, please.</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(abgelehnt,               Is.Not.Empty);
-                Assert.That(Gesendet("invalid-from"), Is.True);
+                Assert.That(refused,               Is.Not.Empty);
+                Assert.That(WasSent("invalid-from"), Is.True);
                 Assert.That(stream.IsClosed,          Is.True);
             });
 
@@ -363,38 +363,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMalformedSender_EndsTheStreamAsWell()
 
         /// <summary>
-        /// Ein <c>from</c>, das überhaupt kein JID ist, beendet den Stream
-        /// ebenso.
+        /// A <c>from</c> that is no JID at all ends the stream just the same.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 8.1.1.1 unterscheidet die beiden Fälle nicht:
-        /// Ein <c>from</c>, das die Gegenstelle nicht führen darf, und eines,
-        /// das keine Adresse ist, sind beide „invalid". Und der Grund, aus dem
-        /// der erste den Stream beendet, trägt hier genauso — wer einmal etwas
-        /// schickt, das keine Adresse hat, tut es beim nächsten Versuch wieder.
+        /// RFC 6120, section 8.1.1.1 does not tell the two cases apart: a
+        /// <c>from</c> the far end may not carry, and one that is no address,
+        /// are both "invalid". And the reason the first one ends the stream
+        /// carries here just as well — whoever sends something once that has no
+        /// address does it again at the next attempt.
         ///
-        /// Ohne diesen Test käme das neue Urteil aus D53 im Stream nirgends an:
-        /// Er reicht alles, was nicht <c>Accepted</c> ist, als verworfene
-        /// Stanza weiter, und die Verbindung bliebe offen.
+        /// Without this test the new verdict from D53 would arrive nowhere in
+        /// the stream: it hands everything that is not <c>Accepted</c> on as a
+        /// discarded stanza, and the connection would stay open.
         /// </remarks>
         [Test]
         public async Task AMalformedSender_EndsTheStreamAsWell()
         {
 
-            var stream = EingehendMit(RemoteStanzaResult.MalformedSender);
+            var stream = IncomingWith(RemoteStanzaResult.MalformedSender);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            var abgelehnt = new List<String>();
-            stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            stream.OnStanzaRefused += reason => refused.Add(reason);
 
             await stream.ProcessFrameAsync(
-                      "<message from='al ice@left.example' to='bob@right.example'><body>Hallo</body></message>");
+                      "<message from='al ice@left.example' to='bob@right.example'><body>Hello</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(abgelehnt,                Is.Not.Empty);
-                Assert.That(Gesendet("invalid-from"),  Is.True);
+                Assert.That(refused,                Is.Not.Empty);
+                Assert.That(WasSent("invalid-from"),  Is.True);
                 Assert.That(stream.IsClosed,           Is.True);
             });
 
@@ -405,32 +404,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMalformedRecipient_DropsOnlyThatStanza()
 
         /// <summary>
-        /// Ein unmöglicher <b>Empfänger</b> kostet dagegen nur die eine Stanza.
+        /// An impossible <b>recipient</b> on the other hand costs only that one
+        /// stanza.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum vorigen Test, und sie zieht die Grenze, um die es
-        /// geht: Beim Absender steht die Frage im Raum, wer da spricht — beim
-        /// Empfänger ein Tippfehler in einer Adresse. Risse der die Föderation
-        /// ab, wäre die Prüfung schlimmer als ihr Nutzen.
+        /// The counter-check to the previous test, and it draws the line this
+        /// is about: with the sender the question stands who is speaking there
+        /// — with the recipient a typo in an address. Were that to tear the
+        /// federation down, the check would be worse than its use.
         /// </remarks>
         [Test]
         public async Task AMalformedRecipient_DropsOnlyThatStanza()
         {
 
-            var stream = EingehendMit(RemoteStanzaResult.MalformedRecipient);
+            var stream = IncomingWith(RemoteStanzaResult.MalformedRecipient);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            var abgelehnt = new List<String>();
-            stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            stream.OnStanzaRefused += reason => refused.Add(reason);
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@left.example' to='b ob@right.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='b ob@right.example'><body>Hello</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(abgelehnt,                Is.Not.Empty);
-                Assert.That(Gesendet("invalid-from"),  Is.False, "Nur die Stanza ist falsch, nicht der Stream.");
+                Assert.That(refused,                Is.Not.Empty);
+                Assert.That(WasSent("invalid-from"),  Is.False, "Only the stanza is wrong, not the stream.");
                 Assert.That(stream.IsClosed,           Is.False);
                 Assert.That(stream.IsOpen,             Is.True);
             });
@@ -442,32 +442,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AForeignRecipient_DropsOnlyThatStanza()
 
         /// <summary>
-        /// Die Gegenprobe: eine Stanza an eine dritte Domain wird verworfen,
-        /// aber der Stream bleibt.
+        /// The counter-check: a stanza to a third domain is discarded, but the
+        /// stream stays.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test bestünde der vorige auch dann, wenn jede Ablehnung
-        /// den Stream beendete - und ein einziger Tippfehler in einem
-        /// <c>to</c> risse die Föderation ab.
+        /// Without this test the previous one would pass even if every refusal
+        /// ended the stream - and a single typo in a <c>to</c> would tear the
+        /// federation down.
         /// </remarks>
         [Test]
         public async Task AForeignRecipient_DropsOnlyThatStanza()
         {
 
-            var stream = EingehendMit(RemoteStanzaResult.ForeignRecipient);
+            var stream = IncomingWith(RemoteStanzaResult.ForeignRecipient);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            var abgelehnt = new List<String>();
-            stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            stream.OnStanzaRefused += reason => refused.Add(reason);
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@left.example' to='wer@ganzwoanders.example'><body>Weiter</body></message>");
+                      "<message from='alice@left.example' to='who@faraway.example'><body>Onwards</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(abgelehnt,                Is.Not.Empty);
-                Assert.That(Gesendet("invalid-from"),  Is.False, "Nur die Stanza ist falsch, nicht der Stream.");
+                Assert.That(refused,                Is.Not.Empty);
+                Assert.That(WasSent("invalid-from"),  Is.False, "Only the stanza is wrong, not the stream.");
                 Assert.That(stream.IsClosed,           Is.False);
                 Assert.That(stream.IsOpen,             Is.True);
             });
@@ -479,34 +479,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnOutgoingStream_TakesNoStanzas()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 4.1: ein Stream trägt in eine Richtung. Was auf
-        /// dem ausgehenden ankommt, wird gemeldet und verworfen.
+        /// RFC 6120, section 4.1: a stream carries in one direction. What
+        /// arrives on the outbound one is reported and discarded.
         /// </summary>
         /// <remarks>
-        /// Beides über eine Verbindung zu führen wäre XEP-0288 und müsste
-        /// ausgehandelt werden. Ohne diese Grenze wäre unklar, für welche
-        /// Domain die Gegenstelle auf welchem Stream sprechen darf - und
-        /// genau daran hängt die Absenderprüfung.
+        /// To carry both over one connection would be XEP-0288 and would have
+        /// to be negotiated. Without this boundary it would be unclear which
+        /// domain the far end may speak for on which stream - and precisely on
+        /// that the sender check hangs.
         /// </remarks>
         [Test]
         public async Task AnOutgoingStream_TakesNoStanzas()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-1"));
 
-            var abgelehnt = new List<String>();
-            stream.OnStanzaRefused += grund => abgelehnt.Add(grund);
+            var refused = new List<String>();
+            stream.OnStanzaRefused += reason => refused.Add(reason);
 
-            var verstanden = await stream.ProcessFrameAsync(
-                                 "<message from='bob@right.example' to='alice@left.example'><body>Antwort</body></message>");
+            var understood = await stream.ProcessFrameAsync(
+                                 "<message from='bob@right.example' to='alice@left.example'><body>Answer</body></message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(verstanden, Is.False);
-                Assert.That(abgelehnt,  Is.Not.Empty);
+                Assert.That(understood, Is.False);
+                Assert.That(refused,  Is.Not.Empty);
             });
 
         }
@@ -516,24 +516,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SendingBeforeTheHandshake_IsRefused()
 
         /// <summary>
-        /// Bevor der Handshake steht, geht keine Stanza hinaus - sie ginge
-        /// sonst an eine Gegenstelle, die sich noch nicht gemeldet hat.
+        /// Before the handshake stands, no stanza goes out - it would otherwise
+        /// go to a far end that has not answered yet.
         /// </summary>
         [Test]
         public async Task SendingBeforeTheHandshake_IsRefused()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
 
-            var gesendet = await stream.SendStanzaAsync(
-                               "<message from='alice@left.example' to='bob@right.example'/>");
+            var sent = await stream.SendStanzaAsync(
+                           "<message from='alice@left.example' to='bob@right.example'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(gesendet,  Is.False);
-                Assert.That(_gesendet, Has.Count.EqualTo(1), "Nur der Stream-Kopf.");
+                Assert.That(sent,  Is.False);
+                Assert.That(_sent, Has.Count.EqualTo(1), "Only the stream header.");
             });
 
         }
@@ -543,30 +543,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AClosedStream_TakesNothingMore()
 
         /// <summary>
-        /// Nach dem <c>&lt;close/&gt;</c> der Gegenstelle ist Schluss.
+        /// After the <c>&lt;close/&gt;</c> of the far end it is over.
         /// </summary>
         [Test]
         public async Task AClosedStream_TakesNothingMore()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-1"));
 
-            var grund   = "noch nicht beendet";
-            stream.OnClosed += r => grund = r ?? "(ordentlich)";
+            var reason   = "not ended yet";
+            stream.OnClosed += r => reason = r ?? "(orderly)";
 
             await stream.ProcessFrameAsync("<close xmlns='urn:ietf:params:xml:ns:xmpp-framing'/>");
 
-            var gesendet = await stream.SendStanzaAsync(
-                               "<message from='alice@left.example' to='bob@right.example'/>");
+            var sent = await stream.SendStanzaAsync(
+                           "<message from='alice@left.example' to='bob@right.example'/>");
 
             Assert.Multiple(() =>
             {
                 Assert.That(stream.IsClosed, Is.True);
-                Assert.That(grund,           Is.EqualTo("(ordentlich)"));
-                Assert.That(gesendet,        Is.False);
+                Assert.That(reason,           Is.EqualTo("(orderly)"));
+                Assert.That(sent,        Is.False);
             });
 
         }
@@ -576,29 +576,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSameLayerAlsoSpeaksTcpFraming()
 
         /// <summary>
-        /// Dieselbe Protokollschicht, andere Rahmung: über TCP heisst der
-        /// Stream-Kopf <c>&lt;stream:stream&gt;</c> und ist ein offenes Tag
-        /// (RFC 6120, Abschnitt 4.7).
+        /// The same protocol layer, a different framing: over TCP the stream
+        /// header is called <c>&lt;stream:stream&gt;</c> and is an open tag
+        /// (RFC 6120, section 4.7).
         /// </summary>
         /// <remarks>
-        /// Der Nachweis zu S4b-1. Was sich unterscheidet, ist ausschliesslich
-        /// die Rahmung; Handshake-Ablauf, Stream-ID, Absenderprüfung und
-        /// Zustellung laufen unverändert. Genau deshalb steht dieser Test hier
-        /// bei der Protokollschicht und nicht beim Transport - er kommt ohne
-        /// Socket aus.
+        /// The proof for S4b-1. What differs is exclusively the framing;
+        /// handshake sequence, stream id, sender check and delivery run
+        /// unchanged. That is precisely why this test stands here at the
+        /// protocol layer and not at the transport - it manages without a
+        /// socket.
         /// </remarks>
         [Test]
         public async Task TheSameLayerAlsoSpeaksTcpFraming()
         {
 
-            var zugestellt = new List<String>();
+            var delivered = new List<String>();
 
             var stream = S2SStream.Accept(
                              "right.example",
-                             Senden,
+                             Send,
                              (peer, stanza) =>
                              {
-                                 zugestellt.Add(stanza);
+                                 delivered.Add(stanza);
                                  return Task.FromResult(RemoteStanzaResult.Accepted);
                              },
                              framing: TcpStreamFraming.Instance);
@@ -609,19 +609,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                       "from='left.example' to='right.example' version='1.0'>");
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='bob@right.example'><body>Hello</body></message>");
 
             Assert.Multiple(() =>
             {
                 Assert.That(stream.IsOpen,        Is.True);
                 Assert.That(stream.RemoteDomain,  Is.EqualTo("left.example"));
                 Assert.That(stream.StreamId,      Is.Not.Null.And.Not.Empty);
-                Assert.That(zugestellt,           Has.Count.EqualTo(1));
+                Assert.That(delivered,           Has.Count.EqualTo(1));
 
-                // Die Antwort trägt die TCP-Rahmung, nicht die von RFC 7395.
-                Assert.That(Gesendet("<stream:stream"), Is.True);
-                Assert.That(Gesendet("jabber:server"),  Is.True);
-                Assert.That(Gesendet("<open "),         Is.False);
+                // The answer carries the TCP framing, not the one from RFC 7395.
+                Assert.That(WasSent("<stream:stream"), Is.True);
+                Assert.That(WasSent("jabber:server"),  Is.True);
+                Assert.That(WasSent("<open "),         Is.False);
             });
 
         }
@@ -631,14 +631,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TcpFramingClosesWithTheRootElement()
 
         /// <summary>
-        /// Über TCP endet der Stream mit <c>&lt;/stream:stream&gt;</c>, nicht
-        /// mit <c>&lt;close/&gt;</c>.
+        /// Over TCP the stream ends with <c>&lt;/stream:stream&gt;</c>, not
+        /// with <c>&lt;close/&gt;</c>.
         /// </summary>
         [Test]
         public async Task TcpFramingClosesWithTheRootElement()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             framing: TcpStreamFraming.Instance);
 
             await stream.OpenAsync();
@@ -653,10 +653,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(_gesendet[0], Does.StartWith("<stream:stream"));
-                Assert.That(_gesendet[0], Does.Not.Contain("/>"),
-                            "Der Stream-Kopf ist ein offenes Tag.");
-                Assert.That(_gesendet[^1], Is.EqualTo("</stream:stream>"));
+                Assert.That(_sent[0], Does.StartWith("<stream:stream"));
+                Assert.That(_sent[0], Does.Not.Contain("/>"),
+                            "The stream header is an open tag.");
+                Assert.That(_sent[^1], Is.EqualTo("</stream:stream>"));
                 Assert.That(stream.IsClosed, Is.True);
             });
 
@@ -667,21 +667,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TcpFramingCarriesDialbackThroughUnchanged()
 
         /// <summary>
-        /// Auch Dialback läuft über die TCP-Rahmung unverändert - der
-        /// Schlüssel hängt an der Stream-ID, und die gibt es in beiden
-        /// Rahmungen.
+        /// Dialback runs unchanged over the TCP framing as well - the key hangs
+        /// on the stream id, and that exists in both framings.
         /// </summary>
         /// <remarks>
-        /// Das war die offene Frage aus dem Arbeitsplan: Dialback ist über
-        /// XML-Streams definiert, und die WebSocket-Abbildung war eine eigene
-        /// Festlegung. Hier zeigt sich, dass die Schicht darüber davon nichts
-        /// mitbekommt.
+        /// That was the open question from the work plan: dialback is defined
+        /// over XML streams, and the WebSocket mapping was a decision of its
+        /// own. Here it shows that the layer above notices nothing of it.
         /// </remarks>
         [Test]
         public async Task TcpFramingCarriesDialbackThroughUnchanged()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             secret:  "s3cr3tf0rd14lb4ck",
                                             framing: TcpStreamFraming.Instance);
 
@@ -692,16 +690,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                       "xmlns:db='jabber:server:dialback' " +
                       "from='right.example' to='left.example' id='D60000229F' version='1.0'>");
 
-            // Derselbe Vektor wie in DialbackKeyTests, nur mit vertauschten
-            // Beispiel-Domains: Ziel ist hier right.example.
-            var erwartet = DialbackKey.Generate("s3cr3tf0rd14lb4ck",
+            // The same vector as in DialbackKeyTests, only with the example
+            // domains swapped: the target here is right.example.
+            var expected = DialbackKey.Generate("s3cr3tf0rd14lb4ck",
                                                 "right.example", "left.example", "D60000229F");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("<db:result"), Is.True);
-                Assert.That(Gesendet(erwartet),     Is.True);
-                Assert.That(stream.IsAuthenticated, Is.False, "Noch fehlt die Bestätigung.");
+                Assert.That(WasSent("<db:result"), Is.True);
+                Assert.That(WasSent(expected),     Is.True);
+                Assert.That(stream.IsAuthenticated, Is.False, "The confirmation is still missing.");
             });
 
             await stream.ProcessFrameAsync(
@@ -716,36 +714,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ExternalIsOfferedOnlyWhenACertificateCanBeChecked()
 
         /// <summary>
-        /// SASL-EXTERNAL wird nur angeboten, wenn es auch etwas zu pruefen
-        /// gibt.
+        /// SASL-EXTERNAL is offered only when there is something to check.
         /// </summary>
         /// <remarks>
-        /// Ein Angebot ohne pruefbares Zertifikat waere eine Einladung in eine
-        /// Sackgasse: die Gegenstelle schickte ihr <c>&lt;auth/&gt;</c> und
-        /// bekaeme unweigerlich ein <c>&lt;failure/&gt;</c>.
+        /// An offer without a checkable certificate would be an invitation into
+        /// a dead end: the far end would send its <c>&lt;auth/&gt;</c> and
+        /// would inevitably get a <c>&lt;failure/&gt;</c>.
         /// </remarks>
         [Test]
         public async Task ExternalIsOfferedOnlyWhenACertificateCanBeChecked()
         {
 
-            var ohne = Eingehend();
-            await ohne.ProcessFrameAsync(OpenVon("left.example"));
+            var withoutCertificate = Incoming();
+            await withoutCertificate.ProcessFrameAsync(OpenFrom("left.example"));
 
-            Assert.That(Gesendet("EXTERNAL"), Is.False,
-                        "Ohne Zertifikat darf EXTERNAL nicht angeboten werden.");
+            Assert.That(WasSent("EXTERNAL"), Is.False,
+                        "Without a certificate EXTERNAL must not be offered.");
 
-            _gesendet.Clear();
+            _sent.Clear();
 
-            var mit = S2SStream.Accept("right.example", Senden,
-                                       (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
+            var withCertificate = S2SStream.Accept("right.example", Send,
+                                                   (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                        externalIdentity: _ => true);
 
-            await mit.ProcessFrameAsync(OpenVon("left.example"));
+            await withCertificate.ProcessFrameAsync(OpenFrom("left.example"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("EXTERNAL"), Is.True);
-                Assert.That(Gesendet("urn:ietf:params:xml:ns:xmpp-sasl"), Is.True);
+                Assert.That(WasSent("EXTERNAL"), Is.True);
+                Assert.That(WasSent("urn:ietf:params:xml:ns:xmpp-sasl"), Is.True);
             });
 
         }
@@ -755,20 +752,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMatchingCertificate_AuthenticatesTheStream()
 
         /// <summary>
-        /// Der Normalfall: das Zertifikat deckt die Domain, der Stream ist
-        /// ausgewiesen - ohne Dialback und ohne zweite Verbindung.
+        /// The normal case: the certificate covers the domain, the stream is
+        /// identified - without dialback and without a second connection.
         /// </summary>
         [Test]
         public async Task AMatchingCertificate_AuthenticatesTheStream()
         {
 
-            var geprueft = new List<String>();
+            var checkedDomains = new List<String>();
 
-            var stream = S2SStream.Accept("right.example", Senden,
+            var stream = S2SStream.Accept("right.example", Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
-                                          externalIdentity: d => { geprueft.Add(d); return true; });
+                                          externalIdentity: d => { checkedDomains.Add(d); return true; });
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("left.example"));
 
@@ -777,13 +774,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(geprueft,                 Is.EquivalentTo(new[] { "left.example" }));
-                Assert.That(Gesendet("<success"),     Is.True);
+                Assert.That(checkedDomains,                 Is.EquivalentTo(new[] { "left.example" }));
+                Assert.That(WasSent("<success"),     Is.True);
                 Assert.That(stream.IsAuthenticated,   Is.True);
                 Assert.That(stream.AuthenticatedBy,   Is.EqualTo("SASL-EXTERNAL"));
 
-                // RFC 6120, Abschnitt 6.4.6: der Stream faengt von vorn an.
-                Assert.That(stream.IsOpen, Is.False, "Nach <success/> wird der Stream neu geoeffnet.");
+                // RFC 6120, section 6.4.6: the stream starts from the beginning.
+                Assert.That(stream.IsOpen, Is.False, "After <success/> the stream is opened anew.");
             });
 
         }
@@ -793,22 +790,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ACertificateThatDoesNotCoverTheDomain_IsRefused()
 
         /// <summary>
-        /// Deckt das Zertifikat die Domain nicht, gibt es
-        /// <c>&lt;not-authorized/&gt;</c> - und keinen ausgewiesenen Stream.
+        /// If the certificate does not cover the domain, there is
+        /// <c>&lt;not-authorized/&gt;</c> - and no identified stream.
         /// </summary>
         /// <remarks>
-        /// Die eine Zeile, an der SASL-EXTERNAL haengt. Fiele sie weg, waere
-        /// das Verfahren nur eine hoefliche Bitte um Selbstauskunft.
+        /// The one line on which SASL-EXTERNAL hangs. Were it to fall away, the
+        /// procedure would be nothing but a polite request for
+        /// self-declaration.
         /// </remarks>
         [Test]
         public async Task ACertificateThatDoesNotCoverTheDomain_IsRefused()
         {
 
-            var stream = S2SStream.Accept("right.example", Senden,
+            var stream = S2SStream.Accept("right.example", Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: _ => false);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("left.example"));
 
@@ -817,8 +815,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("not-authorized"), Is.True);
-                Assert.That(Gesendet("<success"),       Is.False);
+                Assert.That(WasSent("not-authorized"), Is.True);
+                Assert.That(WasSent("<success"),       Is.False);
                 Assert.That(stream.IsAuthenticated,     Is.False);
             });
 
@@ -829,24 +827,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ClaimingADifferentDomainThanTheStreamHeader_IsRefused()
 
         /// <summary>
-        /// Die authzid muss zu dem passen, was der Stream-Kopf genannt hat.
+        /// The authzid has to match what the stream header named.
         /// </summary>
         /// <remarks>
-        /// Ohne diese Pruefung liesse sich ein Stream nachtraeglich auf eine
-        /// zweite Identitaet umschreiben: Kopf fuer die eine Domain, Ausweis
-        /// fuer die andere. Der Test gibt bewusst ein Zertifikat mit, das
-        /// <b>alles</b> deckt - abgelehnt wird hier nicht wegen des
-        /// Zertifikats, sondern wegen des Widerspruchs.
+        /// Without this check a stream could be rewritten onto a second
+        /// identity afterwards: header for the one domain, identification for
+        /// the other. The test deliberately passes a certificate that covers
+        /// <b>everything</b> - what is refused here is not refused because of
+        /// the certificate but because of the contradiction.
         /// </remarks>
         [Test]
         public async Task ClaimingADifferentDomainThanTheStreamHeader_IsRefused()
         {
 
-            var stream = S2SStream.Accept("right.example", Senden,
+            var stream = S2SStream.Accept("right.example", Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: _ => true);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             var authzid = Convert.ToBase64String(Encoding.UTF8.GetBytes("bank.example"));
 
@@ -855,7 +853,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("not-authorized"), Is.True);
+                Assert.That(WasSent("not-authorized"), Is.True);
                 Assert.That(stream.IsAuthenticated,     Is.False);
             });
 
@@ -866,27 +864,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnEmptyAuthzid_MeansTheStreamHeaderDomain()
 
         /// <summary>
-        /// Eine leere authzid (<c>=</c>) heisst "nimm die Identitaet aus dem
-        /// Zertifikat" (RFC 6120, Abschnitt 6.4.2).
+        /// An empty authzid (<c>=</c>) means "take the identity out of the
+        /// certificate" (RFC 6120, section 6.4.2).
         /// </summary>
         [Test]
         public async Task AnEmptyAuthzid_MeansTheStreamHeaderDomain()
         {
 
-            var geprueft = new List<String>();
+            var checkedDomains = new List<String>();
 
-            var stream = S2SStream.Accept("right.example", Senden,
+            var stream = S2SStream.Accept("right.example", Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
-                                          externalIdentity: d => { geprueft.Add(d); return true; });
+                                          externalIdentity: d => { checkedDomains.Add(d); return true; });
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             await stream.ProcessFrameAsync(
                       "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='EXTERNAL'>=</auth>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(geprueft,               Is.EquivalentTo(new[] { "left.example" }));
+                Assert.That(checkedDomains,               Is.EquivalentTo(new[] { "left.example" }));
                 Assert.That(stream.IsAuthenticated, Is.True);
             });
 
@@ -897,24 +895,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnofferedMechanism_IsRefused()
 
         /// <summary>
-        /// Ein anderer Mechanismus als EXTERNAL wird abgelehnt.
+        /// A mechanism other than EXTERNAL is refused.
         /// </summary>
         [Test]
         public async Task AnUnofferedMechanism_IsRefused()
         {
 
-            var stream = S2SStream.Accept("right.example", Senden,
+            var stream = S2SStream.Accept("right.example", Send,
                                           (_, _) => Task.FromResult(RemoteStanzaResult.Accepted),
                                           externalIdentity: _ => true);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             await stream.ProcessFrameAsync(
                       "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>eA==</auth>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("invalid-mechanism"), Is.True);
+                Assert.That(WasSent("invalid-mechanism"), Is.True);
                 Assert.That(stream.IsAuthenticated,        Is.False);
             });
 
@@ -925,29 +923,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NoStanzasBeforeExternalHasSucceeded()
 
         /// <summary>
-        /// Auch mit SASL-EXTERNAL gilt: vor dem Ausweis keine Stanza.
+        /// With SASL-EXTERNAL too it holds: before the identification no
+        /// stanza.
         /// </summary>
         [Test]
         public async Task NoStanzasBeforeExternalHasSucceeded()
         {
 
-            var zugestellt = new List<String>();
+            var delivered = new List<String>();
 
-            var stream = S2SStream.Accept("right.example", Senden,
+            var stream = S2SStream.Accept("right.example", Send,
                                           (_, stanza) =>
                                           {
-                                              zugestellt.Add(stanza);
+                                              delivered.Add(stanza);
                                               return Task.FromResult(RemoteStanzaResult.Accepted);
                                           },
                                           verifyKey: (_, _, _) => Task.FromResult(false),
                                           externalIdentity: _ => true);
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             await stream.ProcessFrameAsync(
-                      "<message from='alice@left.example' to='bob@right.example'><body>Hallo</body></message>");
+                      "<message from='alice@left.example' to='bob@right.example'><body>Hello</body></message>");
 
-            Assert.That(zugestellt, Is.Empty);
+            Assert.That(delivered, Is.Empty);
 
         }
 
@@ -956,37 +955,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheInitiatorRestartsTheStreamAfterSuccess()
 
         /// <summary>
-        /// Auf der aufbauenden Seite: nach <c>&lt;success/&gt;</c> geht ein
-        /// neuer Stream-Kopf hinaus (RFC 6120, Abschnitt 6.4.6).
+        /// On the building side: after <c>&lt;success/&gt;</c> a new stream
+        /// header goes out (RFC 6120, section 6.4.6).
         /// </summary>
         [Test]
         public async Task TheInitiatorRestartsTheStreamAfterSuccess()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             canOfferExternal: true);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-1"));
 
             await stream.ProcessFrameAsync(
                       "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                       "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
                       "<mechanism>EXTERNAL</mechanism></mechanisms></stream:features>");
 
-            Assert.That(Gesendet("mechanism='EXTERNAL'"), Is.True,
-                        "Auf das Angebot muss ein <auth/> folgen.");
+            Assert.That(WasSent("mechanism='EXTERNAL'"), Is.True,
+                        "The offer has to be followed by an <auth/>.");
 
-            var vorher = _gesendet.Count;
+            var before = _sent.Count;
 
             await stream.ProcessFrameAsync("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
 
             Assert.Multiple(() =>
             {
                 Assert.That(stream.IsAuthenticated, Is.True);
-                Assert.That(_gesendet, Has.Count.GreaterThan(vorher));
-                Assert.That(_gesendet[^1], Does.StartWith("<open"),
-                            "Nach dem Erfolg faengt der Stream von vorn an.");
+                Assert.That(_sent, Has.Count.GreaterThan(before));
+                Assert.That(_sent[^1], Does.StartWith("<open"),
+                            "After the success the stream starts from the beginning.");
             });
 
         }
@@ -996,24 +995,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARefusedExternal_DoesNotFallBackToDialback()
 
         /// <summary>
-        /// Nach <c>&lt;failure/&gt;</c> gibt es keinen zweiten Anlauf mit dem
-        /// schwaecheren Verfahren.
+        /// After a <c>&lt;failure/&gt;</c> there is no second attempt with the
+        /// weaker procedure.
         /// </summary>
         /// <remarks>
-        /// Eine Festlegung, keine Auslassung: wer sich per Zertifikat
-        /// ausweisen wollte und abgelehnt wurde, hat ein Problem, das Dialback
-        /// nicht loest, sondern verdeckt.
+        /// A decision, not an omission: whoever wanted to identify themselves
+        /// by certificate and was refused has a problem that dialback does not
+        /// solve but covers up.
         /// </remarks>
         [Test]
         public async Task ARefusedExternal_DoesNotFallBackToDialback()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             secret: "s3cr3tf0rd14lb4ck",
                                             canOfferExternal: true);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-1"));
             await stream.ProcessFrameAsync(
                       "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                       "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
@@ -1024,7 +1023,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("<db:result"),   Is.False, "Kein Rueckfall auf Dialback.");
+                Assert.That(WasSent("<db:result"),   Is.False, "No fall back to dialback.");
                 Assert.That(stream.IsAuthenticated,   Is.False);
                 Assert.That(stream.IsClosed,          Is.True);
             });
@@ -1036,26 +1035,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutExternalOnOffer_TheInitiatorUsesDialback()
 
         /// <summary>
-        /// Bietet die Gegenstelle kein EXTERNAL an, geht es mit Dialback
-        /// weiter.
+        /// If the far end offers no EXTERNAL, it carries on with dialback.
         /// </summary>
         [Test]
         public async Task WithoutExternalOnOffer_TheInitiatorUsesDialback()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden,
+            var stream = S2SStream.Initiate("left.example", "right.example", Send,
                                             secret: "s3cr3tf0rd14lb4ck",
                                             canOfferExternal: true);
 
             await stream.OpenAsync();
-            await stream.ProcessFrameAsync(OpenVon("right.example", to: "left.example", id: "s-1"));
+            await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-1"));
             await stream.ProcessFrameAsync(
                       "<stream:features xmlns:stream='http://etherx.jabber.org/streams'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("<db:result"),           Is.True);
-                Assert.That(Gesendet("mechanism='EXTERNAL'"), Is.False);
+                Assert.That(WasSent("<db:result"),           Is.True);
+                Assert.That(WasSent("mechanism='EXTERNAL'"), Is.False);
             });
 
         }
@@ -1065,30 +1063,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WaitingForAStreamThatNeverOpens_GivesUp()
 
         /// <summary>
-        /// Endet der Stream, bevor der Handshake steht, wartet niemand ins
-        /// Zeitlimit.
+        /// If the stream ends before the handshake stands, nobody waits into
+        /// the time limit.
         /// </summary>
         /// <remarks>
-        /// Sonst hinge jede Zustellung an eine Domain, deren Server das
-        /// <c>&lt;open/&gt;</c> mit einem Fehler beantwortet, bis zum
-        /// Verbindungs-Timeout - und der Absender bekäme seinen
-        /// <c>&lt;remote-server-not-found/&gt;</c> erst danach.
+        /// Otherwise every delivery to a domain whose server answers the
+        /// <c>&lt;open/&gt;</c> with an error would hang until the connection
+        /// timeout - and the sender would get their
+        /// <c>&lt;remote-server-not-found/&gt;</c> only afterwards.
         /// </remarks>
         [Test]
         public async Task WaitingForAStreamThatNeverOpens_GivesUp()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
 
-            var warten = stream.WaitUntilOpenAsync(TimeSpan.FromSeconds(30));
+            var waiting = stream.WaitUntilOpenAsync(TimeSpan.FromSeconds(30));
 
             await stream.ProcessFrameAsync(
                       "<stream:error xmlns:stream='http://etherx.jabber.org/streams'>" +
                       "<host-unknown xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></stream:error>");
 
-            Assert.That(await warten.WaitAsync(TimeSpan.FromSeconds(5)), Is.False);
+            Assert.That(await waiting.WaitAsync(TimeSpan.FromSeconds(5)), Is.False);
 
         }
 
@@ -1097,52 +1095,50 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownElement_EndsTheStream()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 4.9.3.24: Ein Element, das dieser Server auf
-        /// oberster Ebene nicht kennt, beendet den Stream mit
+        /// RFC 6120, section 4.9.3.24: An element this server does not know on
+        /// the topmost level ends the stream with
         /// <c>&lt;unsupported-stanza-type/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Die Client-Verbindung hält diese Regel seit D26; hier blieb ein
-        /// unbekanntes Element liegen. Das war <b>nicht</b> Nachlässigkeit,
-        /// sondern eine offen vermerkte Lücke: Ungemessen war, was Prosody und
-        /// ejabberd auf einem S2S-Stream tatsächlich schicken — und einen
-        /// Stream abzubrechen, weil man ein Element nicht kennt, wäre gegenüber
-        /// einer fremden Implementierung eine Wette gewesen.
+        /// The client connection has held this rule since D26; here an unknown
+        /// element was left lying. That was <b>not</b> negligence but an openly
+        /// noted gap: what was unmeasured was what Prosody and ejabberd
+        /// actually send on an S2S stream — and to break a stream off because
+        /// one does not know an element would have been a bet against a foreign
+        /// implementation.
         ///
-        /// Gemessen ist es jetzt: über den vollen Lauf gegen beide
-        /// Gegenstellen, in beide Richtungen, fiel kein einziger Rahmen durch
-        /// diese Weiche.
+        /// It is measured now: over the full run against both far ends, in both
+        /// directions, not a single frame fell through this switch.
         ///
-        /// Die drei Fälle sind dieselben wie beim Client — ein erfundenes
-        /// Element und zwei, die nur mit dem Namen einer Stanza
-        /// <b>beginnen</b>.
+        /// The three cases are the same as with the client — one invented
+        /// element and two that only <b>begin</b> with the name of a stanza.
         /// </remarks>
         [Test]
-        [TestCase("<quatsch xmlns='urn:example:nein'/>")]
+        [TestCase("<nonsense xmlns='urn:example:no'/>")]
         [TestCase("<iqbogus/>")]
         [TestCase("<messages/>")]
-        public async Task AnUnknownElement_EndsTheStream(String rahmen)
+        public async Task AnUnknownElement_EndsTheStream(String frame)
         {
 
-            var stream = Eingehend();
+            var stream = Incoming();
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            _gesendet.Clear();
+            _sent.Clear();
 
-            var behandelt = await stream.ProcessFrameAsync(rahmen);
+            var handled = await stream.ProcessFrameAsync(frame);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Gesendet("unsupported-stanza-type"), Is.True,
-                            "Der Grund muss über die Leitung gehen.");
+                Assert.That(WasSent("unsupported-stanza-type"), Is.True,
+                            "The reason has to go over the wire.");
 
                 Assert.That(stream.IsClosed, Is.True,
-                            "Ein Stream-Fehler ist unwiederbringlich (Abschnitt 4.9.1.1).");
+                            "A stream error is irretrievable (section 4.9.1.1).");
 
-                Assert.That(behandelt, Is.True,
-                            "Behandelt ist er - mit einem Fehler und nicht mit Schweigen.");
+                Assert.That(handled, Is.True,
+                            "Handled it is - with an error and not with silence.");
 
             });
 
@@ -1153,43 +1149,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAbort_IsAnsweredWithAborted()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 6.4.4 gilt auch hier: Bricht die Gegenstelle
-        /// die SASL-Aushandlung ab, folgt
-        /// <c>&lt;failure&gt;&lt;aborted/&gt;&lt;/failure&gt;</c> und kein
-        /// Stream-Fehler.
+        /// RFC 6120, section 6.4.4 holds here as well: if the far end breaks
+        /// the SASL negotiation off,
+        /// <c>&lt;failure&gt;&lt;aborted/&gt;&lt;/failure&gt;</c> follows and
+        /// no stream error.
         /// </summary>
         /// <remarks>
-        /// Diese Lücke ist in D27 entstanden und nicht vorgefunden: Vorher
-        /// blieb ein <c>&lt;abort/&gt;</c> hier schlicht liegen, seit der
-        /// Strenge beendete es den Stream. Wer eine Weiche streng macht, erbt
-        /// jede Antwort, die sie noch nicht kennt — und muss sie nachreichen,
-        /// nicht abwarten, bis jemand darüber stolpert.
+        /// This gap came about in D27 and was not found there: before, an
+        /// <c>&lt;abort/&gt;</c> was simply left lying here, since the
+        /// strictness it ended the stream. Whoever makes a switch strict
+        /// inherits every answer it does not know yet — and has to hand it in
+        /// afterwards, not wait until somebody trips over it.
         /// </remarks>
         [Test]
         public async Task AnAbort_IsAnsweredWithAborted()
         {
 
-            var stream = Eingehend();
+            var stream = Incoming();
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            _gesendet.Clear();
+            _sent.Clear();
 
-            var behandelt = await stream.ProcessFrameAsync(
-                                $"<abort xmlns='{S2SStream.SaslNamespace}'/>");
+            var handled = await stream.ProcessFrameAsync(
+                              $"<abort xmlns='{S2SStream.SaslNamespace}'/>");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Gesendet("<aborted/>"), Is.True);
+                Assert.That(WasSent("<aborted/>"), Is.True);
 
-                Assert.That(Gesendet("unsupported-stanza-type"), Is.False,
-                            "Ein Abbruch ist ein vorgesehener Schritt, kein Verstoss.");
+                Assert.That(WasSent("unsupported-stanza-type"), Is.False,
+                            "A break-off is an intended step, no violation.");
 
                 Assert.That(stream.IsClosed, Is.False,
-                            "Der Abbruch beendet die Aushandlung, nicht den Stream.");
+                            "The break-off ends the negotiation, not the stream.");
 
-                Assert.That(behandelt, Is.True);
+                Assert.That(handled, Is.True);
 
             });
 
@@ -1200,31 +1196,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAbortAtTheInitiator_IsNotAnswered()
 
         /// <summary>
-        /// Umgekehrt nicht: Wer selbst angewählt hat, beantwortet keinen
-        /// Abbruch — er wäre der, der ihn schickt.
+        /// The other way round not: whoever dialled themselves answers no
+        /// break-off — they would be the one sending it.
         /// </summary>
         /// <remarks>
-        /// Dieselbe Asymmetrie wie bei <c>&lt;auth/&gt;</c>: Die Rollen in der
-        /// SASL-Aushandlung sind verteilt, und beide Seiten dieselbe Antwort
-        /// geben zu lassen hiesse, sie als austauschbar zu behandeln.
+        /// The same asymmetry as with <c>&lt;auth/&gt;</c>: the roles in the
+        /// SASL negotiation are handed out, and to let both sides give the same
+        /// answer would mean treating them as interchangeable.
         /// </remarks>
         [Test]
         public async Task AnAbortAtTheInitiator_IsNotAnswered()
         {
 
-            var stream = S2SStream.Initiate("left.example", "right.example", Senden);
+            var stream = S2SStream.Initiate("left.example", "right.example", Send);
 
             await stream.OpenAsync();
 
-            _gesendet.Clear();
+            _sent.Clear();
 
-            var behandelt = await stream.ProcessFrameAsync(
-                                $"<abort xmlns='{S2SStream.SaslNamespace}'/>");
+            var handled = await stream.ProcessFrameAsync(
+                              $"<abort xmlns='{S2SStream.SaslNamespace}'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("<aborted/>"), Is.False);
-                Assert.That(behandelt,              Is.False, "Zuständig ist er dafür nicht.");
+                Assert.That(WasSent("<aborted/>"), Is.False);
+                Assert.That(handled,              Is.False, "Responsible for it they are not.");
             });
 
         }
@@ -1234,39 +1230,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFrameWithoutAnElement_IsIgnored()
 
         /// <summary>
-        /// Ein Rahmen ohne Element ist kein unbekanntes Element, sondern gar
-        /// keines — und beendet nichts.
+        /// A frame without an element is no unknown element but none at all —
+        /// and ends nothing.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 4.9.3.24 spricht von „a first-level child of the stream
-        /// that is not supported". Ein leerer Rahmen ist kein Kind, das nicht
-        /// unterstützt wird; er ist kein Kind.
+        /// Section 4.9.3.24 speaks of "a first-level child of the stream that
+        /// is not supported". An empty frame is no child that is not supported;
+        /// it is no child.
         ///
-        /// Über TCP kommt so etwas gar nicht erst an — <c>SkipProlog</c> im
-        /// Zerleger schluckt Leerraum, XML-Deklarationen und Kommentare
-        /// zwischen zwei Elementen, und Leerraum als Keepalive ist auf einem
-        /// Stream ausdrücklich erlaubt (Abschnitt 4.6.1). Über WebSocket wird
-        /// jeder Frame durchgereicht, und dort trägt die Unterscheidung den
-        /// ganzen Fall.
+        /// Over TCP such a thing does not even arrive — <c>SkipProlog</c> in
+        /// the parser swallows whitespace, XML declarations and comments
+        /// between two elements, and whitespace as a keepalive is expressly
+        /// permitted on a stream (section 4.6.1). Over WebSocket every frame is
+        /// handed through, and there the distinction carries the whole case.
         /// </remarks>
         [Test]
         [TestCase("")]
         [TestCase("   ")]
         [TestCase("\r\n")]
-        public async Task AFrameWithoutAnElement_IsIgnored(String rahmen)
+        public async Task AFrameWithoutAnElement_IsIgnored(String frame)
         {
 
-            var stream = Eingehend();
+            var stream = Incoming();
 
-            await stream.ProcessFrameAsync(OpenVon("left.example"));
+            await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
-            _gesendet.Clear();
+            _sent.Clear();
 
-            await stream.ProcessFrameAsync(rahmen);
+            await stream.ProcessFrameAsync(frame);
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gesendet("unsupported-stanza-type"), Is.False);
+                Assert.That(WasSent("unsupported-stanza-type"), Is.False);
                 Assert.That(stream.IsClosed,                     Is.False);
             });
 
