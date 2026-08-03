@@ -27,17 +27,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// JIDs nach RFC 7622, gegen die beiden Beispieltabellen aus Abschnitt 3.5.
+    /// JIDs per RFC 7622, against the two example tables from section 3.5.
     /// </summary>
     /// <remarks>
-    /// Fuenfzehn Zeichenketten, die JIDs sind, und acht, die keine sind. Der
-    /// Abschnitt ist als Pruefstein gebaut: Fast jede Zeile trifft genau eine
-    /// Regel, und mehrere davon sind solche, auf die man von selbst nicht
-    /// kaeme - die Zerlegungsreihenfolge etwa, oder dass ein Zeichen mit
-    /// Kompatibilitaetszerlegung im Localpart nichts zu suchen hat.
+    /// Fifteen strings that are JIDs, and eight that are not. The section is
+    /// built as a touchstone: almost every row hits exactly one rule, and
+    /// several of them are ones nobody would come up with on their own - the
+    /// splitting order, say, or that a character with a compatibility
+    /// decomposition has no business in a local part.
     ///
-    /// Wie in der SASLprep-Sammlung steht jedes besondere Zeichen als benannte
-    /// Konstante da statt als Literal.
+    /// As in the SASLprep collection, every special character stands there as a
+    /// named constant instead of as a literal.
     /// </remarks>
     [TestFixture]
     public class JidFormatTests
@@ -59,36 +59,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc7622_Table1_AreAllJids()
 
         /// <summary>
-        /// Tabelle 1: fuenfzehn gueltige JIDs.
+        /// Table 1: fifteen valid JIDs.
         /// </summary>
         [Test]
         public void Rfc7622_Table1_AreAllJids()
         {
 
-            var gueltig = new (Int32 Nr, String Jid, String Warum)[]
+            var valid = new (Int32 Number, String Jid, String Why)[]
             {
-                ( 1, "juliet@example.com",              "Bare-JID"),
-                ( 2, "juliet@example.com/foo",          "Full-JID"),
-                ( 3, "juliet@example.com/foo bar",      "Leerzeichen im Resourcepart"),
-                ( 4, "juliet@example.com/foo@bar",      "At-Zeichen im Resourcepart"),
-                ( 5, "foo\\20bar@example.com",          "XEP-0106-Umschreibung im Localpart"),
-                ( 6, "fussball@example.com",            "Bare-JID"),
-                ( 7, "fu" + SharpS + "ball@example.com","Esszett im Localpart"),
-                ( 8, Pi + "@example.com",               "Localpart aus einem griechischen Pi"),
-                ( 9, CapitalSigma + "@example.com/foo", "Localpart aus einem grossen Sigma"),
-                (10, SmallSigma + "@example.com/foo",   "Localpart aus einem kleinen Sigma"),
-                (11, FinalSigma + "@example.com/foo",   "Localpart aus einem End-Sigma"),
-                (12, "king@example.com/" + ChessKing,   "Symbol im Resourcepart"),
-                (13, "example.com",                     "nur ein Domainpart"),
-                (14, "example.com/foobar",              "Domainpart und Resourcepart"),
-                (15, "a.example.com/b@example.net",     "Resourcepart mit At-Zeichen")
+                ( 1, "juliet@example.com",              "bare JID"),
+                ( 2, "juliet@example.com/foo",          "full JID"),
+                ( 3, "juliet@example.com/foo bar",      "space in the resource part"),
+                ( 4, "juliet@example.com/foo@bar",      "at sign in the resource part"),
+                ( 5, "foo\\20bar@example.com",          "XEP-0106 escaping in the local part"),
+                ( 6, "fussball@example.com",            "bare JID"),
+                ( 7, "fu" + SharpS + "ball@example.com","sharp s in the local part"),
+                ( 8, Pi + "@example.com",               "local part of a Greek pi"),
+                ( 9, CapitalSigma + "@example.com/foo", "local part of a capital sigma"),
+                (10, SmallSigma + "@example.com/foo",   "local part of a small sigma"),
+                (11, FinalSigma + "@example.com/foo",   "local part of a final sigma"),
+                (12, "king@example.com/" + ChessKing,   "symbol in the resource part"),
+                (13, "example.com",                     "only a domain part"),
+                (14, "example.com/foobar",              "domain part and resource part"),
+                (15, "a.example.com/b@example.net",     "resource part with an at sign")
             };
 
             Assert.Multiple(() =>
             {
-                foreach (var (nr, jid, warum) in gueltig)
+                foreach (var (number, jid, why) in valid)
                     Assert.That(JidUtilities.TryParse(jid, out _), Is.True,
-                                $"Beispiel {nr} ({warum}) muss ein JID sein.");
+                                $"Example {number} ({why}) has to be a JID.");
             });
 
         }
@@ -98,32 +98,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc7622_Table2_AreNoJids()
 
         /// <summary>
-        /// Tabelle 2: Zeichenketten, die keine JIDs sind.
+        /// Table 2: strings that are no JIDs.
         /// </summary>
         /// <remarks>
-        /// Beispiel 18 fehlt hier mit Absicht und wird gleich darunter fuer
-        /// sich behandelt.
+        /// Example 18 is missing here on purpose and is treated on its own just
+        /// below.
         /// </remarks>
         [Test]
         public void Rfc7622_Table2_AreNoJids()
         {
 
-            var ungueltig = new (Int32 Nr, String Jid, String Warum)[]
+            var invalid = new (Int32 Number, String Jid, String Why)[]
             {
-                (16, "\"juliet\"@example.com",           "Anfuehrungszeichen im Localpart"),
-                (17, "foo bar@example.com",              "Leerzeichen im Localpart"),
-                (19, "@example.com/",                    "Local- und Resourcepart leer"),
-                (20, "henry" + RomanFour + "@example.com", "roemische Vier im Localpart"),
-                (21, ChessKing + "@example.com",         "Symbol im Localpart"),
-                (22, "juliet@",                          "Localpart ohne Domainpart"),
-                (23, "/foobar",                          "Resourcepart ohne Domainpart")
+                (16, "\"juliet\"@example.com",           "quotation marks in the local part"),
+                (17, "foo bar@example.com",              "space in the local part"),
+                (19, "@example.com/",                    "local and resource part empty"),
+                (20, "henry" + RomanFour + "@example.com", "Roman four in the local part"),
+                (21, ChessKing + "@example.com",         "symbol in the local part"),
+                (22, "juliet@",                          "local part without a domain part"),
+                (23, "/foobar",                          "resource part without a domain part")
             };
 
             Assert.Multiple(() =>
             {
-                foreach (var (nr, jid, warum) in ungueltig)
+                foreach (var (number, jid, why) in invalid)
                     Assert.That(JidUtilities.TryParse(jid, out _), Is.False,
-                                $"Beispiel {nr} ({warum}) darf kein JID sein.");
+                                $"Example {number} ({why}) must not be a JID.");
             });
 
         }
@@ -133,31 +133,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc7622_Example18_LeadingSpaceInResource_IsAccepted()
 
         /// <summary>
-        /// Beispiel 18 - ein fuehrendes Leerzeichen im Resourcepart - wird
-        /// hier <b>angenommen</b>, entgegen der Tabelle.
+        /// Example 18 - a leading space in the resource part - is
+        /// <b>accepted</b> here, contrary to the table.
         /// </summary>
         /// <remarks>
-        /// Das ist eine bewusste Abweichung und keine Luecke. RFC 7622 fuehrt
-        /// die Zeichenkette als Nicht-JID auf, aber die Regel dazu fehlt: Der
-        /// Resourcepart ist eine Instanz des OpaqueString-Profils, und das
-        /// laesst Leerzeichen ausdruecklich zu (RFC 8265, Abschnitt 4.2.2,
-        /// Regel 2 bildet lediglich Leerzeichen ausserhalb von ASCII auf
-        /// U+0020 ab). Ein Verbot fuehrender Leerzeichen steht weder dort noch
-        /// sonstwo im Regelteil.
+        /// That is a deliberate deviation and no gap. RFC 7622 lists the string
+        /// as a non-JID, but the rule for it is missing: the resource part is an
+        /// instance of the OpaqueString profile, and that permits spaces
+        /// expressly (RFC 8265, section 4.2.2, rule 2 merely maps spaces outside
+        /// ASCII onto U+0020). A prohibition of leading spaces stands neither
+        /// there nor anywhere else in the rules.
         ///
-        /// Fuer einen Router ist Annehmen ausserdem die vorsichtigere Wahl:
-        /// Eine Adresse zurueckzuweisen, die andere Server fuer gueltig
-        /// halten, verliert Nachrichten - und zwar unsere.
+        /// For a router, accepting is besides the more cautious choice: to
+        /// refuse an address other servers hold for valid loses messages - and
+        /// ours at that.
         ///
-        /// Der Test steht hier, damit die Abweichung eine Stelle hat, an der
-        /// sie auffaellt, wenn jemand sie spaeter anders entscheidet.
+        /// The test stands here so that the deviation has a place where it shows
+        /// if somebody later decides it differently.
         /// </remarks>
         [Test]
         public void Rfc7622_Example18_LeadingSpaceInResource_IsAccepted()
         {
 
-            Assert.That(JidUtilities.TryParse("juliet@example.com/ foo", out var teile), Is.True);
-            Assert.That(teile.Resourcepart, Is.EqualTo(" foo"));
+            Assert.That(JidUtilities.TryParse("juliet@example.com/ foo", out var parts), Is.True);
+            Assert.That(parts.Resourcepart, Is.EqualTo(" foo"));
 
         }
 
@@ -166,20 +165,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CompatibilityCharacters_AreRefusedInLocalpart()
 
         /// <summary>
-        /// Zeichen mit Kompatibilitätszerlegung gehören nicht in einen
-        /// Localpart (HasCompat, RFC 8264, Abschnitt 9.6).
+        /// Characters with a compatibility decomposition do not belong in a
+        /// local part (HasCompat, RFC 8264, section 9.6).
         /// </summary>
         /// <remarks>
-        /// Beispiel 20 aus RFC 7622 - die römische Vier - fällt schon über die
-        /// Kategorie: Sie ist eine Zahl-als-Buchstabe (Nl) und damit ohnehin
-        /// kein Buchstabe im Sinne der IdentifierClass. Die HasCompat-Regel
-        /// bleibt dabei ungeprüft.
+        /// Example 20 from RFC 7622 - the Roman four - already falls over the
+        /// category: it is a number-as-letter (Nl) and thereby no letter in the
+        /// sense of the IdentifierClass anyway. The HasCompat rule stays
+        /// unchecked in the process.
         ///
-        /// Die Ligatur ﬁ trifft sie dagegen genau: Sie ist ein
-        /// Kleinbuchstabe, kommt also durch die Kategorieprüfung, und zerfällt
-        /// kompatibel in „fi". Ohne die Regel wären <c>ﬁle@example.com</c> und
-        /// <c>file@example.com</c> zwei Konten, die für das Auge dasselbe
-        /// sind - genau die Verwechslung, gegen die PRECIS gebaut ist.
+        /// The ligature ﬁ hits it precisely, by contrast: it is a lower-case
+        /// letter, so it comes through the category check, and decomposes
+        /// compatibly into "fi". Without the rule <c>ﬁle@example.com</c> and
+        /// <c>file@example.com</c> would be two accounts that are the same to
+        /// the eye - precisely the confusion PRECIS is built against.
         /// </remarks>
         [Test]
         public void CompatibilityCharacters_AreRefusedInLocalpart()
@@ -190,14 +189,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(JidUtilities.TryParse(LigatureFi + "le@example.com", out _),
                             Is.False,
-                            "Die Ligatur hat eine Kompatibilitätszerlegung.");
+                            "The ligature has a compatibility decomposition.");
 
                 Assert.That(JidUtilities.TryParse("file@example.com", out _),
                             Is.True,
-                            "Die ausgeschriebene Fassung ist selbstverständlich zulässig.");
+                            "The written-out version is of course permitted.");
 
-                // Im Resourcepart ist sie dagegen erlaubt: Die FreeformClass
-                // schliesst HasCompat nicht aus.
+                // In the resource part it is permitted, by contrast: the
+                // FreeformClass does not exclude HasCompat.
                 Assert.That(JidUtilities.TryParse("juliet@example.com/" + LigatureFi, out _),
                             Is.True);
 
@@ -210,13 +209,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EmptyParts_AreRefusedEachOnTheirOwn()
 
         /// <summary>
-        /// Local- und Resourcepart dürfen, wenn ihr Trennzeichen dasteht,
-        /// nicht leer sein - jeder für sich.
+        /// Local and resource part must not be empty when their separator stands
+        /// there - each on its own.
         /// </summary>
         /// <remarks>
-        /// Beispiel 19 aus der Tabelle (<c>@example.com/</c>) hat beide Fehler
-        /// zugleich und belegt deshalb keinen von beiden: Es genügt die erste
-        /// Prüfung, die zuschlägt, und die zweite bleibt ungelaufen.
+        /// Example 19 from the table (<c>@example.com/</c>) has both errors at
+        /// once and therefore proves neither of them: the first check that
+        /// strikes suffices, and the second stays unrun.
         /// </remarks>
         [Test]
         public void EmptyParts_AreRefusedEachOnTheirOwn()
@@ -226,10 +225,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(JidUtilities.TryParse("juliet@example.com/", out _), Is.False,
-                            "Ein Schrägstrich ohne Resource dahinter.");
+                            "A slash without a resource behind it.");
 
                 Assert.That(JidUtilities.TryParse("@example.com", out _), Is.False,
-                            "Ein At-Zeichen ohne Localpart davor.");
+                            "An at sign without a local part in front of it.");
 
             });
 
@@ -240,36 +239,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSplitOrderMatters()
 
         /// <summary>
-        /// Erst am <c>/</c> trennen, dann am <c>@</c> - Beispiel 15.
+        /// Split at the <c>/</c> first, then at the <c>@</c> - example 15.
         /// </summary>
         /// <remarks>
-        /// Andersherum ergaebe <c>a.example.com/b@example.net</c> einen
-        /// Localpart <c>a.example.com/b</c>, und der enthielte ein <c>/</c>,
-        /// das dort ausgeschlossen ist. Aus einem gueltigen JID wuerde ein
-        /// ungueltiger.
+        /// The other way round, <c>a.example.com/b@example.net</c> would yield a
+        /// local part <c>a.example.com/b</c>, and that would contain a <c>/</c>,
+        /// which is excluded there. A valid JID would become an invalid one.
         /// </remarks>
         [Test]
         public void TheSplitOrderMatters()
         {
 
-            var beispiel15 = JidUtilities.Parse("a.example.com/b@example.net");
+            var example15 = JidUtilities.Parse("a.example.com/b@example.net");
 
-            // RFC 7622, Abschnitt 3.4: Ein zweiter Schrägstrich gehört zur
-            // Resource - JIDs sind nicht hierarchisch. Getrennt wird am
-            // *ersten*, nicht am letzten.
-            var zweiSchraege = JidUtilities.Parse("juliet@example.com/foo/bar");
+            // RFC 7622, section 3.4: a second slash belongs to the resource -
+            // JIDs are not hierarchical. The split happens at the *first*, not
+            // at the last.
+            var twoSlashes = JidUtilities.Parse("juliet@example.com/foo/bar");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(beispiel15.Localpart,    Is.Null);
-                Assert.That(beispiel15.Domainpart,   Is.EqualTo("a.example.com"));
-                Assert.That(beispiel15.Resourcepart, Is.EqualTo("b@example.net"));
+                Assert.That(example15.Localpart,    Is.Null);
+                Assert.That(example15.Domainpart,   Is.EqualTo("a.example.com"));
+                Assert.That(example15.Resourcepart, Is.EqualTo("b@example.net"));
 
-                Assert.That(zweiSchraege.Localpart,    Is.EqualTo("juliet"));
-                Assert.That(zweiSchraege.Domainpart,   Is.EqualTo("example.com"));
-                Assert.That(zweiSchraege.Resourcepart, Is.EqualTo("foo/bar"),
-                            "Der zweite Schrägstrich gehört in die Resource.");
+                Assert.That(twoSlashes.Localpart,    Is.EqualTo("juliet"));
+                Assert.That(twoSlashes.Domainpart,   Is.EqualTo("example.com"));
+                Assert.That(twoSlashes.Resourcepart, Is.EqualTo("foo/bar"),
+                            "The second slash belongs in the resource.");
 
             });
 
@@ -280,33 +278,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheResourcepartKeepsItsCase()
 
         /// <summary>
-        /// Der Kern: Local- und Domainpart sind von der Schreibweise
-        /// unabhaengig, der Resourcepart nicht (RFC 7622, Abschnitt 3.4).
+        /// The core: local and domain part are independent of the case, the
+        /// resource part is not (RFC 7622, section 3.4).
         /// </summary>
         [Test]
         public void TheResourcepartKeepsItsCase()
         {
 
-            var teile = JidUtilities.Parse("Juliet@Example.COM/Balcony");
+            var parts = JidUtilities.Parse("Juliet@Example.COM/Balcony");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(teile.Localpart,    Is.EqualTo("juliet"));
-                Assert.That(teile.Domainpart,   Is.EqualTo("example.com"));
-                Assert.That(teile.Resourcepart, Is.EqualTo("Balcony"),
-                            "Der Resourcepart darf nicht kleingeschrieben werden.");
+                Assert.That(parts.Localpart,    Is.EqualTo("juliet"));
+                Assert.That(parts.Domainpart,   Is.EqualTo("example.com"));
+                Assert.That(parts.Resourcepart, Is.EqualTo("Balcony"),
+                            "The resource part must not be lower-cased.");
 
                 Assert.That(JidUtilities.AreEqual("juliet@example.com/Balcony",
                                                   "JULIET@EXAMPLE.COM/Balcony"),
                             Is.True,
-                            "Local- und Domainpart ohne Ruecksicht auf die Schreibweise.");
+                            "Local and domain part without regard for the case.");
 
                 Assert.That(JidUtilities.AreEqual("juliet@example.com/Balcony",
                                                   "juliet@example.com/balcony"),
                             Is.False,
-                            "Zwei Resourcen, die sich nur in der Schreibweise " +
-                            "unterscheiden, sind zwei Geraete.");
+                            "Two resources that differ only in the case " +
+                            "are two devices.");
 
             });
 
@@ -317,14 +315,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc7622_CaseMappingNotes()
 
         /// <summary>
-        /// Die Anmerkungen zu den Beispielen 6/7 und 9/10/11.
+        /// The notes on examples 6/7 and 9/10/11.
         /// </summary>
         /// <remarks>
-        /// Zwei Feinheiten, die der Text eigens hervorhebt. Erstens: Esszett
-        /// und „ss" bleiben verschieden - die Regel ist Kleinschreibung
-        /// (toLowerCase), nicht Case Folding, das <c>ss</c> daraus machte.
-        /// Zweitens: Grosses Sigma wird zu kleinem, das End-Sigma bleibt
-        /// dagegen es selbst.
+        /// Two subtleties the text especially highlights. First: sharp s and
+        /// "ss" stay different - the rule is lower-casing (toLowerCase), not
+        /// case folding, which would make <c>ss</c> out of it. Second: capital
+        /// sigma becomes small, whereas the final sigma stays itself.
         /// </remarks>
         [Test]
         public void Rfc7622_CaseMappingNotes()
@@ -336,17 +333,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(JidUtilities.AreEqual("fu" + SharpS + "ball@example.com",
                                                   "fussball@example.com"),
                             Is.False,
-                            "Esszett und ss sind zwei verschiedene Localparts.");
+                            "Sharp s and ss are two different local parts.");
 
                 Assert.That(JidUtilities.AreEqual(CapitalSigma + "@example.com",
                                                   SmallSigma   + "@example.com"),
                             Is.True,
-                            "Grosses und kleines Sigma fallen zusammen.");
+                            "Capital and small sigma fall together.");
 
                 Assert.That(JidUtilities.AreEqual(FinalSigma + "@example.com",
                                                   SmallSigma + "@example.com"),
                             Is.False,
-                            "Das End-Sigma bleibt ein eigenes Zeichen.");
+                            "The final sigma stays a character of its own.");
 
             });
 
@@ -357,13 +354,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PartsLongerThan1023Octets_AreRefused()
 
         /// <summary>
-        /// RFC 7622: Jeder Teil ist auf 1023 Oktette begrenzt - gemessen nach
-        /// der Vorbereitung und an der UTF-8-Kodierung.
+        /// RFC 7622: every part is limited to 1023 octets - measured after the
+        /// preparation and on the UTF-8 encoding.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied zwischen Zeichen und Oktetten ist hier keine
-        /// Feinheit: Ein Localpart aus 600 griechischen Buchstaben hat 600
-        /// Zeichen und 1200 Oktette.
+        /// The difference between characters and octets is no subtlety here: a
+        /// local part of 600 Greek letters has 600 characters and 1200 octets.
         /// </remarks>
         [Test]
         public void PartsLongerThan1023Octets_AreRefused()
@@ -374,16 +370,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(JidUtilities.TryParse(new String('a', 1023) + "@example.com", out _),
                             Is.True,
-                            "1023 Oktette sind erlaubt.");
+                            "1023 octets are permitted.");
 
                 Assert.That(JidUtilities.TryParse(new String('a', 1024) + "@example.com", out _),
                             Is.False);
 
-                // 600 Zeichen, aber 1200 Oktette.
+                // 600 characters, but 1200 octets.
                 Assert.That(JidUtilities.TryParse(String.Concat(Enumerable.Repeat(Pi, 600)) +
                                                   "@example.com", out _),
                             Is.False,
-                            "Gemessen wird in Oktetten, nicht in Zeichen.");
+                            "What is measured are octets, not characters.");
 
             });
 
@@ -394,27 +390,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Bare_NeverThrows()
 
         /// <summary>
-        /// <c>Bare</c> laeuft ueber alles, was von der Leitung kommt, und darf
-        /// deshalb an keiner Eingabe scheitern.
+        /// <c>Bare</c> runs over everything that comes from the wire and must
+        /// therefore founder on no input.
         /// </summary>
         /// <remarks>
-        /// Eine Ausnahme mitten in der Stanza-Behandlung waere der schlechteste
-        /// aller Ausgaenge: Ein Absender, der Unsinn schickt, brächte damit die
-        /// Verbindung zu Fall. Unbrauchbares soll auf nichts passen, nicht
-        /// alles anhalten.
+        /// An exception in the middle of the stanza handling would be the worst
+        /// of all outcomes: a sender who sends nonsense would thereby bring the
+        /// connection down. What is unusable shall match nothing, not stop
+        /// everything.
         /// </remarks>
         [Test]
         public void Bare_NeverThrows()
         {
 
-            var unsinn = new[] { "", "@", "/", "@/", "juliet@", "/foobar",
+            var nonsense = new[] { "", "@", "/", "@/", "juliet@", "/foobar",
                                  "\"juliet\"@example.com", "a@b@c" };
 
             Assert.Multiple(() =>
             {
-                foreach (var eingabe in unsinn)
-                    Assert.That(() => JidUtilities.Bare(eingabe), Throws.Nothing,
-                                $"Ist gestolpert ueber: '{eingabe}'");
+                foreach (var input in nonsense)
+                    Assert.That(() => JidUtilities.Bare(input), Throws.Nothing,
+                                $"Stumbled over: '{input}'");
             });
 
         }

@@ -27,16 +27,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Der Zerleger, der aus dem TCP-Zeichenstrom eines XMPP-Streams einzelne
-    /// Rahmen macht.
+    /// The splitter that makes single frames out of the TCP character stream of
+    /// an XMPP stream.
     /// </summary>
     /// <remarks>
-    /// Diese Tests sind der Grund, warum der Zerleger ein eigener Baustein ist
-    /// und kein Handgriff in der Empfangsschleife: über localhost fallen die
-    /// Pakete fast immer zufällig auf Elementgrenzen, ein fehlerhafter
-    /// Zerleger fiele dort also nie auf. Deshalb wird hier absichtlich an den
-    /// unbequemsten Stellen getrennt - mitten im Tag, mitten im Attributwert,
-    /// zeichenweise.
+    /// These tests are the reason why the splitter is a building block of its
+    /// own and not a handle in the receive loop: over localhost the packets fall
+    /// on element boundaries almost always by chance, so a faulty splitter would
+    /// never show there. That is why the splitting here is done on purpose at
+    /// the most inconvenient places - in the middle of a tag, in the middle of
+    /// an attribute value, character by character.
     /// </remarks>
     [TestFixture]
     public class XmlStreamSplitterTests
@@ -44,30 +44,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private const String Kopf =
+        private const String Header =
             "<stream:stream xmlns='jabber:server' " +
             "xmlns:stream='http://etherx.jabber.org/streams' " +
-            "from='links.example' to='rechts.example' id='abc' version='1.0'>";
+            "from='left.example' to='right.example' id='abc' version='1.0'>";
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Schiebt den Text in einem Stück hinein.</summary>
-        private static List<String> Alles(String text)
+        /// <summary>Pushes the text in in one piece.</summary>
+        private static List<String> All(String text)
             => [.. new XmlStreamSplitter().Push(text)];
 
-        /// <summary>Schiebt den Text Zeichen für Zeichen hinein.</summary>
-        private static List<String> Zeichenweise(String text)
+        /// <summary>Pushes the text in character by character.</summary>
+        private static List<String> CharacterByCharacter(String text)
         {
 
-            var zerleger  = new XmlStreamSplitter();
-            var rahmen    = new List<String>();
+            var splitter  = new XmlStreamSplitter();
+            var frames    = new List<String>();
 
             foreach (var c in text)
-                rahmen.AddRange(zerleger.Push(c.ToString()));
+                frames.AddRange(splitter.Push(c.ToString()));
 
-            return rahmen;
+            return frames;
 
         }
 
@@ -77,19 +77,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStreamHeaderComesOutOnItsOwn()
 
         /// <summary>
-        /// Der Stream-Kopf ist ein offenes Tag - er darf nicht auf sein
-        /// schliessendes warten, sonst käme nie ein Rahmen heraus.
+        /// The stream header is an open tag - it must not wait for its closing
+        /// one, otherwise no frame would ever come out.
         /// </summary>
         [Test]
         public void TheStreamHeaderComesOutOnItsOwn()
         {
 
-            var rahmen = Alles(Kopf);
+            var frames = All(Header);
 
             Assert.Multiple(() =>
             {
-                Assert.That(rahmen, Has.Count.EqualTo(1));
-                Assert.That(rahmen[0], Is.EqualTo(Kopf));
+                Assert.That(frames, Has.Count.EqualTo(1));
+                Assert.That(frames[0], Is.EqualTo(Header));
             });
 
         }
@@ -102,15 +102,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void StanzasAfterTheHeaderComeOutOneByOne()
         {
 
-            var rahmen = Alles(Kopf +
-                               "<message from='a@links.example' to='b@rechts.example'><body>eins</body></message>" +
-                               "<presence from='a@links.example'/>");
+            var frames = All(Header +
+                               "<message from='a@left.example' to='b@right.example'><body>one</body></message>" +
+                               "<presence from='a@left.example'/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(rahmen, Has.Count.EqualTo(3));
-                Assert.That(rahmen[1], Does.Contain("eins").And.StartWith("<message"));
-                Assert.That(rahmen[2], Is.EqualTo("<presence from='a@links.example'/>"));
+                Assert.That(frames, Has.Count.EqualTo(3));
+                Assert.That(frames[1], Does.Contain("one").And.StartWith("<message"));
+                Assert.That(frames[2], Is.EqualTo("<presence from='a@left.example'/>"));
             });
 
         }
@@ -120,29 +120,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AStanzaSplitAcrossReads_IsStillOneFrame()
 
         /// <summary>
-        /// Der eigentliche Punkt: TCP kennt keine Nachrichtengrenzen.
+        /// The actual point: TCP knows no message boundaries.
         /// </summary>
         [Test]
         public void AStanzaSplitAcrossReads_IsStillOneFrame()
         {
 
-            var zerleger = new XmlStreamSplitter();
+            var splitter = new XmlStreamSplitter();
 
-            Assert.That(zerleger.Push(Kopf), Has.Count.EqualTo(1));
+            Assert.That(splitter.Push(Header), Has.Count.EqualTo(1));
 
-            // Mitten im Tag getrennt.
-            Assert.That(zerleger.Push("<message from='a@links.exa"), Is.Empty);
-            Assert.That(zerleger.Push("mple' to='b@rechts.example'><bo"), Is.Empty);
-            Assert.That(zerleger.Push("dy>zwei</body>"), Is.Empty);
+            // Split in the middle of the tag.
+            Assert.That(splitter.Push("<message from='a@left.exa"), Is.Empty);
+            Assert.That(splitter.Push("mple' to='b@right.example'><bo"), Is.Empty);
+            Assert.That(splitter.Push("dy>two</body>"), Is.Empty);
 
-            var fertig = zerleger.Push("</message>");
+            var finished = splitter.Push("</message>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(fertig, Has.Count.EqualTo(1));
-                Assert.That(fertig[0], Does.Contain("zwei"));
-                Assert.That(fertig[0], Does.StartWith("<message"));
-                Assert.That(fertig[0], Does.EndWith("</message>"));
+                Assert.That(finished, Has.Count.EqualTo(1));
+                Assert.That(finished[0], Does.Contain("two"));
+                Assert.That(finished[0], Does.StartWith("<message"));
+                Assert.That(finished[0], Does.EndWith("</message>"));
             });
 
         }
@@ -152,22 +152,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CharacterByCharacter_YieldsTheSameFrames()
 
         /// <summary>
-        /// Die schärfste Gegenprobe: jedes einzelne Zeichen ein Lesevorgang.
+        /// The sharpest counter-check: every single character a read.
         /// </summary>
         /// <remarks>
-        /// Wer den Zerleger versehentlich auf ganze Lesevorgänge stützt statt
-        /// auf mitgeführten Zustand, scheitert hier und sonst fast nirgends.
+        /// Whoever accidentally bases the splitter on whole reads instead of on
+        /// carried-along state founders here and almost nowhere else.
         /// </remarks>
         [Test]
         public void CharacterByCharacter_YieldsTheSameFrames()
         {
 
-            var strom = Kopf +
-                        "<message to='b@rechts.example'><body>drei</body></message>" +
+            var stream = Header +
+                        "<message to='b@right.example'><body>three</body></message>" +
                         "<iq type='get' id='1'><ping xmlns='urn:xmpp:ping'/></iq>" +
                         "</stream:stream>";
 
-            Assert.That(Zeichenweise(strom), Is.EqualTo(Alles(strom)));
+            Assert.That(CharacterByCharacter(stream), Is.EqualTo(All(stream)));
 
         }
 
@@ -176,19 +176,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SeveralStanzasInOneRead_AreSeparated()
 
         /// <summary>
-        /// Und die Gegenrichtung: mehrere Stanzas in einem einzigen
-        /// Lesevorgang.
+        /// And the other direction: several stanzas in a single read.
         /// </summary>
         [Test]
         public void SeveralStanzasInOneRead_AreSeparated()
         {
 
-            var zerleger = new XmlStreamSplitter();
-            zerleger.Push(Kopf);
+            var splitter = new XmlStreamSplitter();
+            splitter.Push(Header);
 
-            var rahmen = zerleger.Push("<presence/><presence type='unavailable'/><message/>");
+            var frames = splitter.Push("<presence/><presence type='unavailable'/><message/>");
 
-            Assert.That(rahmen, Has.Count.EqualTo(3));
+            Assert.That(frames, Has.Count.EqualTo(3));
 
         }
 
@@ -197,36 +196,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AGreaterThanInsideAnAttribute_DoesNotEndTheTag()
 
         /// <summary>
-        /// Ein <c>&gt;</c> in einem Attributwert ist gültiges XML und beendet
-        /// das Tag nicht.
+        /// A <c>&gt;</c> in an attribute value is valid XML and does not end the
+        /// tag.
         /// </summary>
         /// <remarks>
-        /// Das <b>selbstschliessende</b> Tag ist hier der tragende Fall, und
-        /// das ist kein Detail: bei einem gewöhnlichen Element fällt fehlende
-        /// Anführungszeichen-Behandlung nicht auf, weil die Elementgrenze am
-        /// Ende dieselbe bleibt - das schliessende Tag bringt die Tiefe so
-        /// oder so auf null. Erst wenn das <c>/&gt;</c> übersehen wird, zählt
-        /// der Zerleger eine Ebene zu viel und liefert den Rahmen nie aus.
-        /// Eine erste Fassung dieses Tests prüfte nur den gewöhnlichen Fall
-        /// und überlebte die Mutation.
+        /// The <b>self-closing</b> tag is the carrying case here, and that is no
+        /// detail: with an ordinary element a missing handling of quotation
+        /// marks does not show, because the element boundary at the end stays
+        /// the same - the closing tag brings the depth to zero either way. Only
+        /// when the <c>/&gt;</c> is overlooked does the splitter count one level
+        /// too many and never deliver the frame. A first version of this test
+        /// checked only the ordinary case and survived the mutation.
         /// </remarks>
         [Test]
         public void AGreaterThanInsideAnAttribute_DoesNotEndTheTag()
         {
 
-            var zerleger = new XmlStreamSplitter();
-            zerleger.Push(Kopf);
+            var splitter = new XmlStreamSplitter();
+            splitter.Push(Header);
 
-            var selbstschliessend = "<presence status='a>b'/>";
-            var gewoehnlich       = "<message subject='a &gt; b' id='x>y'><body>vier</body></message>";
+            var selfClosing = "<presence status='a>b'/>";
+            var ordinary       = "<message subject='a &gt; b' id='x>y'><body>four</body></message>";
 
-            var rahmen = zerleger.Push(selbstschliessend + gewoehnlich);
+            var frames = splitter.Push(selfClosing + ordinary);
 
             Assert.Multiple(() =>
             {
-                Assert.That(rahmen,     Has.Count.EqualTo(2));
-                Assert.That(rahmen[0],  Is.EqualTo(selbstschliessend));
-                Assert.That(rahmen[1],  Is.EqualTo(gewoehnlich));
+                Assert.That(frames,     Has.Count.EqualTo(2));
+                Assert.That(frames[0],  Is.EqualTo(selfClosing));
+                Assert.That(frames[1],  Is.EqualTo(ordinary));
             });
 
         }
@@ -236,22 +234,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ATagInsideCData_IsNotAnElement()
 
         /// <summary>
-        /// In CDATA darf alles stehen, auch etwas, das wie ein Tag aussieht.
+        /// In CDATA anything may stand, including something that looks like a
+        /// tag.
         /// </summary>
         [Test]
         public void ATagInsideCData_IsNotAnElement()
         {
 
-            var zerleger = new XmlStreamSplitter();
-            zerleger.Push(Kopf);
+            var splitter = new XmlStreamSplitter();
+            splitter.Push(Header);
 
             var stanza  = "<message><body><![CDATA[</message><evil/>]]></body></message>";
-            var rahmen  = zerleger.Push(stanza);
+            var frames  = splitter.Push(stanza);
 
             Assert.Multiple(() =>
             {
-                Assert.That(rahmen, Has.Count.EqualTo(1));
-                Assert.That(rahmen[0], Is.EqualTo(stanza));
+                Assert.That(frames, Has.Count.EqualTo(1));
+                Assert.That(frames[0], Is.EqualTo(stanza));
             });
 
         }
@@ -261,31 +260,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NestedElementsOfTheSameName_AreCountedCorrectly()
 
         /// <summary>
-        /// Verschachtelte gleichnamige Elemente - das schliessende Tag des
-        /// inneren beendet nicht das äussere.
+        /// Nested elements of the same name - the closing tag of the inner one
+        /// does not end the outer one.
         /// </summary>
         /// <remarks>
-        /// XEP-0280 Carbons und XEP-0297 Forwarding schachteln
-        /// <c>&lt;message/&gt;</c> genau so ineinander; das ist kein
-        /// konstruierter Fall.
+        /// XEP-0280 carbons and XEP-0297 forwarding nest
+        /// <c>&lt;message/&gt;</c> inside each other in exactly this way; that
+        /// is no constructed case.
         /// </remarks>
         [Test]
         public void NestedElementsOfTheSameName_AreCountedCorrectly()
         {
 
-            var zerleger = new XmlStreamSplitter();
-            zerleger.Push(Kopf);
+            var splitter = new XmlStreamSplitter();
+            splitter.Push(Header);
 
             var stanza = "<message><sent xmlns='urn:xmpp:carbons:2'><forwarded>" +
-                         "<message><body>innen</body></message>" +
+                         "<message><body>inside</body></message>" +
                          "</forwarded></sent></message>";
 
-            var rahmen = zerleger.Push(stanza);
+            var frames = splitter.Push(stanza);
 
             Assert.Multiple(() =>
             {
-                Assert.That(rahmen, Has.Count.EqualTo(1));
-                Assert.That(rahmen[0], Is.EqualTo(stanza));
+                Assert.That(frames, Has.Count.EqualTo(1));
+                Assert.That(frames[0], Is.EqualTo(stanza));
             });
 
         }
@@ -295,20 +294,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheXmlDeclaration_IsNotMistakenForTheHeader()
 
         /// <summary>
-        /// Manche Server schicken eine XML-Deklaration voraus. Sie ist kein
-        /// Element und darf nicht als Stream-Kopf durchgehen.
+        /// Some servers send an XML declaration ahead. It is no element and must
+        /// not pass as the stream header.
         /// </summary>
         [Test]
         public void TheXmlDeclaration_IsNotMistakenForTheHeader()
         {
 
-            var rahmen = Alles("<?xml version='1.0'?>" + Kopf + "<presence/>");
+            var frames = All("<?xml version='1.0'?>" + Header + "<presence/>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(rahmen, Has.Count.EqualTo(2));
-                Assert.That(rahmen[0], Is.EqualTo(Kopf));
-                Assert.That(rahmen[1], Is.EqualTo("<presence/>"));
+                Assert.That(frames, Has.Count.EqualTo(2));
+                Assert.That(frames[0], Is.EqualTo(Header));
+                Assert.That(frames[1], Is.EqualTo("<presence/>"));
             });
 
         }
@@ -318,20 +317,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhitespaceBetweenStanzas_IsNotAFrame()
 
         /// <summary>
-        /// Zwischen Stanzas steht oft Leerraum - unter anderem als
-        /// Keepalive. Er ergibt keinen Rahmen.
+        /// Between stanzas whitespace often stands - among other things as a
+        /// keepalive. It yields no frame.
         /// </summary>
         [Test]
         public void WhitespaceBetweenStanzas_IsNotAFrame()
         {
 
-            var zerleger = new XmlStreamSplitter();
-            zerleger.Push(Kopf);
+            var splitter = new XmlStreamSplitter();
+            splitter.Push(Header);
 
             Assert.Multiple(() =>
             {
-                Assert.That(zerleger.Push("\n  \t "), Is.Empty);
-                Assert.That(zerleger.Push("  <presence/>\n"), Has.Count.EqualTo(1));
+                Assert.That(splitter.Push("\n  \t "), Is.Empty);
+                Assert.That(splitter.Push("  <presence/>\n"), Has.Count.EqualTo(1));
             });
 
         }
@@ -341,19 +340,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheClosingStreamTag_IsItsOwnFrame()
 
         /// <summary>
-        /// Das Stream-Ende muss oben ankommen, sonst merkt niemand, dass die
-        /// Gegenstelle ordentlich Schluss gemacht hat.
+        /// The end of the stream has to arrive up top, otherwise nobody notices
+        /// that the counterpart has finished properly.
         /// </summary>
         [Test]
         public void TheClosingStreamTag_IsItsOwnFrame()
         {
 
-            var rahmen = Alles(Kopf + "<presence/></stream:stream>");
+            var frames = All(Header + "<presence/></stream:stream>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(rahmen, Has.Count.EqualTo(3));
-                Assert.That(rahmen[2], Is.EqualTo("</stream:stream>"));
+                Assert.That(frames, Has.Count.EqualTo(3));
+                Assert.That(frames[2], Is.EqualTo("</stream:stream>"));
             });
 
         }
@@ -363,16 +362,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIncompleteStanza_YieldsNothingYet()
 
         /// <summary>
-        /// Halb Empfangenes wird zurückgehalten, nicht halb geliefert.
+        /// What is half received is held back, not half delivered.
         /// </summary>
         [Test]
         public void AnIncompleteStanza_YieldsNothingYet()
         {
 
-            var zerleger = new XmlStreamSplitter();
-            zerleger.Push(Kopf);
+            var splitter = new XmlStreamSplitter();
+            splitter.Push(Header);
 
-            Assert.That(zerleger.Push("<message><body>unfert"), Is.Empty);
+            Assert.That(splitter.Push("<message><body>unfinis"), Is.Empty);
 
         }
 

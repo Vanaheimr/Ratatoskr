@@ -29,70 +29,71 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 6120, Abschnitt 8.2.3, Regel 2: Das <c>type</c>-Attribut einer
-    /// IQ-Stanza ist zwingend und muss <c>get</c>, <c>set</c>, <c>result</c>
-    /// oder <c>error</c> sein — andernfalls antwortet „the recipient or an
-    /// intermediate router" mit <c>&lt;bad-request/&gt;</c>.
+    /// RFC 6120, section 8.2.3, rule 2: the <c>type</c> attribute of an IQ
+    /// stanza is mandatory and has to be <c>get</c>, <c>set</c>, <c>result</c>
+    /// or <c>error</c> — otherwise "the recipient or an intermediate router"
+    /// answers with <c>&lt;bad-request/&gt;</c>.
     /// </summary>
     /// <remarks>
-    /// Der halbe Satz „or an intermediate router" ist der eigentliche Inhalt
-    /// dieser Regel. Bei jeder anderen Stanza darf ein Server durchreichen und
-    /// den Empfänger urteilen lassen; hier nicht. Der Grund liegt in der Natur
-    /// von IQ: Ein Frage-Antwort-Paar hängt an <c>type</c> und <c>id</c>, und
-    /// wer keinen der vier Werte trägt, ist weder Frage noch Antwort. Ein
-    /// Server, der so etwas weiterreicht, verschiebt das Problem nur — und wenn
-    /// die Gegenstelle es ebenso hält, wandert eine Stanza durch das Netz, die
-    /// niemand beantworten kann und die der Absender nie zurückbekommt.
+    /// The half sentence "or an intermediate router" is the actual content of
+    /// this rule. With every other stanza a server may pass it through and let
+    /// the recipient judge; here it may not. The reason lies in the nature of
+    /// IQ: a question-answer pair hangs on <c>type</c> and <c>id</c>, and
+    /// whatever carries none of the four values is neither question nor answer.
+    /// A server that passes such a thing on merely moves the problem — and if
+    /// the counterpart does the same, a stanza wanders through the net that
+    /// nobody can answer and that the sender never gets back.
     ///
-    /// Dieser Server reichte sie durch, und zwar auf dem denkbar ungünstigsten
-    /// Weg: Der Zustellweg behandelte alles ausser <c>result</c> und
-    /// <c>error</c> als <b>Anfrage</b>. Ein <c>&lt;iq type='vielleicht'&gt;</c>
-    /// wurde also einem Empfänger zugestellt, als hätte er etwas zu beantworten.
+    /// This server passed it through, and by the most unfavourable route
+    /// imaginable: the delivery route treated everything except <c>result</c>
+    /// and <c>error</c> as a <b>request</b>. An <c>&lt;iq type='maybe'&gt;</c>
+    /// was therefore delivered to a recipient as though they had something to
+    /// answer.
     ///
-    /// Geprüft wird beides: dass die vier bekannten Werte weiterhin ankommen,
-    /// und dass der fünfte es nicht tut. Nur die erste Hälfte prüfen hiesse,
-    /// eine Sperre gegen alles nicht zu bemerken.
+    /// Both are checked: that the four known values still arrive, and that the
+    /// fifth does not. To check only the first half would mean not noticing a
+    /// barrier against everything.
     /// </remarks>
     [TestFixture]
     public class IqTypeRuleTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private String Bob => $"bob@{Server.Domain}";
 
-        /// <summary>Sammelt die Stanza-Fehler eines Clients.</summary>
-        private static ConcurrentQueue<StanzaError> Fehlerkorb(XMPPClient client)
+        /// <summary>Collects the stanza errors of a client.</summary>
+        private static ConcurrentQueue<StanzaError> ErrorBasket(XMPPClient client)
         {
 
-            var korb = new ConcurrentQueue<StanzaError>();
-            client.Connection.OnStanzaError += (from, e) => korb.Enqueue(e);
+            var basket = new ConcurrentQueue<StanzaError>();
+            client.Connection.OnStanzaError += (from, e) => basket.Enqueue(e);
 
-            return korb;
+            return basket;
 
         }
 
-        /// <summary>Sammelt die rohen eingehenden Stanzas mit dieser Id.</summary>
-        private static ConcurrentQueue<String> Eingangskorb(XMPPClient client, String id)
+        /// <summary>Collects the raw incoming stanzas with this id.</summary>
+        private static ConcurrentQueue<String> InboxFor(XMPPClient client, String id)
         {
 
-            var korb = new ConcurrentQueue<String>();
+            var basket = new ConcurrentQueue<String>();
 
             client.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<",              StringComparison.Ordinal) &&
                     x.Contains($"id='{id}'",         StringComparison.Ordinal))
                 {
-                    korb.Enqueue(x);
+                    basket.Enqueue(x);
                 }
             };
 
-            return korb;
+            return basket;
 
         }
 
         /// <summary>
-        /// Eine IQ-Stanza mit frei wählbarem Typ — auch mit gar keinem.
+        /// An IQ stanza with a freely chosen type — including none at all.
         /// </summary>
         private static String Stanza(String? type, String? to, String id)
             => "<iq" +
@@ -107,8 +108,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqWithoutAType_IsRefused()
 
         /// <summary>
-        /// Das fehlende Attribut: Der Server antwortet selbst, statt zu
-        /// schweigen oder zuzustellen.
+        /// The missing attribute: the server answers itself instead of staying
+        /// silent or delivering.
         /// </summary>
         [Test]
         public async Task AnIqWithoutAType_IsRefused()
@@ -117,15 +118,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Stanza(null, Bob, "ohne-typ"));
+            await alice.SendRawAsync(Stanza(null, Bob, "no-type"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the refusal by the server");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("bad-request"));
+            Assert.That(refused!.Condition, Is.EqualTo("bad-request"));
 
         }
 
@@ -134,8 +135,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqWithAnUnknownType_IsRefused()
 
         /// <summary>
-        /// Und derselbe Fehler mit einem Attribut, das dasteht und nichts
-        /// bedeutet.
+        /// And the same error with an attribute that stands there and means
+        /// nothing.
         /// </summary>
         [Test]
         public async Task AnIqWithAnUnknownType_IsRefused()
@@ -144,15 +145,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Stanza("vielleicht", Bob, "falscher-typ"));
+            await alice.SendRawAsync(Stanza("maybe", Bob, "wrong-type"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the refusal by the server");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("bad-request"));
+            Assert.That(refused!.Condition, Is.EqualTo("bad-request"));
 
         }
 
@@ -161,15 +162,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqToTheServerItselfWithoutAType_IsRefused()
 
         /// <summary>
-        /// Auch ohne <c>to</c>, also an den eigenen Server gerichtet.
+        /// Without a <c>to</c> as well, that is, directed at one's own server.
         /// </summary>
         /// <remarks>
-        /// Der Test, der die Stelle der Prüfung festhält. Eine Prüfung im
-        /// Zustellweg — dort, wo eine Anfrage an eine andere Adresse
-        /// weitergereicht wird — bestünde die beiden Tests darüber und liesse
-        /// genau diesen Fall durch: Was an den Server selbst geht, kommt dort
-        /// nie vorbei und fiele stillschweigend hinten heraus. Vorher tat es
-        /// das auch.
+        /// The test that holds the place of the check fast. A check in the
+        /// delivery route — there, where a request is passed on to another
+        /// address — would pass the two tests above and let precisely this case
+        /// through: what goes to the server itself never comes by there and
+        /// would fall out at the back silently. Before, it did that too.
         /// </remarks>
         [Test]
         public async Task AnIqToTheServerItselfWithoutAType_IsRefused()
@@ -177,15 +177,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var fehler = Fehlerkorb(alice);
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Stanza(null, null, "an-den-server"));
+            await alice.SendRawAsync(Stanza(null, null, "to-the-server"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the refusal by the server");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("bad-request"));
+            Assert.That(refused!.Condition, Is.EqualTo("bad-request"));
 
         }
 
@@ -194,25 +194,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRefusalKeepsTheIdAndAsksToModify()
 
         /// <summary>
-        /// Die Form der Ablehnung: dieselbe <c>id</c>, Fehlerart
-        /// <c>modify</c>, Absender der Server.
+        /// The form of the refusal: the same <c>id</c>, error type
+        /// <c>modify</c>, sender the server.
         /// </summary>
         /// <remarks>
-        /// Die <c>id</c> hält das Paar zusammen (Regel 3) — ohne sie liegt beim
-        /// Absender eine Ablehnung, die zu keiner seiner offenen Fragen gehört.
+        /// The <c>id</c> holds the pair together (rule 3) — without it a refusal
+        /// lies with the sender that belongs to none of their pending questions.
         ///
-        /// <c>modify</c> und nicht <c>cancel</c>, weil Abschnitt 8.3.3.1 es für
-        /// <c>&lt;bad-request/&gt;</c> so vorsieht, und das ist keine
-        /// Förmlichkeit: Die Art sagt dem Absender, ob es sich lohnt, es noch
-        /// einmal zu versuchen. Hier lohnt es sich — er muss nur das Attribut
-        /// richtig setzen.
+        /// <c>modify</c> and not <c>cancel</c>, because section 8.3.3.1 provides
+        /// for it that way with <c>&lt;bad-request/&gt;</c>, and that is no
+        /// formality: the type tells the sender whether it is worth trying
+        /// again. Here it is worth it — they only have to set the attribute
+        /// right.
         ///
-        /// Und der Absender ist dieser Server und nicht der gemeinte Empfänger.
-        /// Der Unterschied zu <c>&lt;service-unavailable/&gt;</c>, das im Namen
-        /// des Empfängers antwortet, ist inhaltlich: Dort hat der Server für
-        /// jemanden geantwortet, hier hat er die Stanza gar nicht erst
-        /// angenommen. Ein Empfänger als Absender behauptete, jemand habe
-        /// hineingesehen.
+        /// And the sender is this server and not the intended recipient. The
+        /// difference from <c>&lt;service-unavailable/&gt;</c>, which answers in
+        /// the name of the recipient, is one of substance: there the server
+        /// answered for somebody, here it did not even accept the stanza. A
+        /// recipient as the sender would claim that somebody had looked into it.
         /// </remarks>
         [Test]
         public async Task TheRefusalKeepsTheIdAndAsksToModify()
@@ -221,19 +220,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            var eingang = Eingangskorb(alice, "mit-form");
+            var inbox = InboxFor(alice, "with-form");
 
-            await alice.SendRawAsync(Stanza("vielleicht", Bob, "mit-form"));
+            await alice.SendRawAsync(Stanza("maybe", Bob, "with-form"));
 
-            await WaitFor(() => !eingang.IsEmpty, "die Ablehnung auf dem Draht");
+            await WaitFor(() => !inbox.IsEmpty, "the refusal on the wire");
 
-            eingang.TryDequeue(out var stanza);
+            inbox.TryDequeue(out var stanza);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(stanza, Does.Contain("type='error'"));
-                Assert.That(stanza, Does.Contain("id='mit-form'"));
+                Assert.That(stanza, Does.Contain("id='with-form'"));
                 Assert.That(stanza, Does.Contain("<error type='modify'"));
                 Assert.That(stanza, Does.Contain("<bad-request "));
                 Assert.That(stanza, Does.Contain($"from='{Server.Domain}'"));
@@ -247,19 +246,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRefusalComesEvenWithoutAnId()
 
         /// <summary>
-        /// Ohne <c>id</c> wird die Ablehnung trotzdem geschickt — und trägt
-        /// dann keine.
+        /// Without an <c>id</c> the refusal is sent all the same — and then
+        /// carries none.
         /// </summary>
         /// <remarks>
-        /// Regel 2 stellt die Ablehnung unter keinen Vorbehalt, und der Grund
-        /// trägt: Wo eine unbeantwortete Anfrage den Absender nur warten lässt,
-        /// sagt diese Antwort etwas über die Stanza selbst — dass ihre Form
-        /// nicht stimmt. Das kann er auch dann brauchen, wenn er sie keiner
-        /// offenen Frage zuordnen kann; zumal die fehlende <c>id</c> nach
-        /// Regel 1 selbst dazugehört.
+        /// Rule 2 puts the refusal under no proviso, and the reason carries:
+        /// where an unanswered request merely lets the sender wait, this answer
+        /// says something about the stanza itself — that its form is not right.
+        /// They can use that even when they cannot assign it to any pending
+        /// question; all the more so as the missing <c>id</c> belongs to it
+        /// itself per rule 1.
         ///
-        /// Ein leeres <c>id=''</c> wäre der schlechteste Ausgang: Es gehört zu
-        /// keiner Frage und sieht aus, als gehörte es zu einer.
+        /// An empty <c>id=''</c> would be the worst outcome: it belongs to no
+        /// question and looks as though it belonged to one.
         /// </remarks>
         [Test]
         public async Task TheRefusalComesEvenWithoutAnId()
@@ -267,25 +266,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var eingang = new ConcurrentQueue<String>();
+            var inbox = new ConcurrentQueue<String>();
 
             alice.Connection.OnRawXml += x =>
             {
                 if (x.StartsWith("<<<",         StringComparison.Ordinal) &&
                     x.Contains("bad-request",   StringComparison.Ordinal))
                 {
-                    eingang.Enqueue(x);
+                    inbox.Enqueue(x);
                 }
             };
 
             await alice.SendRawAsync("<iq><ping xmlns='urn:xmpp:ping'/></iq>");
 
-            await WaitFor(() => !eingang.IsEmpty, "die Ablehnung ohne id");
+            await WaitFor(() => !inbox.IsEmpty, "the refusal without an id");
 
-            eingang.TryDequeue(out var stanza);
+            inbox.TryDequeue(out var stanza);
 
             Assert.That(stanza, Does.Not.Contain("id="),
-                        "Was keine id hatte, bekommt auch keine leere zurück.");
+                        "What had no id gets no empty one back either.");
 
         }
 
@@ -294,14 +293,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFourKnownTypes_ReachTheResource()
 
         /// <summary>
-        /// Die Gegenprobe: Alle vier vorgesehenen Werte kommen weiterhin an.
+        /// The counter-check: all four values provided for still arrive.
         /// </summary>
         /// <remarks>
-        /// An die Full-JID und mit beidseitiger Berechtigung, weil dann alle
-        /// vier denselben Weg nehmen: <c>get</c> und <c>set</c> über die
-        /// Presence-Prüfung aus Abschnitt 8.5.3.1, <c>result</c> und
-        /// <c>error</c> über die Zuordnung zur fragenden Resource. Ein
-        /// Unterschied im Ergebnis käme damit nur vom Typ selbst.
+        /// To the full JID and with two-sided permission, because then all four
+        /// take the same route: <c>get</c> and <c>set</c> by way of the presence
+        /// check from section 8.5.3.1, <c>result</c> and <c>error</c> by way of
+        /// the assignment to the asking resource. A difference in the result
+        /// would then come only from the type itself.
         /// </remarks>
         [Test]
         [TestCase("get")]
@@ -316,11 +315,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectClientAsync("alice");
             var bob    = await ConnectClientAsync("bob");
 
-            var beiBob = Eingangskorb(bob, $"typ-{type}");
+            var atBob = InboxFor(bob, $"type-{type}");
 
-            await alice.SendRawAsync(Stanza(type, bob.FullJid, $"typ-{type}"));
+            await alice.SendRawAsync(Stanza(type, bob.FullJid, $"type-{type}"));
 
-            await WaitFor(() => !beiBob.IsEmpty, $"die Zustellung eines iq '{type}'");
+            await WaitFor(() => !atBob.IsEmpty, $"the delivery of an iq '{type}'");
 
         }
 
@@ -329,19 +328,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownType_ReachesNoResource()
 
         /// <summary>
-        /// Und derselbe Aufbau mit einem fünften Wert: Er erreicht die Resource
-        /// nicht.
+        /// And the same setup with a fifth value: it does not reach the
+        /// resource.
         /// </summary>
         /// <remarks>
-        /// Der Kern des Ganzen. Vorher wurde diese Stanza zugestellt, und zwar
-        /// als Anfrage — der Zustellweg fragte nur, ob der Typ <c>result</c>
-        /// oder <c>error</c> ist, und behandelte alles übrige als
-        /// beantwortungspflichtig. Bob bekam damit etwas vorgelegt, worauf er
-        /// nach Regel 3 antworten müsste und worauf keine Antwort passt.
+        /// The heart of the whole thing. Before, this stanza was delivered, and
+        /// as a request at that — the delivery route asked only whether the type
+        /// was <c>result</c> or <c>error</c>, and treated everything else as
+        /// requiring an answer. Bob was thereby presented with something he
+        /// would have to answer per rule 3 and that no answer fits.
         ///
-        /// Beide Hälften gehören in einen Test: „kommt nicht an" allein wäre
-        /// auch erfüllt, wenn die Stanza spurlos verschwände, und das wäre
-        /// wieder Schweigen statt einer Antwort.
+        /// Both halves belong in one test: "does not arrive" alone would also be
+        /// met if the stanza vanished without a trace, and that would again be
+        /// silence instead of an answer.
         /// </remarks>
         [Test]
         public async Task AnUnknownType_ReachesNoResource()
@@ -352,19 +351,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectClientAsync("alice");
             var bob    = await ConnectClientAsync("bob");
 
-            var beiBob = Eingangskorb(bob, "typ-vielleicht");
-            var fehler = Fehlerkorb(alice);
+            var atBob = InboxFor(bob, "type-maybe");
+            var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Stanza("vielleicht", bob.FullJid, "typ-vielleicht"));
+            await alice.SendRawAsync(Stanza("maybe", bob.FullJid, "type-maybe"));
 
-            await WaitFor(() => !fehler.IsEmpty, "die Ablehnung des Servers");
+            await WaitFor(() => !errors.IsEmpty, "the refusal by the server");
 
-            // Und Bob Zeit geben, sie doch noch zu bekommen.
-            await WaitAgainst(() => !beiBob.IsEmpty, "die Zustellung an Bob");
+            // And give Bob time to get it after all.
+            await WaitAgainst(() => !atBob.IsEmpty, "the delivery to Bob");
 
-            fehler.TryDequeue(out var abgelehnt);
+            errors.TryDequeue(out var refused);
 
-            Assert.That(abgelehnt!.Condition, Is.EqualTo("bad-request"));
+            Assert.That(refused!.Condition, Is.EqualTo("bad-request"));
 
         }
 

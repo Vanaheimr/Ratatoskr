@@ -27,29 +27,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// RFC 8264, Abschnitt 8: die abgeleitete Eigenschaft eines Codepoints -
-    /// Zweig für Zweig.
+    /// RFC 8264, section 8: the derived property of a code point - branch by
+    /// branch.
     /// </summary>
     /// <remarks>
-    /// Die Leiter aus Abschnitt 8 ist nicht nur eine Aufzählung von
-    /// Kategorien, sondern eine <b>Reihenfolge</b>, und mehrere Codepoints
-    /// gehören in mehr als eine davon. Wer sie als Menge liest statt als
-    /// Leiter, bekommt andere Antworten:
+    /// The ladder from section 8 is not merely an enumeration of categories but
+    /// an <b>order</b>, and several code points belong in more than one of them.
+    /// Whoever reads it as a set instead of as a ladder gets other answers:
     ///
     /// <list type="bullet">
-    ///   <item>U+0640 (ARABIC TATWEEL) ist ein Modifier Letter und damit in
-    ///         LetterDigits — die Ausnahmeliste steht aber davor und verbietet
-    ///         ihn.</item>
-    ///   <item>U+2163 (ROMAN NUMERAL FOUR) ist Nl und damit in
-    ///         OtherLetterDigits — HasCompat steht davor.</item>
-    ///   <item>U+00DF (ß) wäre ohne die Ausnahmeliste PVALID über
-    ///         LetterDigits; die Ausnahme sagt dasselbe, aber aus einem
-    ///         anderen Grund.</item>
+    ///   <item>U+0640 (ARABIC TATWEEL) is a modifier letter and thereby in
+    ///         LetterDigits — the exception list, however, stands before it and
+    ///         forbids it.</item>
+    ///   <item>U+2163 (ROMAN NUMERAL FOUR) is Nl and thereby in
+    ///         OtherLetterDigits — HasCompat stands before it.</item>
+    ///   <item>U+00DF (ß) would be PVALID without the exception list, by way of
+    ///         LetterDigits; the exception says the same thing, but for another
+    ///         reason.</item>
     /// </list>
     ///
-    /// Deshalb steht zu jedem Fall dabei, <i>welcher Zweig</i> ihn beantwortet.
-    /// Ein Test, der nur das Ergebnis prüft, hielte eine Leiter mit vertauschten
-    /// Sprossen für richtig, solange sich die Fälle nicht überschneiden.
+    /// That is why for every case it is stated <i>which branch</i> answers it. A
+    /// test that checks only the result would take a ladder with swapped rungs
+    /// for right, as long as the cases do not overlap.
     /// </remarks>
     [TestFixture]
     public class PrecisPropertyTests
@@ -58,13 +57,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheLadderOfSection8()
 
         /// <summary>
-        /// Ein Fall je Zweig, in der Reihenfolge des Abschnitts.
+        /// One case per branch, in the order of the section.
         /// </summary>
         [Test]
         public void TheLadderOfSection8()
         {
 
-            var faelle = new (UInt32 CodePoint, PrecisProperty Erwartet, String Zweig)[]
+            var cases = new (UInt32 CodePoint, PrecisProperty Expected, String Branch)[]
             {
                 (0x00DF, PrecisProperty.PValid,      "Exceptions: LATIN SMALL LETTER SHARP S"),
                 (0x03C2, PrecisProperty.PValid,      "Exceptions: GREEK SMALL LETTER FINAL SIGMA"),
@@ -72,41 +71,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 (0x00B7, PrecisProperty.ContextO,    "Exceptions: MIDDLE DOT"),
                 (0x0660, PrecisProperty.ContextO,    "Exceptions: ARABIC-INDIC DIGIT ZERO"),
                 (0x06F9, PrecisProperty.ContextO,    "Exceptions: EXTENDED ARABIC-INDIC DIGIT NINE"),
-                (0x0640, PrecisProperty.Disallowed,  "Exceptions: ARABIC TATWEEL - trotz Kategorie Lm"),
-                (0x07FA, PrecisProperty.Disallowed,  "Exceptions: NKO LAJANYALAN - trotz Kategorie Lm"),
+                (0x0640, PrecisProperty.Disallowed,  "Exceptions: ARABIC TATWEEL - despite category Lm"),
+                (0x07FA, PrecisProperty.Disallowed,  "Exceptions: NKO LAJANYALAN - despite category Lm"),
                 (0x3031, PrecisProperty.Disallowed,  "Exceptions: VERTICAL KANA REPEAT MARK"),
-                (0x0378, PrecisProperty.Unassigned,  "Unassigned: nicht vergeben"),
+                (0x0378, PrecisProperty.Unassigned,  "Unassigned: not assigned"),
                 (0x0061, PrecisProperty.PValid,      "ASCII7: 'a'"),
-                (0x007E, PrecisProperty.PValid,      "ASCII7: '~' - die obere Grenze"),
+                (0x007E, PrecisProperty.PValid,      "ASCII7: '~' - the upper bound"),
                 (0x200C, PrecisProperty.ContextJ,    "JoinControl: ZERO WIDTH NON-JOINER"),
                 (0x200D, PrecisProperty.ContextJ,    "JoinControl: ZERO WIDTH JOINER"),
                 (0x1100, PrecisProperty.Disallowed,  "OldHangulJamo: HANGUL CHOSEONG KIYEOK (L)"),
                 (0x11A8, PrecisProperty.Disallowed,  "OldHangulJamo: HANGUL JONGSEONG KIYEOK (T)"),
                 (0x00AD, PrecisProperty.Disallowed,  "PrecisIgnorableProperties: SOFT HYPHEN"),
-                (0xFDD0, PrecisProperty.Disallowed,  "PrecisIgnorableProperties: Nichtzeichen"),
-                (0xFFFE, PrecisProperty.Disallowed,  "PrecisIgnorableProperties: Nichtzeichen am Blockende"),
-                (0x3164, PrecisProperty.Disallowed,  "PrecisIgnorableProperties: HANGUL FILLER - trotz Kategorie Lo"),
-                (0x0009, PrecisProperty.Disallowed,  "Controls: Tabulator"),
-                (0x007F, PrecisProperty.Disallowed,  "Controls: DEL - ASCII7 endet bei 7E"),
-                (0x2163, PrecisProperty.FreePValid,  "HasCompat: ROMAN NUMERAL FOUR - zerfällt in 'IV'"),
-                (0xFB01, PrecisProperty.FreePValid,  "HasCompat: Ligatur fi"),
+                (0xFDD0, PrecisProperty.Disallowed,  "PrecisIgnorableProperties: non-characters"),
+                (0xFFFE, PrecisProperty.Disallowed,  "PrecisIgnorableProperties: non-characters at the end of a block"),
+                (0x3164, PrecisProperty.Disallowed,  "PrecisIgnorableProperties: HANGUL FILLER - despite category Lo"),
+                (0x0009, PrecisProperty.Disallowed,  "Controls: tabulator"),
+                (0x007F, PrecisProperty.Disallowed,  "Controls: DEL - ASCII7 ends at 7E"),
+                (0x2163, PrecisProperty.FreePValid,  "HasCompat: ROMAN NUMERAL FOUR - decomposes into 'IV'"),
+                (0xFB01, PrecisProperty.FreePValid,  "HasCompat: ligature fi"),
                 (0x00E9, PrecisProperty.PValid,      "LetterDigits: é"),
                 (0x05D0, PrecisProperty.PValid,      "LetterDigits: ALEF"),
                 (0x0488, PrecisProperty.FreePValid,  "OtherLetterDigits: Me"),
                 (0x16EE, PrecisProperty.FreePValid,  "OtherLetterDigits: RUNIC ARLAUG SYMBOL (Nl)"),
-                (0x0020, PrecisProperty.FreePValid,  "Spaces: das Leerzeichen ist kein ASCII7"),
+                (0x0020, PrecisProperty.FreePValid,  "Spaces: the space is no ASCII7"),
                 (0x00A0, PrecisProperty.FreePValid,  "Spaces: NO-BREAK SPACE"),
                 (0x265A, PrecisProperty.FreePValid,  "Symbols: BLACK CHESS KING"),
                 (0x2E00, PrecisProperty.FreePValid,  "Punctuation: RIGHT ANGLE SUBSTITUTION MARKER"),
                 (0xE000, PrecisProperty.Disallowed,  "Rest: Private Use"),
-                (0x0600, PrecisProperty.Disallowed,  "Rest: ARABIC NUMBER SIGN (Cf, nicht ignorierbar)")
+                (0x0600, PrecisProperty.Disallowed,  "Rest: ARABIC NUMBER SIGN (Cf, not ignorable)")
             };
 
             Assert.Multiple(() =>
             {
-                foreach (var (codePoint, erwartet, zweig) in faelle)
-                    Assert.That(Precis.DerivedProperty(codePoint), Is.EqualTo(erwartet),
-                                $"U+{codePoint:X4} - {zweig}");
+                foreach (var (codePoint, expected, branch) in cases)
+                    Assert.That(Precis.DerivedProperty(codePoint), Is.EqualTo(expected),
+                                $"U+{codePoint:X4} - {branch}");
             });
 
         }
@@ -116,13 +115,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheTwoClasses()
 
         /// <summary>
-        /// IdentifierClass (RFC 8264, Abschnitt 4.2) nimmt nur PVALID,
-        /// FreeformClass (Abschnitt 4.3) auch FREE_PVAL.
+        /// IdentifierClass (RFC 8264, section 4.2) takes only PVALID,
+        /// FreeformClass (section 4.3) takes FREE_PVAL as well.
         /// </summary>
         /// <remarks>
-        /// Das ist der ganze Unterschied zwischen den beiden Klassen, und er
-        /// ist der Grund, warum ein Resourcepart ein Leerzeichen und ein
-        /// Schachsymbol tragen darf und ein Localpart nicht.
+        /// That is the whole difference between the two classes, and it is the
+        /// reason why a resource part may carry a space and a chess symbol and a
+        /// local part may not.
         /// </remarks>
         [Test]
         public void TheTwoClasses()
@@ -131,19 +130,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(Precis.IsIdentifierClass(0x0061), Is.True,  "'a' gehört in beide Klassen.");
+                Assert.That(Precis.IsIdentifierClass(0x0061), Is.True,  "'a' belongs in both classes.");
                 Assert.That(Precis.IsFreeformClass  (0x0061), Is.True);
 
-                Assert.That(Precis.IsIdentifierClass(0x265A), Is.False, "Ein Symbol ist kein Bezeichnerzeichen.");
+                Assert.That(Precis.IsIdentifierClass(0x265A), Is.False, "A symbol is no identifier character.");
                 Assert.That(Precis.IsFreeformClass  (0x265A), Is.True);
 
-                Assert.That(Precis.IsIdentifierClass(0x0020), Is.False, "Ein Leerzeichen ist kein Bezeichnerzeichen.");
+                Assert.That(Precis.IsIdentifierClass(0x0020), Is.False, "A space is no identifier character.");
                 Assert.That(Precis.IsFreeformClass  (0x0020), Is.True);
 
-                Assert.That(Precis.IsIdentifierClass(0x0640), Is.False, "Der Tatweel ist in keiner Klasse.");
+                Assert.That(Precis.IsIdentifierClass(0x0640), Is.False, "The tatweel is in no class.");
                 Assert.That(Precis.IsFreeformClass  (0x0640), Is.False);
 
-                Assert.That(Precis.IsIdentifierClass(0x0378), Is.False, "Nicht Vergebenes ist in keiner Klasse.");
+                Assert.That(Precis.IsIdentifierClass(0x0378), Is.False, "What is unassigned is in no class.");
                 Assert.That(Precis.IsFreeformClass  (0x0378), Is.False);
 
             });
@@ -152,21 +151,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ist die Regel für die erste Fundstelle dieses Codepoints erfüllt?
+        /// Is the rule satisfied for the first occurrence of this code point?
         /// </summary>
-        private static Boolean Regel(String Text, UInt32 CodePoint)
+        private static Boolean Rule(String Text, UInt32 CodePoint)
         {
 
-            var punkte = Text.EnumerateRunes().Select(r => (UInt32) r.Value).ToArray();
-            var stelle = Array.IndexOf(punkte, CodePoint);
+            var points = Text.EnumerateRunes().Select(r => (UInt32) r.Value).ToArray();
+            var position = Array.IndexOf(points, CodePoint);
 
-            Assert.That(stelle, Is.GreaterThanOrEqualTo(0),
-                        $"U+{CodePoint:X4} kommt in '{Text}' gar nicht vor.");
+            Assert.That(position, Is.GreaterThanOrEqualTo(0),
+                        $"U+{CodePoint:X4} does not occur in '{Text}' at all.");
 
-            return Precis.ContextRuleSatisfied(punkte, stelle);
+            return Precis.ContextRuleSatisfied(points, position);
 
         }
 
@@ -176,22 +175,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheJoinersNeedAReasonToBeThere()
 
         /// <summary>
-        /// RFC 5892, Anhang A.1 und A.2: Die beiden Joiner sind zulässig, wo
-        /// sie etwas bewirken - und nur dort.
+        /// RFC 5892, appendices A.1 and A.2: the two joiners are permitted where
+        /// they bring something about - and only there.
         /// </summary>
         /// <remarks>
-        /// Beide sind unsichtbar. In einer Adresse ist ein unsichtbares Zeichen
-        /// zuerst einmal ein Weg, zwei verschiedene Adressen gleich aussehen zu
-        /// lassen. Die Regeln benennen die Stellen, an denen sie trotzdem
-        /// gebraucht werden:
+        /// Both are invisible. In an address an invisible character is first of
+        /// all a way to make two different addresses look the same. The rules
+        /// name the places where they are needed all the same:
         ///
         /// <list type="bullet">
-        ///   <item>Nach einem Virama (A.1 und A.2): Das Virama tilgt den
-        ///         eingebauten Vokal, der Joiner entscheidet über die
-        ///         Ligatur.</item>
-        ///   <item>Zwischen zwei verbindenden Buchstaben (nur A.1): Dort
-        ///         verhindert der Non-Joiner eine Verbindung, die es sonst
-        ///         gäbe.</item>
+        ///   <item>After a virama (A.1 and A.2): the virama removes the built-in
+        ///         vowel, the joiner decides about the ligature.</item>
+        ///   <item>Between two joining letters (A.1 only): there the non-joiner
+        ///         prevents a joining that would otherwise happen.</item>
         /// </list>
         /// </remarks>
         [Test]
@@ -203,7 +199,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             const String Virama  = "्";  // DEVANAGARI SIGN VIRAMA
             const String Ka      = "क";  // DEVANAGARI LETTER KA
 
-            // Arabisch: BEH und YEH verbinden nach beiden Seiten (Joining_Type D).
+            // Arabic: BEH and YEH join on both sides (Joining_Type D).
             const String Beh     = "ب";
             const String Yeh     = "ي";
             const String Shadda  = "ّ";  // ARABIC SHADDA, Joining_Type T
@@ -211,37 +207,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(Regel(Ka + Virama + Zwnj + Ka, 0x200C), Is.True,
-                            "A.1, erster Weg: nach einem Virama.");
+                Assert.That(Rule(Ka + Virama + Zwnj + Ka, 0x200C), Is.True,
+                            "A.1, first route: after a virama.");
 
-                Assert.That(Regel(Ka + Virama + Zwj + Ka, 0x200D), Is.True,
-                            "A.2: nach einem Virama.");
+                Assert.That(Rule(Ka + Virama + Zwj + Ka, 0x200D), Is.True,
+                            "A.2: after a virama.");
 
-                Assert.That(Regel(Beh + Zwnj + Yeh, 0x200C), Is.True,
-                            "A.1, zweiter Weg: zwischen zwei verbindenden Buchstaben.");
+                Assert.That(Rule(Beh + Zwnj + Yeh, 0x200C), Is.True,
+                            "A.1, second route: between two joining letters.");
 
-                Assert.That(Regel("a" + Zwnj + "b", 0x200C), Is.False,
-                            "Zwischen zwei lateinischen Buchstaben verbindet sich nichts.");
+                Assert.That(Rule("a" + Zwnj + "b", 0x200C), Is.False,
+                            "Between two Latin letters nothing joins.");
 
-                Assert.That(Regel("a" + Zwj + "b", 0x200D), Is.False,
-                            "Für den Joiner gibt es den zweiten Weg gar nicht.");
+                Assert.That(Rule("a" + Zwj + "b", 0x200D), Is.False,
+                            "For the joiner the second route does not exist at all.");
 
-                Assert.That(Regel(Beh + Zwj + Yeh, 0x200D), Is.False,
-                            "Auch nicht zwischen verbindenden Buchstaben.");
+                Assert.That(Rule(Beh + Zwj + Yeh, 0x200D), Is.False,
+                            "Not between joining letters either.");
 
-                // Die drei Fälle, an denen sich zeigt, dass beide Seiten und
-                // die durchsichtigen Zeichen dazwischen wirklich geprüft
-                // werden. Ohne sie genügte es, eine der beiden Seiten
-                // anzusehen: Die Fälle darüber scheitern jeweils schon an der
-                // anderen.
-                Assert.That(Regel("a" + Zwnj + Yeh, 0x200C), Is.False,
-                            "Links steht kein verbindender Buchstabe.");
+                // The three cases that show that both sides and the transparent
+                // characters between them are really checked. Without them it
+                // would suffice to look at one of the two sides: the cases above
+                // each already founder on the other one.
+                Assert.That(Rule("a" + Zwnj + Yeh, 0x200C), Is.False,
+                            "On the left there is no joining letter.");
 
-                Assert.That(Regel(Beh + Zwnj + "b", 0x200C), Is.False,
-                            "Rechts steht keiner.");
+                Assert.That(Rule(Beh + Zwnj + "b", 0x200C), Is.False,
+                            "On the right there is none.");
 
-                Assert.That(Regel(Beh + Shadda + Zwnj + Yeh, 0x200C), Is.True,
-                            "Ein durchsichtiges Zeichen dazwischen zählt nicht mit.");
+                Assert.That(Rule(Beh + Shadda + Zwnj + Yeh, 0x200C), Is.True,
+                            "A transparent character in between does not count.");
 
             });
 
@@ -252,8 +247,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheMiddleDotBelongsBetweenTwoLs()
 
         /// <summary>
-        /// RFC 5892, Anhang A.3: Der Mittelpunkt steht zwischen zwei <c>l</c> -
-        /// dem katalanischen <c>l·l</c> - und sonst nirgends.
+        /// RFC 5892, appendix A.3: the middle dot stands between two <c>l</c> -
+        /// the Catalan <c>l·l</c> - and nowhere else.
         /// </summary>
         [Test]
         public void TheMiddleDotBelongsBetweenTwoLs()
@@ -261,10 +256,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Regel("col·la",  0x00B7), Is.True);
-                Assert.That(Regel("co·lla",  0x00B7), Is.False, "davor kein 'l'");
-                Assert.That(Regel("coll·a",  0x00B7), Is.False, "danach kein 'l'");
-                Assert.That(Regel("·la",     0x00B7), Is.False, "am Anfang");
+                Assert.That(Rule("col·la",  0x00B7), Is.True);
+                Assert.That(Rule("co·lla",  0x00B7), Is.False, "no 'l' before it");
+                Assert.That(Rule("coll·a",  0x00B7), Is.False, "no 'l' after it");
+                Assert.That(Rule("·la",     0x00B7), Is.False, "at the start");
             });
 
         }
@@ -274,14 +269,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheGreekAndHebrewMarks()
 
         /// <summary>
-        /// RFC 5892, Anhang A.4 bis A.6: Die Keraia steht vor griechischer
-        /// Schrift, Geresh und Gershayim stehen nach hebräischer.
+        /// RFC 5892, appendices A.4 to A.6: the keraia stands before Greek
+        /// script, geresh and gershayim stand after Hebrew.
         /// </summary>
         /// <remarks>
-        /// Die drei Zeichen gehören zu ihrer Schrift wie ein Buchstabe.
-        /// Ausserhalb sind sie Satzzeichen in einer Adresse - und Satzzeichen
-        /// sind das Werkzeug, mit dem sich eine Adresse einer anderen ähnlich
-        /// machen lässt.
+        /// The three characters belong to their script like a letter. Outside it
+        /// they are punctuation in an address - and punctuation is the tool one
+        /// makes an address resemble another with.
         /// </remarks>
         [Test]
         public void TheGreekAndHebrewMarks()
@@ -294,15 +288,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(Regel(Keraia + "α", 0x0375), Is.True,  "A.4: vor Griechisch");
-                Assert.That(Regel(Keraia + "a", 0x0375), Is.False, "A.4: vor Latein");
-                Assert.That(Regel("α" + Keraia, 0x0375), Is.False, "A.4: am Ende");
+                Assert.That(Rule(Keraia + "α", 0x0375), Is.True,  "A.4: before Greek");
+                Assert.That(Rule(Keraia + "a", 0x0375), Is.False, "A.4: before Latin");
+                Assert.That(Rule("α" + Keraia, 0x0375), Is.False, "A.4: at the end");
 
-                Assert.That(Regel("א" + Geresh,    0x05F3), Is.True,  "A.5: nach Hebräisch");
-                Assert.That(Regel("a" + Geresh,    0x05F3), Is.False, "A.5: nach Latein");
+                Assert.That(Rule("א" + Geresh,    0x05F3), Is.True,  "A.5: after Hebrew");
+                Assert.That(Rule("a" + Geresh,    0x05F3), Is.False, "A.5: after Latin");
 
-                Assert.That(Regel("א" + Gershayim, 0x05F4), Is.True,  "A.6: nach Hebräisch");
-                Assert.That(Regel(Gershayim + "א", 0x05F4), Is.False, "A.6: am Anfang");
+                Assert.That(Rule("א" + Gershayim, 0x05F4), Is.True,  "A.6: after Hebrew");
+                Assert.That(Rule(Gershayim + "א", 0x05F4), Is.False, "A.6: at the start");
 
             });
 
@@ -313,26 +307,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheKatakanaMiddleDotNeedsJapanese()
 
         /// <summary>
-        /// RFC 5892, Anhang A.7: Der Katakana-Mittelpunkt ist zulässig, wenn
-        /// irgendwo in der Zeichenkette japanische Schrift steht.
+        /// RFC 5892, appendix A.7: the Katakana middle dot is permitted when
+        /// Japanese script stands somewhere in the string.
         /// </summary>
         /// <remarks>
-        /// Diese Regel sieht als einzige der sieben nicht auf die Nachbarn,
-        /// sondern auf das Ganze. Der Mittelpunkt trennt in japanischem Text
-        /// die Teile eines Fremdworts; ohne japanische Zeichen trennt er nichts.
+        /// This rule is the only one of the seven that looks not at the
+        /// neighbours but at the whole. In Japanese text the middle dot
+        /// separates the parts of a foreign word; without Japanese characters it
+        /// separates nothing.
         /// </remarks>
         [Test]
         public void TheKatakanaMiddleDotNeedsJapanese()
         {
 
-            const String Punkt = "・";
+            const String MiddleDot = "・";
 
             Assert.Multiple(() =>
             {
-                Assert.That(Regel("ア" + Punkt + "ア", 0x30FB), Is.True,  "Katakana");
-                Assert.That(Regel("あ" + Punkt + "あ", 0x30FB), Is.True,  "Hiragana");
-                Assert.That(Regel("中" + Punkt + "中", 0x30FB), Is.True,  "Han");
-                Assert.That(Regel("a"  + Punkt + "b",  0x30FB), Is.False, "kein japanisches Zeichen");
+                Assert.That(Rule("ア" + MiddleDot + "ア", 0x30FB), Is.True,  "Katakana");
+                Assert.That(Rule("あ" + MiddleDot + "あ", 0x30FB), Is.True,  "Hiragana");
+                Assert.That(Rule("中" + MiddleDot + "中", 0x30FB), Is.True,  "Han");
+                Assert.That(Rule("a"  + MiddleDot + "b",  0x30FB), Is.False, "no Japanese character");
             });
 
         }
@@ -342,33 +337,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheArabicIndicDigitsRule()
 
         /// <summary>
-        /// RFC 5892, Anhang A.8 und A.9: Die beiden Sätze arabisch-indischer
-        /// Ziffern dürfen nicht in derselben Zeichenkette stehen.
+        /// RFC 5892, appendices A.8 and A.9: the two sets of Arabic-Indic digits
+        /// must not stand in the same string.
         /// </summary>
         /// <remarks>
-        /// Sie sehen einander ähnlich und bedeuten dasselbe. Zwei Konten, die
-        /// sich nur darin unterscheiden, wären für den Leser dasselbe Konto -
-        /// deshalb entweder der eine Satz oder der andere.
+        /// They resemble each other and mean the same. Two accounts that differ
+        /// only in that would be the same account for the reader - hence either
+        /// the one set or the other.
         /// </remarks>
         [Test]
         public void TheArabicIndicDigitsRule()
         {
 
-            const String ArabischIndisch = "٠١٢";
-            const String Erweitert       = "۰۱۲";
+            const String ArabicIndic = "٠١٢";
+            const String Extended       = "۰۱۲";
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Regel(ArabischIndisch, 0x0660), Is.True,
-                            "Ein Satz für sich ist zulässig.");
+                Assert.That(Rule(ArabicIndic, 0x0660), Is.True,
+                            "One set on its own is permitted.");
 
-                Assert.That(Regel(Erweitert, 0x06F0), Is.True);
+                Assert.That(Rule(Extended, 0x06F0), Is.True);
 
-                Assert.That(Regel(ArabischIndisch + Erweitert, 0x0660), Is.False,
-                            "Gemischt nicht.");
+                Assert.That(Rule(ArabicIndic + Extended, 0x0660), Is.False,
+                            "Mixed it is not.");
 
-                Assert.That(Regel(ArabischIndisch + Erweitert, 0x06F0), Is.False);
+                Assert.That(Rule(ArabicIndic + Extended, 0x06F0), Is.False);
 
             });
 
@@ -379,13 +374,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhatIsNotContextual()
 
         /// <summary>
-        /// Was gar nicht kontextabhängig ist, bekommt hier keine Zulassung.
+        /// What is not context-dependent at all gets no permission here.
         /// </summary>
         /// <remarks>
-        /// Diese Funktion beantwortet nur die Frage „darf dieser Sonderfall hier
-        /// stehen". Ein gewöhnlicher Buchstabe ist keiner - für ihn entscheidet
-        /// die Leiter, und ein <c>true</c> an dieser Stelle wäre eine zweite,
-        /// stillere Zulassung neben ihr.
+        /// This function answers only the question "may this special case stand
+        /// here". An ordinary letter is none - for it the ladder decides, and a
+        /// <c>true</c> at this place would be a second, quieter permission
+        /// beside it.
         /// </remarks>
         [Test]
         public void WhatIsNotContextual()
@@ -393,8 +388,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Regel("abc", 0x0061), Is.False, "'a'");
-                Assert.That(Regel("♚",   0x265A), Is.False, "ein Symbol");
+                Assert.That(Rule("abc", 0x0061), Is.False, "'a'");
+                Assert.That(Rule("♚",   0x265A), Is.False, "a symbol");
             });
 
         }
