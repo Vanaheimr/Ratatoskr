@@ -24,40 +24,39 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Einstellungen eines einzelnen Abonnements (XEP-0060, Abschnitt 6.3).
+/// The settings of a single subscription (XEP-0060, section 6.3).
 /// </summary>
 /// <param name="Deliver">
-/// Werden Benachrichtigungen zugestellt? <c>pubsub#deliver</c>, Abschnitt
-/// 12.18.
+/// Are notifications delivered? <c>pubsub#deliver</c>, section 12.18.
 /// </param>
 /// <remarks>
-/// <b>Ein Feld, und das ist die Aussage.</b> XEP-0060 kennt ein Dutzend
-/// weitere - Zusammenfassungen, Ablauffristen, Tiefe, Presence-Filter. Was
-/// dieser Server nicht kann, bietet er auch nicht an: Ein Formular mit
-/// <c>pubsub#digest</c> darin, das dann nichts bewirkt, wäre eine Zusage ohne
-/// Deckung, und zwar eine, die der Abonnent nicht nachprüfen kann - eine
-/// ausbleibende Zusammenfassung sieht aus wie Ruhe.
+/// <b>One field, and that is the statement.</b> XEP-0060 knows a dozen more -
+/// digests, expiry dates, depth, presence filters. What this server cannot do
+/// it does not offer either: a form with <c>pubsub#digest</c> in it that then
+/// brings about nothing would be a promise without cover, and one the
+/// subscriber cannot check at that - a digest that does not come looks like
+/// quiet.
 ///
-/// <b>Erst hiermit unterscheiden sich zwei Abonnements.</b> Bis dahin waren
-/// zwei auf denselben Knoten zwei gleiche Dinge, und das zweite brachte nichts
-/// ein als eine zweite Zustellung. Jetzt ist die <c>subid</c> nicht nur eine
-/// Kennung, sondern die Adresse einer Einstellung.
+/// <b>Only with this do two subscriptions differ.</b> Until then two on the
+/// same node were two identical things, and the second brought in nothing but a
+/// second delivery. Now the <c>subid</c> is not only an identifier but the
+/// address of a setting.
 /// </remarks>
 public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
 {
 
-    /// <summary>Der Namensraum der Datenformulare (XEP-0004).</summary>
+    /// <summary>The namespace of the data forms (XEP-0004).</summary>
     public const String DataFormNamespace = "jabber:x:data";
 
-    /// <summary>Der Formulartyp dieser Einstellungen.</summary>
+    /// <summary>The form type of these settings.</summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#subscribe_options";
 
-    /// <summary>Das Feld für die Zustellung.</summary>
+    /// <summary>The field for the delivery.</summary>
     public const String DeliverVariable = "pubsub#deliver";
 
     /// <summary>
-    /// Das Angebot des Dienstes (<c>type='form'</c>) - was sich einstellen
-    /// lässt und was gerade gilt.
+    /// The offer of the service (<c>type='form'</c>) - what can be set and what
+    /// holds just now.
     /// </summary>
     public XElement ToForm()
     {
@@ -73,13 +72,13 @@ public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
                    new XElement(ns + "field",
                        new XAttribute("var",   DeliverVariable),
                        new XAttribute("type",  "boolean"),
-                       new XAttribute("label", "Benachrichtigungen zustellen"),
+                       new XAttribute("label", "Deliver notifications"),
                        new XElement(ns + "value", Deliver ? "1" : "0")));
 
     }
 
     /// <summary>
-    /// Die Antwort des Abonnenten (<c>type='submit'</c>).
+    /// The answer of the subscriber (<c>type='submit'</c>).
     /// </summary>
     public XElement ToSubmit()
     {
@@ -99,22 +98,20 @@ public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
     }
 
     /// <summary>
-    /// Liest ein abgeschicktes Formular.
+    /// Reads a submitted form.
     /// </summary>
     /// <returns>
-    /// false, wenn es keines ist, den falschen Zweck hat oder ein Feld
-    /// enthält, das hier niemand angeboten hat.
+    /// false when it is none, has the wrong purpose or contains a field nobody
+    /// offered here.
     /// </returns>
     /// <remarks>
-    /// <b>Unbekannte Felder werden abgewiesen und nicht übergangen.</b> Das
-    /// ist strenger, als XEP-0004 verlangt, und Absicht: Wer Unbekanntes
-    /// stillschweigend schluckt, lässt den Absender in dem Glauben, seine
-    /// Einstellung gelte. Eine Absage kann man lesen, eine ausbleibende
-    /// Wirkung nicht.
+    /// <b>Unknown fields are refused and not passed over.</b> That is stricter
+    /// than XEP-0004 demands, and deliberate: whoever silently swallows the
+    /// unknown leaves the sender in the belief that their setting holds. A
+    /// refusal can be read, an effect that does not come cannot.
     ///
-    /// Ein fehlendes Feld ist dagegen kein Fehler: Das abgeschickte Formular
-    /// ist die vollständige Einstellung, und was nicht dasteht, steht auf der
-    /// Vorgabe.
+    /// A missing field, by contrast, is no error: the submitted form is the
+    /// complete setting, and what does not stand there stands on the default.
     /// </remarks>
     public static Boolean TryRead(XElement x, out PubSubSubscriptionOptions? options)
     {
@@ -133,18 +130,18 @@ public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
         foreach (var field in x.Children(DataFormNamespace, "field"))
         {
 
-            var wert = field.Child(DataFormNamespace, "value")?.Value;
+            var value = field.Child(DataFormNamespace, "value")?.Value;
 
             switch (field.Attr("var"))
             {
 
                 case "FORM_TYPE":
-                    if (wert != FormType)
+                    if (value != FormType)
                         return false;
                     break;
 
                 case DeliverVariable:
-                    if (!TryReadBoolean(wert, out deliver))
+                    if (!TryReadBoolean(value, out deliver))
                         return false;
                     break;
 
@@ -162,17 +159,17 @@ public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
     }
 
     /// <summary>
-    /// Liest das Angebot eines Dienstes (<c>type='form'</c>).
+    /// Reads the offer of a service (<c>type='form'</c>).
     /// </summary>
     /// <remarks>
-    /// <b>Hier werden unbekannte Felder übergangen, in <see cref="TryRead"/>
-    /// abgewiesen</b> - und das ist kein Widerspruch, sondern die Richtung:
+    /// <b>Here unknown fields are passed over, in <see cref="TryRead"/>
+    /// refused</b> - and that is no contradiction but the direction:
     ///
-    /// Ein Angebot ist eine Auskunft. Ein fremder Dienst bietet ein Dutzend
-    /// Felder an, von denen dieser Client nur eines setzen kann; wer daran
-    /// scheitert, kann mit keinem echten Dienst sprechen. Ein abgeschicktes
-    /// Formular ist dagegen eine Anweisung, und ein übergangenes Feld darin
-    /// ist eine verworfene Anweisung, von der der Absender nichts erfährt.
+    /// An offer is a piece of information. A foreign service offers a dozen
+    /// fields of which this client can set only one; whoever founders on that
+    /// cannot speak with any real service. A submitted form, by contrast, is an
+    /// instruction, and a field passed over in it is a discarded instruction the
+    /// sender learns nothing of.
     /// </remarks>
     public static Boolean TryReadForm(XElement x, out PubSubSubscriptionOptions? options)
     {
@@ -189,15 +186,15 @@ public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
         foreach (var field in x.Children(DataFormNamespace, "field"))
         {
 
-            var wert = field.Child(DataFormNamespace, "value")?.Value;
+            var value = field.Child(DataFormNamespace, "value")?.Value;
 
-            if (field.Attr("var") == "FORM_TYPE" && wert != FormType)
+            if (field.Attr("var") == "FORM_TYPE" && value != FormType)
                 return false;
 
             if (field.Attr("var") == DeliverVariable)
             {
 
-                if (!TryReadBoolean(wert, out var deliver))
+                if (!TryReadBoolean(value, out var deliver))
                     return false;
 
                 options = new PubSubSubscriptionOptions(deliver);
@@ -206,38 +203,36 @@ public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
 
         }
 
-        // Ohne das Feld gibt es nichts zu lesen: Ein Angebot, das die
-        // Zustellung nicht nennt, sagt über sie auch nichts - und die Vorgabe
-        // anzunehmen hiesse, sie zu erfinden.
+        // Without the field there is nothing to read: an offer that does not
+        // name the delivery says nothing about it either - and to assume the
+        // default would mean inventing it.
         return options is not null;
 
     }
 
     /// <summary>
-    /// XEP-0004, Abschnitt 3.3: Ein Wahrheitswert steht als 0/1 oder
-    /// false/true.
+    /// XEP-0004, section 3.3: a truth value stands as 0/1 or false/true.
     /// </summary>
     /// <remarks>
-    /// Beide Schreibweisen zu lesen und nur eine zu schreiben ist kein
-    /// Widerspruch, sondern die übliche Vorsicht: Was hereinkommt, hat ein
-    /// anderer geschrieben.
+    /// To read both spellings and to write only one is no contradiction but the
+    /// usual caution: what comes in was written by somebody else.
     /// </remarks>
-    private static Boolean TryReadBoolean(String? wert, out Boolean ergebnis)
+    private static Boolean TryReadBoolean(String? value, out Boolean result)
     {
 
-        switch (wert)
+        switch (value)
         {
 
             case "1" or "true":
-                ergebnis = true;
+                result = true;
                 return true;
 
             case "0" or "false":
-                ergebnis = false;
+                result = false;
                 return true;
 
             default:
-                ergebnis = true;
+                result = true;
                 return false;
 
         }

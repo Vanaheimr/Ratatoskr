@@ -24,30 +24,30 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0060, Abschnitt 8.6: Der Antrag auf ein Abonnement, wie er dem
-/// Eigentümer vorgelegt und von ihm beantwortet wird.
+/// XEP-0060, section 8.6: The application for a subscription, as it is
+/// presented to the owner and answered by them.
 /// </summary>
-/// <param name="NodeId">Der Knoten, um den gebeten wird.</param>
-/// <param name="SubscriberJid">Wer bittet.</param>
+/// <param name="NodeId">The node that is being asked for.</param>
+/// <param name="SubscriberJid">Who asks.</param>
 /// <param name="SubId">
-/// Die Kennung des beantragten Abonnements. <b>Sie ist der eigentliche
-/// Gegenstand der Antwort</b> - derselbe JID kann mehrfach beantragen, und ohne
-/// sie wüsste der Dienst nicht, welcher Antrag beschieden wurde.
+/// The identifier of the subscription applied for. <b>It is the actual subject
+/// of the answer</b> - the same JID can apply several times, and without it the
+/// service would not know which application was decided.
 /// </param>
-/// <param name="Allow">Die Antwort: zusagen oder ablehnen.</param>
+/// <param name="Allow">The answer: grant or decline.</param>
 /// <remarks>
-/// <b>Die zweite Tür zu derselben Entscheidung, und deshalb keine zweite
-/// Entscheidung.</b> Genehmigen lässt sich ein Antrag auch über die
-/// Abonnentenliste (Abschnitt 8.8.2), und der Server dieses Projekts tut
-/// intern beide Male dasselbe. Zwei Türen sind trotzdem nötig: Die Liste ist
-/// die Sicht eines Verwalters, das Formular die eines Menschen, dem sein Client
-/// eine Frage anzeigt. Wer nur die Liste hätte, verlangte von jedem Client,
-/// dass er Abonnenten verwalten kann.
+/// <b>The second door to the same decision, and therefore no second
+/// decision.</b> An application can also be approved by way of the subscriber
+/// list (section 8.8.2), and the server of this project does the same thing
+/// internally both times. Two doors are necessary all the same: the list is the
+/// view of an administrator, the form that of a human being whose client shows
+/// them a question. Whoever had only the list would demand of every client that
+/// it can manage subscribers.
 ///
-/// <b>Ein Formular, das niemand beantworten kann, wäre schlimmer als keines.</b>
-/// Deshalb steht das Lesen hier neben dem Schreiben: Wer die Frage stellt, muss
-/// die Antwort annehmen - sonst genehmigt ein Mensch etwas, und es geschieht
-/// nichts.
+/// <b>A form nobody can answer would be worse than none.</b> That is why the
+/// reading stands here beside the writing: whoever asks the question has to
+/// accept the answer - otherwise a human being approves something and nothing
+/// happens.
 /// </remarks>
 public sealed record PubSubSubscribeAuthorization(String   NodeId,
                                                   String   SubscriberJid,
@@ -55,36 +55,36 @@ public sealed record PubSubSubscribeAuthorization(String   NodeId,
                                                   Boolean  Allow = false)
 {
 
-    /// <summary>Der Formulartyp dieses Antrags.</summary>
+    /// <summary>The form type of this application.</summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#subscribe_authorization";
 
-    /// <summary>Das Feld für den Knoten.</summary>
+    /// <summary>The field for the node.</summary>
     public const String NodeVariable = "pubsub#node";
 
-    /// <summary>Das Feld für die Kennung des Antrags.</summary>
+    /// <summary>The field for the identifier of the application.</summary>
     public const String SubIdVariable = "pubsub#subid";
 
-    /// <summary>Das Feld für den Antragsteller.</summary>
+    /// <summary>The field for the applicant.</summary>
     public const String SubscriberVariable = "pubsub#subscriber_jid";
 
-    /// <summary>Das Feld für die Antwort.</summary>
+    /// <summary>The field for the answer.</summary>
     public const String AllowVariable = "pubsub#allow";
 
     /// <summary>
-    /// Die Frage an den Eigentümer (<c>type='form'</c>).
+    /// The question to the owner (<c>type='form'</c>).
     /// </summary>
     /// <remarks>
-    /// Die Vorbelegung von <c>pubsub#allow</c> ist <c>false</c>. Ein Formular,
-    /// das schon auf „ja" steht, macht aus dem Wegklicken eine Zusage.
+    /// The preset of <c>pubsub#allow</c> is <c>false</c>. A form that already
+    /// stands on "yes" turns clicking it away into a grant.
     /// </remarks>
     public XElement ToForm()
         => DataForm.Form("form", FormType,
-               DataForm.Field(NodeVariable,       "text-single", "Knoten",         NodeId),
-               DataForm.Field(SubIdVariable,      "text-single", "Kennung",        SubId ?? ""),
-               DataForm.Field(SubscriberVariable, "jid-single",  "Antragsteller",  SubscriberJid),
-               DataForm.Field(AllowVariable,      "boolean",     "Zusagen?",       DataForm.Boolean(Allow)));
+               DataForm.Field(NodeVariable,       "text-single", "Node",        NodeId),
+               DataForm.Field(SubIdVariable,      "text-single", "Identifier",  SubId ?? ""),
+               DataForm.Field(SubscriberVariable, "jid-single",  "Applicant",   SubscriberJid),
+               DataForm.Field(AllowVariable,      "boolean",     "Grant?",      DataForm.Boolean(Allow)));
 
-    /// <summary>Die Antwort des Eigentümers (<c>type='submit'</c>).</summary>
+    /// <summary>The answer of the owner (<c>type='submit'</c>).</summary>
     public XElement ToSubmit()
         => DataForm.Form("submit", FormType,
                DataForm.Field(NodeVariable,       null, null, NodeId),
@@ -93,93 +93,93 @@ public sealed record PubSubSubscribeAuthorization(String   NodeId,
                DataForm.Field(AllowVariable,      null, null, DataForm.Boolean(Allow)));
 
     /// <summary>
-    /// Liest eine abgeschickte Antwort - streng, wie jede Anweisung.
+    /// Reads a submitted answer - strictly, like every instruction.
     /// </summary>
     /// <returns>
-    /// false, wenn es kein abgeschicktes Formular dieses Zwecks ist, ein Feld
-    /// fehlt oder einen Wert trägt, der keiner ist.
+    /// false when it is no submitted form of this purpose, a field is missing
+    /// or carries a value that is none.
     /// </returns>
     /// <remarks>
-    /// <b>Ohne Knoten, Antragsteller und Antwort ist es keine Antwort.</b> Die
-    /// Kennung darf fehlen - ein Antragsteller mit nur einem offenen Antrag
-    /// ist auch ohne sie eindeutig, und ein Client, der sie verliert, soll
-    /// nicht mit einer erfundenen antworten müssen.
+    /// <b>Without node, applicant and answer it is no answer.</b> The
+    /// identifier may be missing - an applicant with only one pending
+    /// application is unambiguous without it too, and a client that loses it
+    /// shall not have to answer with an invented one.
     /// </remarks>
     public static Boolean TryRead(XElement x, out PubSubSubscribeAuthorization? authorization)
         => TryRead(x, "submit", allowRequired: true, out authorization);
 
     /// <summary>
-    /// Liest den vorgelegten Antrag (<c>type='form'</c>).
+    /// Reads the presented application (<c>type='form'</c>).
     /// </summary>
     /// <remarks>
-    /// <b>Ohne <c>pubsub#allow</c>, und das ist der Unterschied.</b> Im
-    /// vorgelegten Formular ist das Feld die Frage; in der abgeschickten
-    /// Antwort ist es die Antwort. Ein Antrag ohne Vorbelegung ist deshalb
-    /// vollständig, eine Antwort ohne Entscheidung nicht.
+    /// <b>Without <c>pubsub#allow</c>, and that is the difference.</b> In the
+    /// presented form the field is the question; in the submitted answer it is
+    /// the answer. An application without a preset is therefore complete, an
+    /// answer without a decision is not.
     /// </remarks>
     public static Boolean TryReadRequest(XElement x, out PubSubSubscribeAuthorization? request)
         => TryRead(x, "form", allowRequired: false, out request);
 
     private static Boolean TryRead(XElement                          x,
-                                   String                            art,
+                                   String                            kind,
                                    Boolean                           allowRequired,
                                    out PubSubSubscribeAuthorization?  authorization)
     {
 
         authorization = null;
 
-        if (!DataForm.Is(x, art))
+        if (!DataForm.Is(x, kind))
             return false;
 
-        String?   node        = null;
-        String?   wer         = null;
-        String?   kennung     = null;
-        Boolean?  zusagen     = null;
-        var       richtigeArt = false;
+        String?   node       = null;
+        String?   who        = null;
+        String?   subId      = null;
+        Boolean?  allow      = null;
+        var       rightKind  = false;
 
         foreach (var field in DataForm.Fields(x))
         {
 
-            var wert = DataForm.ValueOf(field);
+            var value = DataForm.ValueOf(field);
 
             switch (field.Attr("var"))
             {
 
                 case "FORM_TYPE":
-                    if (wert != FormType)
+                    if (value != FormType)
                         return false;
-                    richtigeArt = true;
+                    rightKind = true;
                     break;
 
-                case NodeVariable:        node    = wert;  break;
-                case SubscriberVariable:  wer     = wert;  break;
+                case NodeVariable:        node    = value;  break;
+                case SubscriberVariable:  who     = value;  break;
 
-                // Ein leeres Feld ist keine Kennung: Der Antragsteller hat
-                // eine, oder er hat keine - eine leere Zeichenkette wäre eine
-                // dritte Möglichkeit, die es nicht gibt.
+                // An empty field is no identifier: the applicant has one, or
+                // they have none - an empty string would be a third possibility
+                // that does not exist.
                 case SubIdVariable:
-                    kennung = String.IsNullOrEmpty(wert) ? null : wert;
+                    subId = String.IsNullOrEmpty(value) ? null : value;
                     break;
 
                 case AllowVariable:
-                    if (!DataForm.TryBoolean(wert, out var erlaubt))
+                    if (!DataForm.TryBoolean(value, out var allowed))
                         return false;
-                    zusagen = erlaubt;
+                    allow = allowed;
                     break;
 
             }
 
         }
 
-        if (!richtigeArt ||
+        if (!rightKind ||
             String.IsNullOrEmpty(node) ||
-            String.IsNullOrEmpty(wer)  ||
-            (allowRequired && zusagen is null))
+            String.IsNullOrEmpty(who)  ||
+            (allowRequired && allow is null))
         {
             return false;
         }
 
-        authorization = new PubSubSubscribeAuthorization(node, wer, kennung, zusagen ?? false);
+        authorization = new PubSubSubscribeAuthorization(node, who, subId, allow ?? false);
 
         return true;
 

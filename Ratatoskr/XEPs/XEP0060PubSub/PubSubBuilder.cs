@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0060: Baut PubSub-IQ-Stanzas.
+/// XEP-0060: Builds PubSub IQ stanzas.
 /// </summary>
 public static class PubSubBuilder
 {
@@ -37,9 +37,9 @@ public static class PubSubBuilder
     /// Unsubscribe from a node
     /// </summary>
     /// <param name="subId">
-    /// Die Kennung des Abonnements aus der Zusage des Dienstes, oder null.
-    /// Vorgeschrieben, sobald ein JID mehrere Abonnements auf denselben Knoten
-    /// hält (XEP-0060, Abschnitt 6.2.3.1).
+    /// The identifier of the subscription from the grant of the service, or
+    /// null. Prescribed as soon as one JID holds several subscriptions on the
+    /// same node (XEP-0060, section 6.2.3.1).
     /// </param>
     public static string Unsubscribe(string pubsubJid, string nodeId, string myJid, string id = "pubsub-unsub", string? subId = null)
     {
@@ -51,10 +51,10 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 5.6: Die eigenen Abonnements abfragen.
+    /// XEP-0060, section 5.6: Query one's own subscriptions.
     /// </summary>
     /// <param name="nodeId">
-    /// Auf welchen Knoten eingeschränkt, oder null für alle.
+    /// Which node it is narrowed to, or null for all.
     /// </param>
     public static string GetSubscriptions(string pubsubJid, string id = "pubsub-subs", string? nodeId = null)
     {
@@ -66,7 +66,7 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 5.7: Die eigenen Rollen abfragen.
+    /// XEP-0060, section 5.7: Query one's own roles.
     /// </summary>
     public static string GetAffiliations(string pubsubJid, string id = "pubsub-affs")
     {
@@ -75,7 +75,7 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.9.1: Die Rollen an einem eigenen Knoten abfragen.
+    /// XEP-0060, section 8.9.1: Query the roles at a node of one's own.
     /// </summary>
     public static string GetNodeAffiliations(string pubsubJid, string nodeId, string id = "pubsub-nodeaffs")
     {
@@ -86,7 +86,7 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.9.2: Eine Rolle setzen.
+    /// XEP-0060, section 8.9.2: Set a role.
     /// </summary>
     public static string SetAffiliation(string pubsubJid, string nodeId, string id, string jid, string affiliation)
     {
@@ -98,13 +98,12 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.8.1: Die Abonnenten eines eigenen Knotens
-    /// abfragen.
+    /// XEP-0060, section 8.8.1: Query the subscribers of a node of one's own.
     /// </summary>
     /// <remarks>
-    /// Sieht aus wie die Sammelabfrage aus Abschnitt 5.6 und fragt das
-    /// Gegenteil: nicht „wo hänge ich überall", sondern „wer hängt an meinem
-    /// Knoten". Zu unterscheiden sind die beiden allein am Namensraum.
+    /// Looks like the collection query from section 5.6 and asks the opposite:
+    /// not "where am I hanging everywhere", but "who hangs on my node". The two
+    /// are to be told apart by the namespace alone.
     /// </remarks>
     public static string GetNodeSubscriptions(string pubsubJid, string nodeId, string id = "pubsub-nodesubs")
     {
@@ -115,17 +114,16 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.8.2: Ein Abonnement des eigenen Knotens beenden.
+    /// XEP-0060, section 8.8.2: End a subscription of one's own node.
     /// </summary>
     /// <param name="subId">
-    /// Ein bestimmtes Abonnement, oder null für alle dieses JIDs an diesem
-    /// Knoten.
+    /// A particular subscription, or null for all of this JID at this node.
     /// </param>
     /// <remarks>
-    /// <b>Nur beenden und nicht anmelden</b>, obwohl derselbe Abschnitt auch
-    /// das zulässt. Ein Client, der einen anderen ungefragt anmelden kann,
-    /// braucht dafür keinen Namen in dieser Datei: Wer das will, sagt, was er
-    /// tut. Und der Testserver dieses Projekts weist es ohnehin ab.
+    /// <b>Only ending and not signing up</b>, although the same section permits
+    /// that too. A client that can sign another one up unasked needs no name in
+    /// this file for it: whoever wants that says what they are doing. And the
+    /// test server of this project refuses it anyway.
     /// </remarks>
     public static string RemoveSubscriber(string pubsubJid, string nodeId, string id, string jid, string? subId = null)
     {
@@ -138,7 +136,7 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 6.3.1: Die Einstellungen eines Abonnements abfragen.
+    /// XEP-0060, section 6.3.1: Query the settings of a subscription.
     /// </summary>
     public static string GetOptions(string pubsubJid, string nodeId, string myJid, string id = "pubsub-opts", string? subId = null)
     {
@@ -150,11 +148,11 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 6.3.5: Die Einstellungen eines Abonnements setzen.
+    /// XEP-0060, section 6.3.5: Set the settings of a subscription.
     /// </summary>
     /// <param name="form">
-    /// Das abgeschickte Datenformular als fertiges XML - es wird wie eine
-    /// Nutzlast durchgereicht und nicht escaped.
+    /// The submitted data form as finished XML - it is passed through like a
+    /// payload and not escaped.
     /// </param>
     public static string SetOptions(string pubsubJid, string nodeId, string myJid, string id, string? subId, string form)
     {
@@ -169,8 +167,8 @@ public static class PubSubBuilder
     /// Publish an item to a node
     /// </summary>
     /// <remarks>
-    /// <paramref name="payload"/> wird bewusst NICHT escaped - es ist rohes
-    /// XML. Aufrufer müssen sicherstellen, dass es wohlgeformt ist.
+    /// <paramref name="payload"/> is deliberately NOT escaped - it is raw XML.
+    /// Callers have to make sure that it is well-formed.
     /// </remarks>
     public static string Publish(string pubsubJid, string nodeId, string itemId, string payload, string id = "pubsub-pub")
     {
@@ -182,12 +180,12 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 7.2: Einen einzelnen Eintrag zurücknehmen.
+    /// XEP-0060, section 7.2: Retract a single entry.
     /// </summary>
     /// <remarks>
-    /// Im gewöhnlichen Namensraum und nicht in dem des Eigentümers:
-    /// Zurücknehmen darf, wer auch veröffentlichen darf. Und mit Kennung -
-    /// „nimm irgendetwas zurück" gibt es nicht, dafür ist das Leeren da.
+    /// In the ordinary namespace and not in that of the owner: whoever may
+    /// publish may also retract. And with an identifier - "retract just
+    /// anything" does not exist, that is what the purging is for.
     /// </remarks>
     public static string Retract(string pubsubJid, string nodeId, string itemId, string id = "pubsub-retract")
     {
@@ -210,16 +208,16 @@ public static class PubSubBuilder
                $"</pubsub></iq>";
     }
 
-    /// <summary>Der Namensraum der Eigentümer-Anfragen (XEP-0060, Abschnitt 8).</summary>
+    /// <summary>The namespace of the owner requests (XEP-0060, section 8).</summary>
     public const string OwnerNamespace = "http://jabber.org/protocol/pubsub#owner";
 
     /// <summary>
     /// Create a new node
     /// </summary>
     /// <param name="configuration">
-    /// Das abgeschickte Knotenformular als fertiges XML, oder null. Anlegen
-    /// und einstellen in einem Zug (XEP-0060, Abschnitt 8.1.3): Zwei Schritte
-    /// hätten eine Lücke, in der der Knoten offen steht.
+    /// The submitted node form as finished XML, or null. Creating and
+    /// configuring in one go (XEP-0060, section 8.1.3): two steps would have a
+    /// gap in which the node stands open.
     /// </param>
     public static string CreateNode(string pubsubJid, string nodeId, string id = "pubsub-create", string? configuration = null)
     {
@@ -231,7 +229,7 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.2.1: Die Einstellungen eines Knotens abfragen.
+    /// XEP-0060, section 8.2.1: Query the settings of a node.
     /// </summary>
     public static string GetNodeConfig(string pubsubJid, string nodeId, string id = "pubsub-cfg")
     {
@@ -242,7 +240,7 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.2.4: Die Einstellungen eines Knotens setzen.
+    /// XEP-0060, section 8.2.4: Set the settings of a node.
     /// </summary>
     public static string SetNodeConfig(string pubsubJid, string nodeId, string id, string form)
     {
@@ -253,7 +251,7 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.4: Einen Knoten löschen.
+    /// XEP-0060, section 8.4: Delete a node.
     /// </summary>
     public static string DeleteNode(string pubsubJid, string nodeId, string id = "pubsub-delete")
     {
@@ -264,11 +262,11 @@ public static class PubSubBuilder
     }
 
     /// <summary>
-    /// XEP-0060, Abschnitt 8.5: Einen Knoten leeren.
+    /// XEP-0060, section 8.5: Empty a node.
     /// </summary>
     /// <remarks>
-    /// Sieht dem Löschen zum Verwechseln ähnlich und meint etwas anderes: Der
-    /// Knoten bleibt, seine Abonnenten bleiben, nur der Inhalt geht.
+    /// Looks confusingly like the deleting and means something else: the node
+    /// stays, its subscribers stay, only the content goes.
     /// </remarks>
     public static string PurgeNode(string pubsubJid, string nodeId, string id = "pubsub-purge")
     {

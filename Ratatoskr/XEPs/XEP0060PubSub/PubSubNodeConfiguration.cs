@@ -24,33 +24,32 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Einstellungen eines Knotens (XEP-0060, Abschnitt 8.2).
+/// The settings of a node (XEP-0060, section 8.2).
 /// </summary>
-/// <param name="AccessModel">Wer an die Einträge kommt.</param>
+/// <param name="AccessModel">Who gets at the entries.</param>
 /// <param name="MaxItems">
-/// Wie viele Einträge der Knoten behält; ist die Grenze erreicht, weicht der
-/// älteste.
+/// How many entries the node keeps; once the limit is reached, the oldest gives
+/// way.
 /// </param>
 /// <param name="PersistItems">
-/// Werden Einträge überhaupt behalten? Ein Knoten ohne Ablage meldet nur -
-/// wer nicht zuhörte, hat es verpasst.
+/// Are entries kept at all? A node without storage only reports - whoever was
+/// not listening has missed it.
 /// </param>
 /// <param name="RosterGroups">
-/// Die Rostergruppen, die beim Zugriffsmodell
-/// <see cref="PubSubAccessModel.Roster"/> hereinkommen - leer heisst: der
-/// ganze Roster.
+/// The roster groups that come in with the access model
+/// <see cref="PubSubAccessModel.Roster"/> - empty means: the whole roster.
 /// </param>
 /// <remarks>
-/// <b>Vier Felder, und jedes tut etwas.</b> XEP-0060 kennt zwei Dutzend
-/// weitere - Titel, Sprache, Benachrichtigungen über Konfigurationsänderungen,
-/// Sammelabfragen, Publikationsmodelle. Angeboten wird hier nur, was auch
-/// wirkt; alles andere wäre eine Zusage ohne Deckung, und zwar an der Stelle,
-/// an der ein Eigentümer glaubt, etwas geregelt zu haben.
+/// <b>Four fields, and every one of them does something.</b> XEP-0060 knows two
+/// dozen more - title, language, notifications about configuration changes,
+/// collection queries, publish models. What is offered here is only what also
+/// takes effect; anything else would be a promise without cover, and at the very
+/// place where an owner believes they have settled something.
 ///
-/// Die Gruppenliste steht auch dann im Formular, wenn ein anderes Modell gilt.
-/// Das ist kein Versehen: Sie ist eine Einstellung des Knotens und nicht des
-/// Modells - wer von <c>open</c> auf <c>roster</c> umstellt, soll die Liste
-/// vorher setzen können, statt den Knoten kurz offen dastehen zu lassen.
+/// The group list stands in the form even when another model holds. That is no
+/// oversight: it is a setting of the node and not of the model - whoever
+/// switches from <c>open</c> to <c>roster</c> shall be able to set the list
+/// beforehand instead of letting the node stand open for a moment.
 /// </remarks>
 public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel   = PubSubAccessModel.Open,
                                              Int32                   MaxItems      = 256,
@@ -58,28 +57,28 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
                                              IReadOnlyList<String>?  RosterGroups  = null)
 {
 
-    /// <summary>Die Gruppen, nie null.</summary>
+    /// <summary>The groups, never null.</summary>
     public IReadOnlyList<String> RosterGroups { get; init; } = RosterGroups ?? [];
 
-    /// <summary>Der Formulartyp dieser Einstellungen.</summary>
+    /// <summary>The form type of these settings.</summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#node_config";
 
-    /// <summary>Das Feld für das Zugriffsmodell.</summary>
+    /// <summary>The field for the access model.</summary>
     public const String AccessModelVariable = "pubsub#access_model";
 
-    /// <summary>Das Feld für die Zahl der behaltenen Einträge.</summary>
+    /// <summary>The field for the number of entries kept.</summary>
     public const String MaxItemsVariable = "pubsub#max_items";
 
-    /// <summary>Das Feld für die Ablage.</summary>
+    /// <summary>The field for the storage.</summary>
     public const String PersistItemsVariable = "pubsub#persist_items";
 
-    /// <summary>Das Feld für die erlaubten Rostergruppen.</summary>
+    /// <summary>The field for the permitted roster groups.</summary>
     public const String RosterGroupsVariable = "pubsub#roster_groups_allowed";
 
-    /// <summary>Die Vorgabe: offen, 256 Einträge, mit Ablage.</summary>
+    /// <summary>The default: open, 256 entries, with storage.</summary>
     public static readonly PubSubNodeConfiguration Default = new();
 
-    /// <summary>Das Zugriffsmodell, wie es im Formular steht.</summary>
+    /// <summary>The access model as it stands in the form.</summary>
     public static String NameOf(PubSubAccessModel model)
         => model switch {
                PubSubAccessModel.Presence   => "presence",
@@ -90,19 +89,18 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
            };
 
     /// <summary>
-    /// Liest ein Zugriffsmodell.
+    /// Reads an access model.
     /// </summary>
     /// <returns>
-    /// false bei allem, was dieser Server nicht durchsetzen kann. Seit D93 ist
-    /// das nichts mehr - die Prüfung bleibt trotzdem: Sie unterscheidet einen
-    /// Namen, den es gibt, von einem Tippfehler.
+    /// false for everything this server cannot enforce. Since D93 that is
+    /// nothing any more - the check stays all the same: it distinguishes a name
+    /// that exists from a typo.
     /// </returns>
     /// <remarks>
-    /// <b>Eine Stelle für alle, die danach fragen</b>: das Knotenformular in
-    /// beide Richtungen und die Bedingungen einer Veröffentlichung. Vier
-    /// Stellen, die dieselbe Liste führen, führen sie irgendwann verschieden -
-    /// und die eine, die ein Modell nicht kennt, lässt es still als
-    /// <c>open</c> durchgehen.
+    /// <b>One place for all who ask about it</b>: the node form in both
+    /// directions and the conditions of a publication. Four places that keep the
+    /// same list keep it differently at some point - and the one that does not
+    /// know a model lets it pass silently as <c>open</c>.
     /// </remarks>
     public static Boolean TryReadAccessModel(String? name, out PubSubAccessModel model)
     {
@@ -123,17 +121,17 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
     }
 
     /// <summary>
-    /// Das Angebot des Dienstes (<c>type='form'</c>) - was sich einstellen
-    /// lässt und was gerade gilt.
+    /// The offer of the service (<c>type='form'</c>) - what can be set and what
+    /// holds just now.
     /// </summary>
     public XElement ToForm()
         => DataForm.Form("form", FormType,
-               DataForm.Field     (AccessModelVariable,  "list-single", "Wer an die Einträge kommt", NameOf(AccessModel)),
-               DataForm.Field     (MaxItemsVariable,     "text-single", "Behaltene Einträge",        MaxItems.ToString()),
-               DataForm.Field     (PersistItemsVariable, "boolean",     "Einträge behalten",         DataForm.Boolean(PersistItems)),
-               DataForm.MultiField(RosterGroupsVariable, "list-multi",  "Erlaubte Rostergruppen",    RosterGroups));
+               DataForm.Field     (AccessModelVariable,  "list-single", "Who gets at the entries", NameOf(AccessModel)),
+               DataForm.Field     (MaxItemsVariable,     "text-single", "Entries kept",            MaxItems.ToString()),
+               DataForm.Field     (PersistItemsVariable, "boolean",     "Keep entries",            DataForm.Boolean(PersistItems)),
+               DataForm.MultiField(RosterGroupsVariable, "list-multi",  "Permitted roster groups", RosterGroups));
 
-    /// <summary>Die Antwort des Eigentümers (<c>type='submit'</c>).</summary>
+    /// <summary>The answer of the owner (<c>type='submit'</c>).</summary>
     public XElement ToSubmit()
         => DataForm.Form("submit", FormType,
                DataForm.Field     (AccessModelVariable,  null, null, NameOf(AccessModel)),
@@ -142,19 +140,18 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
                DataForm.MultiField(RosterGroupsVariable, null, null, RosterGroups));
 
     /// <summary>
-    /// Liest ein abgeschicktes Formular - streng, wie jede Anweisung.
+    /// Reads a submitted form - strictly, like every instruction.
     /// </summary>
-    /// <param name="basis">
-    /// Der Stand, auf den sich fehlende Felder beziehen. XEP-0060,
-    /// Abschnitt 8.2.4 lässt Teilformulare zu; was nicht dasteht, bleibt wie
-    /// es war.
+    /// <param name="current">
+    /// The state missing fields refer to. XEP-0060, section 8.2.4 permits
+    /// partial forms; what does not stand there stays as it was.
     /// </param>
     /// <returns>
-    /// false, wenn es kein abgeschicktes Formular ist, den falschen Zweck hat,
-    /// ein unbekanntes Feld enthält oder einen Wert, der keiner ist.
+    /// false when it is no submitted form, has the wrong purpose, contains an
+    /// unknown field or a value that is none.
     /// </returns>
     public static Boolean TryRead(XElement                  x,
-                                  PubSubNodeConfiguration   basis,
+                                  PubSubNodeConfiguration   current,
                                   out PubSubNodeConfiguration?  configuration)
     {
 
@@ -163,47 +160,46 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
         if (!DataForm.Is(x, "submit"))
             return false;
 
-        var zugriff  = basis.AccessModel;
-        var anzahl   = basis.MaxItems;
-        var ablage   = basis.PersistItems;
-        var gruppen  = basis.RosterGroups;
+        var access  = current.AccessModel;
+        var count   = current.MaxItems;
+        var persist = current.PersistItems;
+        var groups  = current.RosterGroups;
 
         foreach (var field in DataForm.Fields(x))
         {
 
-            var wert = DataForm.ValueOf(field);
+            var value = DataForm.ValueOf(field);
 
             switch (field.Attr("var"))
             {
 
                 case "FORM_TYPE":
-                    if (wert != FormType)
+                    if (value != FormType)
                         return false;
                     break;
 
                 case AccessModelVariable:
-                    // authorize und roster stehen nicht im Angebot. Sie
-                    // anzunehmen und offen zu bleiben wäre die gefährlichste
-                    // Höflichkeit dieses Servers.
-                    if (!TryReadAccessModel(wert, out zugriff))
+                    // authorize and roster do not stand in the offer. To accept
+                    // them and stay open would be the most dangerous politeness
+                    // of this server.
+                    if (!TryReadAccessModel(value, out access))
                         return false;
                     break;
 
                 case MaxItemsVariable:
-                    if (!Int32.TryParse(wert, out anzahl) || anzahl < 1)
+                    if (!Int32.TryParse(value, out count) || count < 1)
                         return false;
                     break;
 
                 case PersistItemsVariable:
-                    if (!DataForm.TryBoolean(wert, out ablage))
+                    if (!DataForm.TryBoolean(value, out persist))
                         return false;
                     break;
 
-                // Alle Werte und nicht nur der erste: Ein Feld, von dem die
-                // Hälfte gelesen wird, gibt dem Eigentümer eine Liste zurück,
-                // die er so nie geschickt hat.
+                // All values and not only the first: a field of which half is
+                // read gives the owner back a list they never sent that way.
                 case RosterGroupsVariable:
-                    gruppen = DataForm.ValuesOf(field);
+                    groups = DataForm.ValuesOf(field);
                     break;
 
                 default:
@@ -213,20 +209,20 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
 
         }
 
-        configuration = new PubSubNodeConfiguration(zugriff, anzahl, ablage, gruppen);
+        configuration = new PubSubNodeConfiguration(access, count, persist, groups);
 
         return true;
 
     }
 
     /// <summary>
-    /// Liest das Angebot eines Dienstes (<c>type='form'</c>) - nachsichtig,
-    /// wie jede Auskunft.
+    /// Reads the offer of a service (<c>type='form'</c>) - leniently, like
+    /// every piece of information.
     /// </summary>
     /// <remarks>
-    /// Unbekannte Felder werden übergangen: Ein fremder Dienst bietet zwei
-    /// Dutzend an, von denen dieser Client drei versteht. Ein Angebot, das
-    /// keines davon nennt, ist trotzdem keines - dann gibt es nichts zu lesen.
+    /// Unknown fields are passed over: a foreign service offers two dozen, of
+    /// which this client understands three. An offer that names none of them is
+    /// no offer all the same - then there is nothing to read.
     /// </remarks>
     public static Boolean TryReadForm(XElement x, out PubSubNodeConfiguration? configuration)
     {
@@ -236,62 +232,62 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
         if (!DataForm.Is(x, "form"))
             return false;
 
-        var gefunden  = false;
-        var zugriff   = PubSubAccessModel.Open;
-        var anzahl    = Default.MaxItems;
-        var ablage    = Default.PersistItems;
-        var gruppen   = Default.RosterGroups;
+        var found    = false;
+        var access   = PubSubAccessModel.Open;
+        var count    = Default.MaxItems;
+        var persist  = Default.PersistItems;
+        var groups   = Default.RosterGroups;
 
         foreach (var field in DataForm.Fields(x))
         {
 
-            var wert = DataForm.ValueOf(field);
+            var value = DataForm.ValueOf(field);
 
             switch (field.Attr("var"))
             {
 
                 case "FORM_TYPE":
-                    if (wert != FormType)
+                    if (value != FormType)
                         return false;
                     break;
 
                 case AccessModelVariable:
-                    // Ein fremdes Modell wird gelesen, wie es ist: Ein Client,
-                    // der 'authorize' zu 'open' verkürzte, zeigte dem Menschen
-                    // das Gegenteil dessen, was gilt. Hier gibt es dafür keinen
-                    // Wert - also ist das Angebot nicht zu lesen.
-                    if (!TryReadAccessModel(wert, out zugriff))
+                    // A foreign model is read as it is: a client that shortened
+                    // 'authorize' to 'open' would show the human being the
+                    // opposite of what holds. There is no value for that here -
+                    // so the offer is not to be read.
+                    if (!TryReadAccessModel(value, out access))
                         return false;
-                    gefunden = true;
+                    found = true;
                     break;
 
                 case MaxItemsVariable:
-                    if (!Int32.TryParse(wert, out anzahl))
+                    if (!Int32.TryParse(value, out count))
                         return false;
-                    gefunden = true;
+                    found = true;
                     break;
 
                 case PersistItemsVariable:
-                    if (!DataForm.TryBoolean(wert, out ablage))
+                    if (!DataForm.TryBoolean(value, out persist))
                         return false;
-                    gefunden = true;
+                    found = true;
                     break;
 
-                // Ein leeres Mehrfachfeld ist ein gelesenes Feld: „keine
-                // Gruppe genannt" ist die Auskunft und nicht ihr Fehlen.
+                // An empty multi-field is a read field: "no group named" is the
+                // information and not its absence.
                 case RosterGroupsVariable:
-                    gruppen  = DataForm.ValuesOf(field);
-                    gefunden = true;
+                    groups = DataForm.ValuesOf(field);
+                    found  = true;
                     break;
 
             }
 
         }
 
-        if (!gefunden)
+        if (!found)
             return false;
 
-        configuration = new PubSubNodeConfiguration(zugriff, anzahl, ablage, gruppen);
+        configuration = new PubSubNodeConfiguration(access, count, persist, groups);
 
         return true;
 

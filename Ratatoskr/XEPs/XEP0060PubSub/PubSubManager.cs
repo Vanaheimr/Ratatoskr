@@ -27,30 +27,29 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0060: Verwaltet PubSub-Abonnements und verarbeitet eingehende Events.
+/// XEP-0060: Manages PubSub subscriptions and processes incoming events.
 /// </summary>
 public sealed class PubSubManager
 {
 
-    /// <summary>Der Namespace der PubSub-Benachrichtigungen.</summary>
+    /// <summary>The namespace of the PubSub notifications.</summary>
     public const string EventNamespace = "http://jabber.org/protocol/pubsub#event";
 
     /// <summary>
-    /// Die bestätigten Abonnements, nach dem Knoten.
+    /// The confirmed subscriptions, by node.
     /// </summary>
     /// <remarks>
-    /// <b>Bestätigt heisst: Der Dienst hat zugesagt.</b> Bis D71 stand hier
-    /// eine blosse Namensmenge, und eingetragen wurde beim Absenden der
-    /// Anfrage - ein abgelehntes Abonnement stand danach als bestehendes da.
-    /// Was jetzt hier liegt, hat der Dienst gesagt und nicht dieser Client
-    /// vermutet: die Kennung, die er vergeben hat, und die Adresse, unter der
-    /// er es tat.
+    /// <b>Confirmed means: the service has granted it.</b> Until D71 a mere set
+    /// of names stood here, and the entry was made when the request was sent off
+    /// - a refused subscription stood there afterwards as an existing one. What
+    /// lies here now the service has said and this client has not guessed: the
+    /// identifier it handed out, and the address under which it did so.
     ///
-    /// <b>Eine Liste je Knoten und kein einzelner Eintrag</b> (seit D73): Auf
-    /// denselben Knoten kann es mehrere Abonnements geben, und das zweite
-    /// überschrieb bis dahin das erste. Damit war dessen Kennung weg - und weg
-    /// heisst hier, dass es sich nie wieder abbestellen liess, denn der Dienst
-    /// verlangt bei mehreren eine Kennung.
+    /// <b>One list per node and not a single entry</b> (since D73): there can be
+    /// several subscriptions on the same node, and until then the second
+    /// overwrote the first. With that its identifier was gone - and gone means
+    /// here that it could never be unsubscribed again, for the service demands
+    /// an identifier when there are several.
     /// </remarks>
     private readonly Dictionary<String, List<PubSubSubscription>> _subscriptions =
         new(StringComparer.OrdinalIgnoreCase);
@@ -70,7 +69,7 @@ public sealed class PubSubManager
     public string PubSubService => _pubsubService;
 
     /// <summary>
-    /// Verarbeitet eine eingehende PubSub-Event-Nachricht mit Spoofing-Schutz
+    /// Processes an incoming PubSub event message with spoofing protection
     /// </summary>
     public bool ProcessEvent(XElement stanza, string from, string expectedPubSubJid)
     {
@@ -80,20 +79,20 @@ public sealed class PubSubManager
         if (eventElement is null)
             return false;
 
-        // Der Knoten zuerst, denn die Absenderprüfung braucht ihn: Erlaubt ist
-        // nicht ein Absender, sondern ein Absender für einen bestimmten Knoten.
+        // The node first, for the sender check needs it: what is permitted is
+        // not a sender but a sender for a particular node.
         var nodeId = NodeOf(eventElement);
 
         if (!IsAcceptableSource(from, nodeId, expectedPubSubJid))
         {
-            _logger.LogWarning("PubSub-Spoofing erkannt! Von: {From}, Knoten: {Node}, erwartet: {Expected}",
+            _logger.LogWarning("PubSub spoofing detected! From: {From}, node: {Node}, expected: {Expected}",
                                from, nodeId, expectedPubSubJid);
             return false;
         }
 
         var subId = SubIdOf(stanza);
 
-        // Items- oder Retract-Event: beide stecken in <items node='…'/>.
+        // An items or retract event: both sit in <items node='…'/>.
         var itemsElement = eventElement.Child(EventNamespace, "items");
 
         if (itemsElement is not null)
@@ -128,10 +127,10 @@ public sealed class PubSubManager
                 if (itemId is null)
                     continue;
 
-                // Die Nutzlast bleibt als rohes XML erhalten - was darin steht,
-                // ist anwendungsspezifisch. Ein <item/> ganz ohne Inhalt ist
-                // zulässig; das frühere Muster verlangte ein Tag-Paar und
-                // übersah selbstschliessende Items.
+                // The payload is kept as raw XML - what stands in it is
+                // application-specific. An <item/> entirely without content is
+                // permissible; the earlier pattern demanded a tag pair and
+                // overlooked self-closing items.
                 itemsEvent.Items.Add(new PubSubItem(itemId,
                                                     nodeId,
                                                     string.Concat(item.Nodes())));
@@ -143,21 +142,21 @@ public sealed class PubSubManager
 
         }
 
-        // XEP-0060, Abschnitt 8.5.2: Der Knoten ist leer - und bleibt bestehen.
-        // Das Abonnement wird deshalb gerade nicht angetastet: Die nächste
-        // Veröffentlichung kommt an dieselbe Adresse.
+        // XEP-0060, section 8.5.2: the node is empty - and stays in existence.
+        // The subscription is therefore precisely not touched: the next
+        // publication comes to the same address.
         if (eventElement.Child(EventNamespace, "purge") is not null)
         {
             OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.Purge, subId));
             return true;
         }
 
-        // XEP-0060, Abschnitt 8.4.2: Den Knoten gibt es nicht mehr.
+        // XEP-0060, section 8.4.2: the node does not exist any more.
         //
-        // <b>Also auch kein Abonnement darauf.</b> Es stehen zu lassen hiesse,
-        // auf Meldungen von einem Knoten zu warten, den niemand mehr
-        // veröffentlicht - und beim Abbestellen eine Kennung mitzuschicken,
-        // die der Dienst nicht mehr kennt.
+        // <b>So neither does a subscription on it.</b> To leave it standing
+        // would mean waiting for notifications from a node nobody publishes to
+        // any more - and sending an identifier along when unsubscribing that the
+        // service does not know any more.
         if (eventElement.Child(EventNamespace, "delete") is not null)
         {
 
@@ -169,56 +168,56 @@ public sealed class PubSubManager
 
         }
 
-        // XEP-0060, Abschnitt 8.8.4: Der Dienst sagt, dass ein Abonnement
-        // beendet ist.
+        // XEP-0060, section 8.8.4: the service says that a subscription is
+        // ended.
         //
-        // Die Kennung steht hier im Element und nicht in der SHIM-Kopfzeile:
-        // Diese Meldung gehört zu keiner Zustellung, sie handelt von dem
-        // Abonnement selbst.
-        if (eventElement.Child(EventNamespace, "subscription") is { } abmeldung)
+        // The identifier stands here in the element and not in the SHIM header:
+        // this report belongs to no delivery, it deals with the subscription
+        // itself.
+        if (eventElement.Child(EventNamespace, "subscription") is { } report)
         {
 
-            var gemeldet = PubSubSubscription.StateOf(abmeldung.Attr("subscription"));
+            var reported = PubSubSubscription.StateOf(report.Attr("subscription"));
 
-            // XEP-0060, Abschnitt 8.6: die Zusage auf einen eigenen Antrag.
+            // XEP-0060, section 8.6: the grant on an application of one's own.
             //
-            // <b>Und nur darauf.</b> In D86 stand hier, eine Zusage komme auf
-            // eine Anfrage und werde dort eingetragen - richtig, solange es
-            // keinen Genehmigungsvorgang gab. Jetzt gibt es einen, und die
-            // Zusage trifft später ein als die Frage. Angenommen wird sie
-            // trotzdem nur, wenn dieser Client einen offenen Antrag dazu hat:
-            // Sonst liesse er sich von einem Dienst ungefragt anmelden.
-            if (gemeldet == PubSubSubscriptionState.Subscribed)
+            // <b>And only on that.</b> In D86 it stood here that a grant comes
+            // in answer to a request and is entered there - right as long as
+            // there was no approval procedure. Now there is one, and the grant
+            // arrives later than the question. It is accepted all the same only
+            // when this client has a pending application for it: otherwise it
+            // would let itself be signed up by a service unasked.
+            if (reported == PubSubSubscriptionState.Subscribed)
             {
 
-                if (!ApproveSubscription(nodeId, abmeldung.Attr("subid"), from))
+                if (!ApproveSubscription(nodeId, report.Attr("subid"), from))
                 {
-                    _logger.LogInformation("PubSub: Zusage zu {Node} ohne offenen Antrag - nicht eingetragen", nodeId);
+                    _logger.LogInformation("PubSub: grant for {Node} without a pending application - not entered", nodeId);
                     return false;
                 }
 
                 OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.SubscriptionApproved,
-                                                abmeldung.Attr("subid")));
+                                                report.Attr("subid")));
 
                 return true;
 
             }
 
-            if (gemeldet != PubSubSubscriptionState.None)
+            if (reported != PubSubSubscriptionState.None)
             {
-                _logger.LogInformation("PubSub: Abonnementmeldung zu {Node} ohne Ausgang - nicht ausgewertet", nodeId);
+                _logger.LogInformation("PubSub: subscription report for {Node} without an outcome - not evaluated", nodeId);
                 return false;
             }
 
-            var beendet = abmeldung.Attr("subid");
+            var ended = report.Attr("subid");
 
-            // Ohne Kennung sind alle Abonnements dieses Knotens gemeint: Der
-            // Dienst nennt sie, wenn er mehrere führt (Abschnitt 12.19), und
-            // eines davon stehen zu lassen hiesse, weiter auf Meldungen zu
-            // warten, die nicht mehr kommen.
-            RemoveSubscription(nodeId, beendet);
+            // Without an identifier all subscriptions of this node are meant:
+            // the service names them when it keeps several (section 12.19), and
+            // to leave one of them standing would mean going on waiting for
+            // notifications that do not come any more.
+            RemoveSubscription(nodeId, ended);
 
-            OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.SubscriptionEnded, beendet));
+            OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.SubscriptionEnded, ended));
 
             return true;
 
@@ -229,16 +228,15 @@ public sealed class PubSubManager
     }
 
     /// <summary>
-    /// Der Knoten, um den es in einem Event geht - aus <c>items</c>,
-    /// <c>purge</c>, <c>delete</c> oder <c>subscription</c>, je nachdem, was
-    /// dasteht.
+    /// The node an event is about - from <c>items</c>, <c>purge</c>,
+    /// <c>delete</c> or <c>subscription</c>, depending on what stands there.
     /// </summary>
     /// <remarks>
-    /// Jede Art von Meldung muss hier stehen, und nicht nur, damit sie
-    /// ankommt: An diesem Knoten hängt die Absenderprüfung. Eine Meldung,
-    /// deren Knoten hier leer bleibt, gilt als Meldung über den Knoten "" -
-    /// den niemand abonniert hat, und die Prüfung liesse sie nur durch, wenn
-    /// sie ohnehin vom eingestellten Dienst käme.
+    /// Every kind of report has to stand here, and not only so that it arrives:
+    /// on this node hangs the sender check. A report whose node stays empty here
+    /// counts as a report about the node "" - which nobody has subscribed to,
+    /// and the check would let it through only when it came from the configured
+    /// service anyway.
     /// </remarks>
     private static String NodeOf(XElement eventElement)
         => eventElement.Elements()
@@ -246,18 +244,18 @@ public sealed class PubSubManager
                                             e.Name.LocalName is "items" or "purge" or "delete" or "subscription")
                       ?.Attr("node") ?? "";
 
-    /// <summary>Der Namensraum der SHIM-Kopfzeilen (XEP-0131).</summary>
+    /// <summary>The namespace of the SHIM headers (XEP-0131).</summary>
     public const string ShimNamespace = "http://jabber.org/protocol/shim";
 
     /// <summary>
-    /// Das Abonnement, zu dem eine Meldung gehört - aus der SHIM-Kopfzeile
-    /// <c>SubID</c> (XEP-0060, Abschnitt 12.20), oder null.
+    /// The subscription a report belongs to - from the SHIM header
+    /// <c>SubID</c> (XEP-0060, section 12.20), or null.
     /// </summary>
     /// <remarks>
-    /// Sie steht neben dem <c>event</c> und nicht darin: Sie sagt etwas über
-    /// die Zustellung und nicht über das Ereignis. Dieselbe Veröffentlichung
-    /// kann mehrfach ankommen, einmal je Abonnement - dann ist diese Kopfzeile
-    /// das einzige, worin sich die Meldungen unterscheiden.
+    /// It stands beside the <c>event</c> and not in it: it says something about
+    /// the delivery and not about the occurrence. The same publication can
+    /// arrive several times, once per subscription - then this header is the
+    /// only thing the reports differ in.
     /// </remarks>
     private static String? SubIdOf(XElement stanza)
         => stanza.Child(ShimNamespace, "headers")
@@ -266,20 +264,19 @@ public sealed class PubSubManager
                 ?.Value;
 
     /// <summary>
-    /// Darf von diesem Absender eine Meldung über diesen Knoten kommen?
+    /// May a report about this node come from this sender?
     /// </summary>
     /// <remarks>
-    /// <b>Bis D71 war die Antwort allein der konfigurierte Dienst</b> -
-    /// richtig für einen PubSub-Service als eigene Komponente, falsch für PEP:
-    /// Dort kommt die Meldung vom Konto selbst (XEP-0163, Abschnitt 4.3), und
-    /// jede einzelne galt deshalb als Fälschung. Aufgefallen ist es nicht,
-    /// weil niemand ein Abonnement hatte, dessen Meldungen jemand erwartete -
-    /// OMEMO geht seinen eigenen Weg.
+    /// <b>Until D71 the answer was the configured service alone</b> - right for
+    /// a PubSub service as a component of its own, wrong for PEP: there the
+    /// report comes from the account itself (XEP-0163, section 4.3), and every
+    /// single one therefore counted as a forgery. It did not show up because
+    /// nobody had a subscription whose reports anybody expected - OMEMO goes its
+    /// own way.
     ///
-    /// Die zweite Erlaubnis ist deshalb <b>an den Knoten gebunden und nicht an
-    /// den Absender</b>: Wer bei Bob den Wetterknoten abonniert hat, hat damit
-    /// nicht erlaubt, dass Bob ihm Meldungen über jeden erdachten Knoten
-    /// schickt.
+    /// The second permission is therefore <b>bound to the node and not to the
+    /// sender</b>: whoever has subscribed to Bob's weather node has not thereby
+    /// permitted Bob to send them reports about every node he can think up.
     /// </remarks>
     private Boolean IsAcceptableSource(String from, String nodeId, String expectedPubSubJid)
     {
@@ -293,40 +290,40 @@ public sealed class PubSubManager
         }
 
         return SubscriptionsOf(nodeId).Any(
-                   abo => String.Equals(bareFrom, JidUtilities.Bare(abo.ServiceJid),
+                   sub => String.Equals(bareFrom, JidUtilities.Bare(sub.ServiceJid),
                                         StringComparison.OrdinalIgnoreCase));
 
     }
 
     /// <summary>
-    /// Trägt ein zugesagtes Abonnement ein.
+    /// Enters a granted subscription.
     /// </summary>
     /// <remarks>
-    /// Dieselbe Kennung ein zweites Mal ersetzt den Eintrag, statt ihn zu
-    /// verdoppeln: Das ist keine zweite Zusage, sondern dieselbe noch einmal.
+    /// The same identifier a second time replaces the entry instead of doubling
+    /// it: that is not a second grant but the same one once more.
     /// </remarks>
     public void AddSubscription(PubSubSubscription subscription)
     {
         lock (_lock)
         {
 
-            if (!_subscriptions.TryGetValue(subscription.NodeId, out var abos))
-                _subscriptions[subscription.NodeId] = abos = [];
+            if (!_subscriptions.TryGetValue(subscription.NodeId, out var subs))
+                _subscriptions[subscription.NodeId] = subs = [];
 
-            abos.RemoveAll(a => a.SubId is not null &&
+            subs.RemoveAll(a => a.SubId is not null &&
                                 String.Equals(a.SubId, subscription.SubId, StringComparison.Ordinal));
 
-            abos.Add(subscription);
+            subs.Add(subscription);
 
         }
     }
 
     /// <summary>
-    /// Streicht ein Abonnement aus der Buchführung.
+    /// Strikes a subscription from the bookkeeping.
     /// </summary>
     /// <param name="subId">
-    /// Die Kennung des beendeten Abonnements, oder null für alle dieses
-    /// Knotens - letzteres nur dort richtig, wo es nachweislich nur eines gab.
+    /// The identifier of the ended subscription, or null for all of this node -
+    /// the latter right only where there demonstrably was only one.
     /// </param>
     public void RemoveSubscription(String nodeId, String? subId = null)
     {
@@ -339,171 +336,169 @@ public sealed class PubSubManager
                 return;
             }
 
-            if (!_subscriptions.TryGetValue(nodeId, out var abos))
+            if (!_subscriptions.TryGetValue(nodeId, out var subs))
                 return;
 
-            abos.RemoveAll(a => String.Equals(a.SubId, subId, StringComparison.Ordinal));
+            subs.RemoveAll(a => String.Equals(a.SubId, subId, StringComparison.Ordinal));
 
-            if (abos.Count == 0)
+            if (subs.Count == 0)
                 _subscriptions.Remove(nodeId);
 
         }
     }
 
     /// <summary>
-    /// Streicht alle Abonnements eines Knotens <b>bei einem bestimmten
-    /// Dienst</b>.
+    /// Strikes all subscriptions of a node <b>at a particular service</b>.
     /// </summary>
     /// <remarks>
-    /// Der Dienst gehört dazu, weil der Knotenname allein keiner ist:
-    /// <c>urn:xmpp:omemo:2:bundles</c> heisst bei jedem Konto so. Wer ihn ohne
-    /// die Adresse streicht, beendet bei einem gelöschten Knoten auch das
-    /// Abonnement auf den gleichnamigen Knoten von jemand anderem - und merkt
-    /// es erst, wenn dessen Meldungen ausbleiben.
+    /// The service belongs with it because the node name alone is none:
+    /// <c>urn:xmpp:omemo:2:bundles</c> is called that at every account. Whoever
+    /// strikes it without the address ends, on a deleted node, the subscription
+    /// to somebody else's node of the same name too - and notices it only when
+    /// their reports stay away.
     /// </remarks>
     public void RemoveSubscriptionsOf(String nodeId, String serviceJid)
     {
         lock (_lock)
         {
 
-            if (!_subscriptions.TryGetValue(nodeId, out var abos))
+            if (!_subscriptions.TryGetValue(nodeId, out var subs))
                 return;
 
-            abos.RemoveAll(a => String.Equals(JidUtilities.Bare(a.ServiceJid),
+            subs.RemoveAll(a => String.Equals(JidUtilities.Bare(a.ServiceJid),
                                               JidUtilities.Bare(serviceJid),
                                               StringComparison.OrdinalIgnoreCase));
 
-            if (abos.Count == 0)
+            if (subs.Count == 0)
                 _subscriptions.Remove(nodeId);
 
         }
     }
 
     /// <summary>
-    /// Gibt es auf diesen Knoten ein <b>zugesagtes</b> Abonnement?
+    /// Is there a <b>granted</b> subscription on this node?
     /// </summary>
     /// <remarks>
-    /// <b>Zugesagt und nicht bloss eingetragen.</b> Seit D95 steht auch ein
-    /// beantragtes in der Buchführung - sonst wüsste dieser Client nach einem
-    /// <c>pending</c> nicht einmal, wonach er gefragt hat. Damit wird aus „ist
-    /// etwas eingetragen" und „bin ich abonniert" zweierlei, und die Frage,
-    /// die hier steht, ist die zweite.
+    /// <b>Granted and not merely entered.</b> Since D95 an applied-for one
+    /// stands in the bookkeeping too - otherwise this client would not even know
+    /// after a <c>pending</c> what it had asked for. With that "is something
+    /// entered" and "am I subscribed" become two things, and the question that
+    /// stands here is the second one.
     /// </remarks>
     public Boolean IsSubscribed(String nodeId)
     {
         lock (_lock)
-            return _subscriptions.TryGetValue(nodeId, out var abos) &&
-                   abos.Any(a => a.State == PubSubSubscriptionState.Subscribed);
+            return _subscriptions.TryGetValue(nodeId, out var subs) &&
+                   subs.Any(a => a.State == PubSubSubscriptionState.Subscribed);
     }
 
     /// <summary>
-    /// Trägt die Zusage auf einen beantragten Abonnementantrag ein (XEP-0060,
-    /// Abschnitt 8.6).
+    /// Enters the grant on an applied-for subscription (XEP-0060,
+    /// section 8.6).
     /// </summary>
     /// <param name="subId">
-    /// Die Kennung aus der Meldung, oder null - dann sind alle beantragten
-    /// Abonnements dieses Knotens bei diesem Dienst gemeint.
+    /// The identifier from the report, or null - then all applied-for
+    /// subscriptions of this node at this service are meant.
     /// </param>
     /// <returns>
-    /// false, wenn es dazu keinen offenen Antrag gab. <b>Dann ist die Meldung
-    /// keine Antwort auf eine Frage dieses Clients</b>, und angenommen wird
-    /// sie nicht: Wer sie annähme, liesse sich von einem Dienst ungefragt
-    /// anmelden.
+    /// false when there was no pending application for it. <b>Then the report is
+    /// no answer to a question of this client's</b>, and it is not accepted:
+    /// whoever accepted it would let themselves be signed up by a service
+    /// unasked.
     /// </returns>
     public Boolean ApproveSubscription(String nodeId, String? subId, String serviceJid)
     {
         lock (_lock)
         {
 
-            if (!_subscriptions.TryGetValue(nodeId, out var abos))
+            if (!_subscriptions.TryGetValue(nodeId, out var subs))
                 return false;
 
-            var offen = abos.FindAll(a => a.State == PubSubSubscriptionState.Pending &&
+            var pending = subs.FindAll(a => a.State == PubSubSubscriptionState.Pending &&
                                           (subId is null || String.Equals(a.SubId, subId, StringComparison.Ordinal)) &&
                                           String.Equals(JidUtilities.Bare(a.ServiceJid),
                                                         JidUtilities.Bare(serviceJid),
                                                         StringComparison.OrdinalIgnoreCase));
 
-            foreach (var eines in offen)
-                abos[abos.IndexOf(eines)] = eines with { State = PubSubSubscriptionState.Subscribed };
+            foreach (var one in pending)
+                subs[subs.IndexOf(one)] = one with { State = PubSubSubscriptionState.Subscribed };
 
-            return offen.Count > 0;
+            return pending.Count > 0;
 
         }
     }
 
     /// <summary>
-    /// Vermerkt, was der Dienst über die Einstellungen eines Abonnements
-    /// gesagt hat.
+    /// Notes down what the service has said about the settings of a
+    /// subscription.
     /// </summary>
     /// <remarks>
-    /// Nur was bestätigt wurde: Ein Wunsch, den der Dienst abgelehnt hat, darf
-    /// hier nicht als geltender Zustand landen - derselbe Fehler wie ein
-    /// Abonnement, das vor der Zusage eingetragen wird.
+    /// Only what was confirmed: a wish the service has refused must not land
+    /// here as the state that holds - the same error as a subscription that is
+    /// entered before the grant.
     /// </remarks>
     public void SetOptions(String nodeId, String? subId, PubSubSubscriptionOptions options)
     {
         lock (_lock)
         {
 
-            if (!_subscriptions.TryGetValue(nodeId, out var abos))
+            if (!_subscriptions.TryGetValue(nodeId, out var subs))
                 return;
 
-            for (var i = 0; i < abos.Count; i++)
-                if (subId is null || String.Equals(abos[i].SubId, subId, StringComparison.Ordinal))
-                    abos[i] = abos[i] with { Options = options };
+            for (var i = 0; i < subs.Count; i++)
+                if (subId is null || String.Equals(subs[i].SubId, subId, StringComparison.Ordinal))
+                    subs[i] = subs[i] with { Options = options };
 
         }
     }
 
     /// <summary>
-    /// Die Abonnements dieses Knotens - keines, eines oder mehrere.
+    /// The subscriptions of this node - none, one or several.
     /// </summary>
     public IReadOnlyList<PubSubSubscription> SubscriptionsOf(String nodeId)
     {
-        lock (_lock) return _subscriptions.TryGetValue(nodeId, out var abos) ? [.. abos] : [];
+        lock (_lock) return _subscriptions.TryGetValue(nodeId, out var subs) ? [.. subs] : [];
     }
 
-    /// <summary>Alle Abonnements, über alle Knoten.</summary>
+    /// <summary>All subscriptions, across all nodes.</summary>
     public IReadOnlyList<PubSubSubscription> Subscriptions
     {
         get { lock (_lock) return [.. _subscriptions.Values.SelectMany(a => a)]; }
     }
 
     /// <summary>
-    /// Übernimmt, was ein Dienst über die eigenen Abonnements gesagt hat.
+    /// Takes over what a service has said about one's own subscriptions.
     /// </summary>
     /// <remarks>
-    /// <b>Ersetzen und nicht ergänzen.</b> Die Antwort ist vollständig für
-    /// diesen Dienst; was hier noch von ihm steht und dort nicht mehr
-    /// vorkommt, gibt es nicht mehr. Zusammenzuführen hiesse, eine
-    /// Erinnerung neben eine Auskunft zu stellen und beide für wahr zu
-    /// halten - und beim nächsten Abbestellen eine Kennung zu schicken, die
-    /// niemand mehr kennt.
+    /// <b>Replace and not add to.</b> The answer is complete for this service;
+    /// what still stands here from it and no longer occurs there does not exist
+    /// any more. To merge them would mean putting a memory beside a piece of
+    /// information and holding both for true - and sending, at the next
+    /// unsubscribing, an identifier nobody knows any more.
     ///
-    /// <b>Was der Dienst nicht nennt, wird nicht angetastet</b>: Abonnements
-    /// bei anderen Diensten gehen ihn nichts an.
+    /// <b>What the service does not name is not touched</b>: subscriptions at
+    /// other services are none of its business.
     /// </remarks>
     public void ReplaceSubscriptionsOf(String serviceJid, IEnumerable<PubSubSubscription> subscriptions)
     {
         lock (_lock)
         {
 
-            foreach (var knoten in _subscriptions.Keys.ToList())
+            foreach (var node in _subscriptions.Keys.ToList())
             {
 
-                _subscriptions[knoten].RemoveAll(
+                _subscriptions[node].RemoveAll(
                     a => String.Equals(JidUtilities.Bare(a.ServiceJid),
                                        JidUtilities.Bare(serviceJid),
                                        StringComparison.OrdinalIgnoreCase));
 
-                if (_subscriptions[knoten].Count == 0)
-                    _subscriptions.Remove(knoten);
+                if (_subscriptions[node].Count == 0)
+                    _subscriptions.Remove(node);
 
             }
 
-            foreach (var abo in subscriptions)
-                AddSubscription(abo);
+            foreach (var sub in subscriptions)
+                AddSubscription(sub);
 
         }
     }

@@ -24,41 +24,39 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Bedingungen einer Veröffentlichung (XEP-0060, Abschnitt 7.1.5).
+/// The conditions of a publication (XEP-0060, section 7.1.5).
 /// </summary>
-/// <param name="AccessModel">Welches Zugriffsmodell der Knoten haben muss.</param>
-/// <param name="MaxItems">Wie viele Einträge er behalten muss.</param>
-/// <param name="PersistItems">Ob er ablegen muss.</param>
+/// <param name="AccessModel">Which access model the node has to have.</param>
+/// <param name="MaxItems">How many entries it has to keep.</param>
+/// <param name="PersistItems">Whether it has to store.</param>
 /// <remarks>
-/// <b>Etwas anderes als eine Einstellung: eine Bedingung.</b> Deshalb ist jedes
-/// Feld hier <c>null</c>-fähig, und <c>null</c> heisst nicht „Vorgabe", sondern
-/// „danach wird nicht gefragt". Wer eine Bedingung mit einer Einstellung
-/// verwechselt, setzt beim Veröffentlichen lauter Felder, die niemand nennen
-/// wollte.
+/// <b>Something other than a setting: a condition.</b> That is why every field
+/// here is <c>null</c>-able, and <c>null</c> does not mean "default" but "this
+/// is not asked about". Whoever mistakes a condition for a setting sets a whole
+/// lot of fields when publishing that nobody wanted to name.
 ///
-/// Der Sinn steht in XEP-0384, Abschnitt 5.2: Ein OMEMO-Bundle muss offen
-/// abrufbar sein, sonst kann niemand verschlüsselt schreiben, der noch in
-/// keinem Roster steht. Der Client kann das nicht wissen, ohne den Knoten
-/// vorher abzufragen - also sagt er es <i>mit</i> der Veröffentlichung, und der
-/// Dienst legt entweder passend an oder weigert sich.
+/// The point stands in XEP-0384, section 5.2: an OMEMO bundle has to be openly
+/// fetchable, otherwise nobody who stands in no roster yet can write in
+/// encrypted form. The client cannot know that without querying the node
+/// beforehand - so it says it <i>with</i> the publication, and the service
+/// either creates it accordingly or refuses.
 /// </remarks>
 public sealed record PubSubPublishOptions(PubSubAccessModel?  AccessModel   = null,
                                           Int32?              MaxItems      = null,
                                           Boolean?            PersistItems  = null)
 {
 
-    /// <summary>Der Formulartyp dieser Bedingungen.</summary>
+    /// <summary>The form type of these conditions.</summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#publish-options";
 
     /// <summary>
-    /// Liest ein abgeschicktes Bedingungsformular - streng, wie jede
-    /// Anweisung.
+    /// Reads a submitted condition form - strictly, like every instruction.
     /// </summary>
     /// <returns>
-    /// false, wenn es keines ist, den falschen Zweck hat oder ein Feld
-    /// enthält, über das dieser Dienst nichts zusagen kann. <b>Gerade hier
-    /// wäre Nachsicht falsch:</b> Eine Bedingung, die übergangen wird, ist
-    /// eine, die der Absender für erfüllt hält.
+    /// false when it is none, has the wrong purpose or contains a field about
+    /// which this service can promise nothing. <b>Leniency would be wrong
+    /// precisely here:</b> a condition that is passed over is one the sender
+    /// takes for fulfilled.
     /// </returns>
     public static Boolean TryRead(XElement x, out PubSubPublishOptions? options)
     {
@@ -68,39 +66,39 @@ public sealed record PubSubPublishOptions(PubSubAccessModel?  AccessModel   = nu
         if (!DataForm.Is(x, "submit"))
             return false;
 
-        PubSubAccessModel?  zugriff  = null;
-        Int32?              anzahl   = null;
-        Boolean?            ablage   = null;
+        PubSubAccessModel?  access   = null;
+        Int32?              count    = null;
+        Boolean?            persist  = null;
 
         foreach (var field in DataForm.Fields(x))
         {
 
-            var wert = DataForm.ValueOf(field);
+            var value = DataForm.ValueOf(field);
 
             switch (field.Attr("var"))
             {
 
                 case "FORM_TYPE":
-                    if (wert != FormType)
+                    if (value != FormType)
                         return false;
                     break;
 
                 case PubSubNodeConfiguration.AccessModelVariable:
-                    if (!PubSubNodeConfiguration.TryReadAccessModel(wert, out var verlangtes))
+                    if (!PubSubNodeConfiguration.TryReadAccessModel(value, out var demanded))
                         return false;
-                    zugriff = verlangtes;
+                    access = demanded;
                     break;
 
                 case PubSubNodeConfiguration.MaxItemsVariable:
-                    if (!Int32.TryParse(wert, out var gelesen) || gelesen < 1)
+                    if (!Int32.TryParse(value, out var read) || read < 1)
                         return false;
-                    anzahl = gelesen;
+                    count = read;
                     break;
 
                 case PubSubNodeConfiguration.PersistItemsVariable:
-                    if (!DataForm.TryBoolean(wert, out var ablegen))
+                    if (!DataForm.TryBoolean(value, out var persisting))
                         return false;
-                    ablage = ablegen;
+                    persist = persisting;
                     break;
 
                 default:
@@ -110,14 +108,14 @@ public sealed record PubSubPublishOptions(PubSubAccessModel?  AccessModel   = nu
 
         }
 
-        options = new PubSubPublishOptions(zugriff, anzahl, ablage);
+        options = new PubSubPublishOptions(access, count, persist);
 
         return true;
 
     }
 
     /// <summary>
-    /// Erfüllt dieser Knoten die Bedingungen?
+    /// Does this node meet the conditions?
     /// </summary>
     public Boolean AreMetBy(PubSubNodeConfiguration configuration)
 
@@ -126,8 +124,8 @@ public sealed record PubSubPublishOptions(PubSubAccessModel?  AccessModel   = nu
            (PersistItems is null || PersistItems == configuration.PersistItems);
 
     /// <summary>
-    /// Die Einstellung, mit der ein neuer Knoten anzulegen ist: die Vorgabe,
-    /// überschrieben von dem, was verlangt wurde.
+    /// The setting a new node is to be created with: the default, overwritten
+    /// by what was demanded.
     /// </summary>
     public PubSubNodeConfiguration ApplyTo(PubSubNodeConfiguration configuration)
 

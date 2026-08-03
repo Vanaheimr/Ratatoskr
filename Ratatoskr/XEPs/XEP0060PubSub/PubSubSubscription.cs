@@ -24,27 +24,27 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Was der Dienst über ein Abonnement gesagt hat (XEP-0060, Abschnitt 6.1.2).
+/// What the service has said about a subscription (XEP-0060, section 6.1.2).
 /// </summary>
-/// <param name="NodeId">Der Knoten.</param>
+/// <param name="NodeId">The node.</param>
 /// <param name="ServiceJid">
-/// Bei wem abonniert wurde - die Adresse, an die die Anfrage ging.
+/// With whom the subscription was taken out - the address the request went to.
 /// </param>
 /// <param name="SubId">
-/// Die Kennung des Abonnements, oder null: Ein Dienst muss keine vergeben,
-/// solange es nur eines gibt (Abschnitt 12.19).
+/// The identifier of the subscription, or null: a service does not have to
+/// hand out any as long as there is only one (section 12.19).
 /// </param>
-/// <param name="State">Der Zustand aus der Antwort.</param>
+/// <param name="State">The state from the answer.</param>
 /// <param name="Options">
-/// Die Einstellungen dieses Abonnements, oder null - <b>null heisst „nicht
-/// gefragt" und nicht „Vorgabe".</b> Was gilt, sagt der Dienst; ein anderes
-/// Gerät desselben Kontos kann dasselbe Abonnement umgestellt haben.
+/// The settings of this subscription, or null - <b>null means "not asked" and
+/// not "default".</b> What holds is said by the service; another device of the
+/// same account may have reconfigured the same subscription.
 /// </param>
 /// <remarks>
-/// <b>Das ist der Ertrag der Korrelation.</b> Nichts davon kann ein Client
-/// wissen, bevor die Antwort da ist - die Kennung schon gar nicht, denn sie
-/// kommt vom Dienst. Wer die Anfrage abschickt und sein Abonnement gleich
-/// einträgt, verwechselt eine Absicht mit einer Tatsache.
+/// <b>This is the yield of the correlation.</b> A client can know none of it
+/// before the answer is there - the identifier least of all, for it comes from
+/// the service. Whoever sends off the request and enters their subscription
+/// right away mistakes an intention for a fact.
 /// </remarks>
 public sealed record PubSubSubscription(String                      NodeId,
                                         String                      ServiceJid,
@@ -53,17 +53,17 @@ public sealed record PubSubSubscription(String                      NodeId,
                                         PubSubSubscriptionOptions?  Options = null)
 {
 
-    /// <summary>Der Namensraum von XEP-0060.</summary>
+    /// <summary>The namespace of XEP-0060.</summary>
     public const String Namespace = "http://jabber.org/protocol/pubsub";
 
     /// <summary>
-    /// Liest die Zusage aus einer IQ-Antwort.
+    /// Reads the grant out of an IQ answer.
     /// </summary>
-    /// <param name="iq">Die Antwort des Dienstes.</param>
-    /// <param name="serviceJid">Die Adresse, an die gefragt wurde.</param>
+    /// <param name="iq">The answer of the service.</param>
+    /// <param name="serviceJid">The address that was asked.</param>
     /// <returns>
-    /// false, wenn die Antwort keine Zusage enthält - dann sagt sie über das
-    /// Abonnement nichts, und das ist etwas anderes als eine Absage.
+    /// false when the answer contains no grant - then it says nothing about the
+    /// subscription, and that is something other than a refusal.
     /// </returns>
     public static Boolean TryRead(XElement              iq,
                                   String                serviceJid,
@@ -72,35 +72,34 @@ public sealed record PubSubSubscription(String                      NodeId,
 
         subscription = null;
 
-        var zusage = iq.Child(Namespace, "pubsub")?.Child(Namespace, "subscription");
+        var grant = iq.Child(Namespace, "pubsub")?.Child(Namespace, "subscription");
 
-        if (zusage?.Attr("node") is not String node || node.Length == 0)
+        if (grant?.Attr("node") is not String node || node.Length == 0)
             return false;
 
-        // Die Adresse, an die gefragt wurde - nicht das 'from' der Antwort.
+        // The address that was asked - not the 'from' of the answer.
         //
-        // Das ist kein Detail: An dieser Adresse hängt später die Frage, von
-        // wem Meldungen über diesen Knoten angenommen werden. Käme sie aus der
-        // Antwort, könnte eine Gegenstelle sich selbst zu einer Quelle
-        // erklären, nach der niemand gefragt hat.
+        // That is no detail: on this address hangs, later, the question from
+        // whom notifications about this node are accepted. If it came from the
+        // answer, another side could declare itself a source nobody asked for.
         subscription = new PubSubSubscription(node,
                                               serviceJid,
-                                              zusage.Attr("subid"),
-                                              StateOf(zusage.Attr("subscription")));
+                                              grant.Attr("subid"),
+                                              StateOf(grant.Attr("subscription")));
 
         return true;
 
     }
 
     /// <summary>
-    /// Der Zustand hinter seinem Namen - alles Unbekannte gilt als
+    /// The state behind its name - everything unknown counts as
     /// <see cref="PubSubSubscriptionState.None"/>.
     /// </summary>
     /// <remarks>
-    /// Ein Zustand, den dieser Client nicht kennt, darf nicht als Zusage
-    /// durchgehen. Die Vorsicht kostet hier nichts: Wer sich zu Unrecht für
-    /// nicht abonniert hält, fragt noch einmal - wer sich zu Unrecht für
-    /// abonniert hält, wartet auf etwas, das nie kommt.
+    /// A state this client does not know must not pass as a grant. The caution
+    /// costs nothing here: whoever wrongly takes themselves for not subscribed
+    /// asks once more - whoever wrongly takes themselves for subscribed waits
+    /// for something that never comes.
     /// </remarks>
     public static PubSubSubscriptionState StateOf(String? name)
         => name switch {
@@ -111,13 +110,13 @@ public sealed record PubSubSubscription(String                      NodeId,
            };
 
     /// <summary>
-    /// Der Zustand, wie er im Protokoll steht.
+    /// The state as it stands in the protocol.
     /// </summary>
     /// <remarks>
-    /// Die Gegenrichtung zu <see cref="StateOf"/>, und aus demselben Grund an
-    /// einer Stelle: Solange es nur zugesagte Abonnements gab, stand
-    /// <c>subscribed</c> als feste Zeichenkette an drei Stellen im Server.
-    /// Mit <c>authorize</c> wurde aus jeder davon eine Behauptung.
+    /// The opposite direction to <see cref="StateOf"/>, and in one place for
+    /// the same reason: as long as there were only granted subscriptions,
+    /// <c>subscribed</c> stood as a fixed string in three places in the server.
+    /// With <c>authorize</c> every one of them became an assertion.
     /// </remarks>
     public static String NameOf(PubSubSubscriptionState state)
         => state switch {
@@ -128,14 +127,14 @@ public sealed record PubSubSubscription(String                      NodeId,
            };
 
     /// <summary>
-    /// Derselbe Name, streng gelesen: false, wenn es kein Zustandsname ist.
+    /// The same name, read strictly: false when it is no state name.
     /// </summary>
     /// <remarks>
-    /// <b>Dieselbe Unterscheidung wie bei den Formularen.</b> Eine Antwort wird
-    /// nachsichtig gelesen - was dieser Client nicht kennt, gilt als „nicht
-    /// abonniert", und das ist die sichere Annahme. Eine <i>Anweisung</i> wird
-    /// streng gelesen: Dort ist <c>none</c> das Beenden eines Abonnements, und
-    /// ein Tippfehler dürfte nicht dasselbe bewirken.
+    /// <b>The same distinction as with the forms.</b> An answer is read
+    /// leniently - what this client does not know counts as "not subscribed",
+    /// and that is the safe assumption. An <i>instruction</i> is read strictly:
+    /// there <c>none</c> is the ending of a subscription, and a typo must not
+    /// bring about the same thing.
     /// </remarks>
     public static Boolean TryReadState(String? name, out PubSubSubscriptionState state)
     {
