@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0030: Ergebnis einer disco#items-Abfrage.
+/// XEP-0030: The result of a disco#items query.
 /// </summary>
 public sealed class DiscoItems
 {

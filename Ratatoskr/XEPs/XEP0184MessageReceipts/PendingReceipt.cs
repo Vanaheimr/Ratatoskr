@@ -18,11 +18,11 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0184: Eine gesendete Nachricht, deren Zustellbestätigung noch aussteht.
+/// XEP-0184: A sent message whose delivery receipt is still outstanding.
 /// </summary>
 /// <remarks>
-/// War zuvor ein privater verschachtelter Record in <see cref="ReceiptTracker"/>
-/// und wurde für "ein Typ pro Datei" auf Top-Level gehoben (internal, da
-/// Implementierungsdetail des Trackers).
+/// Was previously a private nested record in <see cref="ReceiptTracker"/> and
+/// was lifted to top level for "one type per file" (internal, since it is an
+/// implementation detail of the tracker).
 /// </remarks>
 internal sealed record PendingReceipt(string MessageId, string ExpectedFrom, DateTime SentAt);

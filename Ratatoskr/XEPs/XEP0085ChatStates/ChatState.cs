@@ -22,9 +22,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// </summary>
 public enum ChatState
 {
-    Active,      // Benutzer ist im Chat aktiv
-    Composing,   // Benutzer tippt gerade
-    Paused,      // Benutzer hat aufgehört zu tippen
-    Inactive,    // Benutzer ist inaktiv
-    Gone         // Benutzer hat Chat verlassen
+    Active,      // the user is active in the chat
+    Composing,   // the user is typing just now
+    Paused,      // the user has stopped typing
+    Inactive,    // the user is inactive
+    Gone         // the user has left the chat
 }

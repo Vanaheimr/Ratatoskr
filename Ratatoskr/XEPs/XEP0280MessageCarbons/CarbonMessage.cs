@@ -18,11 +18,11 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0280: Eine per Message Carbon gespiegelte Nachricht.
+/// XEP-0280: A message mirrored by a message carbon.
 /// </summary>
 public sealed class CarbonMessage
 {
-    public bool IsSent { get; }          // true = von mir gesendet, false = empfangen
+    public bool IsSent { get; }          // true = sent by me, false = received
     public string OriginalFrom { get; }
     public string OriginalTo { get; }
     public string? Body { get; }

@@ -18,11 +18,11 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0333: Art eines Chat Markers.
+/// XEP-0333: The kind of a chat marker.
 /// </summary>
 public enum ChatMarkerType
 {
-    Received,     // Nachricht empfangen
-    Displayed,    // Nachricht angezeigt/gelesen
-    Acknowledged  // Nachricht bestätigt
+    Received,     // message received
+    Displayed,    // message displayed/read
+    Acknowledged  // message acknowledged
 }

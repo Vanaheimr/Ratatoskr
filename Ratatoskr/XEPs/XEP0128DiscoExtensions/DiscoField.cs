@@ -18,27 +18,27 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0004: Ein Feld eines Datenformulars.
+/// XEP-0004: A field of a data form.
 /// </summary>
-/// <param name="Var">Der Name des Feldes (<c>var</c>).</param>
+/// <param name="Var">The name of the field (<c>var</c>).</param>
 /// <param name="Type">
-/// Der Feldtyp, oder null, wenn das Formular keinen angibt. Er wird gebraucht,
-/// weil XEP-0115, Abschnitt 5.4 ein <c>FORM_TYPE</c> nur dann gelten lässt,
-/// wenn es <c>hidden</c> ist.
+/// The field type, or null when the form gives none. It is needed because
+/// XEP-0115, section 5.4 lets a <c>FORM_TYPE</c> count only when it is
+/// <c>hidden</c>.
 /// </param>
-/// <param name="Values">Die Werte des Feldes, in der Reihenfolge des Formulars.</param>
+/// <param name="Values">The values of the field, in the order of the form.</param>
 public sealed record DiscoField(String                 Var,
                                 String?                Type,
                                 IReadOnlyList<String>  Values)
 {
 
-    /// <summary>Der Name des Feldes, das den Formulartyp trägt.</summary>
+    /// <summary>The name of the field that carries the form type.</summary>
     public const String FormTypeVar = "FORM_TYPE";
 
-    /// <summary>Der Feldtyp, den XEP-0115 für <see cref="FormTypeVar"/> verlangt.</summary>
+    /// <summary>The field type XEP-0115 demands for <see cref="FormTypeVar"/>.</summary>
     public const String HiddenType  = "hidden";
 
-    /// <summary>Ist das ein gültiges FORM_TYPE-Feld (XEP-0115, Abschnitt 5.4)?</summary>
+    /// <summary>Is this a valid FORM_TYPE field (XEP-0115, section 5.4)?</summary>
     public Boolean IsFormType
 
         => Var  == FormTypeVar &&

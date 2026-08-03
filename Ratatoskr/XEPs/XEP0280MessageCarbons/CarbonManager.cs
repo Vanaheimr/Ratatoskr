@@ -24,15 +24,15 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0280: Message Carbons - spiegelt Nachrichten auf alle eigenen Geräte.
+/// XEP-0280: Message carbons - mirrors messages onto all of one's own devices.
 /// </summary>
 public sealed class CarbonManager
 {
 
-    /// <summary>Der Namespace von XEP-0280.</summary>
+    /// <summary>The namespace of XEP-0280.</summary>
     public const string Namespace = "urn:xmpp:carbons:2";
 
-    /// <summary>Der Namespace von XEP-0297, in dem die Nachricht steckt.</summary>
+    /// <summary>The namespace of XEP-0297, in which the message sits.</summary>
     public const string ForwardNamespace = "urn:xmpp:forward:0";
 
     private readonly string _myBareJid;
@@ -51,20 +51,20 @@ public sealed class CarbonManager
     public void SetEnabled(bool enabled) => _enabled = enabled;
 
     /// <summary>
-    /// Verarbeitet eine Carbon-Nachricht mit Spoofing-Schutz.
+    /// Processes a carbon message with spoofing protection.
     ///
-    /// Die Unterscheidung von XEP-0184 lief früher über einen Ausschluss
-    /// (<c>!messageXml.Contains("urn:xmpp:receipts")</c>), weil beide
-    /// Erweiterungen ein <c>&lt;received/&gt;</c> kennen. Mit dem Namespace am
-    /// Element ist die Unterscheidung direkt und ohne Nebenwirkungen möglich.
+    /// The distinction from XEP-0184 used to run over an exclusion
+    /// (<c>!messageXml.Contains("urn:xmpp:receipts")</c>), because both
+    /// extensions know a <c>&lt;received/&gt;</c>. With the namespace at the
+    /// element the distinction is possible directly and without side effects.
     /// </summary>
     public CarbonResult ProcessCarbon(XElement message, string from)
     {
 
         var bareFrom = JidUtilities.Bare(from);
 
-        // KRITISCHER SPOOFING-SCHUTZ:
-        // Carbons dürfen NUR vom eigenen Bare-JID kommen (= vom Server)!
+        // CRITICAL SPOOFING PROTECTION:
+        // carbons may come ONLY from one's own bare JID (= from the server)!
         if (!string.Equals(bareFrom, _myBareJid, StringComparison.OrdinalIgnoreCase))
             return CarbonResult.SpoofingDetected;
 
@@ -86,7 +86,7 @@ public sealed class CarbonManager
 
         if (inner is null)
         {
-            OnParseError?.Invoke("Carbon ohne eingebettete Nachricht");
+            OnParseError?.Invoke("carbon without an embedded message");
             return CarbonResult.ParseError;
         }
 
@@ -95,7 +95,7 @@ public sealed class CarbonManager
 
         if (originalFrom is null && originalTo is null)
         {
-            OnParseError?.Invoke("Konnte from/to nicht aus Carbon extrahieren");
+            OnParseError?.Invoke("could not extract from/to out of the carbon");
             return CarbonResult.ParseError;
         }
 
@@ -110,7 +110,7 @@ public sealed class CarbonManager
     }
 
     /// <summary>
-    /// Erzeugt das IQ zum Aktivieren von Carbons
+    /// Creates the IQ for enabling carbons
     /// </summary>
     public static string EnableIq(string id = "carbons-enable")
     {

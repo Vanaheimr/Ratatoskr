@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0060: Ein vom PubSub-Service zugestelltes Event.
+/// XEP-0060: An event delivered by the PubSub service.
 /// </summary>
 public sealed class PubSubEvent
 {
@@ -28,14 +28,14 @@ public sealed class PubSubEvent
     public List<string> RetractedIds { get; } = [];
 
     /// <summary>
-    /// Das Abonnement, zu dem diese Meldung gehört - aus der SHIM-Kopfzeile
-    /// <c>SubID</c> (XEP-0060, Abschnitt 12.20), oder null.
+    /// The subscription this notification belongs to - from the SHIM header
+    /// <c>SubID</c> (XEP-0060, section 12.20), or null.
     /// </summary>
     /// <remarks>
-    /// Null heisst nicht „unbekannt", sondern meistens: Es gibt nur eines,
-    /// und dann muss der Dienst die Kennung nicht mitschicken. Bei mehreren
-    /// muss er - sonst wären zwei Zustellungen derselben Sache nicht
-    /// auseinanderzuhalten.
+    /// Null does not mean "unknown" but usually: there is only one, and then
+    /// the service does not have to send the identifier along. With several it
+    /// has to - otherwise two deliveries of the same thing could not be told
+    /// apart.
     /// </remarks>
     public string? SubId { get; }
 

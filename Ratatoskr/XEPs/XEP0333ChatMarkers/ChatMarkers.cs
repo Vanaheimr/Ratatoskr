@@ -24,19 +24,19 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0333: Chat Markers - erzeugt und erkennt received/displayed/acknowledged.
+/// XEP-0333: Chat markers - creates and recognises received/displayed/acknowledged.
 /// </summary>
 public static class ChatMarkers
 {
     public const string Namespace = "urn:xmpp:chat-markers:0";
 
     /// <summary>
-    /// Erzeugt <c>&lt;markable/&gt;</c> Element für ausgehende Nachrichten
+    /// Creates the <c>&lt;markable/&gt;</c> element for outgoing messages
     /// </summary>
     public static string Markable => $"<markable xmlns='{Namespace}'/>";
 
     /// <summary>
-    /// Erzeugt eine Marker-Nachricht
+    /// Creates a marker message
     /// </summary>
     public static string CreateMarker(string to, string refId, ChatMarkerType type)
     {
@@ -54,7 +54,7 @@ public static class ChatMarkers
     }
 
     /// <summary>
-    /// Prüft, ob eine Nachricht markierbar ist.
+    /// Checks whether a message is markable.
     /// </summary>
     public static bool IsMarkable(XElement message)
         => message.Elements()
@@ -62,13 +62,13 @@ public static class ChatMarkers
                                 child.Name.LocalName     == "markable");
 
     /// <summary>
-    /// Extrahiert einen Marker aus einer Nachricht.
+    /// Extracts a marker out of a message.
     ///
-    /// Das frühere Muster verlangte <c>xmlns</c> vor <c>id</c>; XML kennt aber
-    /// keine Attributreihenfolge, und ein Server, der sie andersherum schreibt,
-    /// wurde still ignoriert. Die Namespace-Prüfung ist hier besonders wichtig:
-    /// <c>&lt;received/&gt;</c> gibt es in XEP-0333 und in XEP-0184, und ohne
-    /// sie sind die beiden nicht auseinanderzuhalten.
+    /// The earlier pattern demanded <c>xmlns</c> before <c>id</c>; XML,
+    /// however, knows no attribute order, and a server that writes them the
+    /// other way round was silently ignored. The namespace check is especially
+    /// important here: <c>&lt;received/&gt;</c> exists in XEP-0333 and in
+    /// XEP-0184, and without it the two cannot be told apart.
     /// </summary>
     public static ChatMarker? Parse(XElement message, string from)
     {
@@ -98,7 +98,7 @@ public static class ChatMarkers
     }
 
     /// <summary>
-    /// Symbol für Marker-Typ
+    /// The symbol for a marker type
     /// </summary>
     public static string GetSymbol(ChatMarkerType type) => type switch
     {

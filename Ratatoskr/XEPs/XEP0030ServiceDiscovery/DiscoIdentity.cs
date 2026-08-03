@@ -18,16 +18,16 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0030: Identität einer Entity (category/type/name).
+/// XEP-0030: The identity of an entity (category/type/name).
 /// </summary>
 /// <param name="Language">
-/// Das <c>xml:lang</c> der Identität. Eine Entity darf denselben Namen in
-/// mehreren Sprachen führen; im Verification String steht die Sprache zwischen
-/// Typ und Name (XEP-0115, Abschnitt 5.1), und ohne sie ergibt eine solche
-/// Antwort einen anderen Hash als bei ihrem Urheber.
+/// The <c>xml:lang</c> of the identity. An entity may carry the same name in
+/// several languages; in the verification string the language stands between
+/// type and name (XEP-0115, section 5.1), and without it such an answer yields
+/// a different hash than at its originator.
 ///
-/// Steht bewusst hinter <c>Name</c> statt an der Stelle, an die sie im Hash
-/// gehört: So bleibt jeder bestehende Aufruf gültig.
+/// Stands deliberately behind <c>Name</c> instead of at the place where it
+/// belongs in the hash: that way every existing call stays valid.
 /// </param>
 public sealed record DiscoIdentity(string   Category,
                                    string   Type,

@@ -18,56 +18,56 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Was jemand an einem Knoten ist (XEP-0060, Abschnitt 4.1).
+/// What somebody is at a node (XEP-0060, section 4.1).
 /// </summary>
 /// <remarks>
-/// <b>Vier von sechs, und jede entscheidet etwas.</b> XEP-0060 kennt ausserdem
-/// <c>publish-only</c> — ein Publizierender, der nicht lesen darf. Der
-/// Unterschied zu <see cref="Publisher"/> wäre eine dritte Zeile in zwei
-/// Prüfungen und für einen PEP-Knoten eine exotische Rolle; er wird deshalb
-/// abgewiesen statt angeboten.
+/// <b>Four out of six, and every one of them decides something.</b> XEP-0060
+/// knows <c>publish-only</c> besides — a publisher who may not read. The
+/// difference to <see cref="Publisher"/> would be a third line in two checks
+/// and an exotic role for a PEP node; that is why it is refused instead of
+/// offered.
 ///
-/// <b>Der Eigentümer ist kein Eintrag, sondern das Konto.</b> Ein PEP-Knoten
-/// gehört dem Menschen, in dessen Konto er steht, und das lässt sich nicht
-/// umtragen: Wer den Eigentümer wechseln könnte, könnte einem anderen sein
-/// eigenes Konto wegnehmen.
+/// <b>The owner is not an entry but the account.</b> A PEP node belongs to the
+/// human being in whose account it stands, and that cannot be transferred:
+/// whoever could change the owner could take somebody's own account away from
+/// them.
 /// </remarks>
 public enum PubSubAffiliation
 {
 
-    /// <summary>Keine Rolle - der Normalfall für Fremde.</summary>
+    /// <summary>No role - the normal case for strangers.</summary>
     None,
 
     /// <summary>
-    /// Der Eigentümer: das Konto, in dem der Knoten steht. Er darf alles und
-    /// ist nicht setzbar.
+    /// The owner: the account the node stands in. They may do everything and
+    /// are not settable.
     /// </summary>
     Owner,
 
     /// <summary>
-    /// Darf in den Knoten veröffentlichen, ihn aber nicht einstellen.
+    /// May publish into the node but not configure it.
     /// </summary>
     Publisher,
 
     /// <summary>
-    /// Darf lesen und abonnieren, auch wenn der Knoten nur seiner Liste
-    /// offensteht.
+    /// May read and subscribe, even when the node stands open only to its
+    /// list.
     /// </summary>
     /// <remarks>
-    /// Wirksam wird das erst mit dem Zugriffsmodell <c>whitelist</c>; bei
-    /// <c>open</c> und <c>presence</c> darf ein Mitglied nicht mehr als jeder
-    /// andere. Eine Rolle, die nirgends etwas entscheidet, gäbe es hier nicht.
+    /// That takes effect only with the access model <c>whitelist</c>; with
+    /// <c>open</c> and <c>presence</c> a member may do no more than anybody
+    /// else. A role that decides nothing anywhere would not exist here.
     /// </remarks>
     Member,
 
     /// <summary>
-    /// Ausgeschlossen: kommt weder ans Abonnieren noch ans Abrufen, unabhängig
-    /// vom Zugriffsmodell.
+    /// Shut out: gets neither at the subscribing nor at the fetching,
+    /// independently of the access model.
     /// </summary>
     /// <remarks>
-    /// Und er verliert bestehende Abonnements (Abschnitt 8.9.4). Ihn nur an
-    /// neuen zu hindern hiesse, den Ausschluss von dem Zufall abhängig zu
-    /// machen, ob er vorher schon da war.
+    /// And they lose existing subscriptions (section 8.9.4). To hinder them
+    /// only at new ones would mean making the exclusion depend on the chance
+    /// whether they were there before.
     /// </remarks>
     Outcast
 

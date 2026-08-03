@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0030: Ein von disco#items zurückgeliefertes Item.
+/// XEP-0030: An item returned by disco#items.
 /// </summary>
 public sealed record DiscoItem(string Jid, string? Node = null, string? Name = null)
 {

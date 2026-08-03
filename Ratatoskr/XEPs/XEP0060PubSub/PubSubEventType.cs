@@ -18,38 +18,38 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0060: Art eines PubSub-Events.
+/// XEP-0060: The kind of a PubSub event.
 /// </summary>
 public enum PubSubEventType
 {
-    Items,      // Neue/aktualisierte Items
-    Retract,    // Items gelöscht
-    Purge,      // Node geleert
-    Delete,     // Node gelöscht
-    Configuration, // Node-Config geändert
+    Items,      // new/updated items
+    Retract,    // items deleted
+    Purge,      // node emptied
+    Delete,     // node deleted
+    Configuration, // node config changed
 
     /// <summary>
-    /// Ein Abonnement wurde beendet, ohne dass dieser Client danach gefragt
-    /// hätte (XEP-0060, Abschnitt 8.8.4).
+    /// A subscription was ended without this client having asked for it
+    /// (XEP-0060, section 8.8.4).
     /// </summary>
     /// <remarks>
-    /// <b>Beendet und nicht „geändert".</b> Die andere Richtung - eine Zusage
-    /// per Meldung - trägt dieser Client nicht ein: Eine Zusage kommt auf eine
-    /// Anfrage. Wer sie ungefragt annähme, liesse sich von einem Dienst
-    /// anmelden, und genau das weist der Server dieses Projekts auf der
-    /// anderen Seite ab.
+    /// <b>Ended and not "changed".</b> The other direction - a consent by
+    /// notification - this client does not enter: a consent comes in answer to
+    /// a request. Whoever accepted it unasked would let themselves be signed up
+    /// by a service, and that is exactly what the server of this project
+    /// refuses on the other side.
     /// </remarks>
     SubscriptionEnded,
 
     /// <summary>
-    /// Ein beantragtes Abonnement wurde zugesagt (XEP-0060, Abschnitt 8.6).
+    /// A subscription applied for was granted (XEP-0060, section 8.6).
     /// </summary>
     /// <remarks>
-    /// <b>Die Antwort auf eine eigene Frage, und nur die.</b> Sie kommt später
-    /// als die Frage - dazwischen liegt ein Mensch, der sie beantwortet -, und
-    /// deshalb kommt sie als Meldung und nicht als Antwort auf das IQ. Wer
-    /// dazu keinen offenen Antrag hat, bekommt dieses Ereignis nicht: Eine
-    /// unverlangte Zusage bliebe eine Anmeldung durch einen anderen.
+    /// <b>The answer to a question of one's own, and only that.</b> It comes
+    /// later than the question - between them lies a human being who answers it
+    /// - and that is why it comes as a notification and not as an answer to the
+    /// IQ. Whoever has no pending application for it does not get this event: an
+    /// unrequested consent would remain a signing-up by somebody else.
     /// </remarks>
     SubscriptionApproved
 }

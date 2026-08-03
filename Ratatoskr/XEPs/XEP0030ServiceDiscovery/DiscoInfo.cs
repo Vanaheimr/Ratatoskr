@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0030: Ergebnis einer disco#info-Abfrage (Identitäten + Features).
+/// XEP-0030: The result of a disco#info query (identities + features).
 /// </summary>
 public sealed class DiscoInfo
 {
@@ -28,29 +28,28 @@ public sealed class DiscoInfo
     public List<string> Features { get; } = [];
 
     /// <summary>
-    /// XEP-0128: Die Datenformulare der Antwort, ungefiltert und in der
-    /// vorgefundenen Reihenfolge.
+    /// XEP-0128: The data forms of the answer, unfiltered and in the order
+    /// found.
     /// </summary>
     /// <remarks>
-    /// Sie gehören zur Antwort und nicht nur zur Zierde: XEP-0115,
-    /// Abschnitt 5.1 lässt sie in den Verification String eingehen. Wer sie
-    /// wegwirft, kann den Hash einer Entity, die welche führt, nicht
-    /// nachrechnen - und muss ihr dann entweder blind glauben oder ihr
-    /// grundlos misstrauen.
+    /// They belong to the answer and are not merely decoration: XEP-0115,
+    /// section 5.1 lets them go into the verification string. Whoever throws
+    /// them away cannot recompute the hash of an entity that carries any - and
+    /// then has either to believe it blindly or to distrust it without cause.
     /// </remarks>
     public List<DiscoForm> Forms { get; } = [];
 
-    /// <summary>Trug die Antwort ein Datenformular (XEP-0128)?</summary>
+    /// <summary>Did the answer carry a data form (XEP-0128)?</summary>
     public bool HasExtendedInfo => Forms.Count > 0;
 
-    /// <summary>Führt die Antwort dieses Merkmal auf?</summary>
+    /// <summary>Does the answer list this feature?</summary>
     /// <remarks>
-    /// Hier standen einmal fünf Abkürzungen daneben - <c>SupportsCarbons</c>,
-    /// <c>SupportsReceipts</c> und drei weitere -, jede eine Zeile über dieser
-    /// hier und jede mit einem eingebauten Namensraum. Aufgerufen hat sie
-    /// niemand, und sie hätten auch nichts gekonnt, was diese Methode nicht
-    /// kann: Der Namensraum steht ohnehin dort, wo die Erweiterung steht, und
-    /// eine zweite Abschrift davon veraltet für sich allein.
+    /// Five abbreviations once stood beside this one - <c>SupportsCarbons</c>,
+    /// <c>SupportsReceipts</c> and three more -, each a line above this one and
+    /// each with a built-in namespace. Nobody called them, and they could not
+    /// have done anything this method cannot do either: the namespace stands
+    /// where the extension stands anyway, and a second copy of it goes stale on
+    /// its own.
     /// </remarks>
     public bool HasFeature(string feature) => Features.Contains(feature);
 }

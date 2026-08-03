@@ -18,33 +18,32 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0128: Ein Datenformular an einer disco#info-Antwort - die erweiterten
-/// Angaben einer Entity über sich selbst.
+/// XEP-0128: A data form at a disco#info answer - the extended information an
+/// entity gives about itself.
 /// </summary>
 /// <remarks>
-/// Gespeichert wird, was im Formular stand, ungefiltert und in der
-/// vorgefundenen Reihenfolge. Welche Formulare gelten und wie sie sortiert
-/// werden, entscheidet XEP-0115, Abschnitt 5.1 und 5.4 - und das steht dort,
-/// wo diese Regeln hingehören, im <see cref="EntityCapsManager"/>. Ein Parser,
-/// der schon aussortiert, nimmt der Prüfung die Grundlage.
+/// What is stored is what stood in the form, unfiltered and in the order
+/// found. Which forms count and how they are sorted is decided by XEP-0115,
+/// sections 5.1 and 5.4 - and that stands where these rules belong, in the
+/// <see cref="EntityCapsManager"/>. A parser that sorts things out already
+/// takes the ground away from the check.
 /// </remarks>
-/// <param name="Fields">Die Felder des Formulars, FORM_TYPE eingeschlossen.</param>
+/// <param name="Fields">The fields of the form, FORM_TYPE included.</param>
 public sealed record DiscoForm(IReadOnlyList<DiscoField> Fields)
 {
 
     /// <summary>
-    /// Das FORM_TYPE-Feld, sofern eines da ist und den verlangten Typ
-    /// <c>hidden</c> trägt (XEP-0115, Abschnitt 5.4).
+    /// The FORM_TYPE field, provided there is one and it carries the demanded
+    /// type <c>hidden</c> (XEP-0115, section 5.4).
     /// </summary>
     public DiscoField? FormTypeField
 
-        // "field" ist ab C# 14 in einem Property-Accessor ein Schlüsselwort.
-        => Fields.FirstOrDefault(feld => feld.IsFormType);
+        // "field" is a keyword inside a property accessor from C# 14 on.
+        => Fields.FirstOrDefault(f => f.IsFormType);
 
     /// <summary>
-    /// Der Formulartyp, oder null, wenn das Formular keinen gültigen trägt -
-    /// ein solches Formular geht nach XEP-0115, Abschnitt 5.4 nicht in den
-    /// Verification String ein.
+    /// The form type, or null when the form carries no valid one - such a form
+    /// does not go into the verification string per XEP-0115, section 5.4.
     /// </summary>
     public String? FormType
 
@@ -54,8 +53,8 @@ public sealed record DiscoForm(IReadOnlyList<DiscoField> Fields)
     #region (static) Of(FormType, Fields)
 
     /// <summary>
-    /// Ein Formular dieses Typs mit den angegebenen Feldern; das
-    /// FORM_TYPE-Feld entsteht dabei von selbst.
+    /// A form of this type with the given fields; the FORM_TYPE field comes
+    /// into being by itself in the process.
     /// </summary>
     public static DiscoForm Of(String                          FormType,
                                params (String Var, String Value)[] Fields)
@@ -70,14 +69,14 @@ public sealed record DiscoForm(IReadOnlyList<DiscoField> Fields)
     #region (static) SoftwareInfo(...)
 
     /// <summary>
-    /// Das <c>softwareinfo</c>-Formular aus XEP-0232 - der übliche Inhalt
-    /// erweiterter Angaben.
+    /// The <c>softwareinfo</c> form from XEP-0232 - the usual content of
+    /// extended information.
     /// </summary>
     /// <remarks>
-    /// Angaben, die null sind, bleiben weg. Ein Feld ohne Wert wäre nicht
-    /// dasselbe wie ein fehlendes: Es ginge in den Verification String ein
-    /// und machte den Hash von dem einer Entity verschieden, die dieselbe
-    /// Auskunft gibt.
+    /// Entries that are null stay away. A field without a value would not be
+    /// the same as a missing one: it would go into the verification string and
+    /// would make the hash differ from that of an entity which gives the same
+    /// information.
     /// </remarks>
     public static DiscoForm SoftwareInfo(String?  Software          = null,
                                          String?  SoftwareVersion   = null,
@@ -85,14 +84,14 @@ public sealed record DiscoForm(IReadOnlyList<DiscoField> Fields)
                                          String?  OSVersion         = null)
     {
 
-        var felder = new List<(String, String)>(4);
+        var fields = new List<(String, String)>(4);
 
-        if (Software        is not null) felder.Add(("software",         Software));
-        if (SoftwareVersion is not null) felder.Add(("software_version", SoftwareVersion));
-        if (OperatingSystem is not null) felder.Add(("os",               OperatingSystem));
-        if (OSVersion       is not null) felder.Add(("os_version",       OSVersion));
+        if (Software        is not null) fields.Add(("software",         Software));
+        if (SoftwareVersion is not null) fields.Add(("software_version", SoftwareVersion));
+        if (OperatingSystem is not null) fields.Add(("os",               OperatingSystem));
+        if (OSVersion       is not null) fields.Add(("os_version",       OSVersion));
 
-        return Of("urn:xmpp:dataforms:softwareinfo", [.. felder]);
+        return Of("urn:xmpp:dataforms:softwareinfo", [.. fields]);
 
     }
 

@@ -24,12 +24,12 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0085: Serialisierung und Parsing von Chat States.
+/// XEP-0085: Serialisation and parsing of chat states.
 /// </summary>
 public static class ChatStateExtensions
 {
 
-    /// <summary>Der Namespace von XEP-0085.</summary>
+    /// <summary>The namespace of XEP-0085.</summary>
     public const string Namespace = "http://jabber.org/protocol/chatstates";
 
     public static string ToXml(this ChatState state) => state switch
@@ -43,13 +43,13 @@ public static class ChatStateExtensions
     };
 
     /// <summary>
-    /// Liest den Chat State aus einer Nachricht.
+    /// Reads the chat state out of a message.
     ///
-    /// Gesucht wird nur unter den direkten Kindelementen und nur im Namespace
-    /// von XEP-0085. Die frühere Prüfung <c>Contains("&lt;composing")</c> tat
-    /// beides nicht: sie meldete jedes gleichnamige Element aus einer
-    /// beliebigen Erweiterung als Chat State, und der Zustand einer nach
-    /// XEP-0297 weitergeleiteten Nachricht wirkte nach aussen.
+    /// What is sought are only the direct child elements and only those in the
+    /// namespace of XEP-0085. The earlier check <c>Contains("&lt;composing")</c>
+    /// did neither: it reported every element of the same name from any
+    /// extension as a chat state, and the state of a message forwarded per
+    /// XEP-0297 took effect outwardly.
     /// </summary>
     public static ChatState? ParseChatState(XElement message)
     {

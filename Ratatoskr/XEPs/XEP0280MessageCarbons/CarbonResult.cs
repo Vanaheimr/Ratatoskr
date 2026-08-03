@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0280: Ergebnis der Carbon-Verarbeitung.
+/// XEP-0280: The result of processing a carbon.
 /// </summary>
 public enum CarbonResult
 {

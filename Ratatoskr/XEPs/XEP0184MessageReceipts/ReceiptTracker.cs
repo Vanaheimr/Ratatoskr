@@ -25,8 +25,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0184: Verfolgt gesendete Nachrichten bis zur Zustellbestätigung
-/// und prüft eingehende Bestätigungen auf Spoofing.
+/// XEP-0184: Follows sent messages up to the delivery receipt and checks
+/// incoming receipts for spoofing.
 /// </summary>
 public sealed class ReceiptTracker
 {
@@ -42,7 +42,7 @@ public sealed class ReceiptTracker
     }
 
     /// <summary>
-    /// Registriert eine gesendete Nachricht für Receipt-Tracking
+    /// Registers a sent message for receipt tracking
     /// </summary>
     public void TrackMessage(string messageId, string to)
     {
@@ -54,7 +54,7 @@ public sealed class ReceiptTracker
     }
 
     /// <summary>
-    /// Verarbeitet eine eingehende Receipt mit Spoofing-Schutz
+    /// Processes an incoming receipt with spoofing protection
     /// </summary>
     public bool ProcessReceipt(string receiptId, string from)
     {
@@ -64,14 +64,14 @@ public sealed class ReceiptTracker
         {
             if (!_pending.TryGetValue(receiptId, out var pending))
             {
-                // Receipt für unbekannte Nachricht - ignorieren
+                // receipt for an unknown message - ignore
                 return false;
             }
 
-            // SPOOFING-SCHUTZ: Receipt muss vom erwarteten Empfänger kommen
+            // SPOOFING PROTECTION: the receipt has to come from the expected recipient
             if (!string.Equals(pending.ExpectedFrom, bareFrom, StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogWarning("Receipt-Spoofing erkannt! Erwartet: {Expected}, Erhalten: {Actual}",
+                _logger.LogWarning("Receipt spoofing detected! Expected: {Expected}, received: {Actual}",
                                    pending.ExpectedFrom, bareFrom);
                 return false;
             }

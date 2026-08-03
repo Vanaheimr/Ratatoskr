@@ -18,12 +18,12 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Die Namen der Rollen auf dem Draht (XEP-0060, Abschnitt 12.16).
+/// The names of the roles on the wire (XEP-0060, section 12.16).
 /// </summary>
 public static class PubSubAffiliations
 {
 
-    /// <summary>Die Rolle, wie sie im Protokoll heisst.</summary>
+    /// <summary>The role as it is called in the protocol.</summary>
     public static String NameOf(PubSubAffiliation affiliation)
         => affiliation switch {
                PubSubAffiliation.Owner      => "owner",
@@ -34,14 +34,14 @@ public static class PubSubAffiliations
            };
 
     /// <summary>
-    /// Liest eine Rolle.
+    /// Reads a role.
     /// </summary>
     /// <returns>
-    /// false bei allem, was dieser Dienst nicht kennt - auch bei
-    /// <c>publish-only</c>. <b>Eine unbekannte Rolle als „keine" zu lesen wäre
-    /// hier besonders teuer:</b> Wer jemanden ausschliessen will und sich
-    /// vertippt, bekäme sonst ein <c>result</c> und hielte den Ausschluss für
-    /// vollzogen.
+    /// false for everything this service does not know - including
+    /// <c>publish-only</c>. <b>To read an unknown role as "none" would be
+    /// especially expensive here:</b> whoever wants to shut somebody out and
+    /// mistypes would otherwise get a <c>result</c> and take the exclusion for
+    /// carried out.
     /// </returns>
     public static Boolean TryRead(String? name, out PubSubAffiliation affiliation)
     {

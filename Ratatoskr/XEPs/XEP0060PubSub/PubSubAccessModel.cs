@@ -18,91 +18,91 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Wer an die Einträge eines Knotens kommt (XEP-0060, Abschnitt 4.5).
+/// Who gets at the entries of a node (XEP-0060, section 4.5).
 /// </summary>
 /// <remarks>
-/// <b>Alle fünf.</b> Was dieser Server nicht durchsetzen kann, bietet er nicht
-/// an, statt es anzunehmen und zu übergehen - bei einem Zugriffsmodell wäre
-/// das der teuerste Ort für eine Zusage ohne Deckung: Wer <c>whitelist</c>
-/// einstellt und <c>open</c> bekommt, glaubt seine Einträge geschützt und hat
-/// sie veröffentlicht. Dass die Liste jetzt vollständig ist, heisst deshalb
-/// auch: Jedes Modell hier tut etwas.
+/// <b>All five.</b> What this server cannot enforce it does not offer, instead
+/// of accepting it and passing over it - with an access model that would be
+/// the most expensive place for a promise without cover: whoever configures
+/// <c>whitelist</c> and gets <c>open</c> believes their entries protected and
+/// has published them. That the list is complete now therefore also means:
+/// every model here does something.
 ///
-/// <see cref="Whitelist"/> kam mit den Rollen dazu (K13): Es ist das Modell,
-/// das <see cref="PubSubAffiliation.Member"/> überhaupt einen Sinn gibt.
-/// <see cref="Roster"/> folgte in D92 - und brauchte erst einmal einen Server,
-/// der Rostergruppen überhaupt kennt (D91). <see cref="Authorize"/> in D93, mit
-/// dem Zustand <see cref="PubSubSubscriptionState.Pending"/>, den es bis dahin
-/// nur auf dem Papier gab.
+/// <see cref="Whitelist"/> came along with the roles (K13): it is the model
+/// that gives <see cref="PubSubAffiliation.Member"/> a meaning at all.
+/// <see cref="Roster"/> followed in D92 - and first needed a server that knows
+/// roster groups at all (D91). <see cref="Authorize"/> in D93, with the state
+/// <see cref="PubSubSubscriptionState.Pending"/>, which until then existed only
+/// on paper.
 /// </remarks>
 public enum PubSubAccessModel
 {
 
     /// <summary>
-    /// Wer fragt, bekommt.
+    /// Whoever asks, gets.
     /// </summary>
     /// <remarks>
-    /// Die Vorgabe, und für OMEMO die einzig brauchbare: Wer einem Menschen
-    /// verschlüsselt schreiben will, muss dessen Bundle lesen können - im
-    /// Zweifel jemand, der in keinem Roster steht (XEP-0384, Abschnitt 5.2).
+    /// The default, and for OMEMO the only usable one: whoever wants to write
+    /// to a human being in encrypted form has to be able to read their bundle -
+    /// in case of doubt somebody who stands in no roster (XEP-0384,
+    /// section 5.2).
     /// </remarks>
     Open,
 
     /// <summary>
-    /// Nur, wer die Presence des Eigentümers sehen darf.
+    /// Only whoever may see the presence of the owner.
     /// </summary>
     Presence,
 
     /// <summary>
-    /// Nur, wer auf der Liste steht: der Eigentümer, ein
-    /// <see cref="PubSubAffiliation.Publisher"/> und ein
+    /// Only whoever stands on the list: the owner, a
+    /// <see cref="PubSubAffiliation.Publisher"/> and a
     /// <see cref="PubSubAffiliation.Member"/>.
     /// </summary>
     /// <remarks>
-    /// <b>Das strengste der drei Modelle und das einzige, bei dem der Roster
-    /// nichts entscheidet.</b> Presence-Berechtigung entsteht nebenbei -
-    /// jemand nimmt einen Kontakt auf, und schon sieht er mehr. Eine Liste
-    /// entsteht nicht nebenbei: Auf ihr steht nur, wen der Eigentümer
-    /// ausdrücklich daraufgesetzt hat.
+    /// <b>The strictest of the three models and the only one where the roster
+    /// decides nothing.</b> Presence permission comes into being beside the
+    /// point - somebody takes a contact on, and already they see more. A list
+    /// does not come into being beside the point: on it stands only whom the
+    /// owner has expressly put on it.
     /// </remarks>
     Whitelist,
 
     /// <summary>
-    /// Nur, wer im Roster des Eigentümers steht - und, wenn Gruppen genannt
-    /// sind, in einer davon.
+    /// Only whoever stands in the roster of the owner - and, when groups are
+    /// named, in one of them.
     /// </summary>
     /// <remarks>
-    /// <b>Der Roster ist die Liste des Eigentümers</b>, und deshalb genügt ein
-    /// Eintrag: Wer darin steht, steht dort, weil der Eigentümer ihn
-    /// eingetragen hat. Ein Presence-Zustand wird nicht verlangt - das wäre
-    /// <see cref="Presence"/>, und das ist eine andere Frage: Dort geht es
-    /// darum, wer <i>mich sehen darf</i>, hier darum, wen <i>ich führe</i>.
-    /// Beides kann auseinandergehen, und dann sind es zwei verschiedene
-    /// Antworten und keine ungenaue.
+    /// <b>The roster is the list of the owner</b>, and that is why one entry
+    /// suffices: whoever stands in it stands there because the owner has
+    /// entered them. A presence state is not demanded - that would be
+    /// <see cref="Presence"/>, and that is another question: there it is about
+    /// who <i>may see me</i>, here about whom <i>I carry</i>. The two can
+    /// diverge, and then they are two different answers and not one imprecise
+    /// one.
     ///
-    /// <b>Ohne genannte Gruppen kommt der ganze Roster herein.</b> Eine leere
-    /// Liste als „niemand" zu lesen wäre die andere Möglichkeit und die
-    /// schlechtere: Sie machte das Modell in seiner Grundeinstellung
-    /// wirkungsgleich mit einer leeren <see cref="Whitelist"/> - zwei Namen
-    /// für dieselbe Sache, und einer davon führte in die Irre.
+    /// <b>Without named groups the whole roster comes in.</b> To read an empty
+    /// list as "nobody" would be the other possibility and the worse one: it
+    /// would make the model in its basic setting equal in effect to an empty
+    /// <see cref="Whitelist"/> - two names for the same thing, and one of them
+    /// would lead astray.
     /// </remarks>
     Roster,
 
     /// <summary>
-    /// Nur, wen der Eigentümer einzeln hereingelassen hat.
+    /// Only whom the owner has let in one by one.
     /// </summary>
     /// <remarks>
-    /// <b>Das einzige Modell, bei dem Abonnieren und Hereinkommen zwei Dinge
-    /// sind.</b> Bei allen anderen entscheidet dieselbe Regel beides: Wer nicht
-    /// hereindarf, darf auch nicht abonnieren. Hier darf jeder <i>fragen</i> -
-    /// das Fragen ist der Vorgang -, und was er bekommt, ist ein Abonnement im
-    /// Zustand <see cref="PubSubSubscriptionState.Pending"/>: angenommen,
-    /// aber noch nicht zugesagt.
+    /// <b>The only model where subscribing and getting in are two things.</b>
+    /// With all the others the same rule decides both: whoever may not get in
+    /// may not subscribe either. Here everybody may <i>ask</i> - the asking is
+    /// the procedure -, and what they get is a subscription in the state
+    /// <see cref="PubSubSubscriptionState.Pending"/>: accepted, but not yet
+    /// granted.
     ///
-    /// Der Unterschied zu <see cref="Whitelist"/> ist der Zeitpunkt: Dort muss
-    /// der Eigentümer jemanden eintragen, <i>bevor</i> der fragt, und erfährt
-    /// nie, dass jemand vergeblich angeklopft hat. Hier kommt die Frage bei
-    /// ihm an.
+    /// The difference to <see cref="Whitelist"/> is the moment: there the owner
+    /// has to enter somebody <i>before</i> they ask, and never learns that
+    /// somebody knocked in vain. Here the question arrives at them.
     /// </remarks>
     Authorize
 

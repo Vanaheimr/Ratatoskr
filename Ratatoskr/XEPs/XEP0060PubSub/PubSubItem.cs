@@ -18,7 +18,7 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0060: Ein einzelnes Item eines PubSub-Nodes.
+/// XEP-0060: A single item of a PubSub node.
 /// </summary>
 public sealed class PubSubItem
 {

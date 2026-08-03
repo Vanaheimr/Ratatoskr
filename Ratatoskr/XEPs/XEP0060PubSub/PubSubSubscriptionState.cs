@@ -18,35 +18,35 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Der Zustand eines Abonnements (XEP-0060, Abschnitt 12.19).
+/// The state of a subscription (XEP-0060, section 12.19).
 /// </summary>
 /// <remarks>
-/// <b>Vier Zustände und nicht zwei.</b> „Abonniert oder nicht" wäre die
-/// naheliegende Verkürzung und genau die, an der ein Client scheitert: Ein
-/// <see cref="Pending"/> sieht wie eine Zusage aus - der Dienst hat die
-/// Anfrage angenommen -, ist aber keine. Wer beides zusammenwirft, hält sich
-/// für abonniert, während noch jemand darüber entscheidet, und wundert sich
-/// über die ausbleibenden Benachrichtigungen.
+/// <b>Four states and not two.</b> "Subscribed or not" would be the obvious
+/// shortening and exactly the one a client founders on: a
+/// <see cref="Pending"/> looks like a consent - the service has accepted the
+/// request - but is none. Whoever throws the two together takes themselves for
+/// subscribed while somebody is still deciding about it, and wonders about the
+/// notifications that do not come.
 /// </remarks>
 public enum PubSubSubscriptionState
 {
 
-    /// <summary>Kein Abonnement.</summary>
+    /// <summary>No subscription.</summary>
     None,
 
     /// <summary>
-    /// Beantragt, aber noch nicht genehmigt - der Knoten verlangt die
-    /// Zustimmung seines Besitzers.
+    /// Applied for but not yet approved - the node demands the consent of its
+    /// owner.
     /// </summary>
     Pending,
 
     /// <summary>
-    /// Angenommen, aber der Dienst erwartet noch die Konfiguration des
-    /// Abonnements, bevor er etwas schickt.
+    /// Accepted, but the service still expects the configuration of the
+    /// subscription before it sends anything.
     /// </summary>
     Unconfigured,
 
-    /// <summary>Abonniert - von hier an kommen Benachrichtigungen.</summary>
+    /// <summary>Subscribed - from here on notifications come.</summary>
     Subscribed
 
 }

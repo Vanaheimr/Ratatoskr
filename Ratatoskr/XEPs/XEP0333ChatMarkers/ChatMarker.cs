@@ -18,6 +18,6 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0333: Ein empfangener Chat Marker.
+/// XEP-0333: A received chat marker.
 /// </summary>
 public sealed record ChatMarker(ChatMarkerType Type, string From, string MessageId, DateTime ReceivedAt);

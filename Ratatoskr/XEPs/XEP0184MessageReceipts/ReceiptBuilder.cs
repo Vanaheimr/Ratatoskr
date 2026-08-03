@@ -24,21 +24,21 @@ using System.Xml.Linq;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// XEP-0184: Erzeugt und erkennt Receipt-Elemente.
+/// XEP-0184: Creates and recognises receipt elements.
 /// </summary>
 public static class ReceiptBuilder
 {
 
-    /// <summary>Der Namespace von XEP-0184.</summary>
+    /// <summary>The namespace of XEP-0184.</summary>
     public const string Namespace = "urn:xmpp:receipts";
 
     /// <summary>
-    /// Erzeugt das XML für eine Receipt-Anfrage (in ausgehende Nachricht einfügen)
+    /// Creates the XML for a receipt request (to be inserted into an outgoing message)
     /// </summary>
     public static string RequestXml => $"<request xmlns='{Namespace}'/>";
 
     /// <summary>
-    /// Erzeugt eine Receipt-Antwort
+    /// Creates a receipt answer
     /// </summary>
     public static string CreateReceipt(string to, string originalMessageId)
     {
@@ -48,13 +48,13 @@ public static class ReceiptBuilder
     }
 
     /// <summary>
-    /// Prüft, ob eine Nachricht um eine Quittung bittet.
+    /// Checks whether a message asks for a receipt.
     ///
-    /// Die frühere Prüfung suchte wörtlich nach
-    /// <c>xmlns='urn:xmpp:receipts'</c>, also nur mit einfachen
-    /// Anführungszeichen - gegen einen Server, der doppelte benutzt, blieb
-    /// jede Quittung aus. Ausserdem zählte ein <c>&lt;request/&gt;</c>
-    /// irgendwo in der Nachricht, also auch eines in einer weitergeleiteten.
+    /// The earlier check looked literally for
+    /// <c>xmlns='urn:xmpp:receipts'</c>, that is, only with single quotation
+    /// marks - against a server that uses double ones every receipt stayed
+    /// away. Besides that, a <c>&lt;request/&gt;</c> anywhere in the message
+    /// counted, so one in a forwarded message as well.
     /// </summary>
     public static bool HasReceiptRequest(XElement message)
         => message.Elements()
@@ -62,10 +62,10 @@ public static class ReceiptBuilder
                                 child.Name.LocalName     == "request");
 
     /// <summary>
-    /// Extrahiert die Quittungs-ID aus einer Quittung.
+    /// Extracts the receipt id out of a receipt.
     ///
-    /// Die Namespace-Prüfung trennt sie vom gleichnamigen
-    /// <c>&lt;received/&gt;</c> aus XEP-0333.
+    /// The namespace check separates it from the <c>&lt;received/&gt;</c> of
+    /// the same name from XEP-0333.
     /// </summary>
     public static string? ExtractReceiptId(XElement message)
         => message.Elements()
