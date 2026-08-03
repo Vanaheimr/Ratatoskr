@@ -18,124 +18,122 @@
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// So viel Protocol Buffers, wie OMEMO braucht - Varints und
-/// längenbegrenzte Felder, mehr nicht.
+/// As much of Protocol Buffers as OMEMO needs - varints and length-delimited
+/// fields, no more.
 /// </summary>
 /// <remarks>
-/// <b>Warum von Hand und nicht mit einer Bibliothek.</b> Gebraucht werden drei
-/// Nachrichtenarten mit zusammen elf Feldern, alle vom Typ <c>uint32</c> oder
-/// <c>bytes</c>. Dafür einen Codegenerator samt Werkzeugkette in den Bau zu
-/// hängen, kostet mehr als es trägt - und die Kodierung selbst ist in
-/// vierzig Zeilen erschöpfend beschrieben.
+/// <b>Why by hand and not with a library.</b> What is needed are three message
+/// kinds with eleven fields between them, all of type <c>uint32</c> or
+/// <c>bytes</c>. To hang a code generator and its toolchain into the building
+/// for that costs more than it carries - and the encoding itself is
+/// exhaustively described in forty lines.
 ///
-/// <b>Der eigentliche Grund ist aber ein anderer:</b> Diese Bytes gehen in die
-/// Beigabe der Verschlüsselung ein (XEP-0384, Abschnitt 4.3:
-/// <c>ad ‖ OMEMOMessage.proto(header)</c>). Damit muss die Kodierung
-/// <b>bitgenau reproduzierbar</b> sein - beide Seiten müssen aus demselben
-/// Header dieselben Bytes bilden, sonst scheitert jede Prüfung. Eine
-/// Bibliothek, die Felder umsortiert, Vorgabewerte weglässt oder Varints
-/// anders auffüllt, wäre hier kein Komfort, sondern eine Fehlerquelle, die
-/// niemand sieht.
+/// <b>The actual reason, though, is another one:</b> these bytes go into the
+/// associated data of the encryption (XEP-0384, section 4.3:
+/// <c>ad ‖ OMEMOMessage.proto(header)</c>). The encoding therefore has to be
+/// <b>reproducible bit for bit</b> - both sides have to form the same bytes
+/// from the same header, otherwise every check fails. A library that reorders
+/// fields, leaves out default values or pads varints differently would be no
+/// convenience here but a source of errors nobody sees.
 ///
-/// Deshalb schreibt dieser Kodierer immer alle Felder, immer in der
-/// Reihenfolge ihrer Nummern und nie mit gepolsterten Varints.
+/// That is why this encoder always writes all fields, always in the order of
+/// their numbers and never with padded varints.
 /// </remarks>
 public static class Protobuf
 {
 
-    #region Schreiben
+    #region Writing
 
     /// <summary>
-    /// Ein Varint (base 128, kleinstwertige Gruppe zuerst, oberstes Bit als
-    /// Fortsetzungszeichen).
+    /// A varint (base 128, least significant group first, top bit as the
+    /// continuation marker).
     /// </summary>
-    public static void WriteVarint(List<Byte> ziel, UInt64 wert)
+    public static void WriteVarint(List<Byte> target, UInt64 value)
     {
 
-        while (wert >= 0x80)
+        while (value >= 0x80)
         {
-            ziel.Add((Byte) (wert | 0x80));
-            wert >>= 7;
+            target.Add((Byte) (value | 0x80));
+            value >>= 7;
         }
 
-        ziel.Add((Byte) wert);
+        target.Add((Byte) value);
 
     }
 
     /// <summary>
-    /// Ein Feld vom Typ <c>uint32</c> (Wire-Type 0).
+    /// A field of type <c>uint32</c> (wire type 0).
     /// </summary>
-    public static void WriteUInt32(List<Byte> ziel, Int32 feldnummer, UInt32 wert)
+    public static void WriteUInt32(List<Byte> target, Int32 fieldNumber, UInt32 value)
     {
-        WriteVarint(ziel, (UInt64) feldnummer << 3 | 0);
-        WriteVarint(ziel, wert);
+        WriteVarint(target, (UInt64) fieldNumber << 3 | 0);
+        WriteVarint(target, value);
     }
 
     /// <summary>
-    /// Ein Feld vom Typ <c>bytes</c> (Wire-Type 2): Länge, dann Inhalt.
+    /// A field of type <c>bytes</c> (wire type 2): length, then content.
     /// </summary>
-    public static void WriteBytes(List<Byte> ziel, Int32 feldnummer, Byte[] wert)
+    public static void WriteBytes(List<Byte> target, Int32 fieldNumber, Byte[] value)
     {
 
-        WriteVarint(ziel, (UInt64) feldnummer << 3 | 2);
-        WriteVarint(ziel, (UInt64) wert.Length);
+        WriteVarint(target, (UInt64) fieldNumber << 3 | 2);
+        WriteVarint(target, (UInt64) value.Length);
 
-        ziel.AddRange(wert);
+        target.AddRange(value);
 
     }
 
     #endregion
 
-    #region Lesen
+    #region Reading
 
     /// <summary>
-    /// Liest die Felder einer Nachricht in der Reihenfolge, in der sie
-    /// dastehen.
+    /// Reads the fields of a message in the order in which they stand there.
     /// </summary>
     /// <returns>
-    /// Feldnummer, Wire-Type und der Rohwert: bei Wire-Type 0 die Zahl, bei
-    /// Wire-Type 2 die Bytes.
+    /// Field number, wire type and the raw value: with wire type 0 the number,
+    /// with wire type 2 the bytes.
     /// </returns>
     /// <remarks>
-    /// Unbekannte Feldnummern werden übersprungen und nicht abgewiesen - so
-    /// will es Protocol Buffers, und so bleibt eine spätere Fassung der
-    /// Spezifikation lesbar. Ein <b>unbekannter Wire-Type</b> dagegen ist ein
-    /// Abbruch: Ab dort ist nicht mehr zu erkennen, wo das nächste Feld
-    /// anfängt, und was danach gelesen würde, wäre geraten.
+    /// Unknown field numbers are skipped and not refused - that is how Protocol
+    /// Buffers wants it, and that is how a later version of the specification
+    /// stays readable. An <b>unknown wire type</b>, by contrast, is an abort:
+    /// from there on it is no longer recognisable where the next field begins,
+    /// and what would be read after it would be guessed.
     /// </remarks>
-    public static IEnumerable<(Int32 Field, Int32 WireType, UInt64 Number, Byte[] Data)> Read(Byte[] daten)
+    public static IEnumerable<(Int32 Field, Int32 WireType, UInt64 Number, Byte[] Data)> Read(Byte[] data)
     {
 
         var i = 0;
 
-        while (i < daten.Length)
+        while (i < data.Length)
         {
 
-            var schluessel  = ReadVarint(daten, ref i);
-            var feld        = (Int32) (schluessel >> 3);
-            var typ         = (Int32) (schluessel & 7);
+            var key    = ReadVarint(data, ref i);
+            var field  = (Int32) (key >> 3);
+            var type   = (Int32) (key & 7);
 
-            switch (typ)
+            switch (type)
             {
 
                 case 0:
-                    yield return (feld, typ, ReadVarint(daten, ref i), []);
+                    yield return (field, type, ReadVarint(data, ref i), []);
                     break;
 
                 case 2:
-                    var laenge = (Int32) ReadVarint(daten, ref i);
+                    var length = (Int32) ReadVarint(data, ref i);
 
-                    if (laenge < 0 || i + laenge > daten.Length)
-                        throw new FormatException("Ein längenbegrenztes Feld reicht über das Ende hinaus.");
+                    if (length < 0 || i + length > data.Length)
+                        throw new FormatException("A length-delimited field reaches past the end.");
 
-                    yield return (feld, typ, 0, daten[i..(i + laenge)]);
-                    i += laenge;
+                    yield return (field, type, 0, data[i..(i + length)]);
+                    i += length;
                     break;
 
                 default:
                     throw new FormatException(
-                              $"Wire-Type {typ} kommt in OMEMO nicht vor; ab hier ist nicht mehr zu " +
-                              "erkennen, wo das nächste Feld anfängt.");
+                              $"Wire type {type} does not occur in OMEMO; from here on it is no longer " +
+                              "recognisable where the next field begins.");
 
             }
 
@@ -143,33 +141,33 @@ public static class Protobuf
 
     }
 
-    /// <summary>Liest ein Varint und schiebt den Lesezeiger weiter.</summary>
-    public static UInt64 ReadVarint(Byte[] daten, ref Int32 i)
+    /// <summary>Reads a varint and moves the read pointer on.</summary>
+    public static UInt64 ReadVarint(Byte[] data, ref Int32 i)
     {
 
-        UInt64  wert       = 0;
-        var     verschub   = 0;
+        UInt64  value  = 0;
+        var     shift  = 0;
 
         while (true)
         {
 
-            if (i >= daten.Length)
-                throw new FormatException("Das Varint endet vor seinem letzten Byte.");
+            if (i >= data.Length)
+                throw new FormatException("The varint ends before its last byte.");
 
-            // Zehn Gruppen à sieben Bit sind siebzig - mehr als in einen
-            // UInt64 passen. Ohne diese Grenze liesse sich mit einer Kette von
-            // Fortsetzungsbytes beliebig weit über den Wert hinauslesen.
-            if (verschub > 63)
-                throw new FormatException("Das Varint ist länger, als ein 64-Bit-Wert sein kann.");
+            // Ten groups of seven bits are seventy - more than fit into a
+            // UInt64. Without this limit one could read arbitrarily far past
+            // the value with a chain of continuation bytes.
+            if (shift > 63)
+                throw new FormatException("The varint is longer than a 64-bit value can be.");
 
-            var b = daten[i++];
+            var b = data[i++];
 
-            wert |= (UInt64) (b & 0x7F) << verschub;
+            value |= (UInt64) (b & 0x7F) << shift;
 
             if ((b & 0x80) == 0)
-                return wert;
+                return value;
 
-            verschub += 7;
+            shift += 7;
 
         }
 

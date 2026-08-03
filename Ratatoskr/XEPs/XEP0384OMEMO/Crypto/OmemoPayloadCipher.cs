@@ -25,51 +25,49 @@ using System.Text;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Eine verschlüsselte Nutzlast samt dem, was jeder Empfänger dafür braucht.
+/// An encrypted payload together with what every recipient needs for it.
 /// </summary>
-/// <param name="Ciphertext">Der Geheimtext, wie er ins <c>&lt;payload/&gt;</c> geht.</param>
+/// <param name="Ciphertext">The ciphertext as it goes into the <c>&lt;payload/&gt;</c>.</param>
 /// <param name="KeyAndHmac">
-/// Schlüssel und gekürzter HMAC hintereinander - 48 Byte. Genau das geht je
-/// Empfänger durch den Double Ratchet (XEP-0384, Abschnitt 4.4, Schritt 6).
+/// Key and truncated HMAC one after the other - 48 bytes. Exactly that goes
+/// through the double ratchet per recipient (XEP-0384, section 4.4, step 6).
 /// </param>
 public sealed record OmemoPayload(Byte[] Ciphertext, Byte[] KeyAndHmac);
 
 /// <summary>
-/// XEP-0384, Abschnitt 4.4: die Nutzlast selbst - AES-256-CBC mit
-/// HMAC-SHA-256.
+/// XEP-0384, section 4.4: the payload itself - AES-256-CBC with HMAC-SHA-256.
 /// </summary>
 /// <remarks>
-/// <b>Ein Schlüssel je Nachricht, und er geht nicht an die Empfänger.</b>
-/// Verschlüsselt wird der Text genau einmal; durch den Ratchet geht je
-/// Empfänger nur der 48-Byte-Wert. Bei zehn Geräten spart das nicht Rechenzeit,
-/// sondern verhindert etwas: dass derselbe Klartext zehnmal in verschiedenen
-/// Schlüsseln dasteht.
+/// <b>One key per message, and it does not go to the recipients.</b> The text
+/// is encrypted exactly once; through the ratchet goes only the 48-byte value,
+/// per recipient. With ten devices that saves no computing time but prevents
+/// something: that the same plaintext stands there ten times under different
+/// keys.
 ///
-/// <b>Der HMAC steht nicht bei der Nachricht.</b> Er reist im verschlüsselten
-/// Teil mit, und das ist der eigentliche Kniff des Verfahrens: Wer die Nutzlast
-/// verändert, kann den HMAC nicht mitverändern, weil er ihn nicht kennt - und
-/// wer ihn kennt, hat den Ratchet gebrochen. Ein danebenstehender HMAC wäre
-/// dagegen von jedem neu zu rechnen, der den Schlüssel hat, und der Schlüssel
-/// liegt bei jedem Empfänger.
+/// <b>The HMAC does not stand beside the message.</b> It travels inside the
+/// encrypted part, and that is the actual trick of the procedure: whoever
+/// alters the payload cannot alter the HMAC along with it, because they do not
+/// know it - and whoever knows it has broken the ratchet. An HMAC standing
+/// beside it, by contrast, could be recomputed by anybody who has the key, and
+/// the key lies with every recipient.
 ///
-/// Aus dem 32-Byte-Schlüssel werden mit HKDF 80 Byte: Chiffrierschlüssel,
-/// Authentisierungsschlüssel und IV. Deshalb reist kein IV mit der Nachricht -
-/// er ist aus dem Schlüssel abgeleitet und für jede Nachricht ein anderer,
-/// weil es der Schlüssel auch ist.
+/// Out of the 32-byte key HKDF makes 80 bytes: cipher key, authentication key
+/// and IV. That is why no IV travels with the message - it is derived from the
+/// key and is a different one for every message, because the key is one too.
 /// </remarks>
 public static class OmemoPayloadCipher
 {
 
     #region Data
 
-    /// <summary>Der Info-String der Ableitung (Abschnitt 4.4).</summary>
+    /// <summary>The info string of the derivation (section 4.4).</summary>
     public const String Info = "OMEMO Payload";
 
-    /// <summary>Länge des Nachrichtenschlüssels in Byte.</summary>
+    /// <summary>Length of the message key in bytes.</summary>
     public const Int32 KeyLength = 32;
 
     /// <summary>
-    /// Länge des gekürzten HMAC in Byte (Abschnitt 4.4: „Truncate the output
+    /// Length of the truncated HMAC in bytes (section 4.4: "Truncate the output
     /// of the HMAC to 16 bytes/128 bits by cutting off excess bytes from the
     /// end").
     /// </summary>
@@ -80,21 +78,21 @@ public static class OmemoPayloadCipher
     #region Material(key)
 
     /// <summary>
-    /// Die 80 Byte Schlüsselmaterial aus dem Nachrichtenschlüssel:
-    /// 32 Byte Chiffrierschlüssel, 32 Byte Authentisierungsschlüssel, 16 Byte IV.
+    /// The 80 bytes of key material from the message key: 32 bytes cipher key,
+    /// 32 bytes authentication key, 16 bytes IV.
     /// </summary>
     /// <remarks>
-    /// Das Salz sind 32 Nullbytes und nicht etwa nichts. HKDF behandelt beides
-    /// gleich (RFC 5869, Abschnitt 2.2 setzt ein fehlendes Salz auf genau
-    /// diese Nullen) - aber die Spezifikation schreibt „256 zero-bits as HKDF
-    /// salt", und wer hier abkürzt, muss beim nächsten Leser erklären, warum
-    /// er etwas anderes tut als der Text.
+    /// The salt is 32 zero bytes and not nothing. HKDF treats both the same
+    /// (RFC 5869, section 2.2 sets a missing salt to exactly these zeros) - but
+    /// the specification writes "256 zero-bits as HKDF salt", and whoever takes
+    /// a shortcut here has to explain to the next reader why they do something
+    /// other than the text.
     /// </remarks>
     public static (Byte[] Key, Byte[] AuthKey, Byte[] Iv) Material(Byte[] messageKey)
     {
 
         if (messageKey.Length != KeyLength)
-            throw new ArgumentException($"Der Nachrichtenschlüssel hat {KeyLength} Byte, nicht {messageKey.Length}.",
+            throw new ArgumentException($"The message key has {KeyLength} bytes, not {messageKey.Length}.",
                                         nameof(messageKey));
 
         var material = HKDF.DeriveKey(HashAlgorithmName.SHA256,
@@ -112,14 +110,14 @@ public static class OmemoPayloadCipher
     #region Encrypt(plaintext) / Decrypt(ciphertext, keyAndHmac)
 
     /// <summary>
-    /// Verschlüsselt den Klartext mit einem frisch gezogenen Schlüssel.
+    /// Encrypts the plaintext with a freshly drawn key.
     /// </summary>
     public static OmemoPayload Encrypt(Byte[] plaintext)
         => Encrypt(plaintext, RandomNumberGenerator.GetBytes(KeyLength));
 
     /// <summary>
-    /// Verschlüsselt mit einem gegebenen Schlüssel - für Prüfvektoren und für
-    /// Aufrufer, die den Schlüssel selbst verwalten.
+    /// Encrypts with a given key - for test vectors and for callers who manage
+    /// the key themselves.
     /// </summary>
     public static OmemoPayload Encrypt(Byte[] plaintext, Byte[] messageKey)
     {
@@ -131,9 +129,9 @@ public static class OmemoPayloadCipher
 
         var ciphertext = aes.EncryptCbc(plaintext, iv, PaddingMode.PKCS7);
 
-        // Encrypt-then-MAC: gerechnet wird über den Geheimtext, nicht über den
-        // Klartext. Andersherum müsste der Empfänger entschlüsseln, bevor er
-        // weiss, ob er darf.
+        // Encrypt-then-MAC: what is computed over is the ciphertext, not the
+        // plaintext. The other way round the recipient would have to decrypt
+        // before knowing whether they may.
         var hmac = HMACSHA256.HashData(authKey, ciphertext)[..HmacLength];
 
         return new OmemoPayload(ciphertext, [.. messageKey, .. hmac]);
@@ -141,36 +139,36 @@ public static class OmemoPayloadCipher
     }
 
     /// <summary>
-    /// Entschlüsselt die Nutzlast - oder wirft, wenn der HMAC nicht stimmt.
+    /// Decrypts the payload - or throws when the HMAC is not right.
     /// </summary>
     /// <remarks>
-    /// Verglichen wird in fester Zeit. Ein Vergleich, der beim ersten
-    /// abweichenden Byte aufhört, verrät über seine Dauer, wie weit der
-    /// Angreifer schon gekommen ist - und mit 16 Byte à 256 Möglichkeiten
-    /// wären das 4096 Versuche statt 2¹²⁸.
+    /// The comparison is in fixed time. A comparison that stops at the first
+    /// differing byte betrays, by its duration, how far the attacker has
+    /// already got - and with 16 bytes of 256 possibilities each that would be
+    /// 4096 attempts instead of 2¹²⁸.
     /// </remarks>
     public static Byte[] Decrypt(Byte[] ciphertext, Byte[] keyAndHmac)
     {
 
         if (keyAndHmac.Length != KeyLength + HmacLength)
             throw new ArgumentException(
-                      $"Schlüssel und HMAC haben zusammen {KeyLength + HmacLength} Byte, " +
-                      $"nicht {keyAndHmac.Length}.",
+                      $"Key and HMAC have {KeyLength + HmacLength} bytes between them, " +
+                      $"not {keyAndHmac.Length}.",
                       nameof(keyAndHmac));
 
         var (key, authKey, iv) = Material(keyAndHmac[..KeyLength]);
 
-        var erwartet = HMACSHA256.HashData(authKey, ciphertext)[..HmacLength];
+        var expected = HMACSHA256.HashData(authKey, ciphertext)[..HmacLength];
 
-        if (!CryptographicOperations.FixedTimeEquals(erwartet, keyAndHmac[KeyLength..]))
+        if (!CryptographicOperations.FixedTimeEquals(expected, keyAndHmac[KeyLength..]))
             throw new CryptographicException(
-                      "Der HMAC der Nutzlast stimmt nicht - sie wurde unterwegs verändert.");
+                      "The HMAC of the payload is not right - it was altered on the way.");
 
-        // Der Schlüssel muss an das Objekt, nicht bloss der IV an den Aufruf:
-        // Ein frisch erzeugtes Aes hat einen zufälligen Schlüssel, und
-        // DecryptCbc nimmt ihn stillschweigend. Das entschlüsselte dann mit
-        // einem Schlüssel, den niemand kennt - und weil der HMAC vorher
-        // stimmte, sah alles richtig aus, bis das Padding scheiterte.
+        // The key has to go to the object, not merely the IV to the call: a
+        // freshly created Aes has a random key, and DecryptCbc takes it
+        // silently. That then decrypted with a key nobody knows - and because
+        // the HMAC was right beforehand, everything looked correct until the
+        // padding failed.
         using var aes = Aes.Create();
         aes.Key = key;
 

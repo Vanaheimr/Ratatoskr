@@ -28,20 +28,20 @@ using Org.BouncyCastle.Math.EC.Rfc8032;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Ein Curve25519-Schlüsselpaar: 32 Byte geheim, 32 Byte öffentlich.
+/// A Curve25519 key pair: 32 bytes secret, 32 bytes public.
 /// </summary>
 /// <remarks>
-/// Der öffentliche Teil ist die Montgomery-u-Koordinate, wie sie über die
-/// Leitung geht (RFC 7748). Für die Signatur wird sie in die Edwards-Form
-/// umgerechnet - siehe <see cref="Curve25519.Verify"/>.
+/// The public part is the Montgomery u coordinate as it goes over the wire
+/// (RFC 7748). For the signature it is converted into the Edwards form - see
+/// <see cref="Curve25519.Verify"/>.
 /// </remarks>
 public sealed class Curve25519KeyPair
 {
 
-    /// <summary>Der geheime Teil, bereits geklammert („clamped").</summary>
+    /// <summary>The secret part, already clamped.</summary>
     public Byte[] PrivateKey { get; }
 
-    /// <summary>Der öffentliche Teil, 32 Byte Montgomery-u.</summary>
+    /// <summary>The public part, 32 bytes of Montgomery u.</summary>
     public Byte[] PublicKey { get; }
 
     internal Curve25519KeyPair(Byte[] privateKey, Byte[] publicKey)
@@ -53,80 +53,78 @@ public sealed class Curve25519KeyPair
 }
 
 /// <summary>
-/// Curve25519 für OMEMO: Schlüsselvereinbarung nach RFC 7748 und Signaturen
-/// nach XEdDSA.
+/// Curve25519 for OMEMO: key agreement per RFC 7748 and signatures per XEdDSA.
 /// </summary>
 /// <remarks>
-/// <b>Warum XEdDSA und nicht einfach Ed25519?</b> OMEMO hat je Identität genau
-/// <i>einen</i> Schlüssel, und der muss beides können: einen gemeinsamen
-/// Geheimwert aushandeln (das kann nur die Montgomery-Form) und den Signed
-/// PreKey unterschreiben (das kann nur die Edwards-Form). XEdDSA rechnet den
-/// Schlüssel für die Signatur um, statt einen zweiten zu verlangen - denn ein
-/// zweiter Schlüssel wäre ein zweiter Fingerabdruck, und der Mensch, der ihn
-/// vergleichen soll, hat nur einen im Kopf.
+/// <b>Why XEdDSA and not simply Ed25519?</b> OMEMO has exactly <i>one</i> key
+/// per identity, and it has to be able to do both: agree on a shared secret
+/// (only the Montgomery form can do that) and sign the signed prekey (only the
+/// Edwards form can do that). XEdDSA converts the key for the signature instead
+/// of demanding a second one - for a second key would be a second fingerprint,
+/// and the human being who is supposed to compare it has only one in their
+/// head.
 ///
-/// Gerechnet wird mit BouncyCastle. Die eigentliche Kurvenarithmetik selbst zu
-/// schreiben wäre der eine Ort, an dem ein Fehler nichts kostet, bis er alles
-/// kostet: Eine falsche Multiplikation liefert kein falsches Ergebnis, sondern
-/// ein plausibles.
+/// The computing is done with BouncyCastle. To write the actual curve
+/// arithmetic oneself would be the one place where an error costs nothing until
+/// it costs everything: a wrong multiplication delivers not a wrong result but
+/// a plausible one.
 /// </remarks>
 public static class Curve25519
 {
 
     #region Data
 
-    /// <summary>Länge eines Schlüssels in Byte.</summary>
+    /// <summary>Length of a key in bytes.</summary>
     public const Int32 KeyLength        = 32;
 
-    /// <summary>Länge einer Signatur in Byte.</summary>
+    /// <summary>Length of a signature in bytes.</summary>
     public const Int32 SignatureLength  = 64;
 
-    /// <summary>Der Primkörper: 2^255 - 19.</summary>
+    /// <summary>The prime field: 2^255 - 19.</summary>
     private static readonly BigInteger P = BigInteger.Pow(2, 255) - 19;
 
-    /// <summary>Die Gruppenordnung: 2^252 + 27742317777372353535851937790883648493.</summary>
+    /// <summary>The group order: 2^252 + 27742317777372353535851937790883648493.</summary>
     private static readonly BigInteger Q = BigInteger.Pow(2, 252) +
                                            BigInteger.Parse("27742317777372353535851937790883648493");
 
     #endregion
 
-    #region Schlüssel
+    #region Keys
 
     /// <summary>
-    /// Ein neues Schlüsselpaar aus dem Zufallsgenerator des Betriebssystems.
+    /// A new key pair from the random generator of the operating system.
     /// </summary>
     public static Curve25519KeyPair GenerateKeyPair()
         => KeyPairFromPrivate(RandomNumberGenerator.GetBytes(KeyLength));
 
     /// <summary>
-    /// Das Schlüsselpaar zu einem gegebenen geheimen Teil - für gespeicherte
-    /// Schlüssel und für Prüfvektoren.
+    /// The key pair for a given secret part - for stored keys and for test
+    /// vectors.
     /// </summary>
     /// <remarks>
-    /// Der geheime Teil wird <b>geklammert</b> abgelegt (RFC 7748, Abschnitt
-    /// 5): die untersten drei Bits gelöscht, das oberste gelöscht, das
-    /// zweitoberste gesetzt. Das gehört hierhin und nicht erst in die
-    /// Vereinbarung: XEdDSA rechnet mit demselben Skalar weiter, und ein
-    /// ungeklammerter ergäbe eine Signatur, die zum eigenen öffentlichen
-    /// Schlüssel nicht passt.
+    /// The secret part is stored <b>clamped</b> (RFC 7748, section 5): the
+    /// lowest three bits cleared, the top one cleared, the second-from-top one
+    /// set. That belongs here and not only in the agreement: XEdDSA goes on
+    /// computing with the same scalar, and an unclamped one would yield a
+    /// signature that does not fit one's own public key.
     /// </remarks>
     public static Curve25519KeyPair KeyPairFromPrivate(Byte[] privateKey)
     {
 
         if (privateKey.Length != KeyLength)
-            throw new ArgumentException($"Ein Curve25519-Schlüssel hat {KeyLength} Byte, nicht {privateKey.Length}.",
+            throw new ArgumentException($"A Curve25519 key has {KeyLength} bytes, not {privateKey.Length}.",
                                         nameof(privateKey));
 
-        var geklammert = (Byte[]) privateKey.Clone();
+        var clamped = (Byte[]) privateKey.Clone();
 
-        geklammert[0]  &= 248;
-        geklammert[31] &= 127;
-        geklammert[31] |= 64;
+        clamped[0]  &= 248;
+        clamped[31] &= 127;
+        clamped[31] |= 64;
 
-        var oeffentlich = new Byte[KeyLength];
-        X25519.ScalarMultBase(geklammert, 0, oeffentlich, 0);
+        var publicKey = new Byte[KeyLength];
+        X25519.ScalarMultBase(clamped, 0, publicKey, 0);
 
-        return new Curve25519KeyPair(geklammert, oeffentlich);
+        return new Curve25519KeyPair(clamped, publicKey);
 
     }
 
@@ -135,31 +133,30 @@ public static class Curve25519
     #region Agree(ownPrivateKey, otherPublicKey)
 
     /// <summary>
-    /// Der gemeinsame Geheimwert nach RFC 7748 - 32 Byte.
+    /// The shared secret per RFC 7748 - 32 bytes.
     /// </summary>
     /// <remarks>
-    /// Ein Ergebnis aus lauter Nullen wird abgewiesen. Es entsteht, wenn die
-    /// Gegenseite einen Punkt kleiner Ordnung schickt, und ist dann kein
-    /// Geheimnis, sondern eine Zahl, die der Angreifer vorher kennt. RFC 7748,
-    /// Abschnitt 6.1 stellt die Prüfung frei; frei ist sie nur dort, wo der
-    /// öffentliche Schlüssel aus einer vertrauenswürdigen Quelle stammt - ein
-    /// OMEMO-Bundle kommt vom Server.
+    /// A result of nothing but zeros is refused. It comes about when the other
+    /// side sends a point of small order, and is then no secret but a number
+    /// the attacker knows beforehand. RFC 7748, section 6.1 leaves the check
+    /// optional; optional it is only where the public key comes from a
+    /// trustworthy source - an OMEMO bundle comes from the server.
     /// </remarks>
     public static Byte[] Agree(Byte[] ownPrivateKey, Byte[] otherPublicKey)
     {
 
         if (ownPrivateKey.Length  != KeyLength ||
             otherPublicKey.Length != KeyLength)
-            throw new ArgumentException($"Curve25519-Schlüssel haben {KeyLength} Byte.");
+            throw new ArgumentException($"Curve25519 keys have {KeyLength} bytes.");
 
-        var gemeinsam = new Byte[KeyLength];
+        var shared = new Byte[KeyLength];
 
-        if (!X25519.CalculateAgreement(ownPrivateKey, 0, otherPublicKey, 0, gemeinsam, 0))
+        if (!X25519.CalculateAgreement(ownPrivateKey, 0, otherPublicKey, 0, shared, 0))
             throw new CryptographicException(
-                      "Die Schlüsselvereinbarung ergab lauter Nullen - die Gegenstelle hat einen " +
-                      "Punkt kleiner Ordnung geschickt.");
+                      "The key agreement yielded nothing but zeros - the other side has sent a " +
+                      "point of small order.");
 
-        return gemeinsam;
+        return shared;
 
     }
 
@@ -168,76 +165,75 @@ public static class Curve25519
     #region Sign(privateKey, message) / Verify(publicKey, message, signature)
 
     /// <summary>
-    /// Unterschreibt eine Nachricht mit dem Montgomery-Schlüssel (XEdDSA).
+    /// Signs a message with the Montgomery key (XEdDSA).
     /// </summary>
     /// <remarks>
-    /// Der Ablauf stammt aus Signals XEdDSA-Papier, Abschnitt 2.4:
+    /// The procedure comes from Signal's XEdDSA paper, section 2.4:
     /// <list type="number">
-    /// <item>Aus dem Skalar <c>k</c> das Edwards-Paar bestimmen und das
-    ///       Vorzeichen so wählen, dass der öffentliche Punkt es nicht trägt.</item>
-    /// <item><c>r</c> aus <c>hash₁(a ‖ M ‖ Z)</c>, mit 64 zufälligen Byte
+    /// <item>Determine the Edwards pair from the scalar <c>k</c> and choose the
+    ///       sign so that the public point does not carry it.</item>
+    /// <item><c>r</c> from <c>hash₁(a ‖ M ‖ Z)</c>, with 64 random bytes
     ///       <c>Z</c>.</item>
     /// <item><c>R = rB</c>, <c>h = SHA-512(R ‖ A ‖ M)</c>,
     ///       <c>s = r + h·a</c>.</item>
     /// </list>
     ///
-    /// Das <c>Z</c> ist nicht Zierde: Ohne den Zufallsanteil wäre <c>r</c>
-    /// allein vom Schlüssel und der Nachricht bestimmt, und zwei Signaturen
-    /// über dieselbe Nachricht wären Byte für Byte gleich. Das ist bei Ed25519
-    /// Absicht und hier eine Preisgabe - der Signed PreKey wird über seine
-    /// Lebenszeit mehrfach unterschrieben.
+    /// The <c>Z</c> is no decoration: without the random part <c>r</c> would be
+    /// determined by the key and the message alone, and two signatures over the
+    /// same message would be equal byte for byte. With Ed25519 that is
+    /// deliberate and here it is a disclosure - the signed prekey is signed
+    /// several times over its lifetime.
     ///
-    /// Das <c>hash₁</c> ist SHA-512 mit dem Präfix <c>0xFE</c> gefolgt von 31
-    /// Byte <c>0xFF</c>. Der Präfix trennt diese Hash-Verwendung von der in
-    /// Ed25519 selbst - ohne ihn liessen sich die beiden Verfahren gegenseitig
-    /// als Orakel benutzen.
+    /// The <c>hash₁</c> is SHA-512 with the prefix <c>0xFE</c> followed by 31
+    /// bytes of <c>0xFF</c>. The prefix separates this use of the hash from the
+    /// one in Ed25519 itself - without it the two procedures could be used
+    /// against each other as an oracle.
     /// </remarks>
     public static Byte[] Sign(Byte[] privateKey, Byte[] message)
     {
 
-        var (a, aPunkt) = EdwardsKeyPair(privateKey);
+        var (a, aPoint) = EdwardsKeyPair(privateKey);
 
         var z = RandomNumberGenerator.GetBytes(64);
 
         // hash₁(a ‖ M ‖ Z)
-        var praefix = new Byte[32];
-        praefix[0] = 0xFE;
+        var prefix = new Byte[32];
+        prefix[0] = 0xFE;
         for (var i = 1; i < 32; i++)
-            praefix[i] = 0xFF;
+            prefix[i] = 0xFF;
 
-        var r = ReduceMod(SHA512.HashData([.. praefix, .. ToLittleEndian(a), .. message, .. z]), Q);
+        var r = ReduceMod(SHA512.HashData([.. prefix, .. ToLittleEndian(a), .. message, .. z]), Q);
 
-        var gross_r = Ed25519Math.ScalarMultBaseEncoded(r);
+        var bigR = Ed25519Math.ScalarMultBaseEncoded(r);
 
-        var h = ReduceMod(SHA512.HashData([.. gross_r, .. aPunkt, .. message]), Q);
+        var h = ReduceMod(SHA512.HashData([.. bigR, .. aPoint, .. message]), Q);
         var s = (r + h * a) % Q;
 
-        Byte[] signatur = [.. gross_r, .. ToLittleEndian(s)];
+        Byte[] signature = [.. bigR, .. ToLittleEndian(s)];
 
-        // Die eigene Signatur prüfen, bevor sie das Haus verlässt - mit dem
-        // fremden Prüfer aus BouncyCastle und nicht mit der Rechnung von
-        // oben. Das kostet eine Verifikation und macht aus jedem Rechenfehler
-        // hier eine Ausnahme statt einer Unterschrift, die niemand
-        // nachvollziehen kann. Ein Signed PreKey mit falscher Signatur fällt
-        // sonst erst bei der Gegenstelle auf, und dort sieht er aus wie ein
-        // Angriff.
-        if (!Verify(KeyPairFromPrivate(privateKey).PublicKey, message, signatur))
+        // Check one's own signature before it leaves the house - with the
+        // foreign verifier from BouncyCastle and not with the computation
+        // above. That costs one verification and turns every computational
+        // error here into an exception instead of a signature nobody can make
+        // sense of. A signed prekey with a wrong signature otherwise shows up
+        // only at the other side, and there it looks like an attack.
+        if (!Verify(KeyPairFromPrivate(privateKey).PublicKey, message, signature))
             throw new CryptographicException(
-                      "Die erzeugte XEdDSA-Signatur prüft sich selbst nicht - " +
-                      "hier stimmt die Rechnung nicht.");
+                      "The XEdDSA signature produced does not verify against itself - " +
+                      "the computation here is not right.");
 
-        return signatur;
+        return signature;
 
     }
 
     /// <summary>
-    /// Prüft eine XEdDSA-Signatur gegen den Montgomery-Schlüssel.
+    /// Checks an XEdDSA signature against the Montgomery key.
     /// </summary>
     /// <remarks>
-    /// Geprüft wird mit dem gewöhnlichen Ed25519-Verfahren aus BouncyCastle,
-    /// nachdem der öffentliche Schlüssel umgerechnet wurde. Das ist keine
-    /// Bequemlichkeit, sondern die Aussage von XEdDSA: Eine XEdDSA-Signatur
-    /// <b>ist</b> eine Ed25519-Signatur zum umgerechneten Schlüssel.
+    /// It is checked with the ordinary Ed25519 procedure from BouncyCastle,
+    /// after the public key has been converted. That is no convenience but the
+    /// statement of XEdDSA: an XEdDSA signature <b>is</b> an Ed25519 signature
+    /// for the converted key.
     /// </remarks>
     public static Boolean Verify(Byte[] publicKey, Byte[] message, Byte[] signature)
     {
@@ -257,20 +253,20 @@ public static class Curve25519
     }
 
     /// <summary>
-    /// Prüft eine Signatur gegen den Schlüssel <b>in Ed25519-Form</b>.
+    /// Checks a signature against the key <b>in Ed25519 form</b>.
     /// </summary>
     /// <remarks>
-    /// <b>Dieselbe Frage, zwei Schreibweisen des Schlüssels - und das ist die
-    /// Falle dieser Erweiterung.</b> XEP-0384 überträgt den IdentityKey immer
-    /// in Ed25519-Form, gerechnet wird der Diffie-Hellman aber in
-    /// Montgomery-Form. Wer die eine Fassung in die Methode für die andere
-    /// gibt, bekommt keine Fehlermeldung: Beides sind 32 Byte, die Umrechnung
-    /// läuft durch, und heraus kommt ein Schlüssel, zu dem keine Signatur
-    /// passt. Beim ersten Schreiben dieser Zeilen ist mir genau das passiert.
+    /// <b>The same question, two spellings of the key - and that is the trap of
+    /// this extension.</b> XEP-0384 always transfers the identity key in
+    /// Ed25519 form, but the Diffie-Hellman is computed in Montgomery form.
+    /// Whoever gives the one version to the method for the other gets no error
+    /// message: both are 32 bytes, the conversion runs through, and out comes a
+    /// key no signature fits. When first writing these lines that is exactly
+    /// what happened to me.
     ///
-    /// Deshalb zwei Methoden mit verschiedenen Namen statt einer mit einem
-    /// Schalter. Ein <c>Boolean istEdwards</c> wäre an der Aufrufstelle
-    /// unsichtbar, und die Aufrufstelle ist der Ort, an dem man sich irrt.
+    /// That is why there are two methods with different names instead of one
+    /// with a switch. A <c>Boolean isEdwards</c> would be invisible at the call
+    /// site, and the call site is the place where one goes wrong.
     /// </remarks>
     public static Boolean VerifyEdwards(Byte[] edwardsPublicKey, Byte[] message, Byte[] signature)
     {
@@ -284,9 +280,9 @@ public static class Curve25519
         }
         catch (Exception)
         {
-            // Ein unbrauchbarer Schlüssel ist keine gültige Signatur, und
-            // keine Ausnahme des Aufrufers: Beides heisst „nicht von diesem
-            // Absender", und der Unterschied ginge nur an den Angreifer.
+            // An unusable key is no valid signature, and no exception for the
+            // caller: both mean "not from this sender", and the difference
+            // would go only to the attacker.
             return false;
         }
 
@@ -297,37 +293,37 @@ public static class Curve25519
     #region MontgomeryToEdwards(publicKey)
 
     /// <summary>
-    /// Rechnet die Montgomery-u-Koordinate in die Edwards-y-Koordinate um:
+    /// Converts the Montgomery u coordinate into the Edwards y coordinate:
     /// <c>y = (u - 1) / (u + 1) mod p</c>.
     /// </summary>
     /// <remarks>
-    /// Das Vorzeichenbit bleibt gelöscht - genau das stellt
-    /// <see cref="EdwardsKeyPair"/> beim Unterschreiben sicher. Die beiden
-    /// Kurven sind dieselbe Kurve in anderer Schreibweise, und diese Formel
-    /// ist der Übersetzer; sie steht in RFC 7748, Abschnitt 4.1.
+    /// The sign bit stays cleared - precisely that is what
+    /// <see cref="EdwardsKeyPair"/> makes sure of when signing. The two curves
+    /// are the same curve in another spelling, and this formula is the
+    /// translator; it stands in RFC 7748, section 4.1.
     ///
-    /// Geprüft wird sie an einem Punkt, den beide Seiten kennen: Der
-    /// X25519-Basispunkt <c>u = 9</c> muss den Ed25519-Basispunkt ergeben.
+    /// It is checked at a point both sides know: the X25519 base point
+    /// <c>u = 9</c> has to yield the Ed25519 base point.
     /// </remarks>
     internal static Byte[] MontgomeryToEdwards(Byte[] publicKey)
     {
 
-        var roh = (Byte[]) publicKey.Clone();
+        var raw = (Byte[]) publicKey.Clone();
 
-        // RFC 7748, Abschnitt 5: Das oberste Bit der u-Koordinate wird beim
-        // Lesen verworfen. Wer es stehen liesse, rechnete mit einer Zahl, die
-        // die Gegenstelle gar nicht gemeint hat.
-        roh[31] &= 127;
+        // RFC 7748, section 5: the top bit of the u coordinate is discarded on
+        // reading. Whoever left it standing would compute with a number the
+        // other side did not mean at all.
+        raw[31] &= 127;
 
-        var u = new BigInteger(roh, isUnsigned: true, isBigEndian: false);
+        var u = new BigInteger(raw, isUnsigned: true, isBigEndian: false);
 
-        var zaehler = ((u - 1)                                  % P + P) % P;
-        var nenner  = BigInteger.ModPow((u + 1) % P, P - 2, P);   // Inverses über den kleinen Satz von Fermat
+        var numerator   = ((u - 1)                                  % P + P) % P;
+        var denominator = BigInteger.ModPow((u + 1) % P, P - 2, P);   // inverse by Fermat's little theorem
 
-        if (nenner.IsZero)
-            throw new CryptographicException("Der öffentliche Schlüssel lässt sich nicht umrechnen (u = -1).");
+        if (denominator.IsZero)
+            throw new CryptographicException("The public key cannot be converted (u = -1).");
 
-        return ToLittleEndian(zaehler * nenner % P);
+        return ToLittleEndian(numerator * denominator % P);
 
     }
 
@@ -336,54 +332,53 @@ public static class Curve25519
     #region EdwardsToMontgomery(publicKey)
 
     /// <summary>
-    /// Die Gegenrichtung: <c>u = (1 + y) / (1 - y) mod p</c>.
+    /// The opposite direction: <c>u = (1 + y) / (1 - y) mod p</c>.
     /// </summary>
     /// <remarks>
-    /// Gebraucht für fremde Bundles: XEP-0384 überträgt den IdentityKey
-    /// <b>immer</b> in Ed25519-Form („The public key is ALWAYS transferred in
-    /// its Ed25519 form"), gerechnet wird damit aber ein Diffie-Hellman, und
-    /// das kann nur die Montgomery-Form.
+    /// Needed for foreign bundles: XEP-0384 <b>always</b> transfers the identity
+    /// key in Ed25519 form ("The public key is ALWAYS transferred in its Ed25519
+    /// form"), but what is computed with it is a Diffie-Hellman, and only the
+    /// Montgomery form can do that.
     ///
-    /// Das Vorzeichenbit wird verworfen, und das ist kein Verlust: Die
-    /// u-Koordinate kennt es nicht, und beide Punkte mit demselben y ergeben
-    /// denselben gemeinsamen Geheimwert. Genau deshalb ist der Rückweg aus
-    /// <see cref="MontgomeryToEdwards"/> überhaupt eindeutig genug, um zu
-    /// tragen.
+    /// The sign bit is discarded, and that is no loss: the u coordinate does not
+    /// know it, and both points with the same y yield the same shared secret.
+    /// Precisely for that reason the way back out of
+    /// <see cref="MontgomeryToEdwards"/> is unambiguous enough to carry at all.
     /// </remarks>
     public static Byte[] EdwardsToMontgomery(Byte[] publicKey)
     {
 
         if (publicKey.Length != KeyLength)
-            throw new ArgumentException($"Ein Ed25519-Schlüssel hat {KeyLength} Byte, nicht {publicKey.Length}.",
+            throw new ArgumentException($"An Ed25519 key has {KeyLength} bytes, not {publicKey.Length}.",
                                         nameof(publicKey));
 
-        var roh = (Byte[]) publicKey.Clone();
-        roh[31] &= 127;   // das Vorzeichenbit von x gehört nicht zu y
+        var raw = (Byte[]) publicKey.Clone();
+        raw[31] &= 127;   // the sign bit of x does not belong to y
 
-        var y = new BigInteger(roh, isUnsigned: true, isBigEndian: false);
+        var y = new BigInteger(raw, isUnsigned: true, isBigEndian: false);
 
-        var nenner = BigInteger.ModPow(((1 - y) % P + P) % P, P - 2, P);
+        var denominator = BigInteger.ModPow(((1 - y) % P + P) % P, P - 2, P);
 
-        if (nenner.IsZero)
-            throw new CryptographicException("Der öffentliche Schlüssel lässt sich nicht umrechnen (y = 1).");
+        if (denominator.IsZero)
+            throw new CryptographicException("The public key cannot be converted (y = 1).");
 
-        return ToLittleEndian(((1 + y) % P + P) % P * nenner % P);
+        return ToLittleEndian(((1 + y) % P + P) % P * denominator % P);
 
     }
 
     #endregion
 
-    #region Hilfsfunktionen
+    #region Helper functions
 
     /// <summary>
-    /// Das Edwards-Paar zum Montgomery-Skalar: der Skalar mit passendem
-    /// Vorzeichen und der zugehörige öffentliche Punkt ohne Vorzeichenbit.
+    /// The Edwards pair for the Montgomery scalar: the scalar with a fitting
+    /// sign and the public point belonging to it, without a sign bit.
     /// </summary>
     /// <remarks>
-    /// XEdDSA, Abschnitt 2.4: <c>E = kB</c>; trägt <c>E</c> das Vorzeichenbit,
-    /// wird mit <c>-k</c> weitergerechnet. Danach passt der Skalar zu einem
-    /// öffentlichen Punkt ohne Vorzeichen - und genau den bekommt der Prüfer
-    /// aus der u-Koordinate, die kein Vorzeichen kennt.
+    /// XEdDSA, section 2.4: <c>E = kB</c>; if <c>E</c> carries the sign bit, the
+    /// computation goes on with <c>-k</c>. Afterwards the scalar fits a public
+    /// point without a sign - and precisely that is what the verifier gets from
+    /// the u coordinate, which knows no sign.
     /// </remarks>
     private static (BigInteger Scalar, Byte[] PublicPoint) EdwardsKeyPair(Byte[] privateKey)
     {
@@ -393,40 +388,40 @@ public static class Curve25519
         var e = Ed25519Math.ScalarMultBaseEncoded(
                     new BigInteger(k, isUnsigned: true, isBigEndian: false));
 
-        var vorzeichen  = (e[31] & 0x80) != 0;
+        var sign   = (e[31] & 0x80) != 0;
 
-        var punkt       = (Byte[]) e.Clone();
-        punkt[31] &= 0x7F;
+        var point  = (Byte[]) e.Clone();
+        point[31] &= 0x7F;
 
-        // Erst reduzieren, dann negieren. Ein geklammerter Skalar ist knapp
-        // 2^255 gross und damit weit über der Gruppenordnung von etwa 2^252 -
-        // ein blosses (Q - k) % Q wäre negativ, und C# behält bei % das
-        // Vorzeichen. Die Rechnung ging dann nicht falsch aus, sondern gar
-        // nicht: Die Kodierung wirft.
+        // First reduce, then negate. A clamped scalar is nearly 2^255 large and
+        // thus far above the group order of about 2^252 - a mere (Q - k) % Q
+        // would be negative, and C# keeps the sign with %. The computation then
+        // did not come out wrong but did not come out at all: the encoding
+        // throws.
         //
-        // Getroffen hat es genau die Hälfte aller Schlüssel, nämlich die mit
-        // gesetztem Vorzeichenbit. Ein Test mit einem einzigen erzeugten
-        // Schlüssel wäre in jedem zweiten Lauf grün gewesen.
-        var skalar      = new BigInteger(k, isUnsigned: true, isBigEndian: false) % Q;
+        // It hit exactly half of all keys, namely those with the sign bit set. A
+        // test with a single generated key would have been green in every second
+        // run.
+        var scalar = new BigInteger(k, isUnsigned: true, isBigEndian: false) % Q;
 
-        return (vorzeichen ? (Q - skalar) % Q : skalar, punkt);
+        return (sign ? (Q - scalar) % Q : scalar, point);
 
     }
 
-    /// <summary>Ein Hash-Ergebnis als Zahl modulo <paramref name="modulus"/>.</summary>
+    /// <summary>A hash result as a number modulo <paramref name="modulus"/>.</summary>
     private static BigInteger ReduceMod(Byte[] hash, BigInteger modulus)
         => new BigInteger(hash, isUnsigned: true, isBigEndian: false) % modulus;
 
-    /// <summary>Eine Zahl als 32 Byte, kleinstwertiges zuerst.</summary>
+    /// <summary>A number as 32 bytes, least significant first.</summary>
     private static Byte[] ToLittleEndian(BigInteger value)
     {
 
         var bytes  = value.ToByteArray(isUnsigned: true, isBigEndian: false);
-        var feld   = new Byte[32];
+        var field  = new Byte[32];
 
-        Array.Copy(bytes, feld, Math.Min(bytes.Length, 32));
+        Array.Copy(bytes, field, Math.Min(bytes.Length, 32));
 
-        return feld;
+        return field;
 
     }
 

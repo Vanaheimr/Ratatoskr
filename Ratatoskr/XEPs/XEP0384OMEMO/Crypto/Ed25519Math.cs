@@ -24,68 +24,65 @@ using System.Numerics;
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 /// <summary>
-/// Punktarithmetik auf Ed25519 - genau so viel davon, wie XEdDSA braucht:
-/// <c>kB</c> für einen frei gewählten Skalar.
+/// Point arithmetic on Ed25519 - exactly as much of it as XEdDSA needs:
+/// <c>kB</c> for a freely chosen scalar.
 /// </summary>
 /// <remarks>
-/// <b>Warum das hier steht, obwohl BouncyCastle Ed25519 kann.</b> BouncyCastle
-/// gibt öffentlich nur <c>Sign</c> und <c>Verify</c> heraus; sein
-/// <c>ScalarMultBase</c> ist intern. Beide öffentlichen Wege leiten den Skalar
-/// aus einem Seed ab (SHA-512, geklammert) - XEdDSA muss aber mit einem
-/// <i>gegebenen</i> Skalar rechnen: dem Identitätsschlüssel und dem Nonce.
+/// <b>Why this stands here although BouncyCastle can do Ed25519.</b>
+/// BouncyCastle gives out publicly only <c>Sign</c> and <c>Verify</c>; its
+/// <c>ScalarMultBase</c> is internal. Both public routes derive the scalar from
+/// a seed (SHA-512, clamped) - XEdDSA, however, has to compute with a
+/// <i>given</i> scalar: the identity key and the nonce.
 ///
-/// <b>Zwei Auswege, die verworfen wurden</b>, und der Grund gehört
-/// aufgeschrieben, weil beide zunächst verlockend aussehen:
+/// <b>Two ways out that were discarded</b>, and the reason belongs written
+/// down, because both look tempting at first:
 ///
 /// <list type="number">
-/// <item><b>Den Nonce aus einem Seed über BouncyCastles
-/// <c>GeneratePublicKey</c> erzeugen.</b> Dann wäre <c>r</c> geklammert:
-/// ein Vielfaches von 8 in einem festen Fenster, also rund vier Bit
-/// vorhersagbar. Genau darauf zielt der Angriff auf verzerrte Nonces (Hidden
-/// Number Problem) - wenige hundert Signaturen genügen, und der
-/// Identitätsschlüssel fällt. <b>Ein verzerrter Nonce ist kein kleiner
-/// Schönheitsfehler, sondern der übliche Weg, wie solche Schlüssel gestohlen
-/// werden.</b></item>
-/// <item><b><c>R</c> über <c>X25519.ScalarMultBase</c> rechnen und die
-/// u-Koordinate umrechnen.</b> Scheitert an derselben Klammerung - und
-/// zusätzlich daran, dass die u-Koordinate das Vorzeichen von x nicht kennt,
-/// das die Signatur aber festlegt.</item>
+/// <item><b>Producing the nonce from a seed by way of BouncyCastle's
+/// <c>GeneratePublicKey</c>.</b> Then <c>r</c> would be clamped: a multiple of
+/// 8 in a fixed window, so about four bits predictable. That is precisely what
+/// the attack on biased nonces (hidden number problem) aims at - a few hundred
+/// signatures suffice, and the identity key falls. <b>A biased nonce is no
+/// small blemish but the usual way such keys are stolen.</b></item>
+/// <item><b>Computing <c>R</c> by way of <c>X25519.ScalarMultBase</c> and
+/// converting the u coordinate.</b> Founders on the same clamping - and on top
+/// of that on the u coordinate not knowing the sign of x, which the signature
+/// does lay down.</item>
 /// </list>
 ///
-/// Bleibt: selbst rechnen. Die Formeln stehen in RFC 8032, Abschnitt 5.1.4
-/// und sind für diese Kurve <b>vollständig</b> - sie haben keine Sonderfälle,
-/// über die man stolpern könnte. Geprüft wird gegen die veröffentlichten
-/// Vektoren aus RFC 8032, Abschnitt 7.1: Aus dem Seed dieselbe Skalarbildung
-/// wie Ed25519, und <c>sB</c> muss den dort abgedruckten öffentlichen
-/// Schlüssel ergeben. Das ist eine Prüfung gegen fremde Zahlen und nicht gegen
-/// die eigene Rechnung.
+/// What remains: compute it oneself. The formulas stand in RFC 8032,
+/// section 5.1.4 and are <b>complete</b> for this curve - they have no special
+/// cases one could stumble over. It is checked against the published vectors
+/// from RFC 8032, section 7.1: from the seed the same scalar derivation as
+/// Ed25519, and <c>sB</c> has to yield the public key printed there. That is a
+/// check against foreign numbers and not against one's own computation.
 ///
-/// <b>Was diese Rechnung nicht ist: gehärtet gegen Zeitmessung.</b>
-/// <see cref="BigInteger"/> rechnet in variabler Zeit, und die Schleife unten
-/// verzweigt über die Bits des Skalars. Wer die Laufzeit dieses Prozesses fein
-/// genug messen kann, erfährt etwas über den Schlüssel - das setzt Zugriff auf
-/// denselben Rechner voraus. Für einen Client, der auf dem Gerät seines
-/// Benutzers läuft, ist das die richtige Reihenfolge der Sorgen; für einen
-/// Server, der fremde Anfragen beantwortet, wäre es die falsche. Es steht hier,
-/// damit niemand es später für erledigt hält.
+/// <b>What this computation is not: hardened against timing measurement.</b>
+/// <see cref="BigInteger"/> computes in variable time, and the loop below
+/// branches over the bits of the scalar. Whoever can measure the running time
+/// of this process finely enough learns something about the key - that presumes
+/// access to the same machine. For a client running on the device of its user
+/// that is the right order of concerns; for a server answering foreign requests
+/// it would be the wrong one. It stands here so that nobody later takes it for
+/// settled.
 /// </remarks>
 internal static class Ed25519Math
 {
 
     #region Data
 
-    /// <summary>Der Primkörper: 2^255 - 19.</summary>
+    /// <summary>The prime field: 2^255 - 19.</summary>
     internal static readonly BigInteger P = BigInteger.Pow(2, 255) - 19;
 
-    /// <summary>Der Kurvenparameter d = -121665/121666 mod p.</summary>
+    /// <summary>The curve parameter d = -121665/121666 mod p.</summary>
     private static readonly BigInteger D =
         BigInteger.Parse("37095705934669439343138083508754565189542113879843219016388785533085940283555");
 
-    /// <summary>Die x-Koordinate des Basispunkts.</summary>
+    /// <summary>The x coordinate of the base point.</summary>
     private static readonly BigInteger Bx =
         BigInteger.Parse("15112221349535400772501151409588531511454012693041857206046113283949847762202");
 
-    /// <summary>Die y-Koordinate des Basispunkts: 4/5 mod p.</summary>
+    /// <summary>The y coordinate of the base point: 4/5 mod p.</summary>
     private static readonly BigInteger By =
         BigInteger.Parse("46316835694926478169428394003475163141307993866256225615783033603165251855960");
 
@@ -94,40 +91,40 @@ internal static class Ed25519Math
     #region ScalarMultBaseEncoded(scalar)
 
     /// <summary>
-    /// <c>kB</c>, kodiert wie in RFC 8032, Abschnitt 5.1.2: 32 Byte
-    /// y-Koordinate, kleinstwertiges Byte zuerst, im obersten Bit das
-    /// niedrigste Bit von x.
+    /// <c>kB</c>, encoded as in RFC 8032, section 5.1.2: 32 bytes of y
+    /// coordinate, least significant byte first, in the top bit the lowest bit
+    /// of x.
     /// </summary>
     internal static Byte[] ScalarMultBaseEncoded(BigInteger scalar)
         => Encode(ScalarMult(scalar));
 
     /// <summary>
-    /// Doppeln-und-Addieren über die Bits des Skalars, von oben nach unten.
+    /// Double-and-add over the bits of the scalar, from the top down.
     /// </summary>
     private static (BigInteger X, BigInteger Y, BigInteger Z, BigInteger T) ScalarMult(BigInteger scalar)
     {
 
-        // Der neutrale Punkt (0 : 1 : 1 : 0).
-        var ergebnis  = (X: BigInteger.Zero, Y: BigInteger.One, Z: BigInteger.One, T: BigInteger.Zero);
-        var basis     = (X: Bx, Y: By, Z: BigInteger.One, T: Bx * By % P);
+        // The neutral point (0 : 1 : 1 : 0).
+        var result     = (X: BigInteger.Zero, Y: BigInteger.One, Z: BigInteger.One, T: BigInteger.Zero);
+        var basePoint  = (X: Bx, Y: By, Z: BigInteger.One, T: Bx * By % P);
 
         var k = ((scalar % Order) + Order) % Order;
 
         for (var bit = 254; bit >= 0; bit--)
         {
 
-            ergebnis = Add(ergebnis, ergebnis);
+            result = Add(result, result);
 
             if (!((k >> bit) & BigInteger.One).IsZero)
-                ergebnis = Add(ergebnis, basis);
+                result = Add(result, basePoint);
 
         }
 
-        return ergebnis;
+        return result;
 
     }
 
-    /// <summary>Die Gruppenordnung.</summary>
+    /// <summary>The group order.</summary>
     internal static readonly BigInteger Order =
         BigInteger.Pow(2, 252) + BigInteger.Parse("27742317777372353535851937790883648493");
 
@@ -136,14 +133,14 @@ internal static class Ed25519Math
     #region Add / Encode
 
     /// <summary>
-    /// Die vollständige Additionsformel für a = -1 in erweiterten Koordinaten
-    /// (RFC 8032, Abschnitt 5.1.4).
+    /// The complete addition formula for a = -1 in extended coordinates
+    /// (RFC 8032, section 5.1.4).
     /// </summary>
     /// <remarks>
-    /// Vollständig heisst: Sie gilt auch, wenn beide Summanden derselbe Punkt
-    /// sind, und auch für den neutralen Punkt. Deshalb steht hier keine
-    /// gesonderte Verdopplung - eine zweite Formel wäre ein zweiter Ort für
-    /// denselben Fehler, und die Ersparnis fiele bei 255 Durchläufen nicht auf.
+    /// Complete means: it holds even when both summands are the same point, and
+    /// also for the neutral point. That is why no separate doubling stands here
+    /// - a second formula would be a second place for the same error, and the
+    /// saving would not show over 255 rounds.
     /// </remarks>
     private static (BigInteger X, BigInteger Y, BigInteger Z, BigInteger T) Add(
         (BigInteger X, BigInteger Y, BigInteger Z, BigInteger T) p1,
@@ -165,20 +162,20 @@ internal static class Ed25519Math
     }
 
     /// <summary>
-    /// Kodiert einen Punkt: y als 32 Byte, kleinstwertiges zuerst, mit dem
-    /// niedrigsten Bit von x im obersten Bit.
+    /// Encodes a point: y as 32 bytes, least significant first, with the lowest
+    /// bit of x in the top bit.
     /// </summary>
-    private static Byte[] Encode((BigInteger X, BigInteger Y, BigInteger Z, BigInteger T) punkt)
+    private static Byte[] Encode((BigInteger X, BigInteger Y, BigInteger Z, BigInteger T) point)
     {
 
-        var invZ  = BigInteger.ModPow(punkt.Z, P - 2, P);
-        var x     = Mod(punkt.X * invZ);
-        var y     = Mod(punkt.Y * invZ);
+        var invZ  = BigInteger.ModPow(point.Z, P - 2, P);
+        var x     = Mod(point.X * invZ);
+        var y     = Mod(point.Y * invZ);
 
         var bytes = new Byte[32];
-        var roh   = y.ToByteArray(isUnsigned: true, isBigEndian: false);
+        var raw   = y.ToByteArray(isUnsigned: true, isBigEndian: false);
 
-        Array.Copy(roh, bytes, Math.Min(roh.Length, 32));
+        Array.Copy(raw, bytes, Math.Min(raw.Length, 32));
 
         if (!x.IsEven)
             bytes[31] |= 0x80;
@@ -187,11 +184,11 @@ internal static class Ed25519Math
 
     }
 
-    /// <summary>Ein nicht-negativer Rest modulo p.</summary>
+    /// <summary>A non-negative remainder modulo p.</summary>
     private static BigInteger Mod(BigInteger value)
     {
-        var rest = value % P;
-        return rest.Sign < 0 ? rest + P : rest;
+        var remainder = value % P;
+        return remainder.Sign < 0 ? remainder + P : remainder;
     }
 
     #endregion
