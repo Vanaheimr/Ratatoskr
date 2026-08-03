@@ -25,23 +25,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Föderation gegen ejabberd - die zweite fremde Gegenstelle.
+    /// Federation against ejabberd - the second foreign far end.
     /// </summary>
     /// <remarks>
-    /// Warum eine zweite, wo doch schon eine steht: Prosody allein belegt, dass
-    /// wir mit Prosody können. Wo unsere Auffassung des Protokolls von der
-    /// Norm abweicht, Prosody aber dieselbe Abweichung mitmacht - sei es aus
-    /// Nachsicht, sei es aus derselben Lesart -, fällt das nicht auf. Erst eine
-    /// zweite, unabhängig entstandene Implementierung trennt "richtig" von
-    /// "deckungsgleich mit einer Auffassung".
+    /// Why a second one when there is one already: Prosody alone establishes
+    /// that we can manage with Prosody. Where our understanding of the protocol
+    /// departs from the norm but Prosody goes along with the same departure -
+    /// be it out of leniency, be it out of the same reading -, that does not
+    /// stand out. Only a second, independently grown implementation separates
+    /// "right" from "congruent with one understanding".
     ///
-    /// ejabberd ist dafür der interessante Gegner: in Erlang geschrieben,
-    /// anderer Werdegang, anderer Autorenkreis, eigene Vorlieben im Handshake.
-    /// Was gegen beide trägt, trägt vermutlich.
+    /// ejabberd is the interesting opponent for that: written in Erlang, a
+    /// different history, a different circle of authors, its own preferences in
+    /// the handshake. What carries against both probably carries.
     ///
-    /// Der Aufbau steht in <c>tools/ejabberd/setup.sh</c>, die Mechanik in
-    /// <see cref="AForeignPeerFederationTests"/>. Die Tests überspringen sich,
-    /// wenn auf 25269 kein ejabberd antwortet.
+    /// The set-up stands in <c>tools/ejabberd/setup.sh</c>, the mechanics in
+    /// <see cref="AForeignPeerFederationTests"/>. The tests skip themselves
+    /// when no ejabberd answers on 25269.
     /// </remarks>
     [TestFixture]
     [Category("ejabberd")]
@@ -56,14 +56,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         protected override String  CertVariable  => "JABBER_EJABBERD_CERTS";
 
         /// <summary>
-        /// 5270, nicht 5269 - damit beide Gegenstellen nebeneinander laufen
-        /// können und kein Lauf versehentlich an der falschen hängt.
+        /// 5270, not 5269 - so that both far ends can run next to each other
+        /// and no run hangs on the wrong one by accident.
         /// </summary>
         /// <remarks>
-        /// Frei wählbar ist der Port nur, weil ejabberd einen ausdrücklichen
-        /// Schalter dafür hat: ohne SRV-Eintrag nimmt es
-        /// <c>outgoing_s2s_port</c>. Prosody kennt keinen und bleibt fest bei
-        /// 5269 - dort horcht deshalb der Prosody-Aufbau.
+        /// The port is freely choosable only because ejabberd has an express
+        /// switch for it: without an SRV record it takes
+        /// <c>outgoing_s2s_port</c>. Prosody knows none and stays fixed at
+        /// 5269 - that is where the Prosody set-up listens.
         /// </remarks>
         protected override Int32   InboundPort   => 5270;
 
@@ -73,41 +73,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStreamToEjabberdCarriesAStanza()
 
         /// <summary>
-        /// Der ausgehende Weg gegen die zweite Gegenstelle: STARTTLS,
-        /// SASL-EXTERNAL, eine Stanza hinaus.
+        /// The outbound path against the second far end: STARTTLS,
+        /// SASL-EXTERNAL, a stanza out.
         /// </summary>
         /// <remarks>
-        /// Derselbe Weg wie gegen Prosody, aber gegen einen Prüfer, der ihn
-        /// unabhängig davon gelesen hat: unser Stream-Kopf, unser
-        /// STARTTLS-Aufbau, unser Klientzertifikat, unser
-        /// <c>&lt;auth mechanism='EXTERNAL'/&gt;</c> und der Neustart des
-        /// Streams danach. Kommt die Stanza durch, hat keine der beiden
-        /// Auffassungen etwas zu beanstanden gehabt.
+        /// The same path as against Prosody, but against a checker that has
+        /// read it independently of it: our stream header, our STARTTLS set-up,
+        /// our client certificate, our
+        /// <c>&lt;auth mechanism='EXTERNAL'/&gt;</c> and the restart of the
+        /// stream afterwards. If the stanza gets through, neither of the two
+        /// understandings had anything to object to.
         ///
-        /// Warum ein <c>iq</c> vom Typ <c>result</c> und keine Nachricht: eine
-        /// Nachricht an die blosse Domain hat dort keinen Empfänger und wird
-        /// zurückgewiesen. Für die Rückweisung legt ejabberd eine ausgehende
-        /// Verbindung zu <c>jabber.test</c> an - und die überlebt diesen Test,
-        /// weil unser Server auf einem Ephemeralport lag, den es nach dem
-        /// Abbau nicht mehr gibt. Der nächste Test bekommt sie dann aus dem
-        /// Zwischenspeicher vorgesetzt und verliert seine Antwort darin. Ein
-        /// <c>result</c> darf laut RFC 6120, Abschnitt 8.3.1, nie beantwortet
-        /// werden und hinterlässt deshalb nichts.
+        /// Why an <c>iq</c> of type <c>result</c> and no message: a message to
+        /// the bare domain has no recipient there and is turned away. For the
+        /// turning away ejabberd lays down an outbound connection to
+        /// <c>jabber.test</c> - and that one outlives this test, because our
+        /// server lay on an ephemeral port that does not exist any more after
+        /// the tear-down. The next test then gets it presented out of the cache
+        /// and loses its answer in it. A <c>result</c> may never be answered
+        /// according to RFC 6120, section 8.3.1, and therefore leaves nothing
+        /// behind.
         /// </remarks>
         [Test]
         public async Task TheStreamToEjabberdCarriesAStanza()
         {
 
-            Aufbau();
+            BuildUp();
 
-            var angekommen = await Links!.DeliverAsync(
-                                 PeerDomain,
+            var arrived = await Links!.DeliverAsync(
+                              PeerDomain,
                                  $"<iq from='alice@{LocalDomain}' to='{PeerDomain}' " +
-                                 "type='result' id='hallo-ejabberd'/>",
+                                 "type='result' id='hello-ejabberd'/>",
                                  CancellationToken.None);
 
-            Assert.That(angekommen, Is.True,
-                        "Der Stream zu ejabberd kam nicht zustande.");
+            Assert.That(arrived, Is.True,
+                        "The stream to ejabberd did not come about.");
 
         }
 
@@ -116,31 +116,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APingOverABidirectionalStream()
 
         /// <summary>
-        /// XEP-0288 gegen die zweite Gegenstelle.
+        /// XEP-0288 against the second far end.
         /// </summary>
         /// <remarks>
-        /// Der Test mit dem grössten Ertrag, weil die Erweiterung die jüngste
-        /// und am wenigsten eingefahrene ist: sie schreibt vor, <i>wo</i> im
-        /// Handshake <c>&lt;bidi/&gt;</c> zu stehen hat - nach STARTTLS, vor
-        /// SASL und vor Dialback -, und eine Gegenstelle, die es an anderer
-        /// Stelle noch durchgehen liesse, deckte einen Fehler bei uns zu.
+        /// The test with the greatest yield, because the extension is the
+        /// youngest and the least settled one: it prescribes <i>where</i> in
+        /// the handshake <c>&lt;bidi/&gt;</c> has to stand - after STARTTLS,
+        /// before SASL and before dialback -, and a far end that would still
+        /// let it through at another place would cover up an error at our end.
         ///
-        /// ejabberd kündigt <c>urn:xmpp:features:bidi</c> an, sobald
-        /// <c>mod_s2s_bidi</c> geladen ist; <c>tools/ejabberd/setup.sh</c>
-        /// schaltet es ein.
+        /// ejabberd announces <c>urn:xmpp:features:bidi</c> as soon as
+        /// <c>mod_s2s_bidi</c> is loaded; <c>tools/ejabberd/setup.sh</c>
+        /// switches it on.
         /// </remarks>
         [Test]
         public async Task APingOverABidirectionalStream()
         {
 
-            Aufbau(bidi: true);
+            BuildUp(bidi: true);
 
             var alice = await AliceAsync();
 
-            var dauer = await alice.PingAsync(PeerDomain);
+            var duration = await alice.PingAsync(PeerDomain);
 
-            Assert.That(dauer, Is.Not.Null,
-                        "ejabberd hat den Ping nicht über die Rückrichtung beantwortet.");
+            Assert.That(duration, Is.Not.Null,
+                        "ejabberd did not answer the ping over the return direction.");
 
         }
 
@@ -149,52 +149,52 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EjabberdDialsUsAndTheAnswerArrives()
 
         /// <summary>
-        /// Der eingehende Weg: ejabberd baut die Verbindung auf, wir nehmen an.
+        /// The inbound path: ejabberd builds the connection up, we accept.
         /// </summary>
         /// <remarks>
-        /// Geprüft wird unsere annehmende Seite - Stream-Kopf als
-        /// Antwortender, Feature-Ankündigung, Annahme eines fremden
-        /// <c>&lt;auth mechanism='EXTERNAL'/&gt;</c>, Identitätsprüfung aus dem
-        /// vorgelegten Zertifikat -, diesmal vor einem zweiten Gegenüber.
+        /// What is checked is our accepting side - stream header as the
+        /// answering one, feature announcement, acceptance of a foreign
+        /// <c>&lt;auth mechanism='EXTERNAL'/&gt;</c>, identity check from the
+        /// presented certificate -, this time before a second counterpart.
         ///
-        /// Ohne XEP-0288, und das ist Absicht: genau dann beantwortet ejabberd
-        /// den Ping über eine eigene Verbindung zu uns, und die muss unser
-        /// Listener annehmen. Mit Bidi käme die Antwort über den bestehenden
-        /// Stream, und der eingehende Weg bliebe ungeprüft.
+        /// Without XEP-0288, and that is on purpose: precisely then ejabberd
+        /// answers the ping over a connection of its own to us, and that one
+        /// our listener has to accept. With bidi the answer would come over the
+        /// existing stream, and the inbound path would stay unchecked.
         ///
-        /// <b>Dieser Test läuft nur innerhalb von WSL.</b> Von Windows aus
-        /// erreicht ejabberd uns nicht - die Hyper-V-Firewall verwirft jede
-        /// Verbindung von WSL zum Host, und das zu ändern hiesse, eine
-        /// Firewall-Regel zu setzen. Im selben Netz ist alles Rückschleife.
+        /// <b>This test runs only inside WSL.</b> From Windows ejabberd does
+        /// not reach us - the Hyper-V firewall discards every connection from
+        /// WSL to the host, and to change that would mean setting a firewall
+        /// rule. In the same net everything is loopback.
         /// </remarks>
         [Test]
         public async Task EjabberdDialsUsAndTheAnswerArrives()
         {
 
             if (!OperatingSystem.IsLinux())
-                Assert.Ignore("Nur innerhalb von WSL: von Windows aus erreicht ejabberd diesen Server nicht.");
+                Assert.Ignore("Only inside WSL: from Windows ejabberd does not reach this server.");
 
-            Aufbau(erreichbar: true);
+            BuildUp(reachable: true);
 
             var alice = await AliceAsync();
 
-            var dauer = await alice.PingAsync(PeerDomain);
+            var duration = await alice.PingAsync(PeerDomain);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(dauer, Is.Not.Null,
-                            "ejabberd hat den Ping nicht beantwortet.");
+                Assert.That(duration, Is.Not.Null,
+                            "ejabberd did not answer the ping.");
 
                 Assert.That(Links!.InboundConnectionCount, Is.GreaterThan(0),
-                            "Die Antwort kam, aber nicht über eine eingehende Verbindung - " +
-                            "dann prüft dieser Test nicht, was er prüfen soll.");
+                            "The answer came, but not over an inbound connection - " +
+                            "then this test does not check what it is supposed to check.");
 
                 Assert.That(Links.BidirectionalDeliveryCount, Is.Zero,
-                            "Aufbau des Tests: hier soll gerade keine Rückrichtung im Spiel sein.");
+                            "Set-up of the test: no return direction is supposed to be in play here.");
 
                 Assert.That(Links.DialbackVerificationCount, Is.Zero,
-                            "Hier soll SASL-EXTERNAL tragen, nicht Dialback.");
+                            "SASL-EXTERNAL is supposed to carry here, not dialback.");
 
             });
 
@@ -205,47 +205,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DialbackCarriesBothDirections()
 
         /// <summary>
-        /// XEP-0220 gegen die zweite Gegenstelle - in beiden Rollen.
+        /// XEP-0220 against the second far end - in both roles.
         /// </summary>
         /// <remarks>
-        /// Ein Ping-Rundlauf übt beide Rollen auf einmal, weil jede Richtung
-        /// ihre eigene Verbindung aufbaut und jede aufbauende Seite sich
-        /// ausweisen muss: unsere <b>autoritative</b> Rolle beantwortet
-        /// ejabberds Rückfrage nach unserem Schlüssel, unsere <b>prüfende</b>
-        /// Rolle fragt bei <c>ejabberd.test</c> nach seinem.
+        /// A ping round trip exercises both roles at once, because every
+        /// direction builds its own connection up and every building side has
+        /// to identify itself: our <b>authoritative</b> role answers ejabberd's
+        /// query after our key, our <b>checking</b> role queries
+        /// <c>ejabberd.test</c> after its own.
         ///
-        /// Dass ejabberd Dialback überhaupt zulässt, hängt an einer Zeile der
-        /// Konfiguration: <c>s2s_use_starttls: required</c> statt
-        /// <c>required_trusted</c>. Das zweite verlangt zusätzlich eine gültige
-        /// Zertifikatskette und schlösse Dialback aus. Welches Verfahren zum
-        /// Zug kommt, entscheidet damit unsere Seite - legen wir kein
-        /// Klientzertifikat vor, bleibt nur Dialback.
+        /// That ejabberd permits dialback at all hangs on one line of the
+        /// configuration: <c>s2s_use_starttls: required</c> instead of
+        /// <c>required_trusted</c>. The second demands a valid certificate
+        /// chain on top and would rule dialback out. Which procedure comes into
+        /// play is thereby decided by our side - if we present no client
+        /// certificate, only dialback is left.
         /// </remarks>
         [Test]
         public async Task DialbackCarriesBothDirections()
         {
 
             if (!OperatingSystem.IsLinux())
-                Assert.Ignore("Nur innerhalb von WSL: ejabberds Rückfrage erreicht diesen Server sonst nicht.");
+                Assert.Ignore("Only inside WSL: ejabberd's query does not reach this server otherwise.");
 
-            Aufbau(erreichbar: true, dialback: true);
+            BuildUp(reachable: true, dialback: true);
 
             var alice = await AliceAsync();
 
-            var dauer = await alice.PingAsync(PeerDomain);
+            var duration = await alice.PingAsync(PeerDomain);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(dauer, Is.Not.Null,
-                            "ejabberd hat den Ping nicht beantwortet - eine der beiden " +
-                            "Rückfragen ist gescheitert.");
+                Assert.That(duration, Is.Not.Null,
+                            "ejabberd did not answer the ping - one of the two " +
+                            "queries has failed.");
 
                 Assert.That(Links!.DialbackVerificationCount, Is.GreaterThan(0),
-                            "Wir haben ejabberds Schlüssel nie nachgefragt.");
+                            "We never queried ejabberd's key.");
 
                 Assert.That(Links.InboundConnectionCount, Is.GreaterThan(0),
-                            "Ohne eingehende Verbindung gab es auch nichts zu prüfen.");
+                            "Without an inbound connection there was nothing to check either.");
 
             });
 

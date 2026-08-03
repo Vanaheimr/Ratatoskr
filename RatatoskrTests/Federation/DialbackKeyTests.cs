@@ -27,17 +27,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Der Dialback-Schlüssel gegen den veröffentlichten Vektor aus XEP-0220,
-    /// Abschnitt 2.1.1.
+    /// The dialback key against the published vector from XEP-0220,
+    /// section 2.1.1.
     /// </summary>
     /// <remarks>
-    /// Der Vektor ist hier nicht Zierde, sondern der Grund, warum die
-    /// Implementierung stimmt. Zwei naheliegende Lesarten des Verfahrens
-    /// liefern jeweils einen in sich stimmigen, aber falschen Schlüssel -
-    /// <c>SHA256(Secret)</c> als Rohbytes statt als Hex-Zeichenkette, und die
-    /// Domains in umgekehrter Reihenfolge. Beide fallen nur gegen einen
-    /// fremden Vektor auf; gegen die eigene Gegenprobe wäre jede von ihnen
-    /// grün.
+    /// The vector is no ornament here but the reason why the implementation is
+    /// right. Two obvious readings of the procedure each deliver a key that is
+    /// consistent in itself but wrong - <c>SHA256(Secret)</c> as raw bytes
+    /// instead of as a hex string, and the domains in reverse order. Both stand
+    /// out only against a foreign vector; against our own counter-check either
+    /// of them would be green.
     /// </remarks>
     [TestFixture]
     public class DialbackKeyTests
@@ -45,7 +44,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        // XEP-0220, Abschnitt 2.1.1:
+        // XEP-0220, section 2.1.1:
         //
         //   key = HMAC-SHA256(
         //           SHA256('s3cr3tf0rd14lb4ck'),
@@ -53,15 +52,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         //         )
         //       = b4835385f37fe2895af6c196b59097b16862406db80559900d96bf6fa7d23df3
         //
-        // montague.example ist dort der annehmende Server (Target Domain),
-        // capulet.example der aufbauende (Sender Domain).
+        // montague.example is the accepting server there (target domain),
+        // capulet.example the building one (sender domain).
 
         private const String Secret        = "s3cr3tf0rd14lb4ck";
         private const String TargetDomain  = "montague.example";
         private const String SenderDomain  = "capulet.example";
         private const String StreamId      = "D60000229F";
 
-        private const String ErwarteterSchluessel =
+        private const String ExpectedKey =
             "b4835385f37fe2895af6c196b59097b16862406db80559900d96bf6fa7d23df3";
 
         #endregion
@@ -70,14 +69,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheKeyMatchesThePublishedVector()
 
         /// <summary>
-        /// Der Vektor aus dem XEP, exakt reproduziert.
+        /// The vector from the XEP, reproduced exactly.
         /// </summary>
         [Test]
         public void TheKeyMatchesThePublishedVector()
         {
 
             Assert.That(DialbackKey.Generate(Secret, TargetDomain, SenderDomain, StreamId),
-                        Is.EqualTo(ErwarteterSchluessel));
+                        Is.EqualTo(ExpectedKey));
 
         }
 
@@ -86,26 +85,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDomainOrderMatters()
 
         /// <summary>
-        /// Ziel- vor Absenderdomain. Vertauscht käme ebenfalls ein
-        /// wohlgeformter Schlüssel heraus - nur eben ein anderer.
+        /// Target domain before sender domain. Swapped, a well-formed key would
+        /// come out as well - only a different one.
         /// </summary>
         /// <remarks>
-        /// Verglichen werden zwei <b>erzeugte</b> Schlüssel und nicht einer
-        /// gegen die veröffentlichte Konstante. Der Unterschied ist nicht
-        /// kosmetisch: gegen die Konstante besteht so ein Test auch dann noch,
-        /// wenn der geprüfte Bestandteil aus der Ableitung ganz herausfällt -
-        /// das Ergebnis weicht dann ja erst recht ab. So gefragt beantwortet
-        /// er dagegen genau das, was er behauptet: dass die Reihenfolge einen
-        /// Unterschied macht.
+        /// What are compared are two <b>generated</b> keys and not one against
+        /// the published constant. The difference is not cosmetic: against the
+        /// constant such a test still passes even when the checked component
+        /// falls out of the derivation entirely - the result then differs all
+        /// the more. Asked this way it answers precisely what it claims: that
+        /// the order makes a difference.
         /// </remarks>
         [Test]
         public void TheDomainOrderMatters()
         {
 
-            var herum       = DialbackKey.Generate(Secret, TargetDomain, SenderDomain, StreamId);
-            var vertauscht  = DialbackKey.Generate(Secret, SenderDomain, TargetDomain, StreamId);
+            var inOrder  = DialbackKey.Generate(Secret, TargetDomain, SenderDomain, StreamId);
+            var swapped  = DialbackKey.Generate(Secret, SenderDomain, TargetDomain, StreamId);
 
-            Assert.That(vertauscht, Is.Not.EqualTo(herum));
+            Assert.That(swapped, Is.Not.EqualTo(inOrder));
 
         }
 
@@ -114,24 +112,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStreamIdBindsTheKeyToOneConnection()
 
         /// <summary>
-        /// Eine andere Stream-ID ergibt einen anderen Schlüssel - daran hängt,
-        /// dass ein mitgeschnittener Schlüssel auf einer zweiten Verbindung
-        /// nichts nützt.
+        /// A different stream id yields a different key - on that hangs the
+        /// fact that a recorded key is of no use on a second connection.
         /// </summary>
         /// <remarks>
-        /// Auch hier zwei erzeugte Schlüssel gegeneinander: gegen die
-        /// Konstante geprüft blieb dieser Test grün, als die Stream-ID
-        /// versuchsweise ganz aus der Ableitung genommen wurde - er hätte also
-        /// genau den Fehler nicht bemerkt, gegen den er geschrieben ist.
+        /// Two generated keys against each other here as well: checked against
+        /// the constant, this test stayed green when the stream id was taken
+        /// out of the derivation entirely by way of trial - it would therefore
+        /// not have noticed precisely the error it is written against.
         /// </remarks>
         [Test]
         public void TheStreamIdBindsTheKeyToOneConnection()
         {
 
-            var eineVerbindung    = DialbackKey.Generate(Secret, TargetDomain, SenderDomain, StreamId);
-            var andereVerbindung  = DialbackKey.Generate(Secret, TargetDomain, SenderDomain, "417GAF25");
+            var oneConnection      = DialbackKey.Generate(Secret, TargetDomain, SenderDomain, StreamId);
+            var anotherConnection  = DialbackKey.Generate(Secret, TargetDomain, SenderDomain, "417GAF25");
 
-            Assert.That(andereVerbindung, Is.Not.EqualTo(eineVerbindung));
+            Assert.That(anotherConnection, Is.Not.EqualTo(oneConnection));
 
         }
 
@@ -140,17 +137,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnotherSecretYieldsAnotherKey()
 
         /// <summary>
-        /// Ohne das Geheimnis kommt niemand auf den Schlüssel - das ist der
-        /// ganze Punkt von Dialback.
+        /// Without the secret nobody arrives at the key - that is the whole
+        /// point of dialback.
         /// </summary>
         [Test]
         public void AnotherSecretYieldsAnotherKey()
         {
 
-            var eigen  = DialbackKey.Generate(Secret,          TargetDomain, SenderDomain, StreamId);
-            var fremd  = DialbackKey.Generate("etwas anderes", TargetDomain, SenderDomain, StreamId);
+            var own      = DialbackKey.Generate(Secret,           TargetDomain, SenderDomain, StreamId);
+            var foreign  = DialbackKey.Generate("something else", TargetDomain, SenderDomain, StreamId);
 
-            Assert.That(fremd, Is.Not.EqualTo(eigen));
+            Assert.That(foreign, Is.Not.EqualTo(own));
 
         }
 
@@ -159,14 +156,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region VerifyAcceptsTheCorrectKey()
 
         /// <summary>
-        /// Die Gegenrichtung: der autoritative Server rechnet nach und
-        /// erkennt seinen eigenen Schlüssel wieder.
+        /// The reverse direction: the authoritative server recalculates and
+        /// recognises its own key again.
         /// </summary>
         [Test]
         public void VerifyAcceptsTheCorrectKey()
         {
 
-            Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId, ErwarteterSchluessel),
+            Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId, ExpectedKey),
                         Is.True);
 
         }
@@ -176,15 +173,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region VerifyIsCaseInsensitiveAboutHex()
 
         /// <summary>
-        /// Hex in Grossbuchstaben ist derselbe Schlüssel. Ein Server, der ihn
-        /// so schreibt, verstösst gegen nichts.
+        /// Hex in capital letters is the same key. A server writing it that way
+        /// violates nothing.
         /// </summary>
         [Test]
         public void VerifyIsCaseInsensitiveAboutHex()
         {
 
             Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId,
-                                           ErwarteterSchluessel.ToUpperInvariant()),
+                                           ExpectedKey.ToUpperInvariant()),
                         Is.True);
 
         }
@@ -194,15 +191,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region VerifyIgnoresSurroundingWhitespace()
 
         /// <summary>
-        /// Im XEP steht der Schlüssel eingerückt zwischen den Tags - der
-        /// Zeilenumbruch davor und danach gehört nicht dazu.
+        /// In the XEP the key stands indented between the tags - the line break
+        /// before and after does not belong to it.
         /// </summary>
         [Test]
         public void VerifyIgnoresSurroundingWhitespace()
         {
 
             Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId,
-                                           $"\n        {ErwarteterSchluessel}\n      "),
+                                           $"\n        {ExpectedKey}\n      "),
                         Is.True);
 
         }
@@ -212,17 +209,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region VerifyRejectsAForgedKey()
 
         /// <summary>
-        /// Ein Schlüssel, der nicht mit diesem Geheimnis entstanden ist, wird
-        /// abgelehnt.
+        /// A key that did not come about with this secret is refused.
         /// </summary>
         [Test]
         public void VerifyRejectsAForgedKey()
         {
 
-            var gefaelscht = DialbackKey.Generate("das Geheimnis des Angreifers",
-                                                  TargetDomain, SenderDomain, StreamId);
+            var forged = DialbackKey.Generate("the attacker's secret",
+                                              TargetDomain, SenderDomain, StreamId);
 
-            Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId, gefaelscht),
+            Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId, forged),
                         Is.False);
 
         }
@@ -232,14 +228,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region VerifyRejectsSomethingThatIsNotHexAtAll()
 
         /// <summary>
-        /// Was gar kein Hex ist, führt zu einer Ablehnung und nicht zu einer
-        /// Ausnahme - die Eingabe kommt von der Gegenstelle.
+        /// What is no hex at all leads to a refusal and not to an exception -
+        /// the input comes from the far end.
         /// </summary>
         [Test]
         public void VerifyRejectsSomethingThatIsNotHexAtAll()
         {
 
-            Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId, "kein Schlüssel"),
+            Assert.That(DialbackKey.Verify(Secret, TargetDomain, SenderDomain, StreamId, "no key at all"),
                         Is.False);
 
         }
@@ -249,7 +245,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EverySecretIsDifferent()
 
         /// <summary>
-        /// <see cref="DialbackKey.NewSecret"/> liefert nicht zweimal dasselbe.
+        /// <see cref="DialbackKey.NewSecret"/> does not deliver the same thing
+        /// twice.
         /// </summary>
         [Test]
         public void EverySecretIsDifferent()
@@ -261,7 +258,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(a, Is.Not.EqualTo(b));
-                Assert.That(a, Has.Length.EqualTo(64), "32 Bytes als Hex.");
+                Assert.That(a, Has.Length.EqualTo(64), "32 bytes as hex.");
             });
 
         }

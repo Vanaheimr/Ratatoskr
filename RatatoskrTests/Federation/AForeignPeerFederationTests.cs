@@ -32,44 +32,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Basis für Föderationsläufe gegen eine fremde, ausgewachsene Gegenstelle.
+    /// Base for federation runs against a foreign, fully grown far end.
     /// </summary>
     /// <remarks>
-    /// Alles andere in dieser Testsammlung prüft unseren Server gegen unseren
-    /// Server. Das beweist, dass beide Seiten dieselbe Auffassung vom Protokoll
-    /// haben - nicht, dass diese Auffassung stimmt. Wo unsere beiden Seiten
-    /// denselben Fehler machen, fällt er nicht auf.
+    /// Everything else in this test collection checks our server against our
+    /// server. That establishes that both sides have the same understanding of
+    /// the protocol - not that this understanding is right. Where our two
+    /// sides make the same error, it does not stand out.
     ///
-    /// Der Aufbau ist für jede Gegenstelle derselbe: sie wird ohne root in WSL
-    /// ausgepackt, bekommt ein von einer Test-CA signiertes Zertifikat und
-    /// horcht auf der Rückschleife. Dieselbe CA signiert unser Zertifikat -
-    /// damit trägt SASL-EXTERNAL (XEP-0178). Was sich unterscheidet, sind
-    /// Domain, Ports und die Umgebungsvariable, über die die Testsammlung die
-    /// CA findet; genau das legen die Ableitungen fest.
+    /// The set-up is the same for every far end: it is unpacked in WSL without
+    /// root, gets a certificate signed by a test CA and listens on the
+    /// loopback. The same CA signs our certificate - with that SASL-EXTERNAL
+    /// carries (XEP-0178). What differs are the domain, the ports and the
+    /// environment variable over which the test collection finds the CA;
+    /// precisely that is what the derivations lay down.
     /// </remarks>
     public abstract class AForeignPeerFederationTests
     {
 
-        #region Was die Gegenstelle ausmacht
+        #region What makes up the far end
 
-        /// <summary>Name der Gegenstelle - nur für Fehlermeldungen.</summary>
+        /// <summary>Name of the far end - only for error messages.</summary>
         protected abstract String  PeerName      { get; }
 
-        /// <summary>Die Domain, die die Gegenstelle bedient.</summary>
+        /// <summary>The domain the far end serves.</summary>
         protected abstract String  PeerDomain    { get; }
 
-        /// <summary>Der Port, auf dem sie S2S-Verbindungen annimmt.</summary>
+        /// <summary>The port on which it accepts S2S connections.</summary>
         protected abstract Int32   PeerPort      { get; }
 
         /// <summary>
-        /// Der Port, auf dem <b>wir</b> im eingehenden Lauf horchen - also der,
-        /// auf den die Gegenstelle ohne SRV-Eintrag zurückfällt.
+        /// The port on which <b>we</b> listen in the inbound run - that is, the
+        /// one the far end falls back on without an SRV record.
         /// </summary>
         protected abstract Int32   InboundPort   { get; }
 
         /// <summary>
-        /// Die Umgebungsvariable, die auf das Zertifikatsverzeichnis des
-        /// Aufbaus zeigt.
+        /// The environment variable pointing at the certificate directory of
+        /// the set-up.
         /// </summary>
         protected abstract String  CertVariable  { get; }
 
@@ -77,19 +77,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        /// <summary>Unsere Domain im ausgehenden Lauf.</summary>
+        /// <summary>Our domain in the outbound run.</summary>
         protected const String LocalDomain    = "jabber.test";
 
         /// <summary>
-        /// Unsere Domain im eingehenden Lauf - und der Grund, warum es zwei
-        /// gibt.
+        /// Our domain in the inbound run - and the reason why there are two.
         /// </summary>
         /// <remarks>
-        /// Damit die <b>Gegenstelle</b> uns anwählen kann, muss sie unsere
-        /// Domain auflösen können. Ein Eintrag in <c>/etc/hosts</c> bräuchte
-        /// root; <c>localhost</c> steht dort ohnehin und zeigt auf die
-        /// Rückschleife. Deshalb bedient der Testserver in diesem Fall diese
-        /// Domain.
+        /// So that the <b>far end</b> can dial us, it has to be able to resolve
+        /// our domain. An entry in <c>/etc/hosts</c> would need root;
+        /// <c>localhost</c> stands there anyway and points at the loopback.
+        /// That is why the test server serves this domain in this case.
         /// </remarks>
         protected const String InboundDomain  = "localhost";
 
@@ -97,108 +95,108 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private   X509Certificate2  _ca       = null!;
         private   X509Certificate2  _ourCert  = null!;
 
-        /// <summary>Unser Server im laufenden Test.</summary>
+        /// <summary>Our server in the running test.</summary>
         protected XMPPServer?      Server  { get; private set; }
 
-        /// <summary>Unser S2S-Zweig im laufenden Test.</summary>
+        /// <summary>Our S2S branch in the running test.</summary>
         protected TcpServerLinks?  Links   { get; private set; }
 
         #endregion
 
-        #region Aufbau / Abbau
+        #region Set-up / tear-down
 
         private readonly InternalErrorGuard _guard = new();
 
-        /// <summary>Die Wache vor jedem Test scharfstellen.</summary>
+        /// <summary>Arm the guard before every test.</summary>
         [SetUp]
-        public void WacheScharfstellen()
+        public void ArmTheGuard()
             => _guard.Reset();
 
         /// <summary>
-        /// Wo die Test-CA und unser Zertifikat liegen. Ohne sie oder ohne
-        /// laufende Gegenstelle hat der Test nichts zu prüfen.
+        /// Where the test CA and our certificate lie. Without them or without a
+        /// running far end the test has nothing to check.
         /// </summary>
         private String CertDirectory
             => Environment.GetEnvironmentVariable(CertVariable) ?? "";
 
         /// <summary>
-        /// Baut Server und S2S-Zweig auf, oder überspringt den Test, wenn die
-        /// Gegenstelle nicht bereitsteht.
+        /// Builds the server and the S2S branch up, or skips the test when the
+        /// far end is not standing by.
         /// </summary>
         /// <param name="bidi">
-        /// XEP-0288 in beide Richtungen: anbieten und erbitten.
+        /// XEP-0288 in both directions: offering and requesting.
         /// </param>
-        /// <param name="nurAnbieten">
-        /// XEP-0288 nur auf eingehenden Verbindungen anbieten, auf ausgehenden
-        /// nicht erbitten.
+        /// <param name="offerOnly">
+        /// Offer XEP-0288 on inbound connections only, do not request it on
+        /// outbound ones.
         /// </param>
-        /// <param name="erreichbar">
-        /// Unter einer Domain und einem Port aufbauen, unter denen die
-        /// Gegenstelle uns von sich aus anwählen kann.
+        /// <param name="reachable">
+        /// Build up under a domain and a port under which the far end can dial
+        /// us of its own accord.
         /// </param>
         /// <param name="dialback">
-        /// Ohne SASL-EXTERNAL aufbauen, sodass beide Seiten auf die
-        /// Dialback-Rückfrage zurückfallen.
+        /// Build up without SASL-EXTERNAL, so that both sides fall back on the
+        /// dialback query.
         /// </param>
-        protected void Aufbau(Boolean bidi         = false,
-                              Boolean nurAnbieten  = false,
-                              Boolean erreichbar   = false,
-                              Boolean dialback     = false)
+        protected void BuildUp(Boolean bidi       = false,
+                               Boolean offerOnly  = false,
+                               Boolean reachable  = false,
+                               Boolean dialback   = false)
         {
 
-            var verzeichnis = CertDirectory;
+            var directory = CertDirectory;
 
-            if (verzeichnis.Length == 0 || !File.Exists(Path.Combine(verzeichnis, "ca.crt")))
-                Assert.Ignore($"Kein {PeerName}-Aufbau: {CertVariable} zeigt auf keine Test-CA.");
+            if (directory.Length == 0 || !File.Exists(Path.Combine(directory, "ca.crt")))
+                Assert.Ignore($"No {PeerName} set-up: {CertVariable} points at no test CA.");
 
-            if (!PortAntwortet())
-                Assert.Ignore($"Auf 127.0.0.1:{PeerPort} antwortet kein {PeerName}.");
+            if (!PortAnswers())
+                Assert.Ignore($"On 127.0.0.1:{PeerPort} no {PeerName} answers.");
 
-            var domain = erreichbar ? InboundDomain : LocalDomain;
+            var domain = reachable ? InboundDomain : LocalDomain;
 
-            _ca       = X509CertificateLoader.LoadCertificateFromFile(Path.Combine(verzeichnis, "ca.crt"));
+            _ca       = X509CertificateLoader.LoadCertificateFromFile(Path.Combine(directory, "ca.crt"));
             _ourCert  = X509CertificateLoader.LoadPkcs12FromFile(
-                            Path.Combine(verzeichnis, $"{domain}.pfx"), null);
+                            Path.Combine(directory, $"{domain}.pfx"), null);
 
             Server    = _guard.Watched(new XMPPServer(domain, certificate: _ourCert));
             Server.Start();
             Server.AddAccount("alice");
 
             Links     = new TcpServerLinks(Server,
-                                           port: erreichbar ? InboundPort : 0,
+                                           port: reachable ? InboundPort : 0,
                                            mode: TcpTlsMode.StartTls) {
 
-                            // Ohne SASL-EXTERNAL legen wir kein Klientzertifikat
-                            // vor. Die Gegenstelle hat dann nichts zu prüfen und
-                            // bietet EXTERNAL gar nicht erst an - der Weg fällt
-                            // damit von selbst auf Dialback zurück, ohne dass
-                            // eine Seite es erzwingen müsste.
-                            UseSaslExternal          = !dialback,
-                            OfferBidirectionalStreams    = bidi || nurAnbieten,
+                            // Without SASL-EXTERNAL we present no client
+                            // certificate. The far end then has nothing to
+                            // check and does not even offer EXTERNAL - the path
+                            // thereby falls back on dialback of its own accord,
+                            // without either side having to force it.
+                            UseSaslExternal              = !dialback,
+                            OfferBidirectionalStreams    = bidi || offerOnly,
                             RequestBidirectionalStreams  = bidi
                         };
 
-            Links.AddPeer(PeerDomain, "127.0.0.1", PeerPort, TcpTlsMode.StartTls, TrautDerTestCA);
+            Links.AddPeer(PeerDomain, "127.0.0.1", PeerPort, TcpTlsMode.StartTls, TrustsTheTestCA);
 
         }
 
         [TearDown]
-        public async Task Abbau()
+        public async Task CleanUp()
         {
 
             if (_client is not null)
             {
-                try { await _client.DisposeAsync(); } catch { /* im Teardown egal */ }
+                try { await _client.DisposeAsync(); } catch { /* does not matter in the teardown */ }
                 _client = null;
             }
 
-            // Ausdrücklich vor dem Server: der S2S-Zweig hält im erreichbaren
-            // Aufbau einen festen Port, und den bekommt der nächste Test sonst
-            // nicht mehr. Das kostete beim Prosody-Aufbau zwei Testläufe, weil
-            // ein gescheiterter Bind wie ein Protokollfehler aussieht.
+            // Expressly before the server: the S2S branch holds a fixed port in
+            // the reachable set-up, and otherwise the next test does not get it
+            // any more. That cost two test runs with the Prosody set-up,
+            // because a failed bind looks like a protocol error.
             if (Links is not null)
             {
-                try { await Links.DisposeAsync(); } catch { /* im Teardown egal */ }
+                try { await Links.DisposeAsync(); } catch { /* does not matter in the teardown */ }
                 Links = null;
             }
 
@@ -214,9 +212,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private Boolean PortAntwortet()
+        private Boolean PortAnswers()
         {
             try
             {
@@ -230,44 +228,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Nimmt genau die Zertifikate an, die von der Test-CA signiert sind.
+        /// Accepts exactly those certificates that are signed by the test CA.
         /// </summary>
         /// <remarks>
-        /// Nicht "alles annehmen": eine Prüfung, die jedes Zertifikat
-        /// durchlässt, bestünde auch gegen eine beliebige fremde Gegenstelle
-        /// und sagte über den Handshake nichts aus. Der Betriebssystemspeicher
-        /// hilft hier nicht - die Test-CA steht dort nicht und soll es auch
-        /// nicht.
+        /// Not "accept everything": a check letting every certificate through
+        /// would pass against an arbitrary foreign far end as well and would
+        /// say nothing about the handshake. The operating system store does not
+        /// help here - the test CA does not stand there and is not supposed to.
         /// </remarks>
-        private Boolean TrautDerTestCA(Object            sender,
-                                       X509Certificate?  certificate,
-                                       X509Chain?        chain,
-                                       SslPolicyErrors   errors)
+        private Boolean TrustsTheTestCA(Object            sender,
+                                        X509Certificate?  certificate,
+                                        X509Chain?        chain,
+                                        SslPolicyErrors   errors)
         {
 
             if (certificate is null)
                 return false;
 
-            var zertifikat = certificate as X509Certificate2
+            var certificate2 = certificate as X509Certificate2
                                  ?? X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
 
-            using var pruefung = new X509Chain();
+            using var check = new X509Chain();
 
-            pruefung.ChainPolicy.TrustMode       = X509ChainTrustMode.CustomRootTrust;
-            pruefung.ChainPolicy.RevocationMode  = X509RevocationMode.NoCheck;
-            pruefung.ChainPolicy.CustomTrustStore.Add(_ca);
+            check.ChainPolicy.TrustMode       = X509ChainTrustMode.CustomRootTrust;
+            check.ChainPolicy.RevocationMode  = X509RevocationMode.NoCheck;
+            check.ChainPolicy.CustomTrustStore.Add(_ca);
 
-            return pruefung.Build(zertifikat);
+            return check.Build(certificate2);
 
         }
 
         /// <summary>
-        /// Verbindet einen echten Client mit unserem Testserver.
+        /// Connects a real client to our test server.
         /// </summary>
         protected async Task<XMPPClient> AliceAsync()
         {
 
-            var connection = new XMPPConnection($"alice@{Server!.Domain}", "pw", Server.Uri) {
+            var connection                                   = new XMPPConnection($"alice@{Server!.Domain}", "pw", Server.Uri) {
                                  KeepaliveEnabled            = false,
                                  MaxReconnectAttempts        = 0,
                                  ServerCertificateValidator  = (_, c, _, _) =>
@@ -290,75 +287,71 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePeerTakesTheReturnPathWeOffered()
 
         /// <summary>
-        /// Die Gegenstelle nimmt unsere XEP-0288-Ankündigung an, wenn <b>sie</b>
-        /// uns anwählt.
+        /// The far end takes our XEP-0288 announcement when <b>it</b> dials us.
         /// </summary>
         /// <remarks>
-        /// Die Richtung, die bis zuletzt nur aus fremdem Quelltext geschlossen
-        /// und nie beobachtet war - und sie war es aus einem hausgemachten
-        /// Grund: ein einziger Schalter steuerte Anbieten und Erbitten
-        /// zugleich. Solange unsere ausgehende Verbindung die Rückrichtung
-        /// nutzt, antwortet die Gegenstelle darüber und wählt uns gar nicht
-        /// erst an. Es gab also keinen Zustand, in dem sich unsere
-        /// Ankündigung zeigen konnte.
+        /// The direction that until recently was only inferred from foreign
+        /// source and never observed - and it was so for a home-made reason: a
+        /// single switch steered offering and requesting at once. As long as
+        /// our outbound connection uses the return direction, the far end
+        /// answers over it and does not dial us at all. So there was no state
+        /// in which our announcement could show itself.
         ///
-        /// Mit getrennten Schaltern gibt es ihn: wir bieten an, erbitten aber
-        /// nicht. Der Ablauf ist dann
+        /// With separate switches there is one: we offer but do not request.
+        /// The sequence is then
         ///
         /// <list type="number">
         ///   <item>
-        ///     Alice pingt. Wir wählen an - ohne <c>&lt;bidi/&gt;</c> -, die
-        ///     Gegenstelle beantwortet den Ping über eine <b>eigene</b>
-        ///     Verbindung zu uns (RFC 6120, Abschnitt 4.1).
+        ///     Alice pings. We dial - without <c>&lt;bidi/&gt;</c> -, the far
+        ///     end answers the ping over a connection of <b>its own</b> to us
+        ///     (RFC 6120, section 4.1).
         ///   </item>
         ///   <item>
-        ///     Auf dieser eingehenden Verbindung kündigen wir die Rückrichtung
-        ///     an. Nimmt die Gegenstelle sie an, ist der Stream bei uns
-        ///     freigeschaltet.
+        ///     On this inbound connection we announce the return direction. If
+        ///     the far end takes it, the stream is cleared at our end.
         ///   </item>
         ///   <item>
-        ///     Der zweite Ping geht dann über genau diesen Stream hinaus statt
-        ///     über eine neue Verbindung - und das zählt
-        ///     <c>BidirectionalDeliveryCount</c>.
+        ///     The second ping then goes out over precisely this stream instead
+        ///     of over a new connection - and that is what
+        ///     <c>BidirectionalDeliveryCount</c> counts.
         ///   </item>
         /// </list>
         ///
-        /// Zwei Pings, nicht einer: beim ersten gibt es die eingehende
-        /// Verbindung noch nicht.
+        /// Two pings, not one: with the first one the inbound connection does
+        /// not exist yet.
         ///
-        /// <b>Nur innerhalb von WSL.</b> Von Windows aus erreicht uns die
-        /// Gegenstelle nicht.
+        /// <b>Only inside WSL.</b> From Windows the far end does not reach us.
         /// </remarks>
         [Test]
         public async Task ThePeerTakesTheReturnPathWeOffered()
         {
 
             if (!OperatingSystem.IsLinux())
-                Assert.Ignore($"Nur innerhalb von WSL: von Windows aus erreicht {PeerName} diesen Server nicht.");
+                Assert.Ignore($"Only inside WSL: from Windows {PeerName} does not reach this server.");
 
-            Aufbau(nurAnbieten: true, erreichbar: true);
+            BuildUp(offerOnly: true, reachable: true);
 
             var alice = await AliceAsync();
 
             Assert.That(await alice.PingAsync(PeerDomain), Is.Not.Null,
-                        "Schon der erste Ping kam nicht zurück.");
+                        "Even the first ping did not come back.");
 
             Assert.That(await XMPPServer.WaitUntilAsync(() => Links!.InboundConnectionCount > 0,
                                                        TimeSpan.FromSeconds(10)),
                         Is.True,
-                        $"Keine eingehende Verbindung von {PeerName}.");
+                        $"No inbound connection from {PeerName}.");
 
-            var dauer = await alice.PingAsync(PeerDomain);
+            var duration = await alice.PingAsync(PeerDomain);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(dauer, Is.Not.Null,
-                            "Der zweite Ping kam nicht zurück.");
+                Assert.That(duration, Is.Not.Null,
+                            "The second ping did not come back.");
 
                 Assert.That(Links!.BidirectionalDeliveryCount, Is.GreaterThan(0),
-                            $"{PeerName} hat unsere Ankündigung nicht angenommen - " +
-                            "die zweite Stanza ging über eine eigene Verbindung hinaus.");
+                            $"{PeerName} did not take our announcement - " +
+                            "the second stanza went out over a connection of its own.");
 
             });
 

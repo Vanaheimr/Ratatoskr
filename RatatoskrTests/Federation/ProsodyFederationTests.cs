@@ -25,18 +25,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Föderation gegen Prosody - eine fremde, ausgewachsene Gegenstelle.
+    /// Federation against Prosody - a foreign, fully grown far end.
     /// </summary>
     /// <remarks>
-    /// Diese Tests überspringen sich, wenn auf 15269 kein Prosody antwortet.
-    /// Der Aufbau steht in <c>tools/prosody/</c>: Prosody wird ohne root in
-    /// WSL ausgepackt, bekommt ein von einer Test-CA signiertes Zertifikat und
-    /// horcht auf 127.0.0.1:15269. Dieselbe CA signiert unser Zertifikat -
-    /// damit trägt SASL-EXTERNAL (XEP-0178), und Dialback wird nicht gebraucht.
+    /// These tests skip themselves when no Prosody answers on 15269. The
+    /// set-up stands in <c>tools/prosody/</c>: Prosody is unpacked in WSL
+    /// without root, gets a certificate signed by a test CA and listens on
+    /// 127.0.0.1:15269. The same CA signs our certificate - with that
+    /// SASL-EXTERNAL carries (XEP-0178), and dialback is not needed.
     ///
-    /// Die Mechanik des Aufbaus steht in
-    /// <see cref="AForeignPeerFederationTests"/>; hier steht nur, was Prosody
-    /// eigen ist.
+    /// The mechanics of the set-up stand in
+    /// <see cref="AForeignPeerFederationTests"/>; what stands here is only what
+    /// is peculiar to Prosody.
     /// </remarks>
     [TestFixture]
     [Category("Prosody")]
@@ -51,9 +51,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         protected override String  CertVariable  => "JABBER_PROSODY_CERTS";
 
         /// <summary>
-        /// 5269 - der Port, auf den Prosody ohne SRV-Eintrag zurückfällt.
-        /// Prosody kennt keinen Schalter dafür, also weicht im eingehenden Lauf
-        /// Prosody selbst auf 15269 aus und überlässt uns diesen hier.
+        /// 5269 - the port Prosody falls back on without an SRV record. Prosody
+        /// knows no switch for it, so in the inbound run Prosody itself moves
+        /// aside to 15269 and leaves this one to us.
         /// </summary>
         protected override Int32   InboundPort   => 5269;
 
@@ -63,31 +63,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStreamToProsodyCarriesAStanza()
 
         /// <summary>
-        /// Der ausgehende Weg gegen eine fremde Gegenstelle: STARTTLS,
-        /// SASL-EXTERNAL, eine Stanza hinaus.
+        /// The outbound path against a foreign far end: STARTTLS,
+        /// SASL-EXTERNAL, a stanza out.
         /// </summary>
         /// <remarks>
-        /// Ein <c>true</c> von <c>DeliverAsync</c> heisst hier mehr als bei
-        /// einem Lauf gegen die eigene Gegenstelle: Prosody hat den
-        /// STARTTLS-Aufbau angenommen, unser Zertifikat gegen seine CA geprüft,
-        /// <c>EXTERNAL</c> angeboten, unsere Identität daraus abgeleitet und
-        /// den Stream freigegeben. Jeder dieser Schritte war bisher nur gegen
-        /// unsere eigene Auffassung davon geprüft.
+        /// A <c>true</c> from <c>DeliverAsync</c> means more here than with a
+        /// run against our own far end: Prosody has taken the STARTTLS set-up,
+        /// checked our certificate against its CA, offered <c>EXTERNAL</c>,
+        /// derived our identity from it and cleared the stream. Every one of
+        /// these steps was so far only checked against our own understanding of
+        /// it.
         /// </remarks>
         [Test]
         public async Task TheStreamToProsodyCarriesAStanza()
         {
 
-            Aufbau();
+            BuildUp();
 
-            var angekommen = await Links!.DeliverAsync(
-                                 PeerDomain,
+            var arrived = await Links!.DeliverAsync(
+                              PeerDomain,
                                  $"<message from='alice@{LocalDomain}' to='{PeerDomain}' type='chat'>" +
-                                 "<body>Hallo Prosody</body></message>",
+                                 "<body>Hello Prosody</body></message>",
                                  CancellationToken.None);
 
-            Assert.That(angekommen, Is.True,
-                        "Der Stream zu Prosody kam nicht zustande.");
+            Assert.That(arrived, Is.True,
+                        "The stream to Prosody did not come about.");
 
         }
 
@@ -96,33 +96,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APingOverABidirectionalStream()
 
         /// <summary>
-        /// Dasselbe mit XEP-0288: die Antwort nimmt die Verbindung, über die
-        /// die Frage kam.
+        /// The same with XEP-0288: the answer takes the connection the question
+        /// came over.
         /// </summary>
         /// <remarks>
-        /// Der Test, um dessentwillen der Prosody-Aufbau existiert. Die
-        /// Rückrichtung ist sonst nur gegen die eigene Gegenstelle geprüft -
-        /// und eine Aushandlung, bei der beide Seiten dieselbe Vorstellung von
-        /// der Erweiterung haben, beweist über die Erweiterung nichts.
+        /// The test for whose sake the Prosody set-up exists. The return
+        /// direction is otherwise only checked against our own far end - and a
+        /// negotiation in which both sides have the same idea of the extension
+        /// establishes nothing about the extension.
         ///
-        /// Prosody kündigt <c>urn:xmpp:features:bidi</c> an, sobald
-        /// <c>mod_s2s_bidi</c> läuft; <c>tools/prosody/setup.sh</c> schaltet es
-        /// ein. Kommt die Antwort an, stand unser <c>&lt;bidi/&gt;</c> in der
-        /// richtigen Form, im richtigen Namensraum und an der richtigen Stelle
-        /// des Handshakes.
+        /// Prosody announces <c>urn:xmpp:features:bidi</c> as soon as
+        /// <c>mod_s2s_bidi</c> runs; <c>tools/prosody/setup.sh</c> switches it
+        /// on. If the answer arrives, our <c>&lt;bidi/&gt;</c> stood in the
+        /// right form, in the right namespace and at the right place of the
+        /// handshake.
         /// </remarks>
         [Test]
         public async Task APingOverABidirectionalStream()
         {
 
-            Aufbau(bidi: true);
+            BuildUp(bidi: true);
 
             var alice = await AliceAsync();
 
-            var dauer = await alice.PingAsync(PeerDomain);
+            var duration = await alice.PingAsync(PeerDomain);
 
-            Assert.That(dauer, Is.Not.Null,
-                        "Prosody hat den Ping nicht über die Rückrichtung beantwortet.");
+            Assert.That(duration, Is.Not.Null,
+                        "Prosody did not answer the ping over the return direction.");
 
         }
 
@@ -131,58 +131,57 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ProsodyDialsUsAndTheAnswerArrives()
 
         /// <summary>
-        /// Der eingehende Weg: Prosody baut die Verbindung auf, wir nehmen an.
+        /// The inbound path: Prosody builds the connection up, we accept.
         /// </summary>
         /// <remarks>
-        /// Bis hierher stand unsere annehmende Seite nie vor einer fremden
-        /// Gegenstelle. Was hier zum ersten Mal geprüft wird, ist unser
-        /// Stream-Kopf als Antwortender, unsere Feature-Ankündigung, unsere
-        /// Annahme eines fremden <c>&lt;auth mechanism='EXTERNAL'/&gt;</c> und
-        /// die Identitätsprüfung aus dem vorgelegten Zertifikat. Der Rückweg
-        /// aus S9 lief zwar in eingehender Richtung, aber über einen Stream,
-        /// den <i>wir</i> aufgebaut hatten.
+        /// Up to here our accepting side never stood before a foreign far end.
+        /// What is checked here for the first time is our stream header as the
+        /// answering one, our feature announcement, our acceptance of a foreign
+        /// <c>&lt;auth mechanism='EXTERNAL'/&gt;</c> and the identity check
+        /// from the presented certificate. The way back from S9 did run in the
+        /// inbound direction, but over a stream <i>we</i> had built up.
         ///
-        /// Ohne XEP-0288, und das ist Absicht: genau dann beantwortet Prosody
-        /// den Ping über eine eigene Verbindung zu uns, und die muss unser
-        /// Listener annehmen. Mit Bidi käme die Antwort über den bestehenden
-        /// Stream, und der eingehende Weg bliebe wieder ungeprüft.
+        /// Without XEP-0288, and that is on purpose: precisely then Prosody
+        /// answers the ping over a connection of its own to us, and that one
+        /// our listener has to accept. With bidi the answer would come over the
+        /// existing stream, and the inbound path would stay unchecked again.
         ///
-        /// <b>Dieser Test läuft nur innerhalb von WSL.</b> Von Windows aus
-        /// erreicht Prosody uns nicht - die Hyper-V-Firewall verwirft jede
-        /// Verbindung von WSL zum Host, und das zu ändern hiesse, eine
-        /// Firewall-Regel zu setzen. Im selben Netz ist alles Rückschleife.
+        /// <b>This test runs only inside WSL.</b> From Windows Prosody does not
+        /// reach us - the Hyper-V firewall discards every connection from WSL
+        /// to the host, and to change that would mean setting a firewall rule.
+        /// In the same net everything is loopback.
         /// </remarks>
         [Test]
         public async Task ProsodyDialsUsAndTheAnswerArrives()
         {
 
             if (!OperatingSystem.IsLinux())
-                Assert.Ignore("Nur innerhalb von WSL: von Windows aus erreicht Prosody diesen Server nicht.");
+                Assert.Ignore("Only inside WSL: from Windows Prosody does not reach this server.");
 
-            Aufbau(erreichbar: true);
+            BuildUp(reachable: true);
 
             var alice = await AliceAsync();
 
-            var dauer = await alice.PingAsync(PeerDomain);
+            var duration = await alice.PingAsync(PeerDomain);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(dauer, Is.Not.Null,
-                            "Prosody hat den Ping nicht beantwortet.");
+                Assert.That(duration, Is.Not.Null,
+                            "Prosody did not answer the ping.");
 
                 Assert.That(Links!.InboundConnectionCount, Is.GreaterThan(0),
-                            "Die Antwort kam, aber nicht über eine eingehende Verbindung - " +
-                            "dann prüft dieser Test nicht, was er prüfen soll.");
+                            "The answer came, but not over an inbound connection - " +
+                            "then this test does not check what it is supposed to check.");
 
                 Assert.That(Links.BidirectionalDeliveryCount, Is.Zero,
-                            "Aufbau des Tests: hier soll gerade keine Rückrichtung im Spiel sein.");
+                            "Set-up of the test: no return direction is supposed to be in play here.");
 
-                // Und der Nachweis, dass Prosody sich über sein Zertifikat
-                // ausgewiesen hat und nicht über Dialback: sonst hätten *wir*
-                // zurückfragen müssen.
+                // And the proof that Prosody identified itself over its
+                // certificate and not over dialback: otherwise *we* would have
+                // had to query back.
                 Assert.That(Links.DialbackVerificationCount, Is.Zero,
-                            "Hier soll SASL-EXTERNAL tragen, nicht Dialback.");
+                            "SASL-EXTERNAL is supposed to carry here, not dialback.");
 
             });
 
@@ -193,61 +192,61 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region DialbackCarriesBothDirections()
 
         /// <summary>
-        /// XEP-0220 gegen eine fremde Gegenstelle - in beiden Rollen.
+        /// XEP-0220 against a foreign far end - in both roles.
         /// </summary>
         /// <remarks>
-        /// Dialback war zuletzt das einzige Verfahren, das nur gegen die eigene
-        /// Gegenstelle geprüft war. Ein Ping-Rundlauf übt beide Rollen auf
-        /// einmal, weil jede Richtung ihre eigene Verbindung aufbaut und jede
-        /// aufbauende Seite sich ausweisen muss:
+        /// Dialback was until recently the only procedure that was checked
+        /// against our own far end alone. A ping round trip exercises both
+        /// roles at once, because every direction builds its own connection up
+        /// and every building side has to identify itself:
         ///
         /// <list type="number">
         ///   <item>
-        ///     Wir wählen an und schicken <c>&lt;db:result/&gt;</c>. Prosody
-        ///     fragt daraufhin beim autoritativen Server unserer Domain nach -
-        ///     das sind wieder wir, auf 5269. Hier antwortet unsere
-        ///     <b>autoritative</b> Rolle einer fremden Gegenstelle.
+        ///     We dial and send <c>&lt;db:result/&gt;</c>. Prosody thereupon
+        ///     queries the authoritative server of our domain - that is us
+        ///     again, on 5269. Here our <b>authoritative</b> role answers a
+        ///     foreign far end.
         ///   </item>
         ///   <item>
-        ///     Prosody wählt an, um die Antwort zuzustellen, und schickt
-        ///     seinerseits <c>&lt;db:result/&gt;</c>. Wir fragen bei
-        ///     <c>prosody.test</c> nach. Hier arbeitet unsere <b>prüfende</b>
-        ///     Rolle gegen eine fremde Gegenstelle.
+        ///     Prosody dials in order to deliver the answer, and sends
+        ///     <c>&lt;db:result/&gt;</c> in turn. We query
+        ///     <c>prosody.test</c>. Here our <b>checking</b> role works against
+        ///     a foreign far end.
         ///   </item>
         /// </list>
         ///
-        /// Dass der Ping ankommt, belegt beide: scheiterte Prosodys Rückfrage
-        /// an uns, nähme es unsere Stanza nicht an; scheiterte unsere Rückfrage
-        /// an Prosody, nähmen wir seine Antwort nicht an.
-        /// <c>DialbackVerificationCount</c> hält die zweite Rolle zusätzlich
-        /// fest - ohne sie bestünde der Test auch dann, wenn wir jemanden
-        /// ungeprüft durchgelassen hätten.
+        /// That the ping arrives establishes both: had Prosody's query to us
+        /// failed, it would not take our stanza; had our query to Prosody
+        /// failed, we would not take its answer.
+        /// <c>DialbackVerificationCount</c> holds the second role fast on top -
+        /// without it the test would pass even if we had let somebody through
+        /// unchecked.
         /// </remarks>
         [Test]
         public async Task DialbackCarriesBothDirections()
         {
 
             if (!OperatingSystem.IsLinux())
-                Assert.Ignore("Nur innerhalb von WSL: Prosodys Rückfrage erreicht diesen Server sonst nicht.");
+                Assert.Ignore("Only inside WSL: Prosody's query does not reach this server otherwise.");
 
-            Aufbau(erreichbar: true, dialback: true);
+            BuildUp(reachable: true, dialback: true);
 
             var alice = await AliceAsync();
 
-            var dauer = await alice.PingAsync(PeerDomain);
+            var duration = await alice.PingAsync(PeerDomain);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(dauer, Is.Not.Null,
-                            "Prosody hat den Ping nicht beantwortet - eine der beiden " +
-                            "Rückfragen ist gescheitert.");
+                Assert.That(duration, Is.Not.Null,
+                            "Prosody did not answer the ping - one of the two " +
+                            "queries has failed.");
 
                 Assert.That(Links!.DialbackVerificationCount, Is.GreaterThan(0),
-                            "Wir haben Prosodys Schlüssel nie nachgefragt.");
+                            "We never queried Prosody's key.");
 
                 Assert.That(Links.InboundConnectionCount, Is.GreaterThan(0),
-                            "Ohne eingehende Verbindung gab es auch nichts zu prüfen.");
+                            "Without an inbound connection there was nothing to check either.");
 
             });
 
