@@ -27,21 +27,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die Bidi-Regel aus RFC 5893, Abschnitt 2.
+    /// The Bidi rule from RFC 5893, section 2.
     /// </summary>
     /// <remarks>
-    /// <b>Die Regel gilt nicht immer, sondern ansteckend.</b> Sobald ein
-    /// einziges Label eines Domainnamens rechtsläufige Zeichen trägt, ist der
-    /// ganze Name ein „Bidi domain name" - und dann müssen <i>alle</i> Labels
-    /// die sechs Bedingungen erfüllen, auch die aus reinem ASCII. Genau das ist
-    /// der Teil, den man beim Lesen überliest und beim Umsetzen vergisst:
-    /// <c>9abc.example</c> ist ein gültiger Domainname, <c>9abc.אבג</c> ist
-    /// keiner.
+    /// <b>The rule does not always hold, but catchingly.</b> As soon as a single
+    /// label of a domain name carries right-to-left characters, the whole name
+    /// is a "Bidi domain name" - and then <i>all</i> labels have to meet the six
+    /// conditions, including those of pure ASCII. Precisely that is the part one
+    /// overlooks when reading and forgets when implementing:
+    /// <c>9abc.example</c> is a valid domain name, <c>9abc.אבג</c> is none.
     ///
-    /// Die Bidi-Klassen kommen aus <c>BidiClasses</c>, erzeugt aus
-    /// <c>DerivedBidiClass.txt</c>. Ohne diese Tabelle wäre die Regel nicht
-    /// umsetzbar: Ob ein Buchstabe R, AL oder L ist, hängt an seiner Schrift
-    /// und ist aus keiner Eigenschaft ableitbar, die .NET ausliefert.
+    /// The Bidi classes come from <c>BidiClasses</c>, produced from
+    /// <c>DerivedBidiClass.txt</c>. Without this table the rule could not be
+    /// implemented: whether a letter is R, AL or L hangs on its script and is
+    /// derivable from no property .NET delivers.
     /// </remarks>
     [TestFixture]
     public class IdnaBidiTests
@@ -49,17 +48,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private const String Hebraeisch     = "אבג";   // ALEF BET GIMEL, Klasse R
-        private const String Arabisch       = "مثال";  // Klasse AL
-        private const String ArabischeZiffer = "٢";    // ARABIC-INDIC DIGIT TWO, Klasse AN
+        private const String Hebrew     = "אבג";   // ALEF BET GIMEL, class R
+        private const String Arabic       = "مثال";  // class AL
+        private const String ArabicDigit = "٢";    // ARABIC-INDIC DIGIT TWO, class AN
 
-        private static Boolean Gueltig(String domain)
+        private static Boolean Valid(String domain)
             => Idna.IsValidDomain(domain, out _);
 
-        private static String? Grund(String domain)
+        private static String? Reason(String domain)
         {
-            Idna.IsValidDomain(domain, out var grund);
-            return grund;
+            Idna.IsValidDomain(domain, out var reason);
+            return reason;
         }
 
         #endregion
@@ -68,14 +67,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAnRtlLabel_TheRuleDoesNotApply()
 
         /// <summary>
-        /// Die Gegenprobe zuerst, und sie ist die wichtigere Hälfte: In einem
-        /// Namen ohne rechtsläufiges Label gilt die Regel nicht.
+        /// The counter-check first, and it is the more important half: in a name
+        /// without a right-to-left label the rule does not hold.
         /// </summary>
         /// <remarks>
-        /// <c>9abc</c> beginnt mit einer europäischen Ziffer (EN) und verstösst
-        /// damit gegen Bedingung 1 - aber nur, wenn die Regel überhaupt gilt.
-        /// Wer sie immer anwendet, weist reihenweise Domainnamen ab, die es seit
-        /// dreissig Jahren gibt.
+        /// <c>9abc</c> begins with a European digit (EN) and thereby violates
+        /// condition 1 - but only if the rule holds at all. Whoever applies it
+        /// always refuses domain names by the dozen that have existed for thirty
+        /// years.
         /// </remarks>
         [Test]
         public void WithoutAnRtlLabel_TheRuleDoesNotApply()
@@ -83,9 +82,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gueltig("9abc.example"),  Is.True, Grund("9abc.example"));
-                Assert.That(Gueltig("example.com"),   Is.True, Grund("example.com"));
-                Assert.That(Gueltig("3com.example"),  Is.True, Grund("3com.example"));
+                Assert.That(Valid("9abc.example"),  Is.True, Reason("9abc.example"));
+                Assert.That(Valid("example.com"),   Is.True, Reason("example.com"));
+                Assert.That(Valid("3com.example"),  Is.True, Reason("3com.example"));
             });
 
         }
@@ -95,8 +94,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRuleIsCatching()
 
         /// <summary>
-        /// Ein einziges rechtsläufiges Label macht den ganzen Namen zu einem
-        /// Bidi-Namen - und dann gilt die Regel auch für die anderen.
+        /// A single right-to-left label makes the whole name a Bidi name - and
+        /// then the rule holds for the others too.
         /// </summary>
         [Test]
         public void TheRuleIsCatching()
@@ -105,27 +104,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(Gueltig($"{Hebraeisch}.example"), Is.True,
-                            Grund($"{Hebraeisch}.example"));
+                Assert.That(Valid($"{Hebrew}.example"), Is.True,
+                            Reason($"{Hebrew}.example"));
 
-                Assert.That(Gueltig($"9abc.{Hebraeisch}"), Is.False,
-                            "Dasselbe Label, das ohne Nachbarn zulässig ist.");
+                Assert.That(Valid($"9abc.{Hebrew}"), Is.False,
+                            "The same label that is permitted without neighbours.");
 
-                Assert.That(Grund($"9abc.{Hebraeisch}"), Does.Contain("9abc"),
-                            "Und der Grund nennt das Label, an dem es liegt.");
+                Assert.That(Reason($"9abc.{Hebrew}"), Does.Contain("9abc"),
+                            "And the reason names the label it is down to.");
 
-                // Ein Label aus lauter arabischen Ziffern macht den Namen
-                // ebenfalls zu einem Bidi-Namen (AN zählt mit) - und
-                // verstösst dann selbst gegen Bedingung 1.
-                Assert.That(Gueltig($"{ArabischeZiffer}.example"), Is.False,
-                            "Ein Label aus lauter arabischen Ziffern.");
+                // A label of nothing but Arabic digits likewise makes the name a
+                // Bidi name (AN counts along) - and then violates condition 1
+                // itself.
+                Assert.That(Valid($"{ArabicDigit}.example"), Is.False,
+                            "A label of nothing but Arabic digits.");
 
-                // Das rechtsläufige Label steckt hier in seiner
-                // ASCII-Verpackung. Wer die Bidi-Regel über die Verpackung
-                // laufen lässt, sieht lauter lateinische Buchstaben und findet
-                // nichts.
-                Assert.That(Gueltig("9abc.xn--4dbcagdahymbxekheh6e0a7fei0b"), Is.False,
-                            "Hebräisch als A-Label, daneben ein Label mit Ziffer am Anfang.");
+                // The right-to-left label sits here in its ASCII wrapping.
+                // Whoever lets the Bidi rule run over the wrapping sees nothing
+                // but Latin letters and finds nothing.
+                Assert.That(Valid("9abc.xn--4dbcagdahymbxekheh6e0a7fei0b"), Is.False,
+                            "Hebrew as an A-label, beside it a label with a digit at the start.");
 
             });
 
@@ -136,14 +134,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnRtlLabel_KeepsItsDirection()
 
         /// <summary>
-        /// Bedingung 1, 2 und 5: Ein Label hat eine Richtung, und die bestimmt
-        /// sein erstes Zeichen.
+        /// Conditions 1, 2 and 5: a label has a direction, and its first
+        /// character determines it.
         /// </summary>
         /// <remarks>
-        /// <c>a{Hebraeisch}</c> beginnt links und trägt rechtsläufige Zeichen:
-        /// Nach Bedingung 1 ist es ein LTR-Label, und Bedingung 5 lässt darin
-        /// kein R zu. Andersherum darf ein RTL-Label keine lateinischen
-        /// Buchstaben tragen (Bedingung 2).
+        /// <c>a{Hebrew}</c> begins on the left and carries right-to-left
+        /// characters: per condition 1 it is an LTR label, and condition 5
+        /// permits no R in it. The other way round, an RTL label may carry no
+        /// Latin letters (condition 2).
         /// </remarks>
         [Test]
         public void AnRtlLabel_KeepsItsDirection()
@@ -152,24 +150,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(Gueltig($"a{Hebraeisch}.example"), Is.False,
-                            "Ein LTR-Label mit hebräischen Zeichen.");
+                Assert.That(Valid($"a{Hebrew}.example"), Is.False,
+                            "An LTR label with Hebrew characters.");
 
-                Assert.That(Gueltig($"{Hebraeisch}a.example"), Is.False,
-                            "Ein RTL-Label mit lateinischen Zeichen.");
+                Assert.That(Valid($"{Hebrew}a.example"), Is.False,
+                            "An RTL label with Latin characters.");
 
-                // Dieselben beiden Fälle, aber mit dem fremden Zeichen in der
-                // Mitte statt am Ende. Das ist kein Feinschliff: Am Ende
-                // scheitern sie schon an Bedingung 3 bzw. 6 - dass auch
-                // Bedingung 2 und 5 etwas tun, zeigt erst diese Form.
-                Assert.That(Gueltig($"אaב.example"), Is.False,
-                            "Bedingung 2: ein L mitten in einem rechtsläufigen Label.");
+                // The same two cases, but with the foreign character in the
+                // middle instead of at the end. That is no fine polish: at the
+                // end they already founder on conditions 3 and 6 respectively -
+                // that conditions 2 and 5 do something as well is shown only by
+                // this form.
+                Assert.That(Valid($"אaב.example"), Is.False,
+                            "Condition 2: an L in the middle of a right-to-left label.");
 
-                Assert.That(Gueltig($"aאb.example"), Is.False,
-                            "Bedingung 5: ein R mitten in einem linksläufigen Label.");
+                Assert.That(Valid($"aאb.example"), Is.False,
+                            "Condition 5: an R in the middle of a left-to-right label.");
 
-                Assert.That(Gueltig($"{Arabisch}.example"),    Is.True,
-                            Grund($"{Arabisch}.example"));
+                Assert.That(Valid($"{Arabic}.example"),    Is.True,
+                            Reason($"{Arabic}.example"));
 
             });
 
@@ -180,16 +179,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnRtlLabel_DoesNotMixTheTwoKindsOfDigits()
 
         /// <summary>
-        /// Bedingung 4: In einem rechtsläufigen Label stehen europäische und
-        /// arabische Ziffern nicht nebeneinander.
+        /// Condition 4: in a right-to-left label European and Arabic digits do
+        /// not stand beside each other.
         /// </summary>
         /// <remarks>
-        /// Das ist eine andere Regel als A.8/A.9 aus RFC 5892 und trifft ein
-        /// anderes Paar: Dort ging es um die beiden <i>arabischen</i>
-        /// Ziffernreihen, hier um arabische neben europäischen. Beide sagen
-        /// dasselbe darüber, warum: Zwei Ziffernfolgen nebeneinander, die
-        /// verschieden herum gelesen werden, ergeben eine Adresse, die niemand
-        /// sicher vorlesen kann.
+        /// That is another rule than A.8/A.9 from RFC 5892 and hits another
+        /// pair: there it was about the two <i>Arabic</i> digit series, here
+        /// about Arabic beside European ones. Both say the same about why: two
+        /// digit sequences beside each other that are read in opposite
+        /// directions yield an address nobody can read out with confidence.
         /// </remarks>
         [Test]
         public void AnRtlLabel_DoesNotMixTheTwoKindsOfDigits()
@@ -198,14 +196,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(Gueltig($"{Hebraeisch}1.example"),  Is.True,
-                            Grund($"{Hebraeisch}1.example"));
+                Assert.That(Valid($"{Hebrew}1.example"),  Is.True,
+                            Reason($"{Hebrew}1.example"));
 
-                Assert.That(Gueltig($"{Arabisch}{ArabischeZiffer}.example"), Is.True,
-                            Grund($"{Arabisch}{ArabischeZiffer}.example"));
+                Assert.That(Valid($"{Arabic}{ArabicDigit}.example"), Is.True,
+                            Reason($"{Arabic}{ArabicDigit}.example"));
 
-                Assert.That(Gueltig($"{Arabisch}1{ArabischeZiffer}.example"), Is.False,
-                            "Europäische und arabische Ziffer im selben Label.");
+                Assert.That(Valid($"{Arabic}1{ArabicDigit}.example"), Is.False,
+                            "European and Arabic digit in the same label.");
 
             });
 
@@ -216,37 +214,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheEndOfALabel()
 
         /// <summary>
-        /// Bedingung 3 und 6: Woran ein Label enden darf.
+        /// Conditions 3 and 6: what a label may end on.
         /// </summary>
         /// <remarks>
-        /// Diese beiden Bedingungen sind über <see cref="Idna.IsValidDomain"/>
-        /// nicht erreichbar - die Zeichen, mit denen ein Label falsch enden
-        /// könnte (Trenn- und Sonderzeichen), sind schon auf der Codepoint-Ebene
-        /// abgewiesen. Die Regel prüft sie trotzdem, denn sie ist die Regel aus
-        /// dem RFC und nicht die Teilmenge, die dieser Aufrufer gerade
-        /// durchlässt. Also wird sie hier unmittelbar gefragt.
+        /// These two conditions are not reachable through
+        /// <see cref="Idna.IsValidDomain"/> - the characters a label could end
+        /// wrongly on (separators and special characters) are already refused at
+        /// the code point level. The rule checks them all the same, for it is
+        /// the rule from the RFC and not the subset this caller happens to let
+        /// through. So it is asked directly here.
         /// </remarks>
         [Test]
         public void TheEndOfALabel()
         {
 
-            const String Punkt      = "·";  // MIDDLE DOT, Klasse ON
-            const String Nsm        = "֑";  // HEBREW ACCENT ETNAHTA, Klasse NSM
+            const String MiddleDot      = "·";  // MIDDLE DOT, class ON
+            const String Nsm        = "֑";  // HEBREW ACCENT ETNAHTA, class NSM
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Idna.SatisfiesBidiRule(Hebraeisch + Nsm, out _), Is.True,
-                            "Bedingung 3: nach dem letzten R dürfen NSM folgen.");
+                Assert.That(Idna.SatisfiesBidiRule(Hebrew + Nsm, out _), Is.True,
+                            "Condition 3: after the last R, NSM may follow.");
 
-                Assert.That(Idna.SatisfiesBidiRule(Hebraeisch + Punkt, out _), Is.False,
-                            "Bedingung 3: ein ON am Ende ist keines der erlaubten Zeichen.");
+                Assert.That(Idna.SatisfiesBidiRule(Hebrew + MiddleDot, out _), Is.False,
+                            "Condition 3: an ON at the end is none of the permitted characters.");
 
-                Assert.That(Idna.SatisfiesBidiRule("abc" + Punkt, out _), Is.False,
-                            "Bedingung 6: dasselbe für ein LTR-Label.");
+                Assert.That(Idna.SatisfiesBidiRule("abc" + MiddleDot, out _), Is.False,
+                            "Condition 6: the same for an LTR label.");
 
                 Assert.That(Idna.SatisfiesBidiRule("abc1", out _), Is.True,
-                            "Bedingung 6: eine europäische Ziffer darf ein LTR-Label beenden.");
+                            "Condition 6: a European digit may end an LTR label.");
 
             });
 
@@ -257,8 +255,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFirstCharacterDecides()
 
         /// <summary>
-        /// Bedingung 1: Weder eine Ziffer noch ein neutrales Zeichen darf ein
-        /// Label eröffnen.
+        /// Condition 1: neither a digit nor a neutral character may open a
+        /// label.
         /// </summary>
         [Test]
         public void TheFirstCharacterDecides()
@@ -266,10 +264,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Idna.SatisfiesBidiRule("1abc", out _),          Is.False, "EN am Anfang");
-                Assert.That(Idna.SatisfiesBidiRule(ArabischeZiffer + "ب", out _), Is.False, "AN am Anfang");
+                Assert.That(Idna.SatisfiesBidiRule("1abc", out _),          Is.False, "EN at the start");
+                Assert.That(Idna.SatisfiesBidiRule(ArabicDigit + "ب", out _), Is.False, "AN at the start");
                 Assert.That(Idna.SatisfiesBidiRule("abc", out _),           Is.True);
-                Assert.That(Idna.SatisfiesBidiRule(Hebraeisch, out _),      Is.True);
+                Assert.That(Idna.SatisfiesBidiRule(Hebrew, out _),      Is.True);
             });
 
         }

@@ -27,18 +27,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Punycode nach RFC 3492, gegen die Beispiele aus Abschnitt 7.1.
+    /// Punycode per RFC 3492, against the examples from section 7.1.
     /// </summary>
     /// <remarks>
-    /// Der RFC liefert seine Prüfsteine selbst mit: elf Zeichenketten in acht
-    /// Schriften, jede mit ihrer kodierten Form. Gegen sie zu rechnen ist der
-    /// Unterschied zwischen „mein Kodierer und mein Dekodierer sind sich einig"
-    /// und „meine Kodierung ist die, die alle anderen auch lesen".
+    /// The RFC brings its touchstones along itself: eleven strings in eight
+    /// scripts, each with its encoded form. To compute against them is the
+    /// difference between "my encoder and my decoder agree" and "my encoding is
+    /// the one everybody else reads too".
     ///
-    /// Beide Richtungen stehen hier, und beide werden gebraucht: Dekodiert wird,
-    /// um zu sehen, was ein A-Label bedeutet; kodiert wird, um zu prüfen, dass
-    /// es die <b>einzige</b> Schreibweise dieser Bedeutung ist (RFC 5891,
-    /// Abschnitt 4.2.2 - eine andere wäre eine zweite Adresse für dasselbe).
+    /// Both directions stand here, and both are needed: decoding is done to see
+    /// what an A-label means; encoding is done to check that it is the
+    /// <b>only</b> spelling of that meaning (RFC 5891, section 4.2.2 - another
+    /// one would be a second address for the same thing).
     /// </remarks>
     [TestFixture]
     public class PunycodeTests
@@ -47,29 +47,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Data
 
         /// <summary>
-        /// RFC 3492, Abschnitt 7.1 - die Beispiele mit ihrer kodierten Form.
+        /// RFC 3492, section 7.1 - the examples with their encoded form.
         /// </summary>
-        private static readonly (String Klartext, String Kodiert, String Schrift)[] Beispiele =
+        private static readonly (String PlainText, String Encoded, String Script)[] Examples =
         [
             ("ليهمابتكلموشعربي؟",
              "egbpdaj6bu4bxfgehfvwxn",
-             "Arabisch (A)"),
+             "Arabic (A)"),
 
             ("他们为什么不说中文",
              "ihqwcrb4cv8a8dqg056pqjye",
-             "Chinesisch, vereinfacht (B)"),
+             "Chinese, simplified (B)"),
 
             ("他們爲什麽不說中文",
              "ihqwctvzc91f659drss3x8bo0yb",
-             "Chinesisch, traditionell (C)"),
+             "Chinese, traditional (C)"),
 
             ("Pročprostěnemluvíčesky",
              "Proprostnemluvesky-uyb24dma41a",
-             "Tschechisch (D)"),
+             "Czech (D)"),
 
             ("למההםפשוטלאמדבריםעברית",
              "4dbcagdahymbxekheh6e0a7fei0b",
-             "Hebräisch (E)"),
+             "Hebrew (E)"),
 
             ("यहलोगहिन्दीक्योंनहींबोलसकतेहैं",
              "i1baa7eci9glrd9b2ae1bj0hfcgg6iyaf8o0a1dig0cd",
@@ -77,23 +77,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             ("なぜみんな日本語を話してくれないのか",
              "n8jok5ay5dzabd5bym9f0cm5685rrjetr6pdxa",
-             "Japanisch (G)"),
+             "Japanese (G)"),
 
             ("PorquénopuedensimplementehablarenEspañol",
              "PorqunopuedensimplementehablarenEspaol-fmd56a",
-             "Spanisch (I)"),
+             "Spanish (I)"),
 
             ("TạisaohọkhôngthểchỉnóitiếngViệt",
              "TisaohkhngthchnitingVit-kjcr8268qyxafd2f1b9g",
-             "Vietnamesisch (J)"),
+             "Vietnamese (J)"),
 
             ("3年B組金八先生",
              "3B-ww4c5e180e575a65lsy2b",
-             "Japanisch (L) - mit ASCII dazwischen"),
+             "Japanese (L) - with ASCII in between"),
 
             ("ひとつ屋根の下2",
              "2-u9tlzr9756bt3uc0v",
-             "Japanisch (O) - ASCII am Ende")
+             "Japanese (O) - ASCII at the end")
         ];
 
         #endregion
@@ -102,7 +102,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc3492_Examples_Decode()
 
         /// <summary>
-        /// Jede kodierte Form ergibt ihren Klartext.
+        /// Every encoded form yields its plain text.
         /// </summary>
         [Test]
         public void Rfc3492_Examples_Decode()
@@ -110,8 +110,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                foreach (var (klartext, kodiert, schrift) in Beispiele)
-                    Assert.That(Punycode.Decode(kodiert), Is.EqualTo(klartext), schrift);
+                foreach (var (plaintext, encoded, script) in Examples)
+                    Assert.That(Punycode.Decode(encoded), Is.EqualTo(plaintext), script);
             });
 
         }
@@ -121,7 +121,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Rfc3492_Examples_Encode()
 
         /// <summary>
-        /// Und jeder Klartext ergibt genau diese kodierte Form.
+        /// And every plain text yields precisely this encoded form.
         /// </summary>
         [Test]
         public void Rfc3492_Examples_Encode()
@@ -129,8 +129,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                foreach (var (klartext, kodiert, schrift) in Beispiele)
-                    Assert.That(Punycode.Encode(klartext), Is.EqualTo(kodiert), schrift);
+                foreach (var (plaintext, encoded, script) in Examples)
+                    Assert.That(Punycode.Encode(plaintext), Is.EqualTo(encoded), script);
             });
 
         }
@@ -140,12 +140,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region BrokenInput_IsRefusedNotGuessed()
 
         /// <summary>
-        /// Was kein Punycode ist, ergibt <c>null</c> - und keine Ausnahme.
+        /// What is no punycode yields <c>null</c> - and no exception.
         /// </summary>
         /// <remarks>
-        /// Der Inhalt kommt aus einer Adresse, die irgendjemand geschickt hat.
-        /// Eine Ausnahme mitten in der Stanza-Behandlung wäre die falsche
-        /// Antwort auf „das ist kein gültiges Label".
+        /// The content comes from an address somebody sent. An exception in the
+        /// middle of the stanza handling would be the wrong answer to "that is
+        /// no valid label".
         /// </remarks>
         [Test]
         public void BrokenInput_IsRefusedNotGuessed()
@@ -153,14 +153,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Punycode.Decode("$"),           Is.Null, "keine Ziffer des 36er-Alphabets");
-                Assert.That(Punycode.Decode("abc-ä"),       Is.Null, "Nicht-ASCII im kodierten Teil");
-                Assert.That(Punycode.Decode("9999999999"),  Is.Null, "Überlauf");
-                Assert.That(Punycode.Decode(""),            Is.Null, "leer");
+                Assert.That(Punycode.Decode("$"),           Is.Null, "no digit of the base-36 alphabet");
+                Assert.That(Punycode.Decode("abc-ä"),       Is.Null, "non-ASCII in the encoded part");
+                Assert.That(Punycode.Decode("9999999999"),  Is.Null, "overflow");
+                Assert.That(Punycode.Decode(""),            Is.Null, "empty");
 
-                // Gegenprobe zur Zeile darüber: 'a-' ist kein Bruch, sondern
-                // die richtige Kodierung von 'a'. Ohne sie stünde hier die
-                // Vermutung, jeder Trenner am Ende sei ein Fehler.
+                // Counter-check to the line above: 'a-' is no breakage but the
+                // correct encoding of 'a'. Without it the assumption would stand
+                // here that every separator at the end is an error.
                 Assert.That(Punycode.Decode("a-"),          Is.EqualTo("a"));
             });
 
@@ -171,7 +171,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PureAscii_StaysItself()
 
         /// <summary>
-        /// Reines ASCII bleibt ASCII - mit dem Trenner am Ende.
+        /// Pure ASCII stays ASCII - with the separator at the end.
         /// </summary>
         [Test]
         public void PureAscii_StaysItself()
@@ -182,9 +182,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(Punycode.Encode("abc"),  Is.EqualTo("abc-"));
                 Assert.That(Punycode.Decode("abc-"), Is.EqualTo("abc"));
 
-                // RFC 3492, Abschnitt 5: Die Ziffern sind schreibweisenlos -
-                // 'T' zählt wie 't'. Kodiert wird trotzdem nur klein, und
-                // genau daran erkennt ein A-Label seine kanonische Form.
+                // RFC 3492, section 5: the digits are case-insensitive - 'T'
+                // counts like 't'. It is encoded in lower case all the same, and
+                // precisely by that an A-label is recognised in its canonical
+                // form.
                 Assert.That(Punycode.Decode("TDA"), Is.EqualTo("ü"));
                 Assert.That(Punycode.Encode("ü"),   Is.EqualTo("tda"));
             });

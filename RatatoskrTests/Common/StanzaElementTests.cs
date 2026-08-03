@@ -27,13 +27,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Der Leser, an dem die Weiche für eingehende Rahmen hängt.
+    /// The reader the switch for incoming frames hangs on.
     /// </summary>
     /// <remarks>
-    /// Ohne Server geprüft, und das ist kein Sparen: Die Fragen hier sind
-    /// Fragen an eine Zeichenkette. Ein Fixture mit Server könnte sie zwar auch
-    /// beantworten, aber nur über den Umweg einer Wirkung — und wo es keinen
-    /// Umweg braucht, verdeckt er nur, was gemessen wird.
+    /// Checked without a server, and that is no economising: the questions here
+    /// are questions to a string. A fixture with a server could answer them too,
+    /// but only by the detour of an effect — and where no detour is needed, it
+    /// only covers up what is being measured.
     /// </remarks>
     [TestFixture]
     public class StanzaElementTests
@@ -42,14 +42,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NameOf_ReadsTheNameToItsEnd()
 
         /// <summary>
-        /// Der Name endet beim ersten Zeichen, das nicht mehr zu ihm gehört.
+        /// The name ends at the first character that no longer belongs to it.
         /// </summary>
         /// <remarks>
-        /// Der Fall, der das Ganze ausgelöst hat, steht in der Mitte:
-        /// <c>&lt;presence-probe/&gt;</c> heisst <c>presence-probe</c> und nicht
-        /// <c>presence</c>. Der Bindestrich gehört zum Namen (XML 1.0,
-        /// Abschnitt 2.3), und wer ihn nicht mitliest, macht aus dem Element ein
-        /// anderes.
+        /// The case that set this whole thing off stands in the middle:
+        /// <c>&lt;presence-probe/&gt;</c> is called <c>presence-probe</c> and not
+        /// <c>presence</c>. The hyphen belongs to the name (XML 1.0,
+        /// section 2.3), and whoever does not read it along makes another
+        /// element out of it.
         /// </remarks>
         [Test]
         [TestCase("<iq/>",                     "iq")]
@@ -61,9 +61,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         [TestCase("<opencast/>",               "opencast")]
         [TestCase("<a_b/>",                    "a_b")]
         [TestCase("<a1/>",                     "a1")]
-        public void NameOf_ReadsTheNameToItsEnd(String xml, String erwartet)
+        public void NameOf_ReadsTheNameToItsEnd(String xml, String expected)
         {
-            Assert.That(StanzaElement.NameOf(xml), Is.EqualTo(erwartet));
+            Assert.That(StanzaElement.NameOf(xml), Is.EqualTo(expected));
         }
 
         #endregion
@@ -71,24 +71,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NameOf_DropsTheNamespacePrefix()
 
         /// <summary>
-        /// Das Präfix gehört nicht zum Typ: <c>&lt;client:iq/&gt;</c> ist ein
-        /// <c>iq</c>.
+        /// The prefix does not belong to the type: <c>&lt;client:iq/&gt;</c> is
+        /// an <c>iq</c>.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 4.8.1 legt den Namensraum fest, nicht die
-        /// Abkürzung, unter der er angesprochen wird. Ein Server, der am Präfix
-        /// scheitert, scheitert an einer Freiheit, die der RFC ausdrücklich
-        /// lässt — und zwei Gegenstellen machen davon verschieden Gebrauch:
-        /// <c>&lt;stream:features/&gt;</c> und <c>&lt;features/&gt;</c> sind
-        /// dasselbe Element.
+        /// RFC 6120, section 4.8.1 lays down the namespace, not the abbreviation
+        /// it is addressed under. A server that founders on the prefix founders
+        /// on a freedom the RFC expressly leaves — and two counterparts make
+        /// different use of it: <c>&lt;stream:features/&gt;</c> and
+        /// <c>&lt;features/&gt;</c> are the same element.
         /// </remarks>
         [Test]
         [TestCase("<client:iq/>",        "iq")]
         [TestCase("<stream:features/>",  "features")]
         [TestCase("<db:result/>",        "result")]
-        public void NameOf_DropsTheNamespacePrefix(String xml, String erwartet)
+        public void NameOf_DropsTheNamespacePrefix(String xml, String expected)
         {
-            Assert.That(StanzaElement.NameOf(xml), Is.EqualTo(erwartet));
+            Assert.That(StanzaElement.NameOf(xml), Is.EqualTo(expected));
         }
 
         #endregion
@@ -96,13 +95,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NameOf_SkipsLeadingWhitespace()
 
         /// <summary>
-        /// Führender Leerraum vor dem Element wird übergangen.
+        /// Leading whitespace before the element is passed over.
         /// </summary>
         /// <remarks>
-        /// Über WebSocket kommt ein Rahmen zwar meist ohne, aber über TCP steht
-        /// der Zerleger vor einem Strom, in dem Leerraum als Keepalive erlaubt
-        /// ist (RFC 6120, Abschnitt 4.6.1). Ein Leser, der daran scheitert,
-        /// scheiterte an einem Leerzeichen.
+        /// Over WebSocket a frame usually comes without any, but over TCP the
+        /// splitter stands before a stream in which whitespace is permitted as a
+        /// keepalive (RFC 6120, section 4.6.1). A reader that founders on that
+        /// would founder on a space.
         /// </remarks>
         [Test]
         [TestCase(" <iq/>")]
@@ -117,19 +116,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region NameOf_HasNoNameWithoutAnElement()
 
         /// <summary>
-        /// Was mit keinem Element beginnt, hat keinen Namen — und darf keinen
-        /// erfinden.
+        /// What begins with no element has no name — and must not invent one.
         /// </summary>
         /// <remarks>
-        /// <c>&lt;/iq&gt;</c> steht ausdrücklich dabei: Ein schliessendes
-        /// Element ist kein Element, das ankommt. Ohne diese Unterscheidung
-        /// würde eine Weiche ein <c>&lt;/stream:stream&gt;</c> für einen Stream
-        /// halten, der beginnt.
+        /// <c>&lt;/iq&gt;</c> stands there expressly: a closing element is no
+        /// element that arrives. Without this distinction a switch would take a
+        /// <c>&lt;/stream:stream&gt;</c> for a stream that begins.
         /// </remarks>
         [Test]
         [TestCase("")]
         [TestCase("   ")]
-        [TestCase("kein XML")]
+        [TestCase("no XML")]
         [TestCase("<>")]
         [TestCase("</iq>")]
         public void NameOf_HasNoNameWithoutAnElement(String xml)
@@ -142,7 +139,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region IsStanza_KnowsTheThreeFromSection81()
 
         /// <summary>
-        /// RFC 6120, Abschnitt 8.1 kennt drei Stanzas und keine vierte.
+        /// RFC 6120, section 8.1 knows three stanzas and no fourth.
         /// </summary>
         [Test]
         [TestCase("<message/>",        true)]
@@ -154,10 +151,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         [TestCase("<presence-probe/>", false)]
         [TestCase("<open/>",           false)]
         [TestCase("<r/>",              false)]
-        [TestCase("kein XML",          false)]
-        public void IsStanza_KnowsTheThreeFromSection81(String xml, Boolean erwartet)
+        [TestCase("no XML",            false)]
+        public void IsStanza_KnowsTheThreeFromSection81(String xml, Boolean expected)
         {
-            Assert.That(StanzaElement.IsStanza(xml), Is.EqualTo(erwartet));
+            Assert.That(StanzaElement.IsStanza(xml), Is.EqualTo(expected));
         }
 
         #endregion
@@ -165,7 +162,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Is_ComparesTheWholeName()
 
         /// <summary>
-        /// <c>Is</c> vergleicht den ganzen Namen und nicht seinen Anfang.
+        /// <c>Is</c> compares the whole name and not its beginning.
         /// </summary>
         [Test]
         [TestCase("<open xmlns='urn:ietf:params:xml:ns:xmpp-framing'/>", "open",  true)]
@@ -176,9 +173,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         [TestCase("<resume xmlns='urn:xmpp:sm:3'/>",                     "r",     false)]
         [TestCase("<a xmlns='urn:xmpp:sm:3' h='1'/>",                    "a",     true)]
         [TestCase("<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>",    "a",     false)]
-        public void Is_ComparesTheWholeName(String xml, String name, Boolean erwartet)
+        public void Is_ComparesTheWholeName(String xml, String name, Boolean expected)
         {
-            Assert.That(StanzaElement.Is(xml, name), Is.EqualTo(erwartet));
+            Assert.That(StanzaElement.Is(xml, name), Is.EqualTo(expected));
         }
 
         #endregion

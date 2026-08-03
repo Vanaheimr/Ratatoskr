@@ -27,35 +27,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// IDNA2008 auf Label-Ebene: RFC 5891, Abschnitt 4.2, und die Rückprobe
-    /// eines A-Labels.
+    /// IDNA2008 at the label level: RFC 5891, section 4.2, and the back-check of
+    /// an A-label.
     /// </summary>
     /// <remarks>
-    /// Ein Domainpart ist keine Zeichenkette, sondern eine Folge von Labels,
-    /// und die Regeln greifen je Label. Zwei davon sind keine Formalien,
-    /// sondern Schutz gegen zwei Adressen für dieselbe Sache:
+    /// A domain part is not a string but a sequence of labels, and the rules
+    /// take hold per label. Two of them are no formalities but protection
+    /// against two addresses for the same thing:
     ///
     /// <list type="bullet">
-    ///   <item>Ein A-Label muss sich zurückrechnen lassen <b>und</b> dabei
-    ///         genau sich selbst ergeben. Sonst gäbe es zu einem Namen mehrere
-    ///         gültige Schreibweisen.</item>
-    ///   <item>Ein A-Label, das reines ASCII verpackt, ist keines: Dasselbe
-    ///         Label stünde einmal als es selbst und einmal in Verpackung da.</item>
+    ///   <item>An A-label has to be computable back <b>and</b> yield precisely
+    ///         itself in the process. Otherwise there would be several valid
+    ///         spellings for one name.</item>
+    ///   <item>An A-label that wraps pure ASCII is none: the same label would
+    ///         stand there once as itself and once in wrapping.</item>
     /// </list>
     /// </remarks>
     [TestFixture]
     public class IdnaLabelTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private static Boolean Gueltig(String domain)
+        private static Boolean Valid(String domain)
             => Idna.IsValidDomain(domain, out _);
 
-        private static String? Grund(String domain)
+        private static String? Reason(String domain)
         {
-            Idna.IsValidDomain(domain, out var grund);
-            return grund;
+            Idna.IsValidDomain(domain, out var reason);
+            return reason;
         }
 
         #endregion
@@ -64,7 +64,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OrdinaryNames_AreValid()
 
         /// <summary>
-        /// Die Gegenprobe zuerst: Was ein Domainname ist, bleibt einer.
+        /// The counter-check first: what is a domain name stays one.
         /// </summary>
         [Test]
         public void OrdinaryNames_AreValid()
@@ -72,12 +72,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gueltig("example.com"),            Is.True, Grund("example.com"));
-                Assert.That(Gueltig("localhost"),              Is.True, Grund("localhost"));
-                Assert.That(Gueltig("a.example.com"),          Is.True, Grund("a.example.com"));
-                Assert.That(Gueltig("xn--bcher-kva.example"),  Is.True, Grund("xn--bcher-kva.example"));
-                Assert.That(Gueltig("bücher.example"),         Is.True, Grund("bücher.example"));
-                Assert.That(Gueltig("a-b.example"),            Is.True, Grund("a-b.example"));
+                Assert.That(Valid("example.com"),            Is.True, Reason("example.com"));
+                Assert.That(Valid("localhost"),              Is.True, Reason("localhost"));
+                Assert.That(Valid("a.example.com"),          Is.True, Reason("a.example.com"));
+                Assert.That(Valid("xn--bcher-kva.example"),  Is.True, Reason("xn--bcher-kva.example"));
+                Assert.That(Valid("bücher.example"),         Is.True, Reason("bücher.example"));
+                Assert.That(Valid("a-b.example"),            Is.True, Reason("a-b.example"));
             });
 
         }
@@ -87,7 +87,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAceLabel_IsCheckedByDecodingIt()
 
         /// <summary>
-        /// Ein A-Label wird nicht geglaubt, sondern nachgerechnet.
+        /// An A-label is not believed but recomputed.
         /// </summary>
         [Test]
         public void TheAceLabel_IsCheckedByDecodingIt()
@@ -97,20 +97,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(Punycode.Decode("bcher-kva"), Is.EqualTo("bücher"),
-                            "Das bekannteste Beispiel überhaupt.");
+                            "The best-known example of them all.");
 
-                Assert.That(Gueltig("xn--nichtpunycode$.example"), Is.False,
-                            "Was wie ein A-Label aussieht und keines ist, wird abgewiesen.");
+                Assert.That(Valid("xn--nichtpunycode$.example"), Is.False,
+                            "What looks like an A-label and is none is refused.");
 
-                Assert.That(Gueltig("xn--abc-.example"), Is.False,
-                            "Ein A-Label, das reines ASCII verpackt, ist keines.");
+                Assert.That(Valid("xn--abc-.example"), Is.False,
+                            "An A-label that wraps pure ASCII is none.");
 
-                Assert.That(Gueltig("xn--tda.example"), Is.True,
-                            Grund("xn--tda.example"));
+                Assert.That(Valid("xn--tda.example"), Is.True,
+                            Reason("xn--tda.example"));
 
-                Assert.That(Gueltig("xn--TDA.example"), Is.False,
-                            "Dieselbe Bedeutung, andere Schreibweise: Punycode-Ziffern sind " +
-                            "schreibweisenlos, das kanonische A-Label ist es nicht.");
+                Assert.That(Valid("xn--TDA.example"), Is.False,
+                            "The same meaning, another spelling: punycode digits are " +
+                            "case-insensitive, the canonical A-label is not.");
 
             });
 
@@ -121,13 +121,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheHyphenRules()
 
         /// <summary>
-        /// RFC 5891, Abschnitt 4.2.3.1: kein Bindestrich am Rand, kein
-        /// Doppelstrich an dritter und vierter Stelle.
+        /// RFC 5891, section 4.2.3.1: no hyphen at the edge, no double hyphen at
+        /// the third and fourth position.
         /// </summary>
         /// <remarks>
-        /// Die zweite Regel hält die Stelle frei, an der das Präfix eines
-        /// A-Labels steht. Ein U-Label, das dort <c>--</c> trägt, sähe aus wie
-        /// eine Verpackung und wäre keine.
+        /// The second rule keeps free the position where the prefix of an
+        /// A-label stands. A U-label that carries <c>--</c> there would look
+        /// like a wrapping and would be none.
         /// </remarks>
         [Test]
         public void TheHyphenRules()
@@ -135,10 +135,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gueltig("-abc.example"),  Is.False, "Bindestrich am Anfang");
-                Assert.That(Gueltig("abc-.example"),  Is.False, "Bindestrich am Ende");
-                Assert.That(Gueltig("ab--cd.example"), Is.False, "'--' an dritter und vierter Stelle");
-                Assert.That(Gueltig("a-b-c.example"),  Is.True,  "Einzelne Bindestriche sind in Ordnung.");
+                Assert.That(Valid("-abc.example"),  Is.False, "hyphen at the start");
+                Assert.That(Valid("abc-.example"),  Is.False, "hyphen at the end");
+                Assert.That(Valid("ab--cd.example"), Is.False, "'--' at the third and fourth position");
+                Assert.That(Valid("a-b-c.example"),  Is.True,  "Single hyphens are fine.");
             });
 
         }
@@ -148,15 +148,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ACombiningMarkAtTheStart_IsRefused()
 
         /// <summary>
-        /// RFC 5891, Abschnitt 4.2.3.2: Ein Label beginnt nicht mit einem
-        /// kombinierenden Zeichen - es hätte nichts, womit es sich verbinden
-        /// könnte.
+        /// RFC 5891, section 4.2.3.2: a label does not begin with a combining
+        /// mark - it would have nothing to combine with.
         /// </summary>
         [Test]
         public void ACombiningMarkAtTheStart_IsRefused()
         {
 
-            Assert.That(Gueltig("́abc.example"), Is.False);
+            Assert.That(Valid("́abc.example"), Is.False);
 
         }
 
@@ -165,7 +164,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EmptyAndOverlongLabels_AreRefused()
 
         /// <summary>
-        /// Ein leeres Label gibt es nicht - auch nicht als Punkt am Ende.
+        /// An empty label does not exist - not even as a dot at the end.
         /// </summary>
         [Test]
         public void EmptyAndOverlongLabels_AreRefused()
@@ -173,10 +172,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gueltig("a..example"),      Is.False, "zwei Punkte");
-                Assert.That(Gueltig("example.com."),    Is.False, "Punkt am Ende");
-                Assert.That(Gueltig(new String('a', 64) + ".example"), Is.False, "64 Zeichen");
-                Assert.That(Gueltig(new String('a', 63) + ".example"), Is.True,  "63 sind erlaubt");
+                Assert.That(Valid("a..example"),      Is.False, "two dots");
+                Assert.That(Valid("example.com."),    Is.False, "dot at the end");
+                Assert.That(Valid(new String('a', 64) + ".example"), Is.False, "64 characters");
+                Assert.That(Valid(new String('a', 63) + ".example"), Is.True,  "63 are permitted");
             });
 
         }
@@ -186,14 +185,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WhatIsNoLabelCharacter()
 
         /// <summary>
-        /// Die Codepoint-Ebene wirkt bis hierher durch: Unterstrich und
-        /// Grossbuchstabe gehören in kein Label.
+        /// The code point level takes effect right through to here: underscore
+        /// and capital letter belong in no label.
         /// </summary>
         /// <remarks>
-        /// Am JID selbst fällt der Grossbuchstabe nicht auf - der Domainpart
-        /// wird vorher kleingeschrieben. Hier steht er trotzdem, weil die
-        /// Prüfung für sich stimmen muss: Sie wird auch von anderswoher
-        /// aufgerufen werden.
+        /// At the JID itself the capital letter does not show - the domain part
+        /// is lower-cased beforehand. It stands here all the same, because the
+        /// check has to be right on its own: it will be called from elsewhere
+        /// too.
         /// </remarks>
         [Test]
         public void WhatIsNoLabelCharacter()
@@ -201,10 +200,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gueltig("exam_ple.example"),  Is.False, "Unterstrich");
-                Assert.That(Gueltig("EXAMPLE.com"),       Is.False, "Grossbuchstabe");
-                Assert.That(Gueltig("exa mple.com"),      Is.False, "Leerzeichen");
-                Assert.That(Gueltig("exa♚mple.com"),      Is.False, "Symbol");
+                Assert.That(Valid("exam_ple.example"),  Is.False, "underscore");
+                Assert.That(Valid("EXAMPLE.com"),       Is.False, "capital letter");
+                Assert.That(Valid("exa mple.com"),      Is.False, "space");
+                Assert.That(Valid("exa♚mple.com"),      Is.False, "symbol");
             });
 
         }
@@ -214,15 +213,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheContextualRulesApplyToLabelsToo()
 
         /// <summary>
-        /// Ein kontextabhängiger Codepoint hängt auch in einem Domain-Label an
-        /// seiner Umgebung (RFC 5892, Anhang A.3).
+        /// A context-dependent code point hangs on its surroundings in a domain
+        /// label too (RFC 5892, appendix A.3).
         /// </summary>
         /// <remarks>
-        /// <c>col·la.example</c> gibt es wirklich - der Mittelpunkt gehört zum
-        /// katalanischen Alphabet. Dieselben Zeichen in anderer Reihenfolge
-        /// ergeben kein Label. Beides prüft zugleich, dass die Label-Ebene die
-        /// Regel überhaupt <i>fragt</i>: Die Prüfung für sich zu prüfen genügt
-        /// nicht (siehe D43).
+        /// <c>col·la.example</c> really exists - the middle dot belongs to the
+        /// Catalan alphabet. The same characters in another order yield no
+        /// label. Both check at the same time that the label level <i>asks</i>
+        /// the rule at all: to check the check on its own does not suffice (see
+        /// D43).
         /// </remarks>
         [Test]
         public void TheContextualRulesApplyToLabelsToo()
@@ -230,8 +229,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gueltig("col·la.example"), Is.True, Grund("col·la.example"));
-                Assert.That(Gueltig("co·lla.example"), Is.False);
+                Assert.That(Valid("col·la.example"), Is.True, Reason("col·la.example"));
+                Assert.That(Valid("co·lla.example"), Is.False);
             });
 
         }
@@ -241,15 +240,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AddressLiterals_AreNotDomainNames()
 
         /// <summary>
-        /// RFC 7622, Abschnitt 3.2 lässt neben dem Domainnamen ein
-        /// IPv4-Literal und ein eingeklammertes IPv6-Literal zu.
+        /// RFC 7622, section 3.2 permits, beside the domain name, an IPv4
+        /// literal and a bracketed IPv6 literal.
         /// </summary>
         /// <remarks>
-        /// Ohne diese Ausnahme fiele <c>127.0.0.1</c> über die Label-Regeln:
-        /// Ein Label aus lauter Ziffern ist zwar zulässig, aber ein Literal ist
-        /// gar kein Domainname und hat mit IDNA nichts zu tun. Bei
-        /// <c>[::1]</c> wäre die Abweisung sogar sicher - Doppelpunkte sind
-        /// keine Label-Zeichen.
+        /// Without this exception <c>127.0.0.1</c> would fall over the label
+        /// rules: a label of nothing but digits is indeed permitted, but a
+        /// literal is no domain name at all and has nothing to do with IDNA.
+        /// With <c>[::1]</c> the refusal would even be certain - colons are no
+        /// label characters.
         /// </remarks>
         [Test]
         public void AddressLiterals_AreNotDomainNames()
@@ -257,10 +256,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Gueltig("127.0.0.1"),        Is.True,  Grund("127.0.0.1"));
-                Assert.That(Gueltig("[::1]"),            Is.True,  Grund("[::1]"));
-                Assert.That(Gueltig("[2001:db8::1]"),    Is.True,  Grund("[2001:db8::1]"));
-                Assert.That(Gueltig("::1"),              Is.False, "Ohne Klammern ist es keines.");
+                Assert.That(Valid("127.0.0.1"),        Is.True,  Reason("127.0.0.1"));
+                Assert.That(Valid("[::1]"),            Is.True,  Reason("[::1]"));
+                Assert.That(Valid("[2001:db8::1]"),    Is.True,  Reason("[2001:db8::1]"));
+                Assert.That(Valid("::1"),              Is.False, "Without brackets it is none.");
             });
 
         }
@@ -270,13 +269,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDomainpartOfAJid_GoesThroughTheseRules()
 
         /// <summary>
-        /// Und das alles gilt für den Domainpart eines JIDs, nicht nur für sich.
+        /// And all that holds for the domain part of a JID, not only on its own.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test wäre die Verdrahtung ungeprüft: Eine Mutation, die
-        /// das Ergebnis der Prüfung wegwirft und weitermacht, kam durch die
-        /// ganze Sammlung. Die Prüfung für sich zu prüfen genügt nicht - es
-        /// muss jemand hinsehen, ob sie auch <i>gefragt</i> wird.
+        /// Without this test the wiring would be unchecked: a mutation that
+        /// throws the result of the check away and goes on came through the
+        /// whole collection. To check the check on its own does not suffice -
+        /// somebody has to look whether it is <i>asked</i> as well.
         /// </remarks>
         [Test]
         public void TheDomainpartOfAJid_GoesThroughTheseRules()
@@ -285,17 +284,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(JidUtilities.TryParse("alice@exa_mple.com",   out _), Is.False, "Unterstrich");
-                Assert.That(JidUtilities.TryParse("alice@-example.com",   out _), Is.False, "Bindestrich am Anfang");
-                Assert.That(JidUtilities.TryParse("alice@a..example.com", out _), Is.False, "leeres Label");
-                Assert.That(JidUtilities.TryParse("alice@xn--abc-.com",   out _), Is.False, "A-Label über ASCII");
+                Assert.That(JidUtilities.TryParse("alice@exa_mple.com",   out _), Is.False, "underscore");
+                Assert.That(JidUtilities.TryParse("alice@-example.com",   out _), Is.False, "hyphen at the start");
+                Assert.That(JidUtilities.TryParse("alice@a..example.com", out _), Is.False, "empty label");
+                Assert.That(JidUtilities.TryParse("alice@xn--abc-.com",   out _), Is.False, "A-label over ASCII");
 
-                Assert.That(JidUtilities.TryParse("alice@bücher.example", out var buecher), Is.True);
-                Assert.That(buecher.Domainpart, Is.EqualTo("bücher.example"),
-                            "Ein U-Label bleibt ein U-Label - umgeschrieben wird hier nichts.");
+                Assert.That(JidUtilities.TryParse("alice@bücher.example", out var books), Is.True);
+                Assert.That(books.Domainpart, Is.EqualTo("bücher.example"),
+                            "A U-label stays a U-label - nothing is rewritten here.");
 
-                Assert.That(JidUtilities.TryParse("alice@[::1]",          out _), Is.True,  "IPv6-Literal");
-                Assert.That(JidUtilities.TryParse("alice@127.0.0.1",      out _), Is.True,  "IPv4-Literal");
+                Assert.That(JidUtilities.TryParse("alice@[::1]",          out _), Is.True,  "IPv6 literal");
+                Assert.That(JidUtilities.TryParse("alice@127.0.0.1",      out _), Is.True,  "IPv4 literal");
 
             });
 
@@ -306,11 +305,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheReasonIsNamed()
 
         /// <summary>
-        /// Die Begründung nennt das Label und die Regel - nicht nur „ungültig".
+        /// The reason names the label and the rule - not merely "invalid".
         /// </summary>
         /// <remarks>
-        /// Eine abgewiesene Adresse ist für den Absender eine verlorene
-        /// Nachricht. Wer sie zurückweist, sollte sagen können, woran es lag.
+        /// A refused address is, for the sender, a lost message. Whoever refuses
+        /// it should be able to say what it was down to.
         /// </remarks>
         [Test]
         public void TheReasonIsNamed()
@@ -318,9 +317,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(Grund("exam_ple.example"), Does.Contain("U+005F"));
-                Assert.That(Grund("-abc.example"),     Does.Contain("-abc"));
-                Assert.That(Grund("a..example"),       Does.Contain("empty"));
+                Assert.That(Reason("exam_ple.example"), Does.Contain("U+005F"));
+                Assert.That(Reason("-abc.example"),     Does.Contain("-abc"));
+                Assert.That(Reason("a..example"),       Does.Contain("empty"));
             });
 
         }
