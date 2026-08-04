@@ -29,26 +29,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die PEP-Verteilung von Geräteliste und Bundles (XEP-0384, Abschnitt
-    /// 5.2) - über einen echten Server.
+    /// The PEP distribution of the device list and the bundles (XEP-0384,
+    /// section 5.2) - over a real server.
     /// </summary>
     /// <remarks>
-    /// <b>Diese Etappe ist die erste seit vier, die wieder XMPP prüft statt
-    /// Kryptographie</b> - und damit die erste, bei der ein Durchlauf mehr
-    /// aussagt als eine nachgerechnete Vorschrift. Der Testserver hat dafür
-    /// eine PEP-Teilmenge bekommen: veröffentlichen, abrufen, benachrichtigen.
+    /// <b>This stage is the first in four that checks XMPP again instead of
+    /// cryptography</b> - and thereby the first where a run says more than a
+    /// recomputed provision. The test server got a subset of PEP for it:
+    /// publish, fetch, notify.
     ///
-    /// Der Kern ist der Weg über die Servergrenze hinweg: Alice veröffentlicht,
-    /// <b>Bob holt ab, und was er abholt, muss seine eigene Signaturprüfung
-    /// bestehen.</b> Damit hängen zum ersten Mal alle bisherigen Etappen
-    /// zusammen - ein Bundle, das aus dem Speicher eines Servers kommt und
-    /// dessen Herkunft der Empfänger selbst nachrechnet.
+    /// The heart of it is the way across the server boundary: Alice publishes,
+    /// <b>Bob fetches, and what he fetches has to pass his own signature
+    /// check.</b> With that, all the stages so far hang together for the first
+    /// time - a bundle that comes out of the store of a server and whose
+    /// origin the receiver recomputes himself.
     /// </remarks>
     [TestFixture]
     public class OmemoPepTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helpers
 
         private static String Hex(Byte[] bytes)
             => Convert.ToHexString(bytes).ToLowerInvariant();
@@ -58,29 +58,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TheDeviceList_RoundTripsThroughXml()
 
-        /// <summary>Die Geräteliste als XML - hin und zurück.</summary>
+        /// <summary>The device list as XML - there and back.</summary>
         [Test]
         public void TheDeviceList_RoundTripsThroughXml()
         {
 
-            var liste = new OmemoDeviceList([new OmemoDevice(31415, "Telefon"),
-                                             new OmemoDevice(27182)]);
+            var list = new OmemoDeviceList([new OmemoDevice(31415, "phone"),
+                                            new OmemoDevice(27182)]);
 
-            var xml = liste.ToXml();
+            var xml = list.ToXml();
 
-            Assert.That(OmemoDeviceList.TryRead(xml, out var gelesen), Is.True);
+            Assert.That(OmemoDeviceList.TryRead(xml, out var loaded), Is.True);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen!.Devices, Has.Count.EqualTo(2));
-                Assert.That(gelesen.Devices[0].Id,     Is.EqualTo(31415u));
-                Assert.That(gelesen.Devices[0].Label,  Is.EqualTo("Telefon"));
-                Assert.That(gelesen.Devices[1].Label,  Is.Null,
-                            "Eine fehlende Bezeichnung ist keine leere Zeichenkette.");
+                Assert.That(loaded!.Devices, Has.Count.EqualTo(2));
+                Assert.That(loaded.Devices[0].Id,     Is.EqualTo(31415u));
+                Assert.That(loaded.Devices[0].Label,  Is.EqualTo("phone"));
+                Assert.That(loaded.Devices[1].Label,  Is.Null,
+                            "A missing label is not an empty string.");
 
-                Assert.That(gelesen.Contains(27182u), Is.True);
-                Assert.That(gelesen.Contains(1u),     Is.False);
+                Assert.That(loaded.Contains(27182u), Is.True);
+                Assert.That(loaded.Contains(1u),     Is.False);
 
             });
 
@@ -91,12 +91,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ABrokenDeviceEntry_DoesNotTakeTheOthersWithIt()
 
         /// <summary>
-        /// Ein Gerät mit krummer Kennung wird übergangen, die Liste bleibt.
+        /// A device with a crooked id is passed over, the list stays.
         /// </summary>
         /// <remarks>
-        /// Der Grund ist die Erreichbarkeit: Wer die ganze Liste verwürfe,
-        /// könnte an keines der übrigen Geräte mehr schreiben. Ein einzelner
-        /// unbrauchbarer Eintrag darf nicht alle anderen mitnehmen.
+        /// The reason is reachability: whoever threw away the whole list could
+        /// no longer write to any of the remaining devices. A single unusable
+        /// entry must not take all the others with it.
         /// </remarks>
         [Test]
         public void ABrokenDeviceEntry_DoesNotTakeTheOthersWithIt()
@@ -105,16 +105,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var xml = XElement.Parse(
                           "<devices xmlns='urn:xmpp:omemo:2'>" +
                           "<device id='1'/>" +
-                          "<device id='keine-zahl'/>" +
+                          "<device id='not-a-number'/>" +
                           "<device/>" +
                           "<device id='0'/>" +
                           "<device id='2'/>" +
                           "</devices>");
 
-            Assert.That(OmemoDeviceList.TryRead(xml, out var liste), Is.True);
+            Assert.That(OmemoDeviceList.TryRead(xml, out var list), Is.True);
 
-            Assert.That(liste!.Devices.Select(d => d.Id), Is.EqualTo(new UInt32[] { 1, 2 }),
-                        "Es blieben nicht genau die brauchbaren Einträge übrig.");
+            Assert.That(list!.Devices.Select(d => d.Id), Is.EqualTo(new UInt32[] { 1, 2 }),
+                        "What was left over was not exactly the usable entries.");
 
         }
 
@@ -123,33 +123,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheBundle_RoundTripsThroughXml()
 
         /// <summary>
-        /// Das Bundle als XML - und die Signatur überlebt den Weg.
+        /// The bundle as XML - and the signature survives the way.
         /// </summary>
         /// <remarks>
-        /// Der zweite Teil ist der wichtige: Eine Kodierung, die alle Felder
-        /// richtig überträgt und dabei ein Byte verliert, fiele an einem
-        /// Feldvergleich nicht auf - an der Signaturprüfung schon.
+        /// The second part is the important one: an encoding that carries all
+        /// the fields across correctly and loses a byte in doing so would not
+        /// show up in a field comparison - but it does in the signature check.
         /// </remarks>
         [Test]
         public void TheBundle_RoundTripsThroughXml()
         {
 
-            var eigen  = OmemoIdentity.Create();
-            var bundle = eigen.Bundle();
+            var own    = OmemoIdentity.Create();
+            var bundle = own.Bundle();
 
-            Assert.That(OmemoPep.TryReadBundle(bundle.ToXml(), out var gelesen), Is.True);
+            Assert.That(OmemoPep.TryReadBundle(bundle.ToXml(), out var loaded), Is.True);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(gelesen!.IdentityKey),            Is.EqualTo(Hex(bundle.IdentityKey)));
-                Assert.That(gelesen.SignedPreKeyId,               Is.EqualTo(bundle.SignedPreKeyId));
-                Assert.That(Hex(gelesen.SignedPreKey),            Is.EqualTo(Hex(bundle.SignedPreKey)));
-                Assert.That(Hex(gelesen.SignedPreKeySignature),   Is.EqualTo(Hex(bundle.SignedPreKeySignature)));
-                Assert.That(gelesen.PreKeys,                      Has.Count.EqualTo(bundle.PreKeys.Count));
+                Assert.That(Hex(loaded!.IdentityKey),            Is.EqualTo(Hex(bundle.IdentityKey)));
+                Assert.That(loaded.SignedPreKeyId,               Is.EqualTo(bundle.SignedPreKeyId));
+                Assert.That(Hex(loaded.SignedPreKey),            Is.EqualTo(Hex(bundle.SignedPreKey)));
+                Assert.That(Hex(loaded.SignedPreKeySignature),   Is.EqualTo(Hex(bundle.SignedPreKeySignature)));
+                Assert.That(loaded.PreKeys,                      Has.Count.EqualTo(bundle.PreKeys.Count));
 
-                Assert.That(gelesen.SignatureIsValid(), Is.True,
-                            "Die Signatur überlebt den Weg durch das XML nicht.");
+                Assert.That(loaded.SignatureIsValid(), Is.True,
+                            "The signature does not survive the way through the XML.");
 
             });
 
@@ -160,43 +160,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIncompleteBundle_IsRefused()
 
         /// <summary>
-        /// Ein Bundle ohne IdentityKey, ohne Signed PreKey oder ohne Signatur
-        /// wird abgewiesen.
+        /// A bundle without an IdentityKey, without a Signed PreKey or without
+        /// a signature is refused.
         /// </summary>
         /// <remarks>
-        /// Hier wird streng gelesen, anders als bei der Geräteliste: Ohne
-        /// IdentityKey lässt sich die Signatur nicht prüfen, ohne Signed
-        /// PreKey nichts vereinbaren. Ein halbes Bundle anzunehmen hiesse,
-        /// eine Sitzung auf etwas aufzubauen, dessen Herkunft niemand geprüft
-        /// hat.
+        /// Reading is strict here, unlike with the device list: without an
+        /// IdentityKey the signature cannot be checked, without a Signed
+        /// PreKey nothing can be agreed. To accept half a bundle would mean
+        /// building a session on something whose origin nobody has checked.
         /// </remarks>
         [Test]
         public void AnIncompleteBundle_IsRefused()
         {
 
-            var vollstaendig = OmemoIdentity.Create().Bundle().ToXml();
+            var complete = OmemoIdentity.Create().Bundle().ToXml();
 
             Assert.Multiple(() =>
             {
 
-                foreach (var teil in new[] { "ik", "spk", "spks" })
+                foreach (var part in new[] { "ik", "spk", "spks" })
                 {
 
-                    var verstuemmelt = new XElement(vollstaendig);
-                    verstuemmelt.Elements().First(e => e.Name.LocalName == teil).Remove();
+                    var mutilated = new XElement(complete);
+                    mutilated.Elements().First(e => e.Name.LocalName == part).Remove();
 
-                    Assert.That(OmemoPep.TryReadBundle(verstuemmelt, out _), Is.False, teil);
+                    Assert.That(OmemoPep.TryReadBundle(mutilated, out _), Is.False, part);
 
                 }
 
-                // Ein Bundle ganz ohne PreKeys ist dagegen brauchbar - die
-                // Sitzung kommt auch ohne zustande, sie verliert nur eine
-                // Eigenschaft.
-                var ohnePreKeys = new XElement(vollstaendig);
-                ohnePreKeys.Elements().First(e => e.Name.LocalName == "prekeys").Remove();
+                // A bundle entirely without PreKeys, on the other hand, is
+                // usable - the session comes about without them too, it only
+                // loses one property.
+                var withoutPreKeys = new XElement(complete);
+                withoutPreKeys.Elements().First(e => e.Name.LocalName == "prekeys").Remove();
 
-                Assert.That(OmemoPep.TryReadBundle(ohnePreKeys, out var gelesen), Is.True);
-                Assert.That(gelesen!.PreKeys, Is.Empty);
+                Assert.That(OmemoPep.TryReadBundle(withoutPreKeys, out var loaded), Is.True);
+                Assert.That(loaded!.PreKeys, Is.Empty);
 
             });
 
@@ -208,50 +207,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnEmptyIdentityKey_IsRefused()
 
         /// <summary>
-        /// Ein <c>&lt;ik/&gt;</c> ohne Inhalt ist kein IdentityKey.
+        /// An <c>&lt;ik/&gt;</c> without content is no IdentityKey.
         /// </summary>
         /// <remarks>
-        /// <b>Der Unterschied zum fehlenden Element ist der ganze Punkt.</b>
-        /// Ein fehlendes wirft beim Lesen und wird dadurch ohnehin abgewiesen;
-        /// ein leeres liefert klaglos ein Feld von null Byte. Ohne die
-        /// ausdrückliche Prüfung käme ein Bundle mit leerem IdentityKey durch,
-        /// und die Signaturprüfung darauf beantwortete eine Frage über einen
-        /// Schlüssel, den es nicht gibt.
+        /// <b>The difference from the missing element is the whole point.</b>
+        /// A missing one throws on reading and is refused by that anyway; an
+        /// empty one delivers a field of zero bytes without complaint. Without
+        /// the express check a bundle with an empty IdentityKey would get
+        /// through, and the signature check on it would answer a question
+        /// about a key that does not exist.
         ///
-        /// Aufgefallen an einer überlebenden Mutation: Sie entfernte die
-        /// Prüfung, und der Test bestand weiter - er hatte nur den Fall mit
-        /// dem <i>fehlenden</i> Element.
+        /// Noticed through a surviving mutation: it removed the check, and the
+        /// test went on passing - it only had the case with the <i>missing</i>
+        /// element.
         /// </remarks>
         [Test]
         public void AnEmptyIdentityKey_IsRefused()
         {
 
-            var vollstaendig = OmemoIdentity.Create().Bundle().ToXml();
+            var complete = OmemoIdentity.Create().Bundle().ToXml();
 
             Assert.Multiple(() =>
             {
 
-                foreach (var teil in new[] { "ik", "spk", "spks" })
+                foreach (var part in new[] { "ik", "spk", "spks" })
                 {
 
-                    var leer = new XElement(vollstaendig);
-                    leer.Elements().First(e => e.Name.LocalName == teil).Value = "";
+                    var empty = new XElement(complete);
+                    empty.Elements().First(e => e.Name.LocalName == part).Value = "";
 
-                    Assert.That(OmemoPep.TryReadBundle(leer, out _), Is.False, $"<{teil}/> leer");
+                    Assert.That(OmemoPep.TryReadBundle(empty, out _), Is.False, $"<{part}/> empty");
 
-                    // Und - der schärfere Fall - ein Wert, der gültiges Base64
-                    // ist und trotzdem kein Schlüssel: drei Byte statt
-                    // zweiunddreissig.
+                    // And - the sharper case - a value that is valid Base64
+                    // and still no key: three bytes instead of thirty-two.
                     //
-                    // Die Prüfung auf „leer" allein erschlägt ihn nicht, und
-                    // genau das haben zwei überlebende Mutationen gezeigt: Sie
-                    // entfernten die Längenprüfung, und der Test blieb grün,
-                    // weil er nur den leeren Fall kannte. Ein zu kurzer
-                    // Schlüssel käme durch bis in die Kurvenarithmetik.
-                    var zuKurz = new XElement(vollstaendig);
-                    zuKurz.Elements().First(e => e.Name.LocalName == teil).Value = "AAAA";
+                    // The check for "empty" alone does not strike it down, and
+                    // that is exactly what two surviving mutations showed:
+                    // they removed the length check, and the test stayed
+                    // green, because it only knew the empty case. Too short a
+                    // key would get through as far as the curve arithmetic.
+                    var tooShort = new XElement(complete);
+                    tooShort.Elements().First(e => e.Name.LocalName == part).Value = "AAAA";
 
-                    Assert.That(OmemoPep.TryReadBundle(zuKurz, out _), Is.False, $"<{teil}/> zu kurz");
+                    Assert.That(OmemoPep.TryReadBundle(tooShort, out _), Is.False, $"<{part}/> too short");
 
                 }
 
@@ -264,15 +262,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheItemId_IsLiterallyCurrent()
 
         /// <summary>
-        /// XEP-0384, Abschnitt 5.2: „The item id must be set to
+        /// XEP-0384, section 5.2: "The item id must be set to
         /// <c>current</c>."
         /// </summary>
         /// <remarks>
-        /// <b>Zum fünften Mal dieselbe Vorsichtsmassnahme.</b> Die Kennung
-        /// liess sich auf etwas anderes setzen, ohne dass ein Test etwas
-        /// sagte - Veröffentlichen und Abrufen benutzen dieselbe Konstante und
-        /// finden sich weiterhin. Erst ein fremder Client suchte vergeblich,
-        /// und den gibt es hier nicht. Also steht der Wert hier wörtlich.
+        /// <b>The same precaution for the fifth time.</b> The id could be set
+        /// to something else without any test saying a word - publishing and
+        /// fetching use the same constant and go on finding each other. Only a
+        /// foreign client would search in vain, and there is none here. So the
+        /// value stands here literally.
         /// </remarks>
         [Test]
         public void TheItemId_IsLiterallyCurrent()
@@ -290,16 +288,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ABundle_TravelsFromOneAccountToAnother()
 
         /// <summary>
-        /// Der ganze Weg: Alice veröffentlicht, Bob holt ab - und prüft die
-        /// Signatur selbst.
+        /// The whole way: Alice publishes, Bob fetches - and checks the
+        /// signature himself.
         /// </summary>
         /// <remarks>
-        /// <b>Der Test, um den es in dieser Etappe geht.</b> Er verbindet zum
-        /// ersten Mal alles: das Schlüsselmaterial aus D63, die
-        /// XML-Darstellung von heute, den Speicher des Servers und die
-        /// Signaturprüfung beim Empfänger. Und er prüft die eigentliche
-        /// Zusage von PEP - <b>Bob bekommt Alices Bundle, ohne dass Alice
-        /// etwas tut.</b>
+        /// <b>The test this stage is about.</b> It joins everything for the
+        /// first time: the key material from D63, the XML rendering of today,
+        /// the store of the server and the signature check at the receiver.
+        /// And it checks the actual promise of PEP - <b>Bob gets Alice's
+        /// bundle without Alice doing anything.</b>
         /// </remarks>
         [Test]
         public async Task ABundle_TravelsFromOneAccountToAnother()
@@ -308,43 +305,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice     = await ConnectClientAsync("alice");
             var bob       = await ConnectClientAsync("bob");
 
-            var identitaet = OmemoIdentity.Create();
+            var identity = OmemoIdentity.Create();
 
-            var listeVeroeffentlicht = await alice.Connection.PublishOmemoDeviceListAsync(
-                                                 new OmemoDeviceList([new OmemoDevice(identitaet.DeviceId,
-                                                                                      "Telefon")]));
+            var listPublished = await alice.Connection.PublishOmemoDeviceListAsync(
+                                          new OmemoDeviceList([new OmemoDevice(identity.DeviceId,
+                                                                               "phone")]));
 
-            var bundleVeroeffentlicht = await alice.Connection.PublishOmemoBundleAsync(
-                                                  identitaet.DeviceId, identitaet.Bundle());
+            var bundlePublished = await alice.Connection.PublishOmemoBundleAsync(
+                                            identity.DeviceId, identity.Bundle());
 
             Assert.Multiple(() =>
             {
-                Assert.That(listeVeroeffentlicht,  Is.True, "Die Geräteliste liess sich nicht veröffentlichen.");
-                Assert.That(bundleVeroeffentlicht, Is.True, "Das Bundle liess sich nicht veröffentlichen.");
+                Assert.That(listPublished,   Is.True, "The device list could not be published.");
+                Assert.That(bundlePublished, Is.True, "The bundle could not be published.");
             });
 
-            var liste = await bob.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
+            var list = await bob.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
 
-            Assert.That(liste, Is.Not.Null, "Bob findet Alices Geräteliste nicht.");
-            Assert.That(liste!.Contains(identitaet.DeviceId), Is.True);
+            Assert.That(list, Is.Not.Null, "Bob does not find Alice's device list.");
+            Assert.That(list!.Contains(identity.DeviceId), Is.True);
 
             var bundle = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}",
-                                                                     identitaet.DeviceId);
+                                                                     identity.DeviceId);
 
-            Assert.That(bundle, Is.Not.Null, "Bob bekommt Alices Bundle nicht.");
+            Assert.That(bundle, Is.Not.Null, "Bob does not get Alice's bundle.");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(bundle!.IdentityKey), Is.EqualTo(Hex(identitaet.PublicIdentityKey)));
+                Assert.That(Hex(bundle!.IdentityKey), Is.EqualTo(Hex(identity.PublicIdentityKey)));
                 Assert.That(bundle.SignatureIsValid(), Is.True);
 
-                // Und damit lässt sich sofort eine Sitzung beginnen - der
-                // eigentliche Zweck der ganzen Verteilung.
-                var bobsIdentitaet = OmemoIdentity.Create();
+                // And with that a session can be begun at once - the actual
+                // purpose of the whole distribution.
+                var bobsIdentity = OmemoIdentity.Create();
 
-                Assert.That(() => X3DH.Initiate(bobsIdentitaet, bundle), Throws.Nothing,
-                            "Aus dem abgeholten Bundle lässt sich keine Sitzung beginnen.");
+                Assert.That(() => X3DH.Initiate(bobsIdentity, bundle), Throws.Nothing,
+                            "No session can be begun from the fetched bundle.");
 
             });
 
@@ -355,20 +352,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoBundles_AreFetchedIndividually()
 
         /// <summary>
-        /// Zwei Geräte, zwei Bundles - und jedes wird einzeln abgeholt.
+        /// Two devices, two bundles - and each one is fetched on its own.
         /// </summary>
         /// <remarks>
-        /// <b>Der Grund für einen Eintrag je Gerät.</b> Ein Absender holt
-        /// genau das Bundle, das er braucht, statt aller - und ein Gerät, das
-        /// seinen PreKey verbraucht hat, schreibt nur seinen eigenen Eintrag
-        /// neu.
+        /// <b>The reason for one entry per device.</b> A sender fetches
+        /// exactly the bundle he needs instead of all of them - and a device
+        /// that has used up its PreKey writes only its own entry anew.
         ///
-        /// Der Test kam durch eine überlebende Mutation dazu: Wer die
-        /// Eintragskennung beim Abrufen übergeht, liefert <i>alle</i> Bundles,
-        /// und der Aufrufer nimmt das erste. Mit nur einem veröffentlichten
-        /// Gerät ist das dasselbe Ergebnis - <b>mit zweien bekommt der
-        /// Absender das falsche Gerät</b>, verschlüsselt für ein Telefon, das
-        /// gar nicht mitliest, und niemand sieht einen Fehler.
+        /// The test came about through a surviving mutation: whoever passes
+        /// over the item id on fetching delivers <i>all</i> bundles, and the
+        /// caller takes the first. With only one published device that is the
+        /// same result - <b>with two the sender gets the wrong device</b>,
+        /// encrypted for a phone that is not reading along at all, and nobody
+        /// sees a mistake.
         /// </remarks>
         [Test]
         public async Task TwoBundles_AreFetchedIndividually()
@@ -377,25 +373,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            var telefon = OmemoIdentity.Create(1000);
-            var rechner = OmemoIdentity.Create(2000);
+            var phone   = OmemoIdentity.Create(1000);
+            var desktop = OmemoIdentity.Create(2000);
 
-            await alice.Connection.PublishOmemoBundleAsync(telefon.DeviceId, telefon.Bundle());
-            await alice.Connection.PublishOmemoBundleAsync(rechner.DeviceId, rechner.Bundle());
+            await alice.Connection.PublishOmemoBundleAsync(phone.DeviceId, phone.Bundle());
+            await alice.Connection.PublishOmemoBundleAsync(desktop.DeviceId, desktop.Bundle());
 
-            var fuerTelefon = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 1000);
-            var fuerRechner = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 2000);
+            var forPhone   = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 1000);
+            var forDesktop = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 2000);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(fuerTelefon!.IdentityKey), Is.EqualTo(Hex(telefon.PublicIdentityKey)),
-                            "Für Gerät 1000 kam ein fremdes Bundle.");
+                Assert.That(Hex(forPhone!.IdentityKey), Is.EqualTo(Hex(phone.PublicIdentityKey)),
+                            "For device 1000 a foreign bundle arrived.");
 
-                Assert.That(Hex(fuerRechner!.IdentityKey), Is.EqualTo(Hex(rechner.PublicIdentityKey)),
-                            "Für Gerät 2000 kam ein fremdes Bundle.");
+                Assert.That(Hex(forDesktop!.IdentityKey), Is.EqualTo(Hex(desktop.PublicIdentityKey)),
+                            "For device 2000 a foreign bundle arrived.");
 
-                Assert.That(Hex(fuerTelefon.IdentityKey), Is.Not.EqualTo(Hex(fuerRechner.IdentityKey)));
+                Assert.That(Hex(forPhone.IdentityKey), Is.Not.EqualTo(Hex(forDesktop.IdentityKey)));
 
             });
 
@@ -406,15 +402,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownNode_IsAnsweredWithItemNotFound()
 
         /// <summary>
-        /// Ein Knoten, in dem nichts steht, wird mit
-        /// <c>&lt;item-not-found/&gt;</c> beantwortet - nicht mit einem leeren
-        /// Ergebnis.
+        /// A node with nothing in it is answered with
+        /// <c>&lt;item-not-found/&gt;</c> - not with an empty result.
         /// </summary>
         /// <remarks>
-        /// Für den eigenen Client wäre beides gleich: Er findet so oder so
-        /// keinen Eintrag. Für einen fremden ist es der Unterschied zwischen
-        /// „es gibt hier nichts" und „hier ist die Antwort, und sie ist leer" -
-        /// und XEP-0060 sieht für den ersten Fall den Fehler vor.
+        /// For the own client the two would be the same: either way it finds
+        /// no entry. For a foreign one it is the difference between "there is
+        /// nothing here" and "here is the answer, and it is empty" - and
+        /// XEP-0060 provides the error for the first case.
         /// </remarks>
         [Test]
         public async Task AnUnknownNode_IsAnsweredWithItemNotFound()
@@ -423,25 +418,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectClientAsync("alice");
             var session = Server.SessionOf(alice.FullJid)!;
 
-            var vorher = session.Sent.Count;
+            var before = session.Sent.Count;
 
             await alice.SendRawAsync(
-                      "<iq type='get' id='leer-1'>" +
+                      "<iq type='get' id='empty-1'>" +
                       "<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
                       $"<items node='{OmemoPep.BundlesNode}'><item id='4711'/></items>" +
                       "</pubsub></iq>");
 
-            await WaitFor(() => session.Sent.Skip(vorher)
-                                       .Any(f => f.Contains("id='leer-1'", StringComparison.Ordinal)),
-                          "die Antwort auf den leeren Knoten");
+            await WaitFor(() => session.Sent.Skip(before)
+                                       .Any(f => f.Contains("id='empty-1'", StringComparison.Ordinal)),
+                          "the answer to the empty node");
 
-            var antwort = session.Sent.Skip(vorher)
-                                 .First(f => f.Contains("id='leer-1'", StringComparison.Ordinal));
+            var reply = session.Sent.Skip(before)
+                               .First(f => f.Contains("id='empty-1'", StringComparison.Ordinal));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("item-not-found"));
+                Assert.That(reply, Does.Contain("type='error'"));
+                Assert.That(reply, Does.Contain("item-not-found"));
             });
 
         }
@@ -451,18 +446,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARejectedPublish_IsReported()
 
         /// <summary>
-        /// Lehnt der Server das Veröffentlichen ab, meldet der Client es -
-        /// statt Erfolg zu behaupten.
+        /// If the server refuses the publishing, the client reports it -
+        /// instead of claiming success.
         /// </summary>
         /// <remarks>
-        /// <b>Das ist der Grund, warum diese Methoden überhaupt einen
-        /// Rückgabewert haben</b> (siehe D38). Wer seine Geräteliste
-        /// veröffentlicht und nicht erfährt, dass es misslang, ist für alle
-        /// seine Kontakte unerreichbar und merkt nichts davon: Alles sieht aus
-        /// wie immer, nur schreibt ihm niemand mehr verschlüsselt.
+        /// <b>This is the reason these methods have a return value at all</b>
+        /// (see D38). Whoever publishes their device list and does not learn
+        /// that it failed is unreachable for all their contacts and notices
+        /// nothing of it: everything looks as it always does, only nobody
+        /// writes to them encrypted any more.
         ///
-        /// Hergestellt wird der Fall über einen Server ohne PEP - dann geht
-        /// die Anfrage den gewöhnlichen Weg und bekommt
+        /// The case is brought about over a server without PEP - then the
+        /// request goes the ordinary way and gets
         /// <c>&lt;service-unavailable/&gt;</c>.
         /// </remarks>
         [Test]
@@ -473,14 +468,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var gemeldet = await alice.Connection.PublishOmemoDeviceListAsync(
+            var reported = await alice.Connection.PublishOmemoDeviceListAsync(
                                      new OmemoDeviceList([new OmemoDevice(4711)]));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gemeldet, Is.False,
-                            "Der Client meldet einen Erfolg, den es nicht gab.");
+                Assert.That(reported, Is.False,
+                            "The client reports a success there never was.");
 
                 Assert.That(Server.GetAccount($"alice@{Server.Domain}")!.PepNodes, Is.Empty);
 
@@ -493,14 +488,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnpublishedBundle_IsNotFound()
 
         /// <summary>
-        /// Wer nichts veröffentlicht hat, hat nichts abzuholen - und ein Konto,
-        /// das es nicht gibt, sieht genauso aus.
+        /// Whoever has published nothing has nothing to fetch - and an account
+        /// that does not exist looks just the same.
         /// </summary>
         /// <remarks>
-        /// Die Gleichbehandlung ist Absicht: Sonst liesse sich über PEP
-        /// herausfinden, welche Konten es auf diesem Server gibt - dieselbe
-        /// Überlegung wie bei der Anmeldung (RFC 6120, Abschnitt 13.11, siehe
-        /// D50).
+        /// The equal treatment is deliberate: otherwise it could be found out
+        /// over PEP which accounts exist on this server - the same
+        /// consideration as with the registration (RFC 6120, section 13.11,
+        /// see D50).
         /// </remarks>
         [Test]
         public async Task AnUnpublishedBundle_IsNotFound()
@@ -510,15 +505,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            var ohneListe   = await bob.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
-            var ohneKonto   = await bob.Connection.FetchOmemoDeviceListAsync($"niemand@{Server.Domain}");
-            var ohneBundle  = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 1);
+            var withoutList     = await bob.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
+            var withoutAccount  = await bob.Connection.FetchOmemoDeviceListAsync($"nobody@{Server.Domain}");
+            var withoutBundle   = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 1);
 
             Assert.Multiple(() =>
             {
-                Assert.That(ohneListe,  Is.Null, "Ein Konto ohne Geräteliste liefert eine.");
-                Assert.That(ohneKonto,  Is.Null, "Ein Konto, das es nicht gibt, liefert eine Geräteliste.");
-                Assert.That(ohneBundle, Is.Null);
+                Assert.That(withoutList,    Is.Null, "An account without a device list delivers one.");
+                Assert.That(withoutAccount, Is.Null, "An account that does not exist delivers a device list.");
+                Assert.That(withoutBundle,  Is.Null);
             });
 
         }
@@ -528,15 +523,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ATamperedBundle_IsRefusedOnFetching()
 
         /// <summary>
-        /// Ein Bundle mit falscher Signatur kommt gar nicht erst beim Aufrufer
-        /// an.
+        /// A bundle with a wrong signature does not reach the caller in the
+        /// first place.
         /// </summary>
         /// <remarks>
-        /// Der Server ist die Partei, gegen die OMEMO schützt - er hält das
-        /// Bundle vorrätig und könnte es austauschen. Deshalb prüft die
-        /// Verbindung die Signatur selbst und gibt ein ungültiges Bundle
-        /// <b>nicht weiter</b>: Ein ungeprüftes durchzureichen hiesse, die
-        /// Prüfung dem zu überlassen, der sie am ehesten vergisst.
+        /// The server is the party OMEMO protects against - it keeps the
+        /// bundle in stock and could exchange it. This is why the connection
+        /// checks the signature itself and does <b>not</b> pass an invalid
+        /// bundle on: to hand an unchecked one through would mean leaving the
+        /// check to the one most likely to forget it.
         /// </remarks>
         [Test]
         public async Task ATamperedBundle_IsRefusedOnFetching()
@@ -545,19 +540,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectClientAsync("alice");
             var bob    = await ConnectClientAsync("bob");
 
-            var echt   = OmemoIdentity.Create();
-            var fremd  = OmemoIdentity.Create();
+            var real     = OmemoIdentity.Create();
+            var foreign  = OmemoIdentity.Create();
 
-            // Alices Bundle mit dem Signed PreKey eines Fremden - so sähe es
-            // aus, wenn der Server ihn ausgetauscht hätte.
-            var untergeschoben = echt.Bundle() with { SignedPreKey = fremd.SignedPreKey.PublicKey };
+            // Alice's bundle with the Signed PreKey of a stranger - this is
+            // how it would look if the server had exchanged it.
+            var planted = real.Bundle() with { SignedPreKey = foreign.SignedPreKey.PublicKey };
 
-            await alice.Connection.PublishOmemoBundleAsync(echt.DeviceId, untergeschoben);
+            await alice.Connection.PublishOmemoBundleAsync(real.DeviceId, planted);
 
             Assert.That(await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}",
-                                                                    echt.DeviceId),
+                                                                    real.DeviceId),
                         Is.Null,
-                        "Ein untergeschobenes Bundle kam beim Aufrufer an.");
+                        "A planted bundle reached the caller.");
 
         }
 
@@ -566,14 +561,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PublishingIntoAForeignNode_IsForbidden()
 
         /// <summary>
-        /// In den PEP-Knoten eines anderen schreibt niemand.
+        /// Into the PEP node of somebody else nobody writes.
         /// </summary>
         /// <remarks>
-        /// Wer es dürfte, könnte fremde Bundles austauschen - und das ist
-        /// genau der Angriff, gegen den die Signatur über den Signed PreKey
-        /// steht. Zwei Sicherungen gegen dieselbe Sache sind hier keine
-        /// Verschwendung: Die eine wirkt gegen den Server, die andere gegen
-        /// jeden anderen Nutzer desselben Servers.
+        /// Whoever were allowed to could exchange foreign bundles - and that
+        /// is exactly the attack the signature over the Signed PreKey stands
+        /// against. Two safeguards against the same thing are no waste here:
+        /// the one works against the server, the other against every other
+        /// user of the same server.
         /// </remarks>
         [Test]
         public async Task PublishingIntoAForeignNode_IsForbidden()
@@ -584,31 +579,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("bob");
 
-            var vorher = session.Sent.Count;
+            var before = session.Sent.Count;
 
             await alice.SendRawAsync(
-                      "<iq type='set' id='fremd-1' to='bob@" + Server.Domain + "'>" +
+                      "<iq type='set' id='foreign-1' to='bob@" + Server.Domain + "'>" +
                       "<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
                       $"<publish node='{OmemoDeviceList.Node}'>" +
                       "<item id='current'><devices xmlns='urn:xmpp:omemo:2'>" +
                       "<device id='666'/></devices></item>" +
                       "</publish></pubsub></iq>");
 
-            await WaitFor(() => session.Sent.Skip(vorher)
-                                       .Any(f => f.Contains("id='fremd-1'", StringComparison.Ordinal)),
-                          "die Antwort auf das fremde Veröffentlichen");
+            await WaitFor(() => session.Sent.Skip(before)
+                                       .Any(f => f.Contains("id='foreign-1'", StringComparison.Ordinal)),
+                          "the answer to the foreign publishing");
 
-            var antwort = session.Sent.Skip(vorher)
-                                 .First(f => f.Contains("id='fremd-1'", StringComparison.Ordinal));
+            var reply = session.Sent.Skip(before)
+                               .First(f => f.Contains("id='foreign-1'", StringComparison.Ordinal));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort, Does.Contain("type='error'"));
-                Assert.That(antwort, Does.Contain("forbidden"));
+                Assert.That(reply, Does.Contain("type='error'"));
+                Assert.That(reply, Does.Contain("forbidden"));
 
                 Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.PepNodes, Is.Empty,
-                            "Der fremde Knoten wurde trotzdem beschrieben.");
+                            "The foreign node was written into all the same.");
 
             });
 
@@ -619,15 +614,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ANewDeviceList_ReachesTheContacts()
 
         /// <summary>
-        /// Veröffentlicht Alice eine neue Geräteliste, erfährt Bob davon -
-        /// ohne zu fragen.
+        /// When Alice publishes a new device list, Bob learns of it - without
+        /// asking.
         /// </summary>
         /// <remarks>
-        /// Ohne diese Benachrichtigung müsste jeder Absender vor jeder
-        /// Nachricht die Liste abrufen. Mit ihr erfährt er von einem neuen
-        /// Gerät in dem Augenblick, in dem es dazukommt - und das ist der
-        /// Unterschied zwischen „verschlüsselt an alle Geräte" und
-        /// „verschlüsselt an die, die ich zuletzt gesehen habe".
+        /// Without this notification every sender would have to fetch the list
+        /// before every message. With it he learns of a new device in the
+        /// moment it comes about - and that is the difference between
+        /// "encrypted to all devices" and "encrypted to the ones I last saw".
         /// </remarks>
         [Test]
         public async Task ANewDeviceList_ReachesTheContacts()
@@ -638,24 +632,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice", createAccount: false);
             var bob   = await ConnectClientAsync("bob",   createAccount: false);
 
-            OmemoDeviceList? empfangen = null;
-            String?          vonWem    = null;
+            OmemoDeviceList? received = null;
+            String?          fromWhom = null;
 
-            bob.Connection.OnOmemoDeviceListChanged += (from, liste) =>
+            bob.Connection.OnOmemoDeviceListChanged += (from, list) =>
             {
-                vonWem    = from;
-                empfangen = liste;
+                fromWhom = from;
+                received = list;
             };
 
             await alice.Connection.PublishOmemoDeviceListAsync(
-                      new OmemoDeviceList([new OmemoDevice(4711, "Telefon")]));
+                      new OmemoDeviceList([new OmemoDevice(4711, "phone")]));
 
-            await WaitFor(() => empfangen is not null, "die Benachrichtigung über Alices Geräteliste");
+            await WaitFor(() => received is not null, "the notification about Alice's device list");
 
             Assert.Multiple(() =>
             {
-                Assert.That(vonWem, Is.EqualTo($"alice@{Server.Domain}"));
-                Assert.That(empfangen!.Contains(4711u), Is.True);
+                Assert.That(fromWhom, Is.EqualTo($"alice@{Server.Domain}"));
+                Assert.That(received!.Contains(4711u), Is.True);
             });
 
         }
@@ -665,19 +659,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AForeignDeviceList_DoesNotTriggerAReannounce()
 
         /// <summary>
-        /// In der Geräteliste eines <b>anderen</b> hat das eigene Gerät nichts
-        /// zu suchen.
+        /// In the device list of <b>somebody else</b> the own device has no
+        /// business.
         /// </summary>
         /// <remarks>
-        /// Ohne die Prüfung, wessen Liste da eintrifft, träge sich dieser
-        /// Client in <i>jede</i> Liste ein, die er zu sehen bekommt - und
-        /// veröffentlichte dabei in einem fremden Knoten, was der Server
-        /// zurückweist. Der Fehler wäre folgenlos und trotzdem falsch: Bei
-        /// jedem Kontakt, der ein Gerät hinzufügt, ginge eine abgewiesene
-        /// Anfrage hinaus.
+        /// Without the check of whose list is coming in, this client would
+        /// enter itself into <i>every</i> list it gets to see - and would
+        /// publish into a foreign node in doing so, which the server refuses.
+        /// The mistake would be without consequence and wrong all the same:
+        /// with every contact who adds a device, a refused request would go
+        /// out.
         ///
-        /// Aufgefallen an einer überlebenden Mutation - der Test davor prüfte
-        /// nur die eigene Liste.
+        /// Noticed through a surviving mutation - the test before it checked
+        /// only the own list.
         /// </remarks>
         [Test]
         public async Task AForeignDeviceList_DoesNotTriggerAReannounce()
@@ -690,33 +684,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             bob.Connection.OmemoDeviceId = 9999;
 
-            var empfangen = false;
-            bob.Connection.OnOmemoDeviceListChanged += (_, _) => empfangen = true;
+            var received = false;
+            bob.Connection.OnOmemoDeviceListChanged += (_, _) => received = true;
 
             await alice.Connection.PublishOmemoDeviceListAsync(
                       new OmemoDeviceList([new OmemoDevice(1234)]));
 
-            await WaitFor(() => empfangen, "die Benachrichtigung über Alices Geräteliste");
+            await WaitFor(() => received, "the notification about Alice's device list");
 
-            // Gefragt wird, ob Bobs Client überhaupt etwas geschickt hat - und
-            // nicht, ob Alices Liste unverändert blieb.
+            // What is asked is whether Bob's client has sent anything at all -
+            // and not whether Alice's list stayed unchanged.
             //
-            // Die erste Fassung prüfte das Zweite und war damit wertlos: Der
-            // Server weist fremde Knoten ohnehin ab, also blieb die Liste auch
-            // dann sauber, wenn Bob es versuchte. Der Test bestand die
-            // Mutation, die genau diesen Versuch auslöst. Geprüft werden muss
-            // der Prüfling, nicht sein Nachbar.
-            var bobsSitzung = Server.SessionOf(bob.FullJid)!;
+            // The first version checked the second of those and was worthless
+            // by that: the server refuses foreign nodes anyway, so the list
+            // stayed clean even when Bob tried. The test passed the mutation
+            // that triggers exactly this attempt. What has to be checked is
+            // the thing under test, not its neighbour.
+            var bobsSession = Server.SessionOf(bob.FullJid)!;
 
-            await WaitAgainst(() => bobsSitzung.Received.Any(
+            await WaitAgainst(() => bobsSession.Received.Any(
                                         f => f.Contains(OmemoPep.PubSubNamespace, StringComparison.Ordinal) &&
                                              f.Contains("<publish", StringComparison.Ordinal)),
-                              "ein Veröffentlichen durch Bob");
+                              "a publishing by Bob");
 
             Assert.That(Server.GetAccount($"alice@{Server.Domain}")!
                               .GetPepItems(OmemoDeviceList.Node, OmemoDeviceList.ItemId)[0].Payload,
                         Does.Not.Contain("9999"),
-                        "Bobs Gerät steht in Alices Geräteliste.");
+                        "Bob's device stands in Alice's device list.");
 
         }
 
@@ -725,20 +719,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMissingOwnDevice_IsReannounced()
 
         /// <summary>
-        /// XEP-0384, Abschnitt 5.2: Fehlt das eigene Gerät in der eigenen
-        /// Liste, trägt es sich wieder ein - <b>ohne die anderen zu
-        /// verdrängen</b>.
+        /// XEP-0384, section 5.2: if the own device is missing from the own
+        /// list, it enters itself again - <b>without displacing the
+        /// others</b>.
         /// </summary>
         /// <remarks>
-        /// Der Fall ist nicht ausgedacht: Ein anderes Gerät desselben
-        /// Menschen - oder ein aufräumender Server - schreibt die Liste neu
-        /// und vergisst dieses Gerät. Von da an schreibt niemand mehr
-        /// verschlüsselt an es, und <b>es merkt nichts davon</b>, weil ihm
-        /// nichts fehlt: Es bekommt weiterhin alles, was unverschlüsselt
-        /// kommt.
+        /// The case is not made up: another device of the same human being -
+        /// or a tidying server - writes the list anew and forgets this device.
+        /// From then on nobody writes to it encrypted any more, and <b>it
+        /// notices nothing of it</b>, because nothing is missing for it: it
+        /// goes on getting everything that comes unencrypted.
         ///
-        /// Geprüft wird deshalb beides: dass es sich wieder einträgt, und dass
-        /// das andere Gerät dabei stehen bleibt.
+        /// This is why both are checked: that it enters itself again, and that
+        /// the other device stays standing in doing so.
         /// </remarks>
         [Test]
         public async Task AMissingOwnDevice_IsReannounced()
@@ -746,39 +739,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            // Ein zweites Gerät desselben Kontos - mit eigener Resource,
-            // sonst stritten sich beide um dieselbe.
-            var zweites = CreateClient("alice");
-            zweites.Connection.Resource = "zweites-geraet";
-            await zweites.ConnectAsync();
+            // A second device of the same account - with its own resource,
+            // otherwise the two would quarrel over the same one.
+            var second = CreateClient("alice");
+            second.Connection.Resource = "second-device";
+            await second.ConnectAsync();
 
             alice.Connection.OmemoDeviceId = 1000;
 
-            // Das erste Gerät trägt sich ein.
+            // The first device enters itself.
             await alice.Connection.PublishOmemoDeviceListAsync(
                       new OmemoDeviceList([new OmemoDevice(1000)]));
 
-            // Das zweite Gerät schreibt die Liste neu - und vergisst das erste.
-            await zweites.Connection.PublishOmemoDeviceListAsync(
-                      new OmemoDeviceList([new OmemoDevice(2000)]));
+            // The second device writes the list anew - and forgets the first.
+            await second.Connection.PublishOmemoDeviceListAsync(
+                     new OmemoDeviceList([new OmemoDevice(2000)]));
 
             await WaitFor(() =>
             {
 
-                var eintraege = Server.GetAccount($"alice@{Server.Domain}")!
-                                      .GetPepItems(OmemoDeviceList.Node, OmemoDeviceList.ItemId);
+                var entries = Server.GetAccount($"alice@{Server.Domain}")!
+                                    .GetPepItems(OmemoDeviceList.Node, OmemoDeviceList.ItemId);
 
-                return eintraege.Count == 1 &&
-                       eintraege[0].Payload.Contains("id=\"1000\"", StringComparison.Ordinal);
+                return entries.Count == 1 &&
+                       entries[0].Payload.Contains("id=\"1000\"", StringComparison.Ordinal);
 
             },
-            "den Wiedereintrag des ersten Geräts");
+            "the re-entry of the first device");
 
-            var liste = Server.GetAccount($"alice@{Server.Domain}")!
-                              .GetPepItems(OmemoDeviceList.Node, OmemoDeviceList.ItemId)[0].Payload;
+            var list = Server.GetAccount($"alice@{Server.Domain}")!
+                             .GetPepItems(OmemoDeviceList.Node, OmemoDeviceList.ItemId)[0].Payload;
 
-            Assert.That(liste, Does.Contain("id=\"2000\""),
-                        "Der Wiedereintrag hat das andere Gerät verdrängt.");
+            Assert.That(list, Does.Contain("id=\"2000\""),
+                        "The re-entry has displaced the other device.");
 
         }
 

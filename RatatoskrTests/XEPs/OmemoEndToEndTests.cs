@@ -27,20 +27,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// OMEMO von einem Ende zum anderen: zwei echte Clients, ein echter
-    /// Server, eine verschlüsselte Nachricht.
+    /// OMEMO from one end to the other: two real clients, a real server, one
+    /// encrypted message.
     /// </summary>
     /// <remarks>
-    /// <b>Der Test, auf den die sieben Etappen hinauslaufen.</b> Er benutzt
-    /// nichts von innen: Alice schaltet OMEMO ein, schreibt, Bob liest.
-    /// Dazwischen liegen Schlüsselerzeugung, PEP-Veröffentlichung,
-    /// Bundle-Abruf, X3DH, Ratchet, Protobuf, SCE und der Speicher - und
-    /// keines davon wird hier einzeln angefasst.
+    /// <b>The test the seven stages run up to.</b> It uses nothing from the
+    /// inside: Alice switches OMEMO on, writes, Bob reads. In between lie key
+    /// creation, PEP publication, bundle fetching, X3DH, ratchet, protobuf,
+    /// SCE and the store - and not one of them is touched here on its own.
     ///
-    /// Geprüft wird zusätzlich, was <b>nicht</b> auf der Leitung steht: Der
-    /// Klartext darf in keiner Stanza vorkommen, die der Server gesehen hat.
-    /// Ohne diese Prüfung bestünde der Test auch dann, wenn die Nachricht
-    /// nebenher unverschlüsselt mitginge.
+    /// What is checked on top of that is what does <b>not</b> stand on the
+    /// wire: the plaintext must not appear in any stanza the server has seen.
+    /// Without that check the test would pass even if the message went along
+    /// unencrypted beside it.
     /// </remarks>
     [TestFixture]
     public class OmemoEndToEndTests : AXMPPTests
@@ -49,8 +48,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessage_TravelsEncrypted()
 
         /// <summary>
-        /// Alice schreibt verschlüsselt, Bob liest - und der Server sieht den
-        /// Klartext nie.
+        /// Alice writes encrypted, Bob reads - and the server never sees the
+        /// plaintext.
         /// </summary>
         [Test]
         public async Task AMessage_TravelsEncrypted()
@@ -64,54 +63,54 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(alice.EnableOmemoAsync().GetAwaiter().GetResult(), Is.True,
-                            "Alice konnte OMEMO nicht einschalten.");
+                            "Alice could not switch OMEMO on.");
                 Assert.That(bob.EnableOmemoAsync().GetAwaiter().GetResult(), Is.True,
-                            "Bob konnte OMEMO nicht einschalten.");
+                            "Bob could not switch OMEMO on.");
             });
 
-            XMPPMessage?    empfangen  = null;
-            OmemoDecrypted? auskunft   = null;
+            XMPPMessage?    received  = null;
+            OmemoDecrypted? info      = null;
 
-            bob.OnEncryptedMessage += (nachricht, omemo) =>
+            bob.OnEncryptedMessage += (message, omemo) =>
             {
-                empfangen = nachricht;
-                auskunft  = omemo;
+                received = message;
+                info     = omemo;
             };
 
-            const String geheim = "Treffen wir uns um acht?";
+            const String secret = "Shall we meet at eight?";
 
-            var uebersprungen = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", geheim);
+            var skipped = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", secret);
 
-            Assert.That(uebersprungen, Is.Empty,
-                        "Nicht alle Geräte konnten mitlesen: " +
-                        String.Join(", ", uebersprungen.Select(u => $"{u.Jid}/{u.DeviceId}: {u.Reason}")));
+            Assert.That(skipped, Is.Empty,
+                        "Not all devices could read along: " +
+                        String.Join(", ", skipped.Select(u => $"{u.Jid}/{u.DeviceId}: {u.Reason}")));
 
-            await WaitFor(() => empfangen is not null, "die entschlüsselte Nachricht bei Bob");
+            await WaitFor(() => received is not null, "the decrypted message at Bob");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(empfangen!.Body, Is.EqualTo(geheim));
+                Assert.That(received!.Body, Is.EqualTo(secret));
 
-                Assert.That(auskunft!.SenderDeviceId, Is.EqualTo(alice.Omemo!.Identity.DeviceId),
-                            "Die Nachricht wird dem falschen Gerät zugeschrieben.");
+                Assert.That(info!.SenderDeviceId, Is.EqualTo(alice.Omemo!.Identity.DeviceId),
+                            "The message is attributed to the wrong device.");
 
-                Assert.That(auskunft.IdentityCheck, Is.EqualTo(OmemoIdentityCheck.New),
-                            "Alices Gerät war Bob angeblich schon bekannt.");
+                Assert.That(info.IdentityCheck, Is.EqualTo(OmemoIdentityCheck.New),
+                            "Alice's device was supposedly known to Bob already.");
 
-                // Und jetzt der Punkt, ohne den der Test nichts wert wäre:
-                // Der Klartext darf auf der Leitung nirgends stehen.
-                var alleStanzas = Server.Sessions.SelectMany(s => s.Received.Concat(s.Sent)).ToList();
+                // And now the point without which the test would be worth
+                // nothing: the plaintext must stand nowhere on the wire.
+                var allStanzas = Server.Sessions.SelectMany(s => s.Received.Concat(s.Sent)).ToList();
 
-                Assert.That(alleStanzas.Any(f => f.Contains(geheim, StringComparison.Ordinal)),
+                Assert.That(allStanzas.Any(f => f.Contains(secret, StringComparison.Ordinal)),
                             Is.False,
-                            "Der Klartext steht in einer Stanza, die der Server gesehen hat.");
+                            "The plaintext stands in a stanza the server has seen.");
 
-                // Zur Gegenprobe: Der Geheimtext ist dort sehr wohl.
-                Assert.That(alleStanzas.Any(f => f.Contains("urn:xmpp:omemo:2", StringComparison.Ordinal)),
+                // As a cross-check: the ciphertext very much is there.
+                Assert.That(allStanzas.Any(f => f.Contains("urn:xmpp:omemo:2", StringComparison.Ordinal)),
                             Is.True,
-                            "Es ging überhaupt keine OMEMO-Stanza über die Leitung - " +
-                            "dann prüft der Test etwas anderes.");
+                            "No OMEMO stanza went over the wire at all - " +
+                            "then the test is checking something else.");
 
             });
 
@@ -122,19 +121,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoMessagesInARow_BothArrive()
 
         /// <summary>
-        /// Zwei Nachrichten hintereinander, ohne Antwort dazwischen.
+        /// Two messages one after the other, without a reply in between.
         /// </summary>
         /// <remarks>
-        /// <b>Der Test, der ein fehlendes Ablegen der Sitzung findet.</b> In
-        /// einem Wechselgespräch fällt es nicht auf: Das Entschlüsseln der
-        /// Antwort legt die Sitzung ohnehin ab, und die nächste Nachricht
-        /// findet einen aktuellen Stand vor. Erst zwei Nachrichten in Folge
-        /// zeigen, ob das <i>Senden</i> selbst den Fortschritt behält - sonst
-        /// stünde die zweite auf derselben Stelle der Kette wie die erste, und
-        /// der Empfänger hielte sie für eine Wiederholung.
+        /// <b>The test that finds a missing store of the session.</b> In an
+        /// alternating conversation it does not show: decrypting the reply
+        /// stores the session anyway, and the next message finds a current
+        /// point. Only two messages in a row show whether the <i>sending</i>
+        /// itself keeps the progress - otherwise the second would stand at the
+        /// same place of the chain as the first, and the receiver would take
+        /// it for a repetition.
         ///
-        /// Genau daran ist eine Mutation vorbeigekommen, bis es diesen Test
-        /// gab.
+        /// This is exactly what a mutation got past, until this test existed.
         /// </remarks>
         [Test]
         public async Task TwoMessagesInARow_BothArrive()
@@ -148,22 +146,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.EnableOmemoAsync();
             await bob.EnableOmemoAsync();
 
-            var beiBob = new List<String>();
-            bob.OnEncryptedMessage += (n, _) => { lock (beiBob) beiBob.Add(n.Body); };
+            var atBob = new List<String>();
+            bob.OnEncryptedMessage += (n, _) => { lock (atBob) atBob.Add(n.Body); };
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "die erste");
-            await WaitFor(() => { lock (beiBob) return beiBob.Count == 1; }, "die erste Nachricht");
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
+            await WaitFor(() => { lock (atBob) return atBob.Count == 1; }, "the first message");
 
-            // Ohne Antwort dazwischen.
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "die zweite");
-            await WaitFor(() => { lock (beiBob) return beiBob.Count == 2; },
-                          "die zweite Nachricht ohne Antwort dazwischen");
+            // Without a reply in between.
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the second");
+            await WaitFor(() => { lock (atBob) return atBob.Count == 2; },
+                          "the second message without a reply in between");
 
-            // Und eine dritte, damit auch der Schritt danach sitzt.
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "die dritte");
-            await WaitFor(() => { lock (beiBob) return beiBob.Count == 3; }, "die dritte Nachricht");
+            // And a third one, so that the step after it sits as well.
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the third");
+            await WaitFor(() => { lock (atBob) return atBob.Count == 3; }, "the third message");
 
-            Assert.That(beiBob, Is.EqualTo(new[] { "die erste", "die zweite", "die dritte" }));
+            Assert.That(atBob, Is.EqualTo(new[] { "the first", "the second", "the third" }));
 
         }
 
@@ -172,17 +170,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOwnOtherDevice_ReadsAlong()
 
         /// <summary>
-        /// Das eigene zweite Gerät liest mit - das eigene <b>erste</b> nicht.
+        /// The own second device reads along - the own <b>first</b> one does
+        /// not.
         /// </summary>
         /// <remarks>
-        /// Ohne den Mitschnitt an die eigenen Geräte sähe der eigene Rechner
-        /// nicht, was das eigene Telefon geschrieben hat; das Gespräch stünde
-        /// auf jedem Gerät anders da.
+        /// Without the copy to the own devices, the own computer would not see
+        /// what the own phone has written; the conversation would stand
+        /// differently on every device.
         ///
-        /// Das <i>sendende</i> Gerät dagegen bekommt keinen Eintrag - es
-        /// müsste eine Sitzung mit sich selbst führen. Beides steht hier
-        /// zusammen, weil beides an derselben Zeile hängt und die Mutationen
-        /// in beide Richtungen überlebt haben.
+        /// The <i>sending</i> device on the other hand gets no entry - it
+        /// would have to keep a session with itself. Both stand here together
+        /// because both hang on the same line and the mutations survived in
+        /// both directions.
         /// </remarks>
         [Test]
         public async Task TheOwnOtherDevice_ReadsAlong()
@@ -193,33 +192,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice", createAccount: false);
             var bob   = await ConnectClientAsync("bob",   createAccount: false);
 
-            var alicesZweites = CreateClient("alice");
-            alicesZweites.Connection.Resource = "zweites-geraet";
-            await alicesZweites.ConnectAsync();
+            var alicesSecond = CreateClient("alice");
+            alicesSecond.Connection.Resource = "second-device";
+            await alicesSecond.ConnectAsync();
 
             await alice.EnableOmemoAsync();
-            await alicesZweites.EnableOmemoAsync();
+            await alicesSecond.EnableOmemoAsync();
             await bob.EnableOmemoAsync();
 
-            String? beimZweiten = null;
-            alicesZweites.OnEncryptedMessage += (n, _) => beimZweiten = n.Body;
+            String? atTheSecond = null;
+            alicesSecond.OnEncryptedMessage += (n, _) => atTheSecond = n.Body;
 
-            var angekommen = false;
-            bob.OnEncryptedMessage += (_, _) => angekommen = true;
+            var arrived = false;
+            bob.OnEncryptedMessage += (_, _) => arrived = true;
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "an Bob geschrieben");
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "written to Bob");
 
-            await WaitFor(() => angekommen,       "die Nachricht bei Bob");
-            await WaitFor(() => beimZweiten is not null,
-                          "die Nachricht beim eigenen zweiten Gerät");
+            await WaitFor(() => arrived,          "the message at Bob");
+            await WaitFor(() => atTheSecond is not null,
+                          "the message at the own second device");
 
-            Assert.That(beimZweiten, Is.EqualTo("an Bob geschrieben"));
+            Assert.That(atTheSecond, Is.EqualTo("written to Bob"));
 
-            // Und das sendende Gerät bekommt keinen Eintrag für sich selbst.
+            // And the sending device gets no entry for itself.
             //
-            // Gesucht wird die Nachricht und nicht irgendeine Stanza mit dem
-            // OMEMO-Namensraum: Die erste davon ist eine PEP-Veröffentlichung,
-            // und an der lässt sich über Schlüsseleinträge nichts ablesen.
+            // What is searched for is the message and not just any stanza with
+            // the OMEMO namespace: the first of those is a PEP publication,
+            // and nothing can be read off it about key entries.
             var stanza = Server.Sessions
                                .SelectMany(s => s.Sent)
                                .First(f => f.StartsWith("<message", StringComparison.Ordinal) &&
@@ -227,11 +226,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var element = System.Xml.Linq.XElement.Parse(stanza);
 
-            Assert.That(OmemoEncryptedElement.TryRead(element, out var gelesen), Is.True);
+            Assert.That(OmemoEncryptedElement.TryRead(element, out var loaded), Is.True);
 
-            Assert.That(gelesen!.KeyFor($"alice@{Server.Domain}", alice.Omemo!.Identity.DeviceId),
+            Assert.That(loaded!.KeyFor($"alice@{Server.Domain}", alice.Omemo!.Identity.DeviceId),
                         Is.Null,
-                        "Das sendende Gerät hat einen Schlüsseleintrag für sich selbst bekommen.");
+                        "The sending device got a key entry for itself.");
 
         }
 
@@ -240,20 +239,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheEnvelope_CarriesTheSenderInside()
 
         /// <summary>
-        /// Der Absender steht <b>in</b> der verschlüsselten Hülle - und wird
-        /// gegen den der Stanza abgeglichen.
+        /// The sender stands <b>inside</b> the encrypted envelope - and is
+        /// matched against the one of the stanza.
         /// </summary>
         /// <remarks>
-        /// Der äussere Absender lässt sich von jedem ändern, der die Stanza in
-        /// die Finger bekommt; der innere nicht. Ohne ihn liesse sich ein
-        /// Geheimtext abfangen und unter fremdem Namen weiterreichen - die
-        /// Verschlüsselung bliebe gültig, und der Empfänger sähe eine
-        /// Nachricht, die nie an ihn gerichtet war.
+        /// The outer sender can be changed by anybody who gets the stanza into
+        /// their fingers; the inner one cannot. Without it a ciphertext could
+        /// be caught and passed on under a foreign name - the encryption would
+        /// stay valid, and the receiver would see a message that was never
+        /// addressed to them.
         ///
-        /// Zwei Mutationen sind hier durchgekommen, solange die Auskunft
-        /// nicht bis zum Aufrufer reichte: die Hülle ohne Absender zu bauen,
-        /// und beim Lesen nicht abzugleichen. Beides fällt nur auf, wenn
-        /// jemand den inneren Absender <i>sehen</i> kann.
+        /// Two mutations got through here as long as the information did not
+        /// reach the caller: building the envelope without a sender, and not
+        /// matching it on reading. Both only show if somebody can <i>see</i>
+        /// the inner sender.
         /// </remarks>
         [Test]
         public async Task TheEnvelope_CarriesTheSenderInside()
@@ -267,15 +266,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.EnableOmemoAsync();
             await bob.EnableOmemoAsync();
 
-            OmemoDecrypted? auskunft = null;
-            bob.OnEncryptedMessage += (_, o) => auskunft = o;
+            OmemoDecrypted? info = null;
+            bob.OnEncryptedMessage += (_, o) => info = o;
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "von innen unterschrieben");
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "signed from the inside");
 
-            await WaitFor(() => auskunft is not null, "die Nachricht bei Bob");
+            await WaitFor(() => info is not null, "the message at Bob");
 
-            Assert.That(auskunft!.EnvelopeFrom, Is.EqualTo($"alice@{Server.Domain}"),
-                        "Die Hülle nennt keinen oder einen anderen Absender.");
+            Assert.That(info!.EnvelopeFrom, Is.EqualTo($"alice@{Server.Domain}"),
+                        "The envelope names no sender, or a different one.");
 
         }
 
@@ -284,25 +283,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AForwardedMessage_IsRefused()
 
         /// <summary>
-        /// Eine gültige Nachricht, unter fremdem Namen weitergereicht, wird
-        /// abgewiesen.
+        /// A valid message, passed on under a foreign name, is refused.
         /// </summary>
         /// <remarks>
-        /// <b>Der Angriff, gegen den die Beigabe aus XEP-0420 steht</b> - und
-        /// der einzige Weg, ihre Prüfung wirklich zu belegen.
+        /// <b>The attack the associated data of XEP-0420 stands against</b> -
+        /// and the only way to really show its check at work.
         ///
-        /// Alice schreibt an Bob und Mallory zugleich; beide bekommen ihren
-        /// eigenen Schlüsseleintrag. Mallory schickt dieselbe
-        /// <c>&lt;encrypted/&gt;</c>-Stanza unverändert an Bob weiter, unter
-        /// ihrem eigenen Namen. Bobs Eintrag ist darin unangetastet, sein
-        /// Ratchet-Schritt geht auf, die Prüfsumme stimmt - <b>alles
-        /// kryptographisch einwandfrei</b>. Nur steht innen „von Alice" und
-        /// aussen „von Mallory".
+        /// Alice writes to Bob and Mallory at once; both get their own key
+        /// entry. Mallory sends the same <c>&lt;encrypted/&gt;</c> stanza
+        /// unchanged on to Bob, under her own name. Bob's entry in it is
+        /// untouched, his ratchet step works out, the checksum adds up -
+        /// <b>everything cryptographically impeccable</b>. Only inside it says
+        /// "from Alice" and outside "from Mallory".
         ///
-        /// Ohne den Abgleich sähe Bob eine Nachricht, die Alice nie an ihn
-        /// gerichtet hat, geliefert von jemand anderem. Solange die Auskunft
-        /// nur mitgeführt und nicht verglichen wurde, ist genau diese Mutation
-        /// durch alle anderen Tests gekommen.
+        /// Without the match Bob would see a message that Alice never
+        /// addressed to him, delivered by somebody else. As long as the
+        /// information was only carried along and not compared, this exact
+        /// mutation got through all the other tests.
         /// </remarks>
         [Test]
         public async Task AForwardedMessage_IsRefused()
@@ -319,25 +316,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await bob.EnableOmemoAsync();
             await mallory.EnableOmemoAsync();
 
-            var beiBob = 0;
-            bob.OnEncryptedMessage += (_, _) => Interlocked.Increment(ref beiBob);
+            var atBob = 0;
+            bob.OnEncryptedMessage += (_, _) => Interlocked.Increment(ref atBob);
 
-            // Eine Nachricht an beide - beide bekommen ihren Eintrag.
+            // One message to both - both get their entry.
             System.Xml.Linq.XNamespace client = "jabber:client";
 
-            var ergebnis = await alice.Omemo!.EncryptAsync(
-                                     [$"bob@{Server.Domain}", $"mallory@{Server.Domain}"],
-                                     [new System.Xml.Linq.XElement(client + "body", "nur für euch beide")]);
+            var result = await alice.Omemo!.EncryptAsync(
+                                   [$"bob@{Server.Domain}", $"mallory@{Server.Domain}"],
+                                   [new System.Xml.Linq.XElement(client + "body", "for the two of you only")]);
 
-            Assert.That(ergebnis.Skipped, Is.Empty);
+            Assert.That(result.Skipped, Is.Empty);
 
-            // Mallory reicht sie unverändert an Bob weiter - unter ihrem Namen.
+            // Mallory passes it on to Bob unchanged - under her own name.
             await mallory.SendRawAsync(
                       $"<message xmlns='jabber:client' to='bob@{Server.Domain}' type='chat'>" +
-                      $"{ergebnis.Element.ToXml()}</message>");
+                      $"{result.Element.ToXml()}</message>");
 
-            await WaitAgainst(() => beiBob > 0,
-                              "eine weitergereichte Nachricht unter fremdem Namen");
+            await WaitAgainst(() => atBob > 0,
+                              "a message passed on under a foreign name");
 
         }
 
@@ -346,14 +343,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AConversation_RunsInBothDirections()
 
         /// <summary>
-        /// Hin und zurück, mehrfach - und damit dreht sich auch die
-        /// Diffie-Hellman-Ratsche.
+        /// There and back, several times - and with that the Diffie-Hellman
+        /// ratchet turns as well.
         /// </summary>
         /// <remarks>
-        /// Die erste Nachricht baut die Sitzung auf, die Antwort dreht die
-        /// Ratsche, alles Weitere läuft darüber. <b>Erst dieser Ablauf prüft
-        /// den Weg, den ein Gespräch tatsächlich nimmt</b> - eine einzelne
-        /// Nachricht sagt darüber nichts.
+        /// The first message builds the session up, the reply turns the
+        /// ratchet, everything further runs over that. <b>Only this course
+        /// checks the way a conversation actually takes</b> - a single message
+        /// says nothing about it.
         /// </remarks>
         [Test]
         public async Task AConversation_RunsInBothDirections()
@@ -367,30 +364,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.EnableOmemoAsync();
             await bob.EnableOmemoAsync();
 
-            var beiBob    = new List<String>();
-            var beiAlice  = new List<String>();
+            var atBob    = new List<String>();
+            var atAlice  = new List<String>();
 
-            bob.OnEncryptedMessage    += (n, _) => { lock (beiBob)   beiBob.Add(n.Body); };
-            alice.OnEncryptedMessage  += (n, _) => { lock (beiAlice) beiAlice.Add(n.Body); };
+            bob.OnEncryptedMessage    += (n, _) => { lock (atBob)   atBob.Add(n.Body); };
+            alice.OnEncryptedMessage  += (n, _) => { lock (atAlice) atAlice.Add(n.Body); };
 
             for (var i = 0; i < 3; i++)
             {
 
-                await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", $"von Alice {i}");
-                await WaitFor(() => { lock (beiBob) return beiBob.Count == i + 1; },
-                              $"Nachricht {i} bei Bob");
+                await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", $"from Alice {i}");
+                await WaitFor(() => { lock (atBob) return atBob.Count == i + 1; },
+                              $"message {i} at Bob");
 
-                await bob.SendEncryptedMessageAsync($"alice@{Server.Domain}", $"von Bob {i}");
-                await WaitFor(() => { lock (beiAlice) return beiAlice.Count == i + 1; },
-                              $"Antwort {i} bei Alice");
+                await bob.SendEncryptedMessageAsync($"alice@{Server.Domain}", $"from Bob {i}");
+                await WaitFor(() => { lock (atAlice) return atAlice.Count == i + 1; },
+                              $"reply {i} at Alice");
 
             }
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(beiBob,   Is.EqualTo(new[] { "von Alice 0", "von Alice 1", "von Alice 2" }));
-                Assert.That(beiAlice, Is.EqualTo(new[] { "von Bob 0",   "von Bob 1",   "von Bob 2" }));
+                Assert.That(atBob,   Is.EqualTo(new[] { "from Alice 0", "from Alice 1", "from Alice 2" }));
+                Assert.That(atAlice, Is.EqualTo(new[] { "from Bob 0",   "from Bob 1",   "from Bob 2" }));
 
             });
 
@@ -401,14 +398,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFingerprints_MatchOnBothSides()
 
         /// <summary>
-        /// Was Bob als Alices Fingerabdruck sieht, ist der, den Alice hat.
+        /// What Bob sees as Alice's fingerprint is the one Alice has.
         /// </summary>
         /// <remarks>
-        /// <b>Daran hängt die ganze Vertrauensfrage.</b> Zwei Menschen
-        /// vergleichen diese Zeichenfolge über einen anderen Weg - am Telefon,
-        /// im selben Raum. Stimmten die beiden Darstellungen nicht überein,
-        /// wäre der Vergleich unmöglich, und niemand könnte je etwas
-        /// bestätigen.
+        /// <b>The whole question of trust hangs on this.</b> Two human beings
+        /// compare this string over another way - on the telephone, in the
+        /// same room. If the two renderings did not agree, the comparison
+        /// would be impossible, and nobody could ever confirm anything.
         /// </remarks>
         [Test]
         public async Task TheFingerprints_MatchOnBothSides()
@@ -422,27 +418,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.EnableOmemoAsync();
             await bob.EnableOmemoAsync();
 
-            var angekommen = false;
-            bob.OnEncryptedMessage += (_, _) => angekommen = true;
+            var arrived = false;
+            bob.OnEncryptedMessage += (_, _) => arrived = true;
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "Hallo");
-            await WaitFor(() => angekommen, "die Nachricht bei Bob");
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "Hello");
+            await WaitFor(() => arrived, "the message at Bob");
 
-            var beiBobVermerkt = bob.Omemo!.KnownDevices()
-                                    .Single(d => d.DeviceId == alice.Omemo!.Identity.DeviceId);
+            var notedAtBob = bob.Omemo!.KnownDevices()
+                                .Single(d => d.DeviceId == alice.Omemo!.Identity.DeviceId);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(beiBobVermerkt.Fingerprint, Is.EqualTo(alice.Omemo!.Fingerprint),
-                            "Bob sieht einen anderen Fingerabdruck, als Alice hat.");
+                Assert.That(notedAtBob.Fingerprint, Is.EqualTo(alice.Omemo!.Fingerprint),
+                            "Bob sees a different fingerprint from the one Alice has.");
 
-                Assert.That(beiBobVermerkt.Trust, Is.EqualTo(OmemoTrust.Undecided),
-                            "Ein frisch gesehenes Gerät gilt als bestätigt.");
+                Assert.That(notedAtBob.Trust, Is.EqualTo(OmemoTrust.Undecided),
+                            "A freshly seen device counts as confirmed.");
 
-                Assert.That(beiBobVermerkt.BareJid, Is.EqualTo($"alice@{Server.Domain}"));
+                Assert.That(notedAtBob.BareJid, Is.EqualTo($"alice@{Server.Domain}"));
 
-                // Und die Entscheidung lässt sich treffen.
+                // And the decision can be made.
                 Assert.That(bob.Omemo.SetTrust($"alice@{Server.Domain}",
                                                alice.Omemo.Identity.DeviceId,
                                                OmemoTrust.Trusted),
@@ -457,14 +453,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ADistrustedDevice_IsLeftOut()
 
         /// <summary>
-        /// Ein abgelehntes Gerät bekommt nichts - und der Absender erfährt es.
+        /// A refused device gets nothing - and the sender learns of it.
         /// </summary>
         /// <remarks>
-        /// <b>Das Erfahren ist der Punkt.</b> Ein Absender, der nicht merkt,
-        /// dass sein Gegenüber ausgelassen wurde, hält das Gespräch für
-        /// geführt und wundert sich über die ausbleibende Antwort. Deshalb
-        /// nennt das Ergebnis jedes übersprungene Gerät samt Grund, statt
-        /// still eine kürzere Empfängerliste zu bauen.
+        /// <b>The learning of it is the point.</b> A sender who does not
+        /// notice that their counterpart was left out takes the conversation
+        /// for held and wonders about the reply that fails to come. This is
+        /// why the result names every skipped device together with the reason,
+        /// instead of quietly building a shorter list of receivers.
         /// </remarks>
         [Test]
         public async Task ADistrustedDevice_IsLeftOut()
@@ -478,34 +474,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.EnableOmemoAsync();
             await bob.EnableOmemoAsync();
 
-            var angekommen = false;
-            bob.OnEncryptedMessage += (_, _) => angekommen = true;
+            var arrived = false;
+            bob.OnEncryptedMessage += (_, _) => arrived = true;
 
-            // Die erste Nachricht macht Bobs Gerät bei Alice bekannt.
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "die erste");
-            await WaitFor(() => angekommen, "die erste Nachricht");
+            // The first message makes Bob's device known at Alice.
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
+            await WaitFor(() => arrived, "the first message");
 
             Assert.That(alice.Omemo!.SetTrust($"bob@{Server.Domain}",
                                               bob.Omemo!.Identity.DeviceId,
                                               OmemoTrust.Distrusted),
                         Is.True);
 
-            angekommen = false;
+            arrived = false;
 
-            var uebersprungen = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "die zweite");
+            var skipped = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the second");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(uebersprungen, Has.Count.EqualTo(1),
-                            "Das abgelehnte Gerät wurde nicht gemeldet.");
+                Assert.That(skipped, Has.Count.EqualTo(1),
+                            "The refused device was not reported.");
 
-                Assert.That(uebersprungen[0].DeviceId, Is.EqualTo(bob.Omemo.Identity.DeviceId));
-                Assert.That(uebersprungen[0].Reason,   Does.Contain("refused"));
+                Assert.That(skipped[0].DeviceId, Is.EqualTo(bob.Omemo.Identity.DeviceId));
+                Assert.That(skipped[0].Reason,   Does.Contain("refused"));
 
             });
 
-            await WaitAgainst(() => angekommen, "eine Nachricht an das abgelehnte Gerät");
+            await WaitAgainst(() => arrived, "a message to the refused device");
 
         }
 
@@ -514,14 +510,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutOmemo_NothingIsSentInTheClear()
 
         /// <summary>
-        /// Ohne eingeschaltetes OMEMO wird geworfen - und nichts gesendet.
+        /// Without OMEMO switched on it throws - and sends nothing.
         /// </summary>
         /// <remarks>
-        /// <b>Der schlimmste aller Fehler wäre, hier unverschlüsselt zu
-        /// senden.</b> Der Aufrufer wollte verschlüsseln; bekäme er
-        /// stattdessen lautlos eine gewöhnliche Nachricht, hielte er sie für
-        /// geschützt. Eine Ausnahme ist laut, eine unverschlüsselte Nachricht
-        /// ist es nicht.
+        /// <b>The worst of all mistakes would be to send unencrypted here.</b>
+        /// The caller wanted to encrypt; if they silently got an ordinary
+        /// message instead, they would take it for protected. An exception is
+        /// loud, an unencrypted message is not.
         /// </remarks>
         [Test]
         public async Task WithoutOmemo_NothingIsSentInTheClear()
@@ -532,14 +527,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("bob");
 
-            var vorher = session.Received.Count;
+            var before = session.Received.Count;
 
-            Assert.That(async () => await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "geheim"),
+            Assert.That(async () => await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "secret"),
                         Throws.TypeOf<InvalidOperationException>());
 
-            await WaitAgainst(() => session.Received.Skip(vorher)
-                                           .Any(f => f.Contains("geheim", StringComparison.Ordinal)),
-                              "eine unverschlüsselt gesendete Nachricht");
+            await WaitAgainst(() => session.Received.Skip(before)
+                                           .Any(f => f.Contains("secret", StringComparison.Ordinal)),
+                              "a message sent unencrypted");
 
         }
 
@@ -548,14 +543,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AConsumedPreKey_IsPersistedImmediately()
 
         /// <summary>
-        /// Der beim Schlüsselaustausch verbrauchte PreKey ist sofort im
-        /// Speicher fort - nicht erst beim nächsten Ablegen.
+        /// The PreKey used up in the key exchange is gone from the store at
+        /// once - not only at the next store.
         /// </summary>
         /// <remarks>
-        /// <b>Sonst wäre er nach einem Neustart wieder da</b>, und dieselbe
-        /// erste Nachricht liesse sich ein zweites Mal einspielen. Der
-        /// Neustart ist dabei kein Sonderfall, sondern die Gelegenheit: Er
-        /// passiert von selbst.
+        /// <b>Otherwise it would be back after a restart</b>, and the same
+        /// first message could be played in a second time. The restart is no
+        /// special case in this; it is the opportunity, because it happens by
+        /// itself.
         /// </remarks>
         [Test]
         public async Task AConsumedPreKey_IsPersistedImmediately()
@@ -566,22 +561,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice", createAccount: false);
             var bob   = await ConnectClientAsync("bob",   createAccount: false);
 
-            var bobsSpeicher = new OmemoMemoryStore();
+            var bobsStore = new OmemoMemoryStore();
 
             await alice.EnableOmemoAsync();
-            await bob.EnableOmemoAsync(bobsSpeicher);
+            await bob.EnableOmemoAsync(bobsStore);
 
-            var vorher = bobsSpeicher.LoadIdentity()!.PreKeys.Count;
+            var before = bobsStore.LoadIdentity()!.PreKeys.Count;
 
-            var angekommen = false;
-            bob.OnEncryptedMessage += (_, _) => angekommen = true;
+            var arrived = false;
+            bob.OnEncryptedMessage += (_, _) => arrived = true;
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "die erste");
-            await WaitFor(() => angekommen, "die Nachricht bei Bob");
+            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
+            await WaitFor(() => arrived, "the message at Bob");
 
-            Assert.That(bobsSpeicher.LoadIdentity()!.PreKeys.Count, Is.EqualTo(vorher - 1),
-                        "Der verbrauchte PreKey steht noch im Speicher - nach einem Neustart " +
-                        "wäre die Nachricht ein zweites Mal annehmbar.");
+            Assert.That(bobsStore.LoadIdentity()!.PreKeys.Count, Is.EqualTo(before - 1),
+                        "The used PreKey is still in the store - after a restart " +
+                        "the message would be acceptable a second time.");
 
         }
 
@@ -590,14 +585,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChangedIdentityKey_StopsTheMessage()
 
         /// <summary>
-        /// Hat sich der IdentityKey eines Geräts geändert, geht nichts mehr an
-        /// es - und der Absender erfährt den Grund.
+        /// If the IdentityKey of a device has changed, nothing goes to it any
+        /// more - and the sender learns the reason.
         /// </summary>
         /// <remarks>
-        /// Hergestellt wird der Fall, indem in Alices Speicher ein
-        /// <i>falscher</i> Schlüssel für Bobs Gerät vermerkt wird. Aus Alices
-        /// Sicht sieht das genauso aus wie ein Angreifer, der Bobs Bundle
-        /// ausgetauscht hat - und genau dann darf nichts hinausgehen.
+        /// The case is brought about by noting a <i>wrong</i> key for Bob's
+        /// device in Alice's store. From Alice's view that looks exactly like
+        /// an attacker who has exchanged Bob's bundle - and precisely then
+        /// nothing may go out.
         /// </remarks>
         [Test]
         public async Task AChangedIdentityKey_StopsTheMessage()
@@ -608,32 +603,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice", createAccount: false);
             var bob   = await ConnectClientAsync("bob",   createAccount: false);
 
-            var alicesSpeicher = new OmemoMemoryStore();
+            var alicesStore = new OmemoMemoryStore();
 
-            await alice.EnableOmemoAsync(alicesSpeicher);
+            await alice.EnableOmemoAsync(alicesStore);
             await bob.EnableOmemoAsync();
 
-            // Alice hat sich Bobs Gerät mit einem anderen Schlüssel gemerkt.
-            alicesSpeicher.RecordIdentity($"bob@{Server.Domain}",
-                                          bob.Omemo!.Identity.DeviceId,
-                                          OmemoIdentity.Create().PublicIdentityKey);
+            // Alice has noted Bob's device with a different key.
+            alicesStore.RecordIdentity($"bob@{Server.Domain}",
+                                       bob.Omemo!.Identity.DeviceId,
+                                       OmemoIdentity.Create().PublicIdentityKey);
 
-            var angekommen = false;
-            bob.OnEncryptedMessage += (_, _) => angekommen = true;
+            var arrived = false;
+            bob.OnEncryptedMessage += (_, _) => arrived = true;
 
-            var uebersprungen = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "geheim");
+            var skipped = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "secret");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(uebersprungen, Has.Count.EqualTo(1),
-                            "Das Gerät mit geändertem Schlüssel wurde nicht übersprungen.");
+                Assert.That(skipped, Has.Count.EqualTo(1),
+                            "The device with the changed key was not skipped.");
 
-                Assert.That(uebersprungen[0].Reason, Does.Contain("identity key"));
+                Assert.That(skipped[0].Reason, Does.Contain("identity key"));
 
             });
 
-            await WaitAgainst(() => angekommen, "eine Nachricht trotz geändertem IdentityKey");
+            await WaitAgainst(() => arrived, "a message despite a changed IdentityKey");
 
         }
 
@@ -642,19 +637,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EnablingOmemo_KeepsAForeignEntryInTheOwnList()
 
         /// <summary>
-        /// Das Einschalten ergänzt die eigene Geräteliste und schreibt sie
-        /// nicht neu.
+        /// Switching on adds to the own device list and does not write it
+        /// anew.
         /// </summary>
         /// <remarks>
-        /// <b>Dieser Test musste einen Umweg nehmen, und der Grund ist
-        /// lehrreich.</b> Ein Test mit zwei echten Clients findet den Fehler
-        /// nicht: Verdrängt das zweite Gerät das erste, bemerkt das erste die
-        /// PEP-Benachrichtigung und trägt sich sofort wieder ein (D66) - der
-        /// Endzustand stimmt wieder, und der Test sieht nichts.
+        /// <b>This test had to take a detour, and the reason is
+        /// instructive.</b> A test with two real clients does not find the
+        /// mistake: if the second device displaces the first, the first
+        /// notices the PEP notification and enters itself again at once
+        /// (D66) - the end state is right again, and the test sees nothing.
         ///
-        /// Deshalb steht hier ein Eintrag für ein Gerät, das es gar nicht
-        /// gibt. Es kann sich nicht wehren, und damit bleibt sichtbar, was das
-        /// Einschalten mit der Liste tut.
+        /// This is why there is an entry here for a device that does not exist
+        /// at all. It cannot defend itself, and so what the switching on does
+        /// to the list stays visible.
         /// </remarks>
         [Test]
         public async Task EnablingOmemo_KeepsAForeignEntryInTheOwnList()
@@ -662,22 +657,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            // Ein Gerät, zu dem es keinen Client gibt.
+            // A device to which there is no client.
             await alice.Connection.PublishOmemoDeviceListAsync(
-                      new OmemoDeviceList([new OmemoDevice(4711, "altes Telefon")]));
+                      new OmemoDeviceList([new OmemoDevice(4711, "old phone")]));
 
             await alice.EnableOmemoAsync();
 
-            var liste = await alice.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
+            var list = await alice.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(liste!.Contains(4711u), Is.True,
-                            "Das Einschalten hat die Liste neu geschrieben und das andere Gerät " +
-                            "verdrängt.");
+                Assert.That(list!.Contains(4711u), Is.True,
+                            "The switching on has written the list anew and displaced the other " +
+                            "device.");
 
-                Assert.That(liste.Contains(alice.Omemo!.Identity.DeviceId), Is.True);
+                Assert.That(list.Contains(alice.Omemo!.Identity.DeviceId), Is.True);
 
             });
 
@@ -688,40 +683,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDeviceList_KeepsTheOtherDevices()
 
         /// <summary>
-        /// Schaltet ein zweites Gerät OMEMO ein, bleibt das erste in der
-        /// Liste.
+        /// When a second device switches OMEMO on, the first one stays in the
+        /// list.
         /// </summary>
         /// <remarks>
-        /// Wer die Liste beim Einschalten neu schriebe, verdrängte jedes
-        /// andere Gerät desselben Menschen - und die bekämen von da an nichts
-        /// mehr, ohne dass jemand etwas bemerkt. Der Wiedereintrag aus D66
-        /// heilte das erst beim nächsten Mal, und auch nur, wenn das andere
-        /// Gerät gerade online ist.
+        /// Whoever wrote the list anew on switching on would displace every
+        /// other device of the same human being - and from then on those would
+        /// get nothing any more, without anybody noticing. The re-entry from
+        /// D66 healed that only at the next time, and only if the other device
+        /// happens to be online.
         /// </remarks>
         [Test]
         public async Task TheDeviceList_KeepsTheOtherDevices()
         {
 
-            var erstes = await ConnectClientAsync("alice");
+            var first = await ConnectClientAsync("alice");
 
-            var zweites = CreateClient("alice");
-            zweites.Connection.Resource = "zweites-geraet";
-            await zweites.ConnectAsync();
+            var second = CreateClient("alice");
+            second.Connection.Resource = "second-device";
+            await second.ConnectAsync();
 
-            await erstes.EnableOmemoAsync();
-            await zweites.EnableOmemoAsync();
+            await first.EnableOmemoAsync();
+            await second.EnableOmemoAsync();
 
-            var liste = await zweites.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
+            var list = await second.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(liste!.Contains(erstes.Omemo!.Identity.DeviceId), Is.True,
-                            "Das erste Gerät wurde aus der Liste verdrängt.");
+                Assert.That(list!.Contains(first.Omemo!.Identity.DeviceId), Is.True,
+                            "The first device was displaced from the list.");
 
-                Assert.That(liste.Contains(zweites.Omemo!.Identity.DeviceId), Is.True);
+                Assert.That(list.Contains(second.Omemo!.Identity.DeviceId), Is.True);
 
-                Assert.That(liste.Devices, Has.Count.EqualTo(2));
+                Assert.That(list.Devices, Has.Count.EqualTo(2));
 
             });
 

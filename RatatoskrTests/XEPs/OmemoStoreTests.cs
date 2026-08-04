@@ -30,34 +30,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Der Speicher, der einen Neustart überdauert (XEP-0384, Etappe 6).
+    /// The store that outlives a restart (XEP-0384, stage 6).
     /// </summary>
     /// <remarks>
-    /// <b>Die Prüfung ist immer dieselbe: neu starten und weitermachen.</b>
-    /// Ein Speicher, der ablegt und wieder herausgibt, ist noch keiner - er
-    /// muss so viel ablegen, dass die Gegenstelle vom Neustart nichts merkt.
-    /// Deshalb wird hier nicht verglichen, was gespeichert wurde, sondern
-    /// geprüft, ob das Gespräch weitergeht.
+    /// <b>The check is always the same: restart and carry on.</b>
+    /// A store that puts things away and hands them back again is not one yet -
+    /// it has to put away enough that the far side notices nothing of the
+    /// restart. This is why nothing here compares what was stored; it checks
+    /// whether the conversation goes on.
     /// </remarks>
     [TestFixture]
     public class OmemoStoreTests
     {
 
-        #region Hilfsfunktionen
+        #region Helpers
 
-        private static readonly Byte[] Beigabe = Encoding.UTF8.GetBytes("AD");
+        private static readonly Byte[] AssociatedData = Encoding.UTF8.GetBytes("AD");
 
-        private String _datei = "";
+        private String _file = "";
 
         [SetUp]
-        public void FrischeDatei()
-            => _datei = Path.Combine(Path.GetTempPath(),
-                                     $"omemo-test-{Guid.NewGuid():N}.json");
+        public void FreshFile()
+            => _file = Path.Combine(Path.GetTempPath(),
+                                    $"omemo-test-{Guid.NewGuid():N}.json");
 
         [TearDown]
-        public void AufraeumenDanach()
+        public void CleanUpAfterwards()
         {
-            try { if (File.Exists(_datei)) File.Delete(_datei); } catch { /* egal */ }
+            try { if (File.Exists(_file)) File.Delete(_file); } catch { /* never mind */ }
         }
 
         private static String Hex(Byte[] bytes)
@@ -66,15 +66,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static Byte[] Text(String s)
             => Encoding.UTF8.GetBytes(s);
 
-        /// <summary>Ein Paar Ratschen, wie es nach X3DH entsteht.</summary>
-        private static (DoubleRatchet Alice, DoubleRatchet Bob) Paar()
+        /// <summary>A pair of ratchets, as it comes about after X3DH.</summary>
+        private static (DoubleRatchet Alice, DoubleRatchet Bob) Pair()
         {
 
-            var geheimnis  = RandomNumberGenerator.GetBytes(32);
-            var bobsKey    = Curve25519.GenerateKeyPair();
+            var sharedSecret  = RandomNumberGenerator.GetBytes(32);
+            var bobsKey       = Curve25519.GenerateKeyPair();
 
-            return (DoubleRatchet.InitiateAsSender(geheimnis, bobsKey.PublicKey),
-                    DoubleRatchet.InitiateAsReceiver(geheimnis, bobsKey));
+            return (DoubleRatchet.InitiateAsSender(sharedSecret, bobsKey.PublicKey),
+                    DoubleRatchet.InitiateAsReceiver(sharedSecret, bobsKey));
 
         }
 
@@ -84,47 +84,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheIdentity_SurvivesARestart()
 
         /// <summary>
-        /// Nach einem Neustart ist es dasselbe Gerät - derselbe
-        /// Fingerabdruck, dieselbe Kennung, dieselbe Signatur.
+        /// After a restart it is the same device - the same fingerprint, the
+        /// same id, the same signature.
         /// </summary>
         /// <remarks>
-        /// <b>Der Fingerabdruck ist der Punkt.</b> Ein neuer bedeutet, dass
-        /// jeder Vergleich, den irgendein Mensch je angestellt hat, wertlos
-        /// ist - und für seine Kontakte sieht ein Client, der bei jedem Start
-        /// neue Schlüssel erzeugt, aus wie ein Angreifer. Jedes Mal.
+        /// <b>The fingerprint is the point.</b> A new one means that every
+        /// comparison any human being has ever made is worthless - and to its
+        /// contacts, a client that creates new keys on every start looks like
+        /// an attacker. Every single time.
         ///
-        /// Die Signatur wird mitgenommen und nicht neu gerechnet: XEdDSA
-        /// mischt Zufall in jede, die neue sähe also anders aus als die
-        /// veröffentlichte, und das Bundle im PEP-Knoten wäre mit dem Gerät
-        /// uneins.
+        /// The signature is carried over and not recomputed: XEdDSA mixes
+        /// randomness into every one of them, so a new one would look
+        /// different from the published one, and the bundle in the PEP node
+        /// would be at odds with the device.
         /// </remarks>
         [Test]
         public void TheIdentity_SurvivesARestart()
         {
 
-            var speicher = new OmemoFileStore(_datei);
-            var erstes   = speicher.LoadOrCreateIdentity();
+            var store = new OmemoFileStore(_file);
+            var first = store.LoadOrCreateIdentity();
 
-            // „Neustart": eine neue Instanz auf derselben Datei.
-            var zweites = new OmemoFileStore(_datei).LoadOrCreateIdentity();
+            // "Restart": a new instance on the same file.
+            var second = new OmemoFileStore(_file).LoadOrCreateIdentity();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(zweites.Fingerprint, Is.EqualTo(erstes.Fingerprint),
-                            "Der Fingerabdruck hat sich geändert.");
+                Assert.That(second.Fingerprint, Is.EqualTo(first.Fingerprint),
+                            "The fingerprint has changed.");
 
-                Assert.That(zweites.DeviceId, Is.EqualTo(erstes.DeviceId));
+                Assert.That(second.DeviceId, Is.EqualTo(first.DeviceId));
 
-                Assert.That(Hex(zweites.SignedPreKeySignature),
-                            Is.EqualTo(Hex(erstes.SignedPreKeySignature)),
-                            "Die Signatur wurde neu gerechnet statt mitgenommen.");
+                Assert.That(Hex(second.SignedPreKeySignature),
+                            Is.EqualTo(Hex(first.SignedPreKeySignature)),
+                            "The signature was recomputed instead of carried over.");
 
-                Assert.That(zweites.AvailablePreKeys, Is.EqualTo(erstes.AvailablePreKeys));
+                Assert.That(second.AvailablePreKeys, Is.EqualTo(first.AvailablePreKeys));
 
-                // Und das veröffentlichte Bundle ist Byte für Byte dasselbe.
-                Assert.That(Hex(zweites.Bundle().SignedPreKey),
-                            Is.EqualTo(Hex(erstes.Bundle().SignedPreKey)));
+                // And the published bundle is the same one, byte for byte.
+                Assert.That(Hex(second.Bundle().SignedPreKey),
+                            Is.EqualTo(Hex(first.Bundle().SignedPreKey)));
 
             });
 
@@ -135,38 +135,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AConsumedPreKey_StaysConsumedAcrossARestart()
 
         /// <summary>
-        /// Ein verbrauchter PreKey ist nach dem Neustart immer noch
-        /// verbraucht.
+        /// A used PreKey is still used after the restart.
         /// </summary>
         /// <remarks>
-        /// <b>Sonst wäre die erste Nachricht wiederholbar.</b> Wer eine alte
-        /// abfängt und nach einem Neustart des Empfängers erneut einspielt,
-        /// bekäme dieselbe Sitzung ein zweites Mal - und der Empfänger zeigte
-        /// die Nachricht als neu an. Der Neustart ist dabei kein
-        /// Sonderfall, sondern die Gelegenheit: Er passiert von selbst.
+        /// <b>Otherwise the first message would be replayable.</b> Whoever
+        /// catches an old one and plays it in again after the receiver has
+        /// restarted would get the same session a second time - and the
+        /// receiver would show the message as new. The restart is no special
+        /// case in this; it is the opportunity, because it happens by itself.
         /// </remarks>
         [Test]
         public void AConsumedPreKey_StaysConsumedAcrossARestart()
         {
 
-            var speicher = new OmemoFileStore(_datei);
-            var eigen    = speicher.LoadOrCreateIdentity();
+            var store = new OmemoFileStore(_file);
+            var own   = store.LoadOrCreateIdentity();
 
-            var verbraucht = eigen.Bundle().PreKeys[0].Id;
+            var used = own.Bundle().PreKeys[0].Id;
 
-            Assert.That(eigen.TakePreKey(verbraucht), Is.Not.Null);
+            Assert.That(own.TakePreKey(used), Is.Not.Null);
 
-            speicher.SaveIdentity(eigen.Export());
+            store.SaveIdentity(own.Export());
 
-            var nachNeustart = new OmemoFileStore(_datei).LoadOrCreateIdentity();
+            var afterRestart = new OmemoFileStore(_file).LoadOrCreateIdentity();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(nachNeustart.TakePreKey(verbraucht), Is.Null,
-                            "Der verbrauchte PreKey ist wieder da.");
+                Assert.That(afterRestart.TakePreKey(used), Is.Null,
+                            "The used PreKey is back.");
 
-                Assert.That(nachNeustart.AvailablePreKeys, Is.EqualTo(OmemoIdentity.PreKeyCount - 1));
+                Assert.That(afterRestart.AvailablePreKeys, Is.EqualTo(OmemoIdentity.PreKeyCount - 1));
 
             });
 
@@ -177,45 +176,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASession_ContinuesAfterARestart()
 
         /// <summary>
-        /// <b>Der Kern dieser Etappe:</b> Ein Gespräch läuft über einen
-        /// Neustart hinweg weiter.
+        /// <b>The heart of this stage:</b> a conversation carries on across a
+        /// restart.
         /// </summary>
         /// <remarks>
-        /// Geprüft wird nicht, ob der Zustand gleich aussieht, sondern ob die
-        /// Gegenstelle vom Neustart nichts merkt. Eine neu begonnene Sitzung
-        /// hätte einen anderen Wurzelschlüssel; die Gegenstelle bekäme
-        /// Nachrichten, deren Prüfsumme nicht stimmt - <b>und das sieht aus
-        /// wie ein Angriff, nicht wie ein Neustart</b>.
+        /// What is checked is not whether the state looks the same, but
+        /// whether the far side notices the restart. A freshly begun session
+        /// would have a different root key; the far side would get messages
+        /// whose checksum does not add up - <b>and that looks like an attack,
+        /// not like a restart</b>.
         /// </remarks>
         [Test]
         public void ASession_ContinuesAfterARestart()
         {
 
-            var (alice, bob) = Paar();
-            var speicher     = new OmemoFileStore(_datei);
+            var (alice, bob) = Pair();
+            var store        = new OmemoFileStore(_file);
 
-            // Ein paar Nachrichten hin und her, damit beide Ratschen laufen.
-            bob.Decrypt(alice.Encrypt(Text("eins"), Beigabe), Beigabe);
-            alice.Decrypt(bob.Encrypt(Text("zwei"), Beigabe), Beigabe);
-            bob.Decrypt(alice.Encrypt(Text("drei"), Beigabe), Beigabe);
+            // A few messages back and forth, so that both ratchets are running.
+            bob.Decrypt(alice.Encrypt(Text("one"), AssociatedData), AssociatedData);
+            alice.Decrypt(bob.Encrypt(Text("two"), AssociatedData), AssociatedData);
+            bob.Decrypt(alice.Encrypt(Text("three"), AssociatedData), AssociatedData);
 
-            speicher.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), Beigabe));
+            store.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), AssociatedData));
 
-            // Bob startet neu.
-            var bobNachher = DoubleRatchet.Import(
-                                 new OmemoFileStore(_datei).LoadSession("bob@example.org", 1)!.Ratchet);
+            // Bob restarts.
+            var bobAfterwards = DoubleRatchet.Import(
+                                    new OmemoFileStore(_file).LoadSession("bob@example.org", 1)!.Ratchet);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bobNachher.Decrypt(alice.Encrypt(Text("nach dem Neustart"), Beigabe), Beigabe),
-                            Is.EqualTo(Text("nach dem Neustart")),
-                            "Nach dem Neustart lässt sich nichts mehr lesen.");
+                Assert.That(bobAfterwards.Decrypt(alice.Encrypt(Text("after the restart"), AssociatedData), AssociatedData),
+                            Is.EqualTo(Text("after the restart")),
+                            "After the restart nothing can be read any more.");
 
-                // Und in der Gegenrichtung ebenso.
-                Assert.That(alice.Decrypt(bobNachher.Encrypt(Text("und zurück"), Beigabe), Beigabe),
-                            Is.EqualTo(Text("und zurück")),
-                            "Alice kann Bobs Antwort nach seinem Neustart nicht lesen.");
+                // And in the other direction just the same.
+                Assert.That(alice.Decrypt(bobAfterwards.Encrypt(Text("and back"), AssociatedData), AssociatedData),
+                            Is.EqualTo(Text("and back")),
+                            "Alice cannot read Bob's reply after his restart.");
 
             });
 
@@ -226,44 +225,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SkippedKeys_SurviveARestart()
 
         /// <summary>
-        /// Auch die beiseitegelegten Schlüssel überstehen den Neustart.
+        /// The keys put aside survive the restart as well.
         /// </summary>
         /// <remarks>
-        /// Ohne sie wäre jede überholte Nachricht verloren, die während des
-        /// Neustarts unterwegs war - und zwar endgültig, denn ihr Schlüssel
-        /// war schon ausgerechnet und dann weggeworfen. Der Absender bekäme
-        /// nie einen Hinweis darauf.
+        /// Without them every overtaken message that was in flight during the
+        /// restart would be lost - and lost for good, because its key had
+        /// already been computed and was then thrown away. The sender would
+        /// never get any hint of it.
         /// </remarks>
         [Test]
         public void SkippedKeys_SurviveARestart()
         {
 
-            var (alice, bob) = Paar();
-            var speicher     = new OmemoFileStore(_datei);
+            var (alice, bob) = Pair();
+            var store        = new OmemoFileStore(_file);
 
-            var eins  = alice.Encrypt(Text("eins"),  Beigabe);
-            var zwei  = alice.Encrypt(Text("zwei"),  Beigabe);
-            var drei  = alice.Encrypt(Text("drei"),  Beigabe);
+            var one    = alice.Encrypt(Text("one"),    AssociatedData);
+            var two    = alice.Encrypt(Text("two"),    AssociatedData);
+            var three  = alice.Encrypt(Text("three"),  AssociatedData);
 
-            // Die dritte kommt zuerst - zwei Schlüssel wandern beiseite.
-            bob.Decrypt(drei, Beigabe);
+            // The third arrives first - two keys go aside.
+            bob.Decrypt(three, AssociatedData);
 
             Assert.That(bob.SkippedKeys, Is.EqualTo(2));
 
-            speicher.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), Beigabe));
+            store.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), AssociatedData));
 
-            var bobNachher = DoubleRatchet.Import(
-                                 new OmemoFileStore(_datei).LoadSession("bob@example.org", 1)!.Ratchet);
+            var bobAfterwards = DoubleRatchet.Import(
+                                    new OmemoFileStore(_file).LoadSession("bob@example.org", 1)!.Ratchet);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bobNachher.SkippedKeys, Is.EqualTo(2));
+                Assert.That(bobAfterwards.SkippedKeys, Is.EqualTo(2));
 
-                Assert.That(bobNachher.Decrypt(eins, Beigabe), Is.EqualTo(Text("eins")),
-                            "Die überholte Nachricht ist über den Neustart verloren.");
+                Assert.That(bobAfterwards.Decrypt(one, AssociatedData), Is.EqualTo(Text("one")),
+                            "The overtaken message is lost across the restart.");
 
-                Assert.That(bobNachher.Decrypt(zwei, Beigabe), Is.EqualTo(Text("zwei")));
+                Assert.That(bobAfterwards.Decrypt(two, AssociatedData), Is.EqualTo(Text("two")));
 
             });
 
@@ -274,17 +273,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessageForTheRotatedSignedPreKey_StillArrives()
 
         /// <summary>
-        /// Eine Nachricht, die den <b>abgelösten</b> Signed PreKey nennt,
-        /// kommt an - die davor nicht mehr.
+        /// A message naming the <b>rotated</b> Signed PreKey arrives - the one
+        /// before it no longer does.
         /// </summary>
         /// <remarks>
-        /// In D63 war dieser Fall ausdrücklich aufgeschoben: Der abgelöste
-        /// Schlüssel wurde nicht aufgehoben, und eine Nachricht, die während
-        /// des Wechsels unterwegs war, ging verloren.
+        /// In D63 this case was expressly put off: the rotated key was not
+        /// kept, and a message that was in flight during the change was lost.
         ///
-        /// Aufgehoben wird genau einer. <b>Jeder weitere nähme ein Stück von
-        /// dem zurück, wofür es den Wechsel gibt</b> - wer ihn stiehlt, öffnet
-        /// die Sitzungen, die er eröffnet hat.
+        /// Exactly one is kept. <b>Every further one would take back a piece
+        /// of what the change is there for</b> - whoever steals it opens the
+        /// sessions it has opened.
         /// </remarks>
         [Test]
         public void AMessageForTheRotatedSignedPreKey_StillArrives()
@@ -293,25 +291,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = OmemoIdentity.Create();
             var bob   = OmemoIdentity.Create();
 
-            // Alice greift zum Bundle von jetzt.
-            var beiAlice = X3DH.Initiate(alice, bob.Bundle());
-            var alterSpk = bob.SignedPreKeyId;
+            // Alice reaches for the bundle of right now.
+            var atAlice = X3DH.Initiate(alice, bob.Bundle());
+            var oldSpk  = bob.SignedPreKeyId;
 
             bob.RotateSignedPreKey();
 
-            var beiBob = X3DH.Accept(bob, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
-                                     alterSpk, beiAlice.UsedPreKeyId);
+            var atBob = X3DH.Accept(bob, alice.PublicIdentityKey, atAlice.EphemeralKey!,
+                                    oldSpk, atAlice.UsedPreKeyId);
 
-            Assert.That(Hex(beiBob.SharedSecret), Is.EqualTo(Hex(beiAlice.SharedSecret)),
-                        "Die Nachricht auf den abgelösten Signed PreKey kommt nicht an.");
+            Assert.That(Hex(atBob.SharedSecret), Is.EqualTo(Hex(atAlice.SharedSecret)),
+                        "The message for the rotated Signed PreKey does not arrive.");
 
-            // Noch ein Wechsel - jetzt ist der erste endgültig fort.
+            // One more change - now the first one is gone for good.
             bob.RotateSignedPreKey();
 
-            Assert.That(() => X3DH.Accept(bob, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
-                                          alterSpk, null),
+            Assert.That(() => X3DH.Accept(bob, alice.PublicIdentityKey, atAlice.EphemeralKey!,
+                                          oldSpk, null),
                         Throws.TypeOf<CryptographicException>(),
-                        "Der vorletzte Signed PreKey wird immer noch aufgehoben.");
+                        "The second to last Signed PreKey is still being kept.");
 
         }
 
@@ -320,47 +318,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRotatedSignedPreKey_SurvivesARestart()
 
         /// <summary>
-        /// Auch der <b>abgelöste</b> Signed PreKey überdauert den Neustart.
+        /// The <b>rotated</b> Signed PreKey outlives the restart as well.
         /// </summary>
         /// <remarks>
-        /// Der Fall, der ihn braucht, dauert Minuten: Eine Nachricht ist
-        /// unterwegs, das Gerät wechselt seinen Signed PreKey und startet neu.
-        /// Fehlte der abgelöste danach, wäre die Nachricht verloren - und der
-        /// Absender erführe nichts davon.
+        /// The case that needs it lasts minutes: a message is in flight, the
+        /// device changes its Signed PreKey and restarts. If the rotated one
+        /// were missing afterwards, the message would be lost - and the sender
+        /// would learn nothing about it.
         ///
-        /// Der Test kam durch eine überlebende Mutation dazu: Der abgelöste
-        /// Schlüssel liess sich beim Wiederherstellen weglassen, ohne dass
-        /// etwas fehlschlug. Geprüft war bis dahin nur der Wechsel selbst,
-        /// nicht sein Überleben.
+        /// The test came about through a surviving mutation: the rotated key
+        /// could be left out on restoring without anything failing. What had
+        /// been checked until then was only the change itself, not its
+        /// survival.
         /// </remarks>
         [Test]
         public void TheRotatedSignedPreKey_SurvivesARestart()
         {
 
-            var speicher = new OmemoFileStore(_datei);
-            var bob      = speicher.LoadOrCreateIdentity();
-            var alice    = OmemoIdentity.Create();
+            var store = new OmemoFileStore(_file);
+            var bob   = store.LoadOrCreateIdentity();
+            var alice = OmemoIdentity.Create();
 
-            var beiAlice = X3DH.Initiate(alice, bob.Bundle());
-            var alterSpk = bob.SignedPreKeyId;
+            var atAlice = X3DH.Initiate(alice, bob.Bundle());
+            var oldSpk  = bob.SignedPreKeyId;
 
             bob.RotateSignedPreKey();
-            speicher.SaveIdentity(bob.Export());
+            store.SaveIdentity(bob.Export());
 
-            // Neustart mitten im Wechsel.
-            var bobNachher = new OmemoFileStore(_datei).LoadOrCreateIdentity();
+            // Restart in the middle of the change.
+            var bobAfterwards = new OmemoFileStore(_file).LoadOrCreateIdentity();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bobNachher.PreviousSignedPreKeyId, Is.EqualTo(alterSpk),
-                            "Der abgelöste Signed PreKey ist über den Neustart fort.");
+                Assert.That(bobAfterwards.PreviousSignedPreKeyId, Is.EqualTo(oldSpk),
+                            "The rotated Signed PreKey is gone across the restart.");
 
-                var beiBob = X3DH.Accept(bobNachher, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
-                                         alterSpk, beiAlice.UsedPreKeyId);
+                var atBob = X3DH.Accept(bobAfterwards, alice.PublicIdentityKey, atAlice.EphemeralKey!,
+                                        oldSpk, atAlice.UsedPreKeyId);
 
-                Assert.That(Hex(beiBob.SharedSecret), Is.EqualTo(Hex(beiAlice.SharedSecret)),
-                            "Die unterwegs gewesene Nachricht ist nach dem Neustart nicht mehr zu lesen.");
+                Assert.That(Hex(atBob.SharedSecret), Is.EqualTo(Hex(atAlice.SharedSecret)),
+                            "The message that had been in flight can no longer be read after the restart.");
 
             });
 
@@ -371,45 +369,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASavedSession_ReplacesTheOlderOne()
 
         /// <summary>
-        /// Zweimal dieselbe Sitzung abgelegt heisst: die neuere gilt.
+        /// Storing the same session twice means: the newer one holds.
         /// </summary>
         /// <remarks>
-        /// <b>Auch das kam durch eine überlebende Mutation.</b> Der Speicher
-        /// liess sich so ändern, dass er die neue Fassung <i>danebenlegt</i>
-        /// statt die alte zu ersetzen - und beim Laden käme die alte zuerst.
-        /// Kein Test hatte je zweimal abgelegt.
+        /// <b>This too came about through a surviving mutation.</b> The store
+        /// could be changed so that it puts the new version <i>beside</i> the
+        /// old one instead of replacing it - and on loading, the old one would
+        /// come first. No test had ever stored twice.
         ///
-        /// Der Schaden wäre der schlimmste, den dieser Speicher anrichten
-        /// kann: Nach einem Neustart stünde die Ratsche auf einem alten Stand,
-        /// und alles, was seitdem lief, wäre nicht mehr zu lesen - für beide
-        /// Seiten, ohne erkennbaren Grund.
+        /// The damage would be the worst this store can do: after a restart
+        /// the ratchet would stand at an old point, and everything that has
+        /// run since then could no longer be read - for both sides, with no
+        /// discernible reason.
         /// </remarks>
         [Test]
         public void ASavedSession_ReplacesTheOlderOne()
         {
 
-            var (alice, bob) = Paar();
-            var speicher     = new OmemoFileStore(_datei);
+            var (alice, bob) = Pair();
+            var store        = new OmemoFileStore(_file);
 
-            bob.Decrypt(alice.Encrypt(Text("eins"), Beigabe), Beigabe);
-            speicher.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), Beigabe));
+            bob.Decrypt(alice.Encrypt(Text("one"), AssociatedData), AssociatedData);
+            store.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), AssociatedData));
 
-            // Das Gespräch geht weiter, und der neue Stand wird abgelegt.
-            bob.Decrypt(alice.Encrypt(Text("zwei"), Beigabe), Beigabe);
-            bob.Decrypt(alice.Encrypt(Text("drei"), Beigabe), Beigabe);
-            speicher.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), Beigabe));
+            // The conversation goes on, and the new point is stored.
+            bob.Decrypt(alice.Encrypt(Text("two"), AssociatedData), AssociatedData);
+            bob.Decrypt(alice.Encrypt(Text("three"), AssociatedData), AssociatedData);
+            store.SaveSession("bob@example.org", 1, new OmemoSessionState(bob.Export(), AssociatedData));
 
-            var geladen = new OmemoFileStore(_datei).LoadSession("bob@example.org", 1)!.Ratchet;
+            var loaded = new OmemoFileStore(_file).LoadSession("bob@example.org", 1)!.Ratchet;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(geladen.ReceiveCount, Is.EqualTo(3u),
-                            "Geladen wurde ein älterer Stand - die neue Fassung wurde danebengelegt.");
+                Assert.That(loaded.ReceiveCount, Is.EqualTo(3u),
+                            "What was loaded is an older point - the new version was put beside it.");
 
-                Assert.That(DoubleRatchet.Import(geladen)
-                                         .Decrypt(alice.Encrypt(Text("vier"), Beigabe), Beigabe),
-                            Is.EqualTo(Text("vier")));
+                Assert.That(DoubleRatchet.Import(loaded)
+                                         .Decrypt(alice.Encrypt(Text("four"), AssociatedData), AssociatedData),
+                            Is.EqualTo(Text("four")));
 
             });
 
@@ -420,50 +418,50 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChangedIdentityKey_IsReported()
 
         /// <summary>
-        /// Ein anderer IdentityKey unter derselben Gerätekennung wird
-        /// <b>gemeldet</b> und nicht übernommen.
+        /// A different IdentityKey under the same device id is <b>reported</b>
+        /// and not taken over.
         /// </summary>
         /// <remarks>
-        /// Dafür gibt es genau zwei Erklärungen: Der Mensch hat sein Gerät neu
-        /// aufgesetzt - oder jemand schiebt sich dazwischen. <b>Von aussen
-        /// sind die beiden nicht zu unterscheiden</b>, und deshalb ist es
-        /// keine Entscheidung, die ein Programm treffen kann.
+        /// There are exactly two explanations for it: the human being has set
+        /// up their device anew - or somebody is pushing themselves in
+        /// between. <b>From the outside the two cannot be told apart</b>, and
+        /// that is why it is not a decision a program can make.
         ///
-        /// Der alte Vermerk bleibt stehen, samt seiner
-        /// Vertrauensentscheidung: Wer ihn überschriebe, machte aus einer
-        /// bestätigten Identität eine unbestätigte, und die Warnung wäre nach
-        /// dem ersten Ansehen fort.
+        /// The old note stays where it is, together with its trust decision:
+        /// whoever overwrote it would turn a confirmed identity into an
+        /// unconfirmed one, and the warning would be gone after the first
+        /// look.
         /// </remarks>
         [Test]
         public void AChangedIdentityKey_IsReported()
         {
 
-            var speicher = new OmemoMemoryStore();
+            var store = new OmemoMemoryStore();
 
-            var echt   = OmemoIdentity.Create().PublicIdentityKey;
-            var fremd  = OmemoIdentity.Create().PublicIdentityKey;
+            var real     = OmemoIdentity.Create().PublicIdentityKey;
+            var foreign  = OmemoIdentity.Create().PublicIdentityKey;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(speicher.RecordIdentity("bob@example.org", 1, echt),
+                Assert.That(store.RecordIdentity("bob@example.org", 1, real),
                             Is.EqualTo(OmemoIdentityCheck.New));
 
-                Assert.That(speicher.RecordIdentity("bob@example.org", 1, echt),
+                Assert.That(store.RecordIdentity("bob@example.org", 1, real),
                             Is.EqualTo(OmemoIdentityCheck.Known));
 
-                Assert.That(speicher.RecordIdentity("bob@example.org", 1, fremd),
+                Assert.That(store.RecordIdentity("bob@example.org", 1, foreign),
                             Is.EqualTo(OmemoIdentityCheck.Changed),
-                            "Der Austausch wurde nicht gemeldet.");
+                            "The exchange was not reported.");
 
-                // Und beim nächsten Mal wieder - die Warnung verbraucht sich
-                // nicht.
-                Assert.That(speicher.RecordIdentity("bob@example.org", 1, fremd),
+                // And the next time again - the warning does not use itself
+                // up.
+                Assert.That(store.RecordIdentity("bob@example.org", 1, foreign),
                             Is.EqualTo(OmemoIdentityCheck.Changed),
-                            "Die Warnung war nach dem ersten Mal fort.");
+                            "The warning was gone after the first time.");
 
-                Assert.That(Hex(speicher.KnownDevices().Single().IdentityKey), Is.EqualTo(Hex(echt)),
-                            "Der alte Vermerk wurde überschrieben.");
+                Assert.That(Hex(store.KnownDevices().Single().IdentityKey), Is.EqualTo(Hex(real)),
+                            "The old note was overwritten.");
 
             });
 
@@ -474,51 +472,50 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ATrustDecision_SurvivesAndBelongsToAKey()
 
         /// <summary>
-        /// Die Vertrauensentscheidung überdauert den Neustart - und gilt einem
-        /// Schlüssel, nicht einer Nummer.
+        /// The trust decision outlives the restart - and belongs to a key, not
+        /// to a number.
         /// </summary>
         /// <remarks>
-        /// Über ein unbekanntes Gerät lässt sich nicht entscheiden, und das
-        /// ist keine Förmlichkeit: Wer im Voraus für eine Gerätekennung
-        /// entschiede, hätte für den ersten Schlüssel entschieden, der unter
-        /// dieser Nummer auftaucht - und das kann jeder sein.
+        /// About an unknown device nothing can be decided, and that is no
+        /// formality: whoever decided in advance for a device id would have
+        /// decided for the first key that turns up under that number - and
+        /// that can be anybody.
         /// </remarks>
         [Test]
         public void ATrustDecision_SurvivesAndBelongsToAKey()
         {
 
-            var speicher = new OmemoFileStore(_datei);
-            var bob      = OmemoIdentity.Create().PublicIdentityKey;
+            var store = new OmemoFileStore(_file);
+            var bob   = OmemoIdentity.Create().PublicIdentityKey;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(speicher.SetTrust("bob@example.org", 1, OmemoTrust.Trusted), Is.False,
-                            "Über ein unbekanntes Gerät liess sich entscheiden.");
+                Assert.That(store.SetTrust("bob@example.org", 1, OmemoTrust.Trusted), Is.False,
+                            "About an unknown device a decision could be made.");
 
-                speicher.RecordIdentity("bob@example.org", 1, bob);
+                store.RecordIdentity("bob@example.org", 1, bob);
 
-                Assert.That(speicher.TrustOf("bob@example.org", 1), Is.EqualTo(OmemoTrust.Undecided),
-                            "Ein frisch gesehenes Gerät gilt als bestätigt.");
+                Assert.That(store.TrustOf("bob@example.org", 1), Is.EqualTo(OmemoTrust.Undecided),
+                            "A freshly seen device counts as confirmed.");
 
-                Assert.That(speicher.SetTrust("bob@example.org", 1, OmemoTrust.Trusted), Is.True);
+                Assert.That(store.SetTrust("bob@example.org", 1, OmemoTrust.Trusted), Is.True);
 
             });
 
-            var nachNeustart = new OmemoFileStore(_datei);
+            var afterRestart = new OmemoFileStore(_file);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(nachNeustart.TrustOf("bob@example.org", 1), Is.EqualTo(OmemoTrust.Trusted),
-                            "Die Entscheidung hat den Neustart nicht überdauert.");
+                Assert.That(afterRestart.TrustOf("bob@example.org", 1), Is.EqualTo(OmemoTrust.Trusted),
+                            "The decision has not outlived the restart.");
 
-                Assert.That(nachNeustart.KnownDevices().Single().Fingerprint,
+                Assert.That(afterRestart.KnownDevices().Single().Fingerprint,
                             Is.EqualTo(Convert.ToHexString(bob).ToLowerInvariant()));
 
-                // Ein anderes Konto mit derselben Gerätekennung ist ein
-                // anderes Gerät.
-                Assert.That(nachNeustart.TrustOf("carol@example.org", 1), Is.EqualTo(OmemoTrust.Undecided));
+                // Another account with the same device id is another device.
+                Assert.That(afterRestart.TrustOf("carol@example.org", 1), Is.EqualTo(OmemoTrust.Undecided));
 
             });
 
@@ -529,28 +526,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnreadableStore_DoesNotStartFresh()
 
         /// <summary>
-        /// Eine unlesbare Datei wirft, statt mit neuen Schlüsseln
-        /// weiterzumachen.
+        /// An unreadable file throws instead of carrying on with new keys.
         /// </summary>
         /// <remarks>
-        /// <b>Der bequeme Weg wäre hier der gefährliche.</b> Ein Client, der
-        /// nach einem Lesefehler frisch startet, hat seinen Fingerabdruck
-        /// gewechselt, ohne dass jemand gefragt wurde - und die alte Datei
-        /// wäre beim ersten Ablegen überschrieben. Aus einem behebbaren
-        /// Lesefehler würde ein endgültiger Verlust.
+        /// <b>The convenient way would be the dangerous one here.</b> A client
+        /// that starts afresh after a read error has changed its fingerprint
+        /// without anybody having been asked - and the old file would be
+        /// overwritten on the first store. A recoverable read error would turn
+        /// into a final loss.
         /// </remarks>
         [Test]
         public void AnUnreadableStore_DoesNotStartFresh()
         {
 
-            File.WriteAllText(_datei, "{ das ist kein JSON");
+            File.WriteAllText(_file, "{ this is not JSON");
 
-            Assert.That(() => new OmemoFileStore(_datei),
+            Assert.That(() => new OmemoFileStore(_file),
                         Throws.InstanceOf<Exception>(),
-                        "Die unlesbare Datei wurde stillschweigend ersetzt.");
+                        "The unreadable file was silently replaced.");
 
-            Assert.That(File.ReadAllText(_datei), Does.StartWith("{ das ist kein JSON"),
-                        "Die unlesbare Datei wurde überschrieben.");
+            Assert.That(File.ReadAllText(_file), Does.StartWith("{ this is not JSON"),
+                        "The unreadable file was overwritten.");
 
         }
 
@@ -559,33 +555,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStore_IsWrittenAtomically()
 
         /// <summary>
-        /// Geschrieben wird über eine Nebendatei - und die bleibt nicht
-        /// liegen.
+        /// Writing goes through a side file - and that one does not stay
+        /// lying about.
         /// </summary>
         /// <remarks>
-        /// Bricht der Vorgang mittendrin ab, steht die alte Fassung noch
-        /// vollständig da. Das ist hier wichtiger als beim Kontenspeicher:
-        /// Eine halb geschriebene Sitzungsdatei kostet nicht einen
-        /// Anmeldeversuch, sondern jede laufende Sitzung.
+        /// If the process breaks off in the middle, the old version is still
+        /// there in full. That matters more here than with the account store:
+        /// a half-written session file costs not one login attempt, but every
+        /// running session.
         /// </remarks>
         [Test]
         public void TheStore_IsWrittenAtomically()
         {
 
-            var speicher = new OmemoFileStore(_datei);
+            var store = new OmemoFileStore(_file);
 
-            speicher.LoadOrCreateIdentity();
-            speicher.SaveSession("bob@example.org", 1, new OmemoSessionState(Paar().Bob.Export(), Beigabe));
+            store.LoadOrCreateIdentity();
+            store.SaveSession("bob@example.org", 1, new OmemoSessionState(Pair().Bob.Export(), AssociatedData));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(File.Exists(_datei), Is.True);
-                Assert.That(File.Exists(_datei + ".new"), Is.False,
-                            "Die Nebendatei ist liegengeblieben.");
+                Assert.That(File.Exists(_file), Is.True);
+                Assert.That(File.Exists(_file + ".new"), Is.False,
+                            "The side file stayed lying about.");
 
-                // Und die Datei ist vollständiges JSON.
-                Assert.That(() => System.Text.Json.JsonDocument.Parse(File.ReadAllText(_datei)),
+                // And the file is complete JSON.
+                Assert.That(() => System.Text.Json.JsonDocument.Parse(File.ReadAllText(_file)),
                             Throws.Nothing);
 
             });
@@ -597,32 +593,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheStoredIdentity_ContainsTheSecrets()
 
         /// <summary>
-        /// Der Speicher enthält die geheimen Teile - und sagt es.
+        /// The store holds the secret parts - and says so.
         /// </summary>
         /// <remarks>
-        /// <b>Dieser Test steht hier als Aussage, nicht als Prüfung einer
-        /// Absicht.</b> Die Datei ist nicht verschlüsselt; wer sie liest,
-        /// liest die Gespräche mit. Eine Verschlüsselung mit einem Schlüssel,
-        /// der danebenläge, wäre keine, und einen, den ein Mensch eingibt,
-        /// gibt es in dieser Anwendung nicht.
+        /// <b>This test stands here as a statement, not as a check of an
+        /// intention.</b> The file is not encrypted; whoever reads it reads
+        /// the conversations along with it. An encryption with a key that lay
+        /// beside it would be none, and one that a human being types in does
+        /// not exist in this application.
         ///
-        /// Wer das später ändert, muss diesen Test ändern - und sieht dabei,
-        /// worum es geht.
+        /// Whoever changes that later has to change this test - and sees while
+        /// doing so what it is about.
         /// </remarks>
         [Test]
         public void TheStoredIdentity_ContainsTheSecrets()
         {
 
-            var speicher = new OmemoFileStore(_datei);
-            var eigen    = speicher.LoadOrCreateIdentity();
+            var store = new OmemoFileStore(_file);
+            var own   = store.LoadOrCreateIdentity();
 
-            var text = File.ReadAllText(_datei);
+            var text = File.ReadAllText(_file);
 
             Assert.That(text,
-                        Does.Contain(Convert.ToBase64String(eigen.IdentityKey.PrivateKey)),
-                        "Der geheime IdentityKey steht nicht im Klartext in der Datei - " +
-                        "wurde die Ablage verschlüsselt? Dann gehört die Bemerkung dazu " +
-                        "in OmemoFileStore berichtigt.");
+                        Does.Contain(Convert.ToBase64String(own.IdentityKey.PrivateKey)),
+                        "The secret IdentityKey is not in the file in the clear - " +
+                        "has the store been encrypted? Then the remark about it " +
+                        "in OmemoFileStore wants correcting.");
 
         }
 
