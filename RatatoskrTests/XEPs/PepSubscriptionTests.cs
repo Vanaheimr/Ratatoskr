@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #region Usings
 
 using System.Xml.Linq;
@@ -30,105 +29,104 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0060, Abschnitte 6.1 und 6.2: Abonnieren und Abbestellen eines
-    /// PEP-Knotens - die Zusage, auf die ein Client warten kann.
+    /// XEP-0060, sections 6.1 and 6.2: subscribing to and unsubscribing from a
+    /// PEP node - the confirmation a client can wait for.
     /// </summary>
     /// <remarks>
-    /// <b>Bis hierher sagte der Testserver zu jedem <c>subscribe</c>
-    /// <c>&lt;service-unavailable/&gt;</c></b>, weil er die Anfrage gar nicht
-    /// kannte. Das ist keine gute Grundlage für einen Client, der lernen soll,
-    /// Antworten auszuwerten: Wer nur Absagen kennt, kann nicht zeigen, dass er
-    /// eine Zusage richtig liest.
+    /// <b>Up to here the test server said <c>&lt;service-unavailable/&gt;</c>
+    /// to every <c>subscribe</c></b>, because it did not know the request at
+    /// all. That is no good ground for a client that is meant to learn to
+    /// evaluate answers: whoever only knows refusals cannot show that they
+    /// read a confirmation properly.
     ///
-    /// Und ein Abonnement, das nirgends wirkt, wäre eine Zusage ohne Deckung -
-    /// derselbe Fehler, für den in D57 ein nie ausgelöstes Ereignis gestrichen
-    /// wurde. Deshalb prüft diese Sammlung nicht nur die Antwort, sondern die
-    /// Wirkung: <b>Wer abonniert hat, bekommt die nächste Veröffentlichung -
-    /// auch ohne Presence-Berechtigung.</b> Genau darin unterscheidet sich ein
-    /// Abonnement von dem, was dieser Server vorher konnte.
+    /// And a subscription that has no effect anywhere would be a promise
+    /// without cover - the same mistake for which an event that was never
+    /// raised was struck in D57. This is why this collection checks not only
+    /// the answer but the effect: <b>whoever has subscribed gets the next
+    /// publication - even without a presence subscription.</b> That is exactly
+    /// what tells a subscription from what this server could do before.
     /// </remarks>
     [TestFixture]
     public class PepSubscriptionTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helpers
 
         private const String PubSubNamespace = "http://jabber.org/protocol/pubsub";
         private const String ErrorNamespace  = "http://jabber.org/protocol/pubsub#errors";
-        private const String Node            = "urn:example:wetter";
+        private const String Node            = "urn:example:weather";
 
         /// <summary>
-        /// Schickt ein IQ und gibt die Antwort mit derselben Kennung zurück.
+        /// Sends an IQ and gives back the answer with the same id.
         /// </summary>
         /// <remarks>
-        /// Über <see cref="XMPPClient.OnRawXml"/> und nicht über den Client:
-        /// Was hier geprüft wird, ist die Antwort des <i>Servers</i>. Ginge sie
-        /// durch die Auswertung des Clients, prüfte der Test am Ende beide
-        /// zugleich - und ein Fehler wäre nicht mehr zuzuordnen.
+        /// Over <see cref="XMPPClient.OnRawXml"/> and not over the client: what
+        /// is checked here is the answer of the <i>server</i>. If it went
+        /// through the evaluation of the client, the test would in the end
+        /// check both at once - and a mistake could no longer be assigned.
         /// </remarks>
         private static async Task<XElement> AskAsync(XMPPClient client, String id, String iq)
         {
 
-            var antworten = new List<String>();
+            var replies = new List<String>();
 
-            void Sammeln(String xml)
+            void Collect(String xml)
             {
                 if (xml.StartsWith("<<< ", StringComparison.Ordinal) &&
                     xml.Contains($"id='{id}'", StringComparison.Ordinal))
                 {
-                    lock (antworten)
-                        antworten.Add(xml[4..]);
+                    lock (replies)
+                        replies.Add(xml[4..]);
                 }
             }
 
-            client.Connection.OnRawXml += Sammeln;
+            client.Connection.OnRawXml += Collect;
 
             try
             {
 
                 await client.SendRawAsync(iq);
 
-                await WaitFor(() => { lock (antworten) return antworten.Count > 0; },
-                              $"die Antwort auf '{id}'");
+                await WaitFor(() => { lock (replies) return replies.Count > 0; },
+                              $"the answer to '{id}'");
 
-                lock (antworten)
-                    return XElement.Parse(antworten[0]);
+                lock (replies)
+                    return XElement.Parse(replies[0]);
 
             }
             finally
             {
-                client.Connection.OnRawXml -= Sammeln;
+                client.Connection.OnRawXml -= Collect;
             }
 
         }
 
         /// <summary>
-        /// Sammelt die PubSub-Benachrichtigungen, die bei einem Client
-        /// eintreffen.
+        /// Collects the PubSub notifications that come in at a client.
         /// </summary>
         private static List<String> CollectEvents(XMPPClient client)
         {
 
-            var ereignisse = new List<String>();
+            var events = new List<String>();
 
             client.Connection.OnRawXml += xml =>
             {
                 if (xml.StartsWith("<<< ", StringComparison.Ordinal) &&
                     xml.Contains(PubSubManager.EventNamespace, StringComparison.Ordinal))
                 {
-                    lock (ereignisse)
-                        ereignisse.Add(xml[4..]);
+                    lock (events)
+                        events.Add(xml[4..]);
                 }
             };
 
-            return ereignisse;
+            return events;
 
         }
 
-        private static Int32 Count(List<String> ereignisse)
+        private static Int32 Count(List<String> events)
         {
-            lock (ereignisse)
-                return ereignisse.Count;
+            lock (events)
+                return events.Count;
         }
 
         private static String PublishIq(String id, String node, String itemId, String payload)
@@ -138,58 +136,58 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                $"<publish node='{node}'><item id='{itemId}'>{payload}</item></publish>" +
                "</pubsub></iq>";
 
-        /// <summary>Der Fehlerzustand einer Antwort, oder null.</summary>
-        private static String? ConditionOf(XElement antwort)
-            => antwort.Elements().FirstOrDefault(e => e.Name.LocalName == "error")
-                     ?.Elements().FirstOrDefault(e => e.Name.NamespaceName ==
-                                                      "urn:ietf:params:xml:ns:xmpp-stanzas")
-                     ?.Name.LocalName;
+        /// <summary>The error condition of an answer, or null.</summary>
+        private static String? ConditionOf(XElement reply)
+            => reply.Elements().FirstOrDefault(e => e.Name.LocalName == "error")
+                   ?.Elements().FirstOrDefault(e => e.Name.NamespaceName ==
+                                                    "urn:ietf:params:xml:ns:xmpp-stanzas")
+                   ?.Name.LocalName;
 
         /// <summary>
-        /// Die Schwere des Fehlers: modify heisst „so nicht, aber vielleicht
-        /// anders", cancel heisst „gar nicht" (RFC 6120, Abschnitt 8.3.2).
+        /// The severity of the error: modify means "not like this, but perhaps
+        /// otherwise", cancel means "not at all" (RFC 6120, section 8.3.2).
         /// </summary>
-        private static String? ErrorTypeOf(XElement antwort)
-            => antwort.Elements().FirstOrDefault(e => e.Name.LocalName == "error")?.Attr("type");
+        private static String? ErrorTypeOf(XElement reply)
+            => reply.Elements().FirstOrDefault(e => e.Name.LocalName == "error")?.Attr("type");
 
-        /// <summary>Der PubSub-eigene Fehlerzustand einer Antwort, oder null.</summary>
-        private static String? PubSubConditionOf(XElement antwort)
-            => antwort.Elements().FirstOrDefault(e => e.Name.LocalName == "error")
-                     ?.Elements().FirstOrDefault(e => e.Name.NamespaceName == ErrorNamespace)
-                     ?.Name.LocalName;
+        /// <summary>The PubSub-own error condition of an answer, or null.</summary>
+        private static String? PubSubConditionOf(XElement reply)
+            => reply.Elements().FirstOrDefault(e => e.Name.LocalName == "error")
+                   ?.Elements().FirstOrDefault(e => e.Name.NamespaceName == ErrorNamespace)
+                   ?.Name.LocalName;
 
-        private static XElement? SubscriptionOf(XElement antwort)
-            => antwort.Child(PubSubNamespace, "pubsub")
-                     ?.Child(PubSubNamespace, "subscription");
+        private static XElement? SubscriptionOf(XElement reply)
+            => reply.Child(PubSubNamespace, "pubsub")
+                   ?.Child(PubSubNamespace, "subscription");
 
         /// <summary>
-        /// Abonniert und gibt die Kennung aus der Zusage zurück.
+        /// Subscribes and gives back the id from the confirmation.
         /// </summary>
         private async Task<String> SubscribeAsync(XMPPClient client, String id)
         {
 
-            var zusage = await AskAsync(client, id,
-                                        PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
-                                                                client.BareJid, id));
+            var grant = await AskAsync(client, id,
+                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                                               client.BareJid, id));
 
-            Assert.That(zusage.Attr("type"), Is.EqualTo("result"), $"Zusage auf '{id}'");
+            Assert.That(grant.Attr("type"), Is.EqualTo("result"), $"confirmation for '{id}'");
 
-            var subId = SubscriptionOf(zusage)?.Attr("subid");
+            var subId = SubscriptionOf(grant)?.Attr("subid");
 
-            Assert.That(subId, Is.Not.Null.And.Not.Empty, $"subid in der Zusage auf '{id}'");
+            Assert.That(subId, Is.Not.Null.And.Not.Empty, $"subid in the confirmation for '{id}'");
 
             return subId!;
 
         }
 
         /// <summary>
-        /// Die Abonnementkennungen aus den SHIM-Kopfzeilen der gesammelten
-        /// Benachrichtigungen (XEP-0060, Abschnitt 12.20).
+        /// The subscription ids from the SHIM headers of the collected
+        /// notifications (XEP-0060, section 12.20).
         /// </summary>
-        private static List<String> SubIdsIn(List<String> ereignisse)
+        private static List<String> SubIdsIn(List<String> events)
         {
-            lock (ereignisse)
-                return [.. ereignisse
+            lock (events)
+                return [.. events
                            .Select(e => XElement.Parse(e)
                                                 .Child("http://jabber.org/protocol/shim", "headers")
                                                ?.Children("http://jabber.org/protocol/shim", "header")
@@ -200,171 +198,170 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Ein <c>&lt;options/&gt;</c>-IQ, wahlweise mit Formular.
+        /// An <c>&lt;options/&gt;</c> IQ, with a form if wanted.
         /// </summary>
         private String OptionsIq(String   id,
-                                 String   art,
+                                 String   kind,
                                  String?  subId    = null,
                                  String?  formular = null,
                                  String?  jid      = null)
 
-            => $"<iq type='{art}' to='bob@{Server.Domain}' id='{id}'>" +
+            => $"<iq type='{kind}' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{PubSubNamespace}'>" +
                $"<options node='{Node}' jid='{jid ?? $"alice@{Server.Domain}"}'" +
                (subId is not null ? $" subid='{subId}'" : "") +
                (formular is null ? "/>" : $">{formular}</options>") +
                "</pubsub></iq>";
 
-        /// <summary>Ein abgeschicktes Formular mit den angegebenen Feldern.</summary>
-        private static String SubmitForm(String felder, String art = "submit")
-            => $"<x xmlns='jabber:x:data' type='{art}'>" +
+        /// <summary>A submitted form with the given fields.</summary>
+        private static String SubmitForm(String fields, String kind = "submit")
+            => $"<x xmlns='jabber:x:data' type='{kind}'>" +
                "<field var='FORM_TYPE' type='hidden'>" +
                "<value>http://jabber.org/protocol/pubsub#subscribe_options</value></field>" +
-               felder +
+               fields +
                "</x>";
 
-        private static String DeliverField(String wert)
-            => $"<field var='pubsub#deliver'><value>{wert}</value></field>";
+        private static String DeliverField(String value)
+            => $"<field var='pubsub#deliver'><value>{value}</value></field>";
 
-        /// <summary>Eine Sammelabfrage der eigenen Abonnements.</summary>
+        /// <summary>A collective query of the own subscriptions.</summary>
         private String SubscriptionsIq(String id, String? node = null)
             => $"<iq type='get' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{PubSubNamespace}'>" +
                "<subscriptions" + (node is null ? "" : $" node='{node}'") + "/>" +
                "</pubsub></iq>";
 
-        /// <summary>Die Einträge einer Abonnementliste.</summary>
-        private static List<XElement> SubscriptionsIn(XElement antwort, String? ns = null)
-            => [.. antwort.Child(ns ?? PubSubNamespace, "pubsub")
+        /// <summary>The entries of a subscription list.</summary>
+        private static List<XElement> SubscriptionsIn(XElement reply, String? ns = null)
+            => [.. reply.Child(ns ?? PubSubNamespace, "pubsub")
                          ?.Child(ns ?? PubSubNamespace, "subscriptions")
-                         ?.Children(ns ?? PubSubNamespace, "subscription") ?? []];
+                       ?.Children(ns ?? PubSubNamespace, "subscription") ?? []];
 
         private const String OwnerNamespace = "http://jabber.org/protocol/pubsub#owner";
 
         /// <summary>
-        /// Die Abonnenten-Anfrage des Eigentümers (XEP-0060, Abschnitt 8.8).
+        /// The subscriber query of the owner (XEP-0060, section 8.8).
         /// </summary>
         private String NodeSubscriptionsIq(String   id,
-                                           String   art,
-                                           String?  inhalt = null,
-                                           String?  node   = null)
+                                           String   kind,
+                                           String?  content = null,
+                                           String?  node    = null)
 
-            => $"<iq type='{art}' to='bob@{Server.Domain}' id='{id}'>" +
+            => $"<iq type='{kind}' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<subscriptions node='{node ?? Node}'" +
-               (inhalt is null ? "/>" : $">{inhalt}</subscriptions>") +
+               (content is null ? "/>" : $">{content}</subscriptions>") +
                "</pubsub></iq>";
 
-        /// <summary>Ein Eintrag in einer Abonnenten-Anweisung.</summary>
-        private static String SubscriberEntry(String jid, String zustand, String? subId = null)
-            => $"<subscription jid='{jid}' subscription='{zustand}'" +
+        /// <summary>An entry in a subscriber instruction.</summary>
+        private static String SubscriberEntry(String jid, String state, String? subId = null)
+            => $"<subscription jid='{jid}' subscription='{state}'" +
                (subId is null ? "" : $" subid='{subId}'") + "/>";
 
-        /// <summary>Ein <c>&lt;configure/&gt;</c>-IQ im Eigentümer-Namensraum.</summary>
+        /// <summary>A <c>&lt;configure/&gt;</c> IQ in the owner namespace.</summary>
         private String ConfigureIq(String   id,
-                                   String   art,
+                                   String   kind,
                                    String?  formular = null,
                                    String?  node     = null)
 
-            => $"<iq type='{art}' to='bob@{Server.Domain}' id='{id}'>" +
+            => $"<iq type='{kind}' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<configure node='{node ?? Node}'" +
                (formular is null ? "/>" : $">{formular}</configure>") +
                "</pubsub></iq>";
 
-        /// <summary>Eine Rollen-Anfrage des Eigentümers (XEP-0060, Abschnitt 8.9).</summary>
+        /// <summary>A role query of the owner (XEP-0060, section 8.9).</summary>
         private String AffiliationsIq(String   id,
-                                      String   art,
-                                      String?  inhalt = null,
-                                      String?  node   = null)
+                                      String   kind,
+                                      String?  content = null,
+                                      String?  node    = null)
 
-            => $"<iq type='{art}' to='bob@{Server.Domain}' id='{id}'>" +
+            => $"<iq type='{kind}' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<affiliations node='{node ?? Node}'" +
-               (inhalt is null ? "/>" : $">{inhalt}</affiliations>") +
+               (content is null ? "/>" : $">{content}</affiliations>") +
                "</pubsub></iq>";
 
-        /// <summary>Die Frage nach den eigenen Rollen (XEP-0060, Abschnitt 5.7).</summary>
+        /// <summary>The question about the own roles (XEP-0060, section 5.7).</summary>
         private String OwnAffiliationsIq(String id)
             => $"<iq type='get' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{PubSubNamespace}'><affiliations/></pubsub></iq>";
 
-        /// <summary>Die Einträge einer Rollenliste.</summary>
-        private static List<XElement> AffiliationsIn(XElement antwort, String? ns = null)
-            => [.. antwort.Child(ns ?? OwnerNamespace, "pubsub")
+        /// <summary>The entries of a role list.</summary>
+        private static List<XElement> AffiliationsIn(XElement reply, String? ns = null)
+            => [.. reply.Child(ns ?? OwnerNamespace, "pubsub")
                          ?.Child(ns ?? OwnerNamespace, "affiliations")
-                         ?.Children(ns ?? OwnerNamespace, "affiliation") ?? []];
+                       ?.Children(ns ?? OwnerNamespace, "affiliation") ?? []];
 
-        /// <summary>Ein abgeschicktes Knotenformular.</summary>
-        private static String ConfigForm(String felder)
+        /// <summary>A submitted node form.</summary>
+        private static String ConfigForm(String fields)
             => "<x xmlns='jabber:x:data' type='submit'>" +
                "<field var='FORM_TYPE' type='hidden'>" +
                "<value>http://jabber.org/protocol/pubsub#node_config</value></field>" +
-               felder +
+               fields +
                "</x>";
 
-        /// <summary>Ein Bedingungsformular für eine Veröffentlichung.</summary>
-        private static String PublishOptionsForm(String felder)
+        /// <summary>A condition form for a publication.</summary>
+        private static String PublishOptionsForm(String fields)
             => "<x xmlns='jabber:x:data' type='submit'>" +
                "<field var='FORM_TYPE' type='hidden'>" +
                "<value>http://jabber.org/protocol/pubsub#publish-options</value></field>" +
-               felder +
+               fields +
                "</x>";
 
-        /// <summary>Der Wert eines Feldes im Knotenformular einer Antwort.</summary>
-        private static String? ConfigField(XElement antwort, String var)
-            => antwort.Child(OwnerNamespace, "pubsub")
-                     ?.Child(OwnerNamespace, "configure")
-                     ?.Child("jabber:x:data", "x")
-                     ?.Children("jabber:x:data", "field")
-                      .FirstOrDefault(f => f.Attr("var") == var)
-                     ?.Child("jabber:x:data", "value")
-                     ?.Value;
+        /// <summary>The value of a field in the node form of an answer.</summary>
+        private static String? ConfigField(XElement reply, String var)
+            => reply.Child(OwnerNamespace, "pubsub")
+                   ?.Child(OwnerNamespace, "configure")
+                   ?.Child("jabber:x:data", "x")
+                   ?.Children("jabber:x:data", "field")
+                    .FirstOrDefault(f => f.Attr("var") == var)
+                   ?.Child("jabber:x:data", "value")
+                   ?.Value;
 
-        /// <summary>Alle Werte eines Feldes im Knotenformular einer Antwort.</summary>
-        private static List<String> ConfigValues(XElement antwort, String var)
-            => [.. antwort.Child(OwnerNamespace, "pubsub")
+        /// <summary>All values of a field in the node form of an answer.</summary>
+        private static List<String> ConfigValues(XElement reply, String var)
+            => [.. reply.Child(OwnerNamespace, "pubsub")
                          ?.Child(OwnerNamespace, "configure")
-                         ?.Child("jabber:x:data", "x")
-                         ?.Children("jabber:x:data", "field")
-                          .FirstOrDefault(f => f.Attr("var") == var)
-                         ?.Children("jabber:x:data", "value")
-                          .Select(v => v.Value) ?? []];
+                       ?.Child("jabber:x:data", "x")
+                       ?.Children("jabber:x:data", "field")
+                        .FirstOrDefault(f => f.Attr("var") == var)
+                       ?.Children("jabber:x:data", "value")
+                        .Select(v => v.Value) ?? []];
 
-        /// <summary>Der Wert eines Formularfeldes in einer Antwort.</summary>
-        private static String? FieldValue(XElement antwort, String var)
-            => antwort.Child(PubSubNamespace, "pubsub")
-                     ?.Child(PubSubNamespace, "options")
-                     ?.Child("jabber:x:data", "x")
-                     ?.Children("jabber:x:data", "field")
-                      .FirstOrDefault(f => f.Attr("var") == var)
-                     ?.Child("jabber:x:data", "value")
-                     ?.Value;
+        /// <summary>The value of a form field in an answer.</summary>
+        private static String? FieldValue(XElement reply, String var)
+            => reply.Child(PubSubNamespace, "pubsub")
+                   ?.Child(PubSubNamespace, "options")
+                   ?.Child("jabber:x:data", "x")
+                   ?.Children("jabber:x:data", "field")
+                    .FirstOrDefault(f => f.Attr("var") == var)
+                   ?.Child("jabber:x:data", "value")
+                   ?.Value;
 
         /// <summary>
-        /// Sammelt die eingehenden Rahmen eines Clients, die einen bestimmten
-        /// Text enthalten.
+        /// Collects the incoming frames of a client that hold a certain text.
         /// </summary>
-        private static List<String> CollectRaw(XMPPClient client, String enthaelt)
+        private static List<String> CollectRaw(XMPPClient client, String contains)
         {
 
-            var rahmen = new List<String>();
+            var frames = new List<String>();
 
             client.Connection.OnRawXml += xml =>
             {
                 if (xml.StartsWith("<<< ", StringComparison.Ordinal) &&
-                    xml.Contains(enthaelt, StringComparison.Ordinal))
+                    xml.Contains(contains, StringComparison.Ordinal))
                 {
-                    lock (rahmen)
-                        rahmen.Add(xml[4..]);
+                    lock (frames)
+                        frames.Add(xml[4..]);
                 }
             };
 
-            return rahmen;
+            return frames;
 
         }
 
-        /// <summary>Der Wert eines Feldes in einem beliebigen Formular.</summary>
+        /// <summary>The value of a field in any form.</summary>
         private static String? FormValue(XElement formular, String var)
             => formular.Children("jabber:x:data", "field")
                        .FirstOrDefault(f => f.Attr("var") == var)
@@ -372,8 +369,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                       ?.Value;
 
         /// <summary>
-        /// Die Antwort des Eigentümers auf einen Antrag (XEP-0060,
-        /// Abschnitt 8.6.2).
+        /// The answer of the owner to an application (XEP-0060, section
+        /// 8.6.2).
         /// </summary>
         private String AuthorizationAnswer(String jid, String subId, Boolean ja, String? an = null)
             => $"<message to='{an ?? $"bob@{Server.Domain}"}'>" +
@@ -386,9 +383,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                "</x></message>";
 
         /// <summary>
-        /// Eine Rücknahme (XEP-0060, Abschnitt 7.2) - im gewöhnlichen
-        /// Namensraum und nicht in dem des Eigentümers: Zurücknehmen darf, wer
-        /// auch veröffentlichen darf.
+        /// A retraction (XEP-0060, section 7.2) - in the ordinary namespace
+        /// and not in that of the owner: whoever may publish may also retract.
         /// </summary>
         private String RetractIq(String id, String? itemId, String? node = null)
             => $"<iq type='set' to='bob@{Server.Domain}' id='{id}'>" +
@@ -398,13 +394,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                "</retract></pubsub></iq>";
 
         /// <summary>
-        /// Die Kennungen der zugestellten Einträge in den gesammelten
-        /// Meldungen.
+        /// The ids of the delivered items in the collected events.
         /// </summary>
-        private static List<String?> ItemIdsIn(List<String> ereignisse)
+        private static List<String?> ItemIdsIn(List<String> events)
         {
-            lock (ereignisse)
-                return [.. ereignisse
+            lock (events)
+                return [.. events
                            .SelectMany(e => XElement.Parse(e)
                                                     .Child(PubSubManager.EventNamespace, "event")
                                                    ?.Child(PubSubManager.EventNamespace, "items")
@@ -413,13 +408,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Die zurückgenommenen Einträge in den gesammelten Meldungen
-        /// (XEP-0060, Abschnitt 7.2.2.1).
+        /// The retracted items in the collected events (XEP-0060, section
+        /// 7.2.2.1).
         /// </summary>
-        private static List<String?> RetractsIn(List<String> ereignisse)
+        private static List<String?> RetractsIn(List<String> events)
         {
-            lock (ereignisse)
-                return [.. ereignisse
+            lock (events)
+                return [.. events
                            .SelectMany(e => XElement.Parse(e)
                                                     .Child(PubSubManager.EventNamespace, "event")
                                                    ?.Child(PubSubManager.EventNamespace, "items")
@@ -428,23 +423,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Eine Anweisung des Eigentümers ohne Inhalt - <c>&lt;delete/&gt;</c>
-        /// oder <c>&lt;purge/&gt;</c>.
+        /// An instruction of the owner without content - <c>&lt;delete/&gt;</c>
+        /// or <c>&lt;purge/&gt;</c>.
         /// </summary>
-        private String OwnerIq(String id, String art, String element, String? node = null)
-            => $"<iq type='{art}' to='bob@{Server.Domain}' id='{id}'>" +
+        private String OwnerIq(String id, String kind, String element, String? node = null)
+            => $"<iq type='{kind}' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<{element} node='{node ?? Node}'/>" +
                "</pubsub></iq>";
 
         /// <summary>
-        /// Die Knotenmeldungen in den gesammelten Ereignissen (XEP-0060,
-        /// Abschnitte 8.4.2 und 8.5.2) - je Eintrag die Art und der Knoten.
+        /// The node events in the collected events (XEP-0060, sections 8.4.2
+        /// and 8.5.2) - per entry the kind and the node.
         /// </summary>
-        private static List<(String Art, String? Node)> NodeEventsIn(List<String> ereignisse)
+        private static List<(String Kind, String? Node)> NodeEventsIn(List<String> events)
         {
-            lock (ereignisse)
-                return [.. ereignisse
+            lock (events)
+                return [.. events
                            .SelectMany(e => XElement.Parse(e)
                                                     .Child(PubSubManager.EventNamespace, "event")
                                                    ?.Elements() ?? [])
@@ -453,13 +448,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Die Abmeldungen aus den gesammelten Meldungen (XEP-0060,
-        /// Abschnitt 8.8.4) - je Eintrag der Knoten, der JID und die Kennung.
+        /// The endings from the collected events (XEP-0060, section 8.8.4) -
+        /// per entry the node, the JID and the id.
         /// </summary>
-        private static List<(String? Node, String? Jid, String? SubId)> EndingsIn(List<String> ereignisse)
+        private static List<(String? Node, String? Jid, String? SubId)> EndingsIn(List<String> events)
         {
-            lock (ereignisse)
-                return [.. ereignisse
+            lock (events)
+                return [.. events
                            .Select(e => XElement.Parse(e)
                                                 .Child(PubSubManager.EventNamespace, "event")
                                                ?.Child(PubSubManager.EventNamespace, "subscription"))
@@ -469,16 +464,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Bob veröffentlicht - den Knoten gibt es danach.
+        /// Bob publishes - the node exists afterwards.
         /// </summary>
-        private async Task<XMPPClient> PublishingBobAsync(String itemId = "1", String inhalt = "sonnig")
+        private async Task<XMPPClient> PublishingBobAsync(String itemId = "1", String content = "sunny")
         {
 
             var bob = await ConnectClientAsync("bob");
 
             await AskAsync(bob, $"pub-{itemId}",
                            PublishIq($"pub-{itemId}", Node, itemId,
-                                     $"<wetter xmlns='urn:example:x'>{inhalt}</wetter>"));
+                                     $"<weather xmlns='urn:example:x'>{content}</weather>"));
 
             return bob;
 
@@ -490,13 +485,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Subscribing_ToAPublishedNode_IsConfirmedWithASubId()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.1.2: Die Zusage nennt den Knoten, den
-        /// Abonnenten, eine Abonnementkennung und den Zustand.
+        /// XEP-0060, section 6.1.2: the confirmation names the node, the
+        /// subscriber, a subscription id and the state.
         /// </summary>
         /// <remarks>
-        /// Die <c>subid</c> ist der Teil, den ein Client sich merken muss und
-        /// nicht selbst ausdenken kann: Sie kommt vom Dienst. Wer die Antwort
-        /// nicht liest, hat sie nie.
+        /// The <c>subid</c> is the part a client has to remember and cannot
+        /// make up itself: it comes from the service. Whoever does not read the
+        /// answer never has it.
         /// </remarks>
         [Test]
         public async Task Subscribing_ToAPublishedNode_IsConfirmedWithASubId()
@@ -506,26 +501,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "sub-1",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}",
-                                                                 Node,
-                                                                 alice.BareJid,
-                                                                 "sub-1"));
+            var reply = await AskAsync(alice, "sub-1",
+                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                                               Node,
+                                                               alice.BareJid,
+                                                               "sub-1"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort.Attr("type"), Is.EqualTo("result"),
-                            "Ein Knoten, den es gibt, muss abonnierbar sein.");
+                Assert.That(reply.Attr("type"), Is.EqualTo("result"),
+                            "A node that exists has to be subscribable.");
 
-                var abo = SubscriptionOf(antwort);
+                var sub = SubscriptionOf(reply);
 
-                Assert.That(abo, Is.Not.Null, "Die Zusage fehlt.");
-                Assert.That(abo!.Attr("node"),         Is.EqualTo(Node));
-                Assert.That(abo!.Attr("subscription"), Is.EqualTo("subscribed"));
-                Assert.That(abo!.Attr("jid"),          Is.EqualTo(alice.BareJid));
-                Assert.That(abo!.Attr("subid"),        Is.Not.Null.And.Not.Empty,
-                            "Ohne subid kann niemand ein Abonnement benennen.");
+                Assert.That(sub, Is.Not.Null, "The confirmation is missing.");
+                Assert.That(sub!.Attr("node"),         Is.EqualTo(Node));
+                Assert.That(sub!.Attr("subscription"), Is.EqualTo("subscribed"));
+                Assert.That(sub!.Attr("jid"),          Is.EqualTo(alice.BareJid));
+                Assert.That(sub!.Attr("subid"),        Is.Not.Null.And.Not.Empty,
+                            "Without a subid nobody can name a subscription.");
 
             });
 
@@ -536,8 +531,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Subscribing_ToANodeThatDoesNotExist_IsRejected()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.1.3.12: Was es nicht gibt, kann man nicht
-        /// abonnieren.
+        /// XEP-0060, section 6.1.3.12: what does not exist cannot be
+        /// subscribed to.
         /// </summary>
         [Test]
         public async Task Subscribing_ToANodeThatDoesNotExist_IsRejected()
@@ -547,16 +542,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "sub-2",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}",
-                                                                 "urn:example:gibtesnicht",
-                                                                 alice.BareJid,
-                                                                 "sub-2"));
+            var reply = await AskAsync(alice, "sub-2",
+                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                                               "urn:example:doesnotexist",
+                                                               alice.BareJid,
+                                                               "sub-2"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort), Is.EqualTo("item-not-found"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("item-not-found"));
             });
 
         }
@@ -566,14 +561,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Subscribing_ForSomebodyElsesJid_IsRejected()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.1.3.1: Der <c>jid</c> muss der des Absenders
-        /// sein.
+        /// XEP-0060, section 6.1.3.1: the <c>jid</c> has to be the one of the
+        /// sender.
         /// </summary>
         /// <remarks>
-        /// <b>Das ist keine Formsache.</b> Ohne diese Prüfung könnte Alice
-        /// Carol anmelden, und Carol bekäme von da an Bobs Veröffentlichungen,
-        /// ohne je etwas verlangt zu haben - eine Zustellung, die sich niemand
-        /// ausgesucht hat und die Carol nicht einmal zuzuordnen wüsste.
+        /// <b>That is no formality.</b> Without this check Alice could sign
+        /// Carol up, and from then on Carol would get Bob's publications
+        /// without ever having asked for anything - a delivery nobody chose and
+        /// that Carol would not even know how to assign.
         /// </remarks>
         [Test]
         public async Task Subscribing_ForSomebodyElsesJid_IsRejected()
@@ -585,19 +580,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "sub-3",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}",
-                                                                 Node,
-                                                                 $"carol@{Server.Domain}",
-                                                                 "sub-3"));
+            var reply = await AskAsync(alice, "sub-3",
+                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                                               Node,
+                                                               $"carol@{Server.Domain}",
+                                                               "sub-3"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort),       Is.EqualTo("bad-request"));
-                Assert.That(ErrorTypeOf(antwort),       Is.EqualTo("modify"));
-                Assert.That(PubSubConditionOf(antwort), Is.EqualTo("invalid-jid"),
-                            "XEP-0060 nennt den Grund beim Namen.");
+                Assert.That(reply.Attr("type"),       Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply),       Is.EqualTo("bad-request"));
+                Assert.That(ErrorTypeOf(reply),       Is.EqualTo("modify"));
+                Assert.That(PubSubConditionOf(reply), Is.EqualTo("invalid-jid"),
+                            "XEP-0060 names the reason by its name.");
             });
 
         }
@@ -607,14 +602,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASubscriber_GetsTheNextItem_WithoutAnyPresenceSubscription()
 
         /// <summary>
-        /// Der Kern der Sache: Ein Abonnement bringt Benachrichtigungen -
-        /// auch dem, der Bobs Presence nicht sehen darf.
+        /// The heart of the matter: a subscription brings notifications - even
+        /// to somebody who may not see Bob's presence.
         /// </summary>
         /// <remarks>
-        /// Vorher bekam eine PEP-Benachrichtigung genau, wer ohnehin Presence
-        /// bekam. Damit war „abonnieren" nichts als ein anderes Wort für „im
-        /// Roster stehen" - und für einen fremden Knoten, den niemand über
-        /// Presence erreicht, gab es überhaupt keinen Weg.
+        /// Before, a PEP notification went to exactly those who got presence
+        /// anyway. With that, "subscribing" was nothing but another word for
+        /// "standing in the roster" - and for a foreign node nobody reaches
+        /// over presence there was no way at all.
         /// </remarks>
         [Test]
         public async Task ASubscriber_GetsTheNextItem_WithoutAnyPresenceSubscription()
@@ -623,35 +618,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob    = await PublishingBobAsync();
             var alice  = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "sub-4",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}",
-                                                                 Node,
-                                                                 alice.BareJid,
-                                                                 "sub-4"));
+            var reply = await AskAsync(alice, "sub-4",
+                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                                               Node,
+                                                               alice.BareJid,
+                                                               "sub-4"));
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
-            var ereignisse = CollectEvents(alice);
+            var events = CollectEvents(alice);
 
             await AskAsync(bob, "pub-2",
-                           PublishIq("pub-2", Node, "2", "<wetter xmlns='urn:example:x'>Regen</wetter>"));
+                           PublishIq("pub-2", Node, "2", "<weather xmlns='urn:example:x'>rain</weather>"));
 
-            await WaitFor(() => Count(ereignisse) > 0,
-                          "die Benachrichtigung an den Abonnenten");
+            await WaitFor(() => Count(events) > 0,
+                          "the notification to the subscriber");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(ereignisse[0], Does.Contain(Node));
-                Assert.That(ereignisse[0], Does.Contain("Regen"));
-                Assert.That(ereignisse[0], Does.Contain($"from='bob@{Server.Domain}'"),
-                            "Die Benachrichtigung kommt vom Konto und nicht vom Server.");
+                Assert.That(events[0], Does.Contain(Node));
+                Assert.That(events[0], Does.Contain("rain"));
+                Assert.That(events[0], Does.Contain($"from='bob@{Server.Domain}'"),
+                            "The notification comes from the account and not from the server.");
 
-                // Die Nutzlast steckt in einem <item/> mit seiner Kennung, und
-                // das ist keine Förmlichkeit: Ein Client, der Einträge nach
-                // ihrer Kennung führt, übergeht ein Item ohne sie ganz - der
-                // Inhalt käme an und wäre trotzdem verloren.
-                Assert.That(ItemIdsIn(ereignisse), Is.EqualTo(new[] { "2" }));
+                // The payload sits in an <item/> with its id, and that is no
+                // formality: a client that keeps items by their id passes over
+                // an item without one entirely - the content would arrive and
+                // still be lost.
+                Assert.That(ItemIdsIn(events), Is.EqualTo(new[] { "2" }));
 
             });
 
@@ -662,26 +657,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutASubscription_NothingArrives()
 
         /// <summary>
-        /// Die Gegenprobe zum vorigen Test: Ohne Abonnement und ohne Presence
-        /// bekommt Alice nichts.
+        /// The cross-check to the previous test: without a subscription and
+        /// without presence Alice gets nothing.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bewiese der vorige Test nur, dass irgendetwas ankommt -
-        /// nicht, dass es am Abonnement liegt.
+        /// Without it the previous test would only prove that something
+        /// arrives - not that it is down to the subscription.
         /// </remarks>
         [Test]
         public async Task WithoutASubscription_NothingArrives()
         {
 
-            var bob        = await PublishingBobAsync();
-            var alice      = await ConnectClientAsync("alice");
-            var ereignisse = CollectEvents(alice);
+            var bob    = await PublishingBobAsync();
+            var alice  = await ConnectClientAsync("alice");
+            var events = CollectEvents(alice);
 
             await AskAsync(bob, "pub-2",
-                           PublishIq("pub-2", Node, "2", "<wetter xmlns='urn:example:x'>Regen</wetter>"));
+                           PublishIq("pub-2", Node, "2", "<weather xmlns='urn:example:x'>rain</weather>"));
 
-            await WaitAgainst(() => Count(ereignisse) > 0,
-                              "eine Benachrichtigung an einen Unbeteiligten");
+            await WaitAgainst(() => Count(events) > 0,
+                              "a notification to somebody uninvolved");
 
         }
 
@@ -690,7 +685,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribing_StopsTheEvents()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.2: Nach dem Abbestellen kommt nichts mehr.
+        /// XEP-0060, section 6.2: after the unsubscribing nothing comes any
+        /// more.
         /// </summary>
         [Test]
         public async Task Unsubscribing_StopsTheEvents()
@@ -702,21 +698,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await AskAsync(alice, "sub-5",
                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, alice.BareJid, "sub-5"));
 
-            var abbestellt = await AskAsync(alice, "unsub-5",
-                                            PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
-                                                                      Node,
-                                                                      alice.BareJid,
-                                                                      "unsub-5"));
+            var unsubscribed = await AskAsync(alice, "unsub-5",
+                                              PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                                                        Node,
+                                                                        alice.BareJid,
+                                                                        "unsub-5"));
 
-            Assert.That(abbestellt.Attr("type"), Is.EqualTo("result"));
+            Assert.That(unsubscribed.Attr("type"), Is.EqualTo("result"));
 
-            var ereignisse = CollectEvents(alice);
+            var events = CollectEvents(alice);
 
             await AskAsync(bob, "pub-3",
-                           PublishIq("pub-3", Node, "3", "<wetter xmlns='urn:example:x'>Schnee</wetter>"));
+                           PublishIq("pub-3", Node, "3", "<weather xmlns='urn:example:x'>snow</weather>"));
 
-            await WaitAgainst(() => Count(ereignisse) > 0,
-                              "eine Benachrichtigung nach dem Abbestellen");
+            await WaitAgainst(() => Count(events) > 0,
+                              "a notification after the unsubscribing");
 
         }
 
@@ -725,8 +721,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribing_WithoutASubscription_IsRejected()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.2.3.2: Wer nicht abonniert hat, kann nicht
-        /// abbestellen.
+        /// XEP-0060, section 6.2.3.2: whoever has not subscribed cannot
+        /// unsubscribe.
         /// </summary>
         [Test]
         public async Task Unsubscribing_WithoutASubscription_IsRejected()
@@ -736,18 +732,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "unsub-6",
-                                         PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
-                                                                   Node,
-                                                                   alice.BareJid,
-                                                                   "unsub-6"));
+            var reply = await AskAsync(alice, "unsub-6",
+                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                                                 Node,
+                                                                 alice.BareJid,
+                                                                 "unsub-6"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort),       Is.EqualTo("unexpected-request"));
-                Assert.That(ErrorTypeOf(antwort),       Is.EqualTo("cancel"));
-                Assert.That(PubSubConditionOf(antwort), Is.EqualTo("not-subscribed"));
+                Assert.That(reply.Attr("type"),       Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply),       Is.EqualTo("unexpected-request"));
+                Assert.That(ErrorTypeOf(reply),       Is.EqualTo("cancel"));
+                Assert.That(PubSubConditionOf(reply), Is.EqualTo("not-subscribed"));
             });
 
         }
@@ -757,14 +753,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribing_WithAForeignSubId_IsRejected()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.2.3.1: Eine mitgeschickte <c>subid</c>, die
-        /// nicht passt, beendet nichts.
+        /// XEP-0060, section 6.2.3.1: a <c>subid</c> sent along that does not
+        /// fit ends nothing.
         /// </summary>
         /// <remarks>
-        /// Der Fall ist selten und die Prüfung trotzdem nötig: Eine falsche
-        /// Kennung durchgehen zu lassen hiesse, ein <i>anderes</i> Abonnement
-        /// zu beenden als das gemeinte - und dem Absender zu bestätigen, es sei
-        /// seines gewesen.
+        /// The case is rare and the check necessary all the same: to let a
+        /// wrong id through would mean ending an <i>other</i> subscription than
+        /// the intended one - and confirming to the sender that it had been
+        /// theirs.
         /// </remarks>
         [Test]
         public async Task Unsubscribing_WithAForeignSubId_IsRejected()
@@ -777,18 +773,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await AskAsync(alice, "sub-7",
                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, alice.BareJid, "sub-7"));
 
-            var antwort = await AskAsync(alice, "unsub-7",
-                                         $"<iq type='set' to='bob@{Server.Domain}' id='unsub-7'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<unsubscribe node='{Node}' jid='{alice.BareJid}' subid='fremd'/>" +
-                                         "</pubsub></iq>");
+            var reply = await AskAsync(alice, "unsub-7",
+                                       $"<iq type='set' to='bob@{Server.Domain}' id='unsub-7'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<unsubscribe node='{Node}' jid='{alice.BareJid}' subid='foreign'/>" +
+                                       "</pubsub></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort),       Is.EqualTo("not-acceptable"));
-                Assert.That(ErrorTypeOf(antwort),       Is.EqualTo("modify"));
-                Assert.That(PubSubConditionOf(antwort), Is.EqualTo("invalid-subid"));
+                Assert.That(reply.Attr("type"),       Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply),       Is.EqualTo("not-acceptable"));
+                Assert.That(ErrorTypeOf(reply),       Is.EqualTo("modify"));
+                Assert.That(PubSubConditionOf(reply), Is.EqualTo("invalid-subid"));
             });
 
         }
@@ -798,18 +794,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Unsubscribing_ForSomebodyElse_LeavesTheirSubscriptionAlone()
 
         /// <summary>
-        /// Auch beim Abbestellen muss der <c>jid</c> der des Absenders sein.
+        /// With the unsubscribing too the <c>jid</c> has to be the one of the
+        /// sender.
         /// </summary>
         /// <remarks>
-        /// Die Gegenrichtung zu <see cref="Subscribing_ForSomebodyElsesJid_IsRejected"/>
-        /// und die gefährlichere von beiden: Ein fremdes Abonnement anzulegen
-        /// ist lästig, ein fremdes zu beenden ist ein Entzug. Carol bekäme
-        /// nichts mehr und wüsste nicht einmal, dass etwas fehlt - Ausbleiben
-        /// sieht aus wie Ruhe.
+        /// The other direction from <see cref="Subscribing_ForSomebodyElsesJid_IsRejected"/>
+        /// and the more dangerous of the two: to create a foreign subscription
+        /// is a nuisance, to end a foreign one is a deprivation. Carol would
+        /// get nothing any more and would not even know that something is
+        /// missing - absence looks like quiet.
         ///
-        /// Der Test prüft deshalb beides: die Absage <b>und</b> dass Carols
-        /// Abonnement noch trägt. Nur die Absage zu prüfen liesse eine
-        /// Umsetzung durch, die erst abmeldet und sich dann beschwert.
+        /// The test therefore checks both: the refusal <b>and</b> that Carol's
+        /// subscription still carries. To check only the refusal would let an
+        /// implementation through that first signs off and then complains.
         /// </remarks>
         [Test]
         public async Task Unsubscribing_ForSomebodyElse_LeavesTheirSubscriptionAlone()
@@ -822,26 +819,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await AskAsync(carol, "sub-11",
                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, carol.BareJid, "sub-11"));
 
-            var antwort = await AskAsync(alice, "unsub-11",
-                                         PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
-                                                                   Node,
-                                                                   carol.BareJid,
-                                                                   "unsub-11"));
+            var reply = await AskAsync(alice, "unsub-11",
+                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                                                 Node,
+                                                                 carol.BareJid,
+                                                                 "unsub-11"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort),       Is.EqualTo("bad-request"));
-                Assert.That(PubSubConditionOf(antwort), Is.EqualTo("invalid-jid"));
+                Assert.That(reply.Attr("type"),       Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply),       Is.EqualTo("bad-request"));
+                Assert.That(PubSubConditionOf(reply), Is.EqualTo("invalid-jid"));
             });
 
-            var ereignisse = CollectEvents(carol);
+            var events = CollectEvents(carol);
 
             await AskAsync(bob, "pub-6",
-                           PublishIq("pub-6", Node, "6", "<wetter xmlns='urn:example:x'>Sturm</wetter>"));
+                           PublishIq("pub-6", Node, "6", "<weather xmlns='urn:example:x'>storm</weather>"));
 
-            await WaitFor(() => Count(ereignisse) > 0,
-                          "die Benachrichtigung an Carol, deren Abonnement niemand beenden durfte");
+            await WaitFor(() => Count(events) > 0,
+                          "the notification to Carol, whose subscription nobody was allowed to end");
 
         }
 
@@ -850,12 +847,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSubIdFromTheConfirmation_Unsubscribes()
 
         /// <summary>
-        /// Die Gegenprobe: Mit der Kennung aus der Zusage geht es.
+        /// The cross-check: with the id from the confirmation it works.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test prüfte der vorige nur, dass <i>irgendeine</i>
-        /// subid abgewiesen wird - eine Umsetzung, die jede abweist, bestünde
-        /// ihn ebenso.
+        /// Without this test the previous one would only check that
+        /// <i>some</i> subid is refused - an implementation that refuses every
+        /// one would pass it just as well.
         /// </remarks>
         [Test]
         public async Task TheSubIdFromTheConfirmation_Unsubscribes()
@@ -865,21 +862,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var zusage = await AskAsync(alice, "sub-8",
-                                        PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
-                                                                alice.BareJid, "sub-8"));
+            var grant = await AskAsync(alice, "sub-8",
+                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                                               alice.BareJid, "sub-8"));
 
-            var subId = SubscriptionOf(zusage)?.Attr("subid");
+            var subId = SubscriptionOf(grant)?.Attr("subid");
 
             Assert.That(subId, Is.Not.Null.And.Not.Empty);
 
-            var antwort = await AskAsync(alice, "unsub-8",
-                                         $"<iq type='set' to='bob@{Server.Domain}' id='unsub-8'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<unsubscribe node='{Node}' jid='{alice.BareJid}' subid='{subId}'/>" +
-                                         "</pubsub></iq>");
+            var reply = await AskAsync(alice, "unsub-8",
+                                       $"<iq type='set' to='bob@{Server.Domain}' id='unsub-8'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<unsubscribe node='{Node}' jid='{alice.BareJid}' subid='{subId}'/>" +
+                                       "</pubsub></iq>");
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
         }
 
@@ -888,14 +885,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASubscriberWhoIsAlsoAContact_GetsTheEventOnlyOnce()
 
         /// <summary>
-        /// Wer über beide Wege in Frage kommt, bekommt die Benachrichtigung
-        /// trotzdem einmal.
+        /// Whoever comes into question over both ways gets the notification
+        /// once all the same.
         /// </summary>
         /// <remarks>
-        /// Zwei Quellen für dieselbe Empfängerliste sind die naheliegende Art,
-        /// eine Nachricht zu verdoppeln. Für einen Menschen wäre das
-        /// ärgerlich; für OMEMO wäre es schlimmer, weil eine doppelt
-        /// eintreffende Geräteliste zweimal beantwortet würde.
+        /// Two sources for the same list of receivers are the obvious way to
+        /// double a message. For a human being that would be annoying; for
+        /// OMEMO it would be worse, because a device list arriving twice would
+        /// be answered twice.
         /// </remarks>
         [Test]
         public async Task ASubscriberWhoIsAlsoAContact_GetsTheEventOnlyOnce()
@@ -909,15 +906,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await AskAsync(alice, "sub-9",
                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, alice.BareJid, "sub-9"));
 
-            var ereignisse = CollectEvents(alice);
+            var events = CollectEvents(alice);
 
             await AskAsync(bob, "pub-4",
-                           PublishIq("pub-4", Node, "4", "<wetter xmlns='urn:example:x'>Nebel</wetter>"));
+                           PublishIq("pub-4", Node, "4", "<weather xmlns='urn:example:x'>fog</weather>"));
 
-            await WaitFor(() => Count(ereignisse) > 0, "die Benachrichtigung");
+            await WaitFor(() => Count(events) > 0, "the notification");
 
-            await WaitAgainst(() => Count(ereignisse) > 1,
-                              "eine zweite Benachrichtigung über dieselbe Veröffentlichung");
+            await WaitAgainst(() => Count(events) > 1,
+                              "a second notification about the same publication");
 
         }
 
@@ -926,20 +923,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SubscribingTwice_YieldsTwoSubscriptions()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.1: Ein zweites <c>subscribe</c> ist ein
-        /// zweites Abonnement, mit eigener Kennung und eigener Zustellung.
+        /// XEP-0060, section 6.1: a second <c>subscribe</c> is a second
+        /// subscription, with an id of its own and a delivery of its own.
         /// </summary>
         /// <remarks>
-        /// <b>Bis K3 stand hier das Gegenteil</b> - ein zweites <c>subscribe</c>
-        /// gab dieselbe Kennung zurück, und die Zustellung blieb einfach. Das
-        /// war nicht falsch (ein Dienst darf so verfahren), aber es machte die
-        /// <c>subid</c> zur Zierde: Wo es nie zwei gibt, benennt sie nichts,
-        /// was man nicht auch am Knoten erkennt.
+        /// <b>Until K3 the opposite stood here</b> - a second <c>subscribe</c>
+        /// gave back the same id, and the delivery stayed single. That was not
+        /// wrong (a service may proceed that way), but it made the <c>subid</c>
+        /// an ornament: where there are never two, it names nothing one could
+        /// not also tell from the node.
         ///
-        /// Der Fall ist nicht ausgedacht. Er entsteht von selbst, wenn ein
-        /// Client neu startet und wieder abonniert, ohne seine alte Kennung zu
-        /// kennen - danach hat der Dienst zwei, und von da an ist jedes
-        /// Abbestellen ohne Kennung zweideutig.
+        /// The case is not made up. It comes about by itself when a client
+        /// restarts and subscribes again without knowing its old id -
+        /// afterwards the service has two, and from then on every unsubscribe
+        /// without an id is ambiguous.
         /// </remarks>
         [Test]
         public async Task SubscribingTwice_YieldsTwoSubscriptions()
@@ -948,21 +945,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var erste  = await SubscribeAsync(alice, "sub-10a");
-            var zweite = await SubscribeAsync(alice, "sub-10b");
+            var first  = await SubscribeAsync(alice, "sub-10a");
+            var second = await SubscribeAsync(alice, "sub-10b");
 
-            Assert.That(zweite, Is.Not.EqualTo(erste),
-                        "Zwei Abonnements, die dieselbe Kennung tragen, sind nicht zu unterscheiden.");
+            Assert.That(second, Is.Not.EqualTo(first),
+                        "Two subscriptions carrying the same id cannot be told apart.");
 
-            var ereignisse = CollectEvents(alice);
+            var events = CollectEvents(alice);
 
             await AskAsync(bob, "pub-5",
-                           PublishIq("pub-5", Node, "5", "<wetter xmlns='urn:example:x'>Hagel</wetter>"));
+                           PublishIq("pub-5", Node, "5", "<weather xmlns='urn:example:x'>hail</weather>"));
 
-            await WaitFor(() => Count(ereignisse) > 1, "beide Benachrichtigungen");
+            await WaitFor(() => Count(events) > 1, "both notifications");
 
-            Assert.That(SubIdsIn(ereignisse), Is.EquivalentTo(new[] { erste, zweite }),
-                        "Jede Zustellung gehört zu genau einem Abonnement und sagt zu welchem.");
+            Assert.That(SubIdsIn(events), Is.EquivalentTo(new[] { first, second }),
+                        "Every delivery belongs to exactly one subscription and says to which.");
 
         }
 
@@ -971,13 +968,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithTwoSubscriptions_UnsubscribingWithoutASubId_IsRejected()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.2.3.1: Wer mehrere hat, muss sagen, welches.
+        /// XEP-0060, section 6.2.3.1: whoever has several has to say which.
         /// </summary>
         /// <remarks>
-        /// Der Grund ist derselbe wie bei der falschen Kennung, nur eine Stufe
-        /// früher: Ein Dienst, der sich eines aussuchte, beendete vielleicht
-        /// das falsche - und bestätigte dem Absender, es sei das gemeinte
-        /// gewesen.
+        /// The reason is the same as with the wrong id, only one step earlier:
+        /// a service that picked one might end the wrong one - and confirm to
+        /// the sender that it had been the intended one.
         /// </remarks>
         [Test]
         public async Task WithTwoSubscriptions_UnsubscribingWithoutASubId_IsRejected()
@@ -990,18 +986,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await SubscribeAsync(alice, "sub-12a");
             await SubscribeAsync(alice, "sub-12b");
 
-            var antwort = await AskAsync(alice, "unsub-12",
-                                         PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
-                                                                   Node,
-                                                                   alice.BareJid,
-                                                                   "unsub-12"));
+            var reply = await AskAsync(alice, "unsub-12",
+                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                                                 Node,
+                                                                 alice.BareJid,
+                                                                 "unsub-12"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort),       Is.EqualTo("bad-request"));
-                Assert.That(ErrorTypeOf(antwort),       Is.EqualTo("modify"));
-                Assert.That(PubSubConditionOf(antwort), Is.EqualTo("subid-required"));
+                Assert.That(reply.Attr("type"),       Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply),       Is.EqualTo("bad-request"));
+                Assert.That(ErrorTypeOf(reply),       Is.EqualTo("modify"));
+                Assert.That(PubSubConditionOf(reply), Is.EqualTo("subid-required"));
             });
 
         }
@@ -1011,12 +1007,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithTwoSubscriptions_TheSubIdEndsExactlyOne()
 
         /// <summary>
-        /// Und mit Kennung endet genau das benannte.
+        /// And with an id exactly the named one ends.
         /// </summary>
         /// <remarks>
-        /// Die Gegenprobe zum vorigen Test, und die eigentliche Zusicherung:
-        /// Ein Abbestellen, das beide beendete, wäre ebenso eindeutig wie
-        /// falsch.
+        /// The cross-check to the previous test, and the actual assurance: an
+        /// unsubscribe that ended both would be just as unambiguous as it would
+        /// be wrong.
         /// </remarks>
         [Test]
         public async Task WithTwoSubscriptions_TheSubIdEndsExactlyOne()
@@ -1025,27 +1021,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var erste  = await SubscribeAsync(alice, "sub-13a");
-            var zweite = await SubscribeAsync(alice, "sub-13b");
+            var first  = await SubscribeAsync(alice, "sub-13a");
+            var second = await SubscribeAsync(alice, "sub-13b");
 
-            var antwort = await AskAsync(alice, "unsub-13",
-                                         PubSubBuilder.Unsubscribe($"bob@{Server.Domain}", Node,
-                                                                   alice.BareJid, "unsub-13", erste));
+            var reply = await AskAsync(alice, "unsub-13",
+                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}", Node,
+                                                                 alice.BareJid, "unsub-13", first));
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
-            var ereignisse = CollectEvents(alice);
+            var events = CollectEvents(alice);
 
             await AskAsync(bob, "pub-7",
-                           PublishIq("pub-7", Node, "7", "<wetter xmlns='urn:example:x'>Graupel</wetter>"));
+                           PublishIq("pub-7", Node, "7", "<weather xmlns='urn:example:x'>sleet</weather>"));
 
-            await WaitFor(() => Count(ereignisse) > 0, "die verbliebene Benachrichtigung");
+            await WaitFor(() => Count(events) > 0, "the remaining notification");
 
-            await WaitAgainst(() => Count(ereignisse) > 1,
-                              "eine Benachrichtigung für das beendete Abonnement");
+            await WaitAgainst(() => Count(events) > 1,
+                              "a notification for the ended subscription");
 
-            Assert.That(SubIdsIn(ereignisse), Is.EqualTo(new[] { zweite }),
-                        "Es blieb nicht das übrig, das bleiben sollte.");
+            Assert.That(SubIdsIn(events), Is.EqualTo(new[] { second }),
+                        "What was left over was not the one that should have been left.");
 
         }
 
@@ -1054,16 +1050,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOptionsForm_OffersDelivery()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 6.3.2: Das Formular sagt, was sich einstellen
-        /// lässt.
+        /// XEP-0060, section 6.3.2: the form says what can be set.
         /// </summary>
         /// <remarks>
-        /// <b>Es enthält genau ein Feld</b>, und das ist die Aussage: Was
-        /// dieser Server nicht kann, bietet er auch nicht an. Ein Formular mit
-        /// <c>pubsub#digest</c> darin, das dann nichts bewirkt, wäre eine
-        /// Zusage ohne Deckung - und zwar eine, die der Abonnent nie
-        /// nachprüfen kann, weil ausbleibende Zusammenfassungen wie Ruhe
-        /// aussehen.
+        /// <b>It holds exactly one field</b>, and that is the statement: what
+        /// this server cannot do it does not offer either. A form with
+        /// <c>pubsub#digest</c> in it that then has no effect would be a
+        /// promise without cover - and one the subscriber can never check,
+        /// because absent digests look like quiet.
         /// </remarks>
         [Test]
         public async Task TheOptionsForm_OffersDelivery()
@@ -1075,18 +1069,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await SubscribeAsync(alice, "sub-20");
 
-            var antwort = await AskAsync(alice, "opt-20", OptionsIq("opt-20", "get"));
+            var reply = await AskAsync(alice, "opt-20", OptionsIq("opt-20", "get"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
-                Assert.That(FieldValue(antwort, "FORM_TYPE"),
+                Assert.That(FieldValue(reply, "FORM_TYPE"),
                             Is.EqualTo("http://jabber.org/protocol/pubsub#subscribe_options"));
 
-                Assert.That(FieldValue(antwort, "pubsub#deliver"), Is.EqualTo("1"),
-                            "Zugestellt wird, solange niemand widerspricht.");
+                Assert.That(FieldValue(reply, "pubsub#deliver"), Is.EqualTo("1"),
+                            "Delivery happens as long as nobody objects.");
 
             });
 
@@ -1097,13 +1091,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheNodeConfigForm_OffersWhatTheServerCanDo()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 8.2: Das Angebot des Eigentümers.
+        /// XEP-0060, section 8.2: the offer of the owner.
         /// </summary>
         /// <remarks>
-        /// Drei Felder, und jedes tut etwas. Das XEP kennt zwei Dutzend
-        /// weitere; angeboten wird nur, was auch wirkt - an dieser Stelle
-        /// besonders, denn ein Eigentümer glaubt danach, etwas geregelt zu
-        /// haben.
+        /// Three fields, and every one of them does something. The XEP knows
+        /// two dozen more; offered is only what also takes effect - especially
+        /// at this place, because an owner believes afterwards to have settled
+        /// something.
         /// </remarks>
         [Test]
         public async Task TheNodeConfigForm_OffersWhatTheServerCanDo()
@@ -1111,19 +1105,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            var antwort = await AskAsync(bob, "cfg-1", ConfigureIq("cfg-1", "get"));
+            var reply = await AskAsync(bob, "cfg-1", ConfigureIq("cfg-1", "get"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
-                Assert.That(ConfigField(antwort, "FORM_TYPE"),
+                Assert.That(ConfigField(reply, "FORM_TYPE"),
                             Is.EqualTo("http://jabber.org/protocol/pubsub#node_config"));
 
-                Assert.That(ConfigField(antwort, "pubsub#access_model"),   Is.EqualTo("open"));
-                Assert.That(ConfigField(antwort, "pubsub#max_items"),      Is.EqualTo("256"));
-                Assert.That(ConfigField(antwort, "pubsub#persist_items"),  Is.EqualTo("1"));
+                Assert.That(ConfigField(reply, "pubsub#access_model"),   Is.EqualTo("open"));
+                Assert.That(ConfigField(reply, "pubsub#max_items"),      Is.EqualTo("256"));
+                Assert.That(ConfigField(reply, "pubsub#persist_items"),  Is.EqualTo("1"));
 
             });
 
@@ -1134,7 +1128,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheConfiguration_IsReadBackAsItWasSet()
 
         /// <summary>
-        /// Was gesetzt wurde, steht danach im Angebot.
+        /// What was set stands in the offer afterwards.
         /// </summary>
         [Test]
         public async Task TheConfiguration_IsReadBackAsItWasSet()
@@ -1142,39 +1136,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            var gesetzt = await AskAsync(bob, "cfg-2",
-                                         ConfigureIq("cfg-2", "set",
-                                                     ConfigForm("<field var='pubsub#max_items'><value>5</value></field>" +
-                                                                "<field var='pubsub#access_model'><value>presence</value></field>")));
+            var set = await AskAsync(bob, "cfg-2",
+                                     ConfigureIq("cfg-2", "set",
+                                                 ConfigForm("<field var='pubsub#max_items'><value>5</value></field>" +
+                                                            "<field var='pubsub#access_model'><value>presence</value></field>")));
 
-            Assert.That(gesetzt.Attr("type"), Is.EqualTo("result"));
+            Assert.That(set.Attr("type"), Is.EqualTo("result"));
 
-            var gelesen = await AskAsync(bob, "cfg-3", ConfigureIq("cfg-3", "get"));
+            var loaded = await AskAsync(bob, "cfg-3", ConfigureIq("cfg-3", "get"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(ConfigField(gelesen, "pubsub#max_items"),     Is.EqualTo("5"));
-                Assert.That(ConfigField(gelesen, "pubsub#access_model"),  Is.EqualTo("presence"));
-                Assert.That(ConfigField(gelesen, "pubsub#persist_items"), Is.EqualTo("1"),
-                            "Was im Teilformular nicht stand, bleibt wie es war.");
+                Assert.That(ConfigField(loaded, "pubsub#max_items"),     Is.EqualTo("5"));
+                Assert.That(ConfigField(loaded, "pubsub#access_model"),  Is.EqualTo("presence"));
+                Assert.That(ConfigField(loaded, "pubsub#persist_items"), Is.EqualTo("1"),
+                            "What did not stand in the partial form stays as it was.");
             });
 
-            // Und die Probe darauf: Ein zweites Teilformular darf den ersten
-            // Wert nicht auf die Vorgabe zurücksetzen. XEP-0060, Abschnitt
-            // 8.2.4 lässt Teilformulare ausdrücklich zu - wer die fehlenden
-            // Felder mit der Vorgabe füllt, ändert lautlos, wonach niemand
-            // gefragt hat.
+            // And the proof of it: a second partial form must not set the first
+            // value back to the default. XEP-0060, section 8.2.4 expressly
+            // allows partial forms - whoever fills the missing fields with the
+            // default changes silently what nobody asked about.
             await AskAsync(bob, "cfg-3b",
                            ConfigureIq("cfg-3b", "set",
                                        ConfigForm("<field var='pubsub#persist_items'><value>0</value></field>")));
 
-            var nochmal = await AskAsync(bob, "cfg-3c", ConfigureIq("cfg-3c", "get"));
+            var onceMore = await AskAsync(bob, "cfg-3c", ConfigureIq("cfg-3c", "get"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(ConfigField(nochmal, "pubsub#persist_items"), Is.EqualTo("0"));
-                Assert.That(ConfigField(nochmal, "pubsub#max_items"),     Is.EqualTo("5"),
-                            "Der Stand von vorhin ist die Grundlage, nicht die Vorgabe.");
+                Assert.That(ConfigField(onceMore, "pubsub#persist_items"), Is.EqualTo("0"));
+                Assert.That(ConfigField(onceMore, "pubsub#max_items"),     Is.EqualTo("5"),
+                            "The state from before is the ground, not the default.");
             });
 
         }
@@ -1184,15 +1177,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AConfigurationThatIsNoConfiguration_IsRejected()
 
         /// <summary>
-        /// Ein unbekanntes Feld, eine Zahl, die keine ist, und eine Grenze
-        /// unter eins.
+        /// An unknown field, a number that is none, and a limit below one.
         /// </summary>
         /// <remarks>
-        /// Dieselbe Strenge wie bei den Abonnement-Einstellungen: Was
-        /// hereinkommt, ist eine Anweisung, und eine übergangene Anweisung ist
-        /// schlimmer als eine abgewiesene. <c>max_items=0</c> ist dabei kein
-        /// Formfehler, sondern eine Falle - ein Knoten, der nichts behalten
-        /// darf, sähe aus wie einer, in den niemand schreibt.
+        /// The same strictness as with the subscription options: what comes in
+        /// is an instruction, and an instruction passed over is worse than one
+        /// refused. <c>max_items=0</c> is no mere formal error in this but a
+        /// trap - a node that may keep nothing would look like one nobody
+        /// writes into.
         /// </remarks>
         [Test]
         public async Task AConfigurationThatIsNoConfiguration_IsRejected()
@@ -1200,23 +1192,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            foreach (var (kennung, feld) in new[] {
+            foreach (var (id, field) in new[] {
                          ("cfg-11", "<field var='pubsub#digest'><value>1</value></field>"),
-                         ("cfg-12", "<field var='pubsub#max_items'><value>viele</value></field>"),
+                         ("cfg-12", "<field var='pubsub#max_items'><value>many</value></field>"),
                          ("cfg-13", "<field var='pubsub#max_items'><value>0</value></field>")
                      })
             {
 
-                var antwort = await AskAsync(bob, kennung, ConfigureIq(kennung, "set", ConfigForm(feld)));
+                var reply = await AskAsync(bob, id, ConfigureIq(id, "set", ConfigForm(field)));
 
-                Assert.That(antwort.Attr("type"), Is.EqualTo("error"), feld);
+                Assert.That(reply.Attr("type"), Is.EqualTo("error"), field);
 
             }
 
-            var gelesen = await AskAsync(bob, "cfg-14", ConfigureIq("cfg-14", "get"));
+            var loaded = await AskAsync(bob, "cfg-14", ConfigureIq("cfg-14", "get"));
 
-            Assert.That(ConfigField(gelesen, "pubsub#max_items"), Is.EqualTo("256"),
-                        "Keine der abgewiesenen Anfragen darf etwas geändert haben.");
+            Assert.That(ConfigField(loaded, "pubsub#max_items"), Is.EqualTo("256"),
+                        "None of the refused requests may have changed anything.");
 
         }
 
@@ -1225,13 +1217,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CreatingANodeInSomebodyElsesAccount_IsForbidden()
 
         /// <summary>
-        /// Anlegen darf man nur bei sich.
+        /// Creating is allowed only at one's own place.
         /// </summary>
         /// <remarks>
-        /// Sonst könnte jeder in fremden Konten Knoten anlegen - und wäre
-        /// deren Eigentümer nicht, aber ihr Urheber: Der Betroffene fände in
-        /// seiner Liste Knoten, die er nie angelegt hat, mit Einstellungen,
-        /// die er nicht gewählt hat.
+        /// Otherwise anybody could create nodes in foreign accounts - and would
+        /// not be their owner but their originator: the one concerned would
+        /// find nodes in their list they never created, with settings they did
+        /// not choose.
         /// </remarks>
         [Test]
         public async Task CreatingANodeInSomebodyElsesAccount_IsForbidden()
@@ -1241,18 +1233,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "new-4",
-                                         PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:fremd", "new-4"));
+            var reply = await AskAsync(alice, "new-4",
+                                       PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:foreign", "new-4"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
             });
 
-            Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.PepNodeExists("urn:example:fremd"),
+            Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.PepNodeExists("urn:example:foreign"),
                         Is.False,
-                        "Ein abgewiesenes Anlegen darf nichts angelegt haben.");
+                        "A refused creating must not have created anything.");
 
         }
 
@@ -1261,7 +1253,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MaxItems_LimitsWhatTheNodeKeeps()
 
         /// <summary>
-        /// <c>pubsub#max_items</c> - der älteste weicht.
+        /// <c>pubsub#max_items</c> - the oldest gives way.
         /// </summary>
         [Test]
         public async Task MaxItems_LimitsWhatTheNodeKeeps()
@@ -1276,11 +1268,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await AskAsync(bob, "pub-30", PublishIq("pub-30", Node, "30", "<w xmlns='urn:example:x'>a</w>"));
             await AskAsync(bob, "pub-31", PublishIq("pub-31", Node, "31", "<w xmlns='urn:example:x'>b</w>"));
 
-            var konto = Server.GetAccount($"bob@{Server.Domain}")!;
+            var account = Server.GetAccount($"bob@{Server.Domain}")!;
 
-            Assert.That(konto.GetPepItems(Node).Select(e => e.ItemId),
+            Assert.That(account.GetPepItems(Node).Select(e => e.ItemId),
                         Is.EqualTo(new[] { "30", "31" }),
-                        "Der erste Eintrag hätte weichen müssen.");
+                        "The first item should have given way.");
 
         }
 
@@ -1289,13 +1281,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASmallerLimit_TakesEffectAtOnce()
 
         /// <summary>
-        /// Eine kleinere Grenze gilt sofort und nicht erst beim nächsten Mal.
+        /// A smaller limit holds at once and not only from the next time.
         /// </summary>
         /// <remarks>
-        /// Wer sie setzt, will nicht so viele aufbewahrt wissen - und der
-        /// Bestand ist genau das, was aufbewahrt wird. Erst beim nächsten
-        /// Veröffentlichen aufzuräumen hiesse: Auf einem Knoten, in dem nie
-        /// wieder etwas erscheint, bleibt alles liegen.
+        /// Whoever sets it does not want so many kept - and the stock is
+        /// exactly what is kept. To tidy up only at the next publication would
+        /// mean: on a node where nothing ever appears again, everything stays
+        /// lying about.
         /// </remarks>
         [Test]
         public async Task ASmallerLimit_TakesEffectAtOnce()
@@ -1310,9 +1302,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-5", "set",
                                        ConfigForm("<field var='pubsub#max_items'><value>1</value></field>")));
 
-            var konto = Server.GetAccount($"bob@{Server.Domain}")!;
+            var account = Server.GetAccount($"bob@{Server.Domain}")!;
 
-            Assert.That(konto.GetPepItems(Node).Select(e => e.ItemId),
+            Assert.That(account.GetPepItems(Node).Select(e => e.ItemId),
                         Is.EqualTo(new[] { "33" }));
 
         }
@@ -1322,14 +1314,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutPersistence_TheNotificationGoesOut_ButNothingIsKept()
 
         /// <summary>
-        /// <c>pubsub#persist_items=0</c>: Der Knoten meldet, behält aber
-        /// nichts.
+        /// <c>pubsub#persist_items=0</c>: the node notifies but keeps nothing.
         /// </summary>
         /// <remarks>
-        /// Beide Hälften gehören in einen Test. Nur „nichts behalten" zu
-        /// prüfen bestünde auch gegen einen Server, der gar nichts mehr tut -
-        /// und dann wäre aus einem Knoten ohne Ablage einer ohne Wirkung
-        /// geworden.
+        /// Both halves belong in one test. To check only "keeps nothing" would
+        /// pass against a server that does nothing at all any more - and then a
+        /// node without storage would have become one without effect.
         /// </remarks>
         [Test]
         public async Task WithoutPersistence_TheNotificationGoesOut_ButNothingIsKept()
@@ -1344,17 +1334,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-6", "set",
                                        ConfigForm("<field var='pubsub#persist_items'><value>0</value></field>")));
 
-            var ereignisse = CollectEvents(alice);
+            var events = CollectEvents(alice);
 
-            await AskAsync(bob, "pub-34", PublishIq("pub-34", Node, "34", "<w xmlns='urn:example:x'>fluechtig</w>"));
+            await AskAsync(bob, "pub-34", PublishIq("pub-34", Node, "34", "<w xmlns='urn:example:x'>fleeting</w>"));
 
-            await WaitFor(() => Count(ereignisse) > 0, "die Benachrichtigung");
+            await WaitFor(() => Count(events) > 0, "the notification");
 
-            var konto = Server.GetAccount($"bob@{Server.Domain}")!;
+            var account = Server.GetAccount($"bob@{Server.Domain}")!;
 
-            Assert.That(konto.GetPepItems(Node).Select(e => e.ItemId),
+            Assert.That(account.GetPepItems(Node).Select(e => e.ItemId),
                         Does.Not.Contain("34"),
-                        "Ein Knoten ohne Ablage behält nichts.");
+                        "A node without storage keeps nothing.");
 
         }
 
@@ -1363,13 +1353,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ACreatedNode_CanBeSubscribed_BeforeAnythingIsPublished()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 8.1: Ein angelegter Knoten existiert, bevor
-        /// etwas darin steht.
+        /// XEP-0060, section 8.1: a created node exists before anything stands
+        /// in it.
         /// </summary>
         /// <remarks>
-        /// Vorher hiess „es gibt den Knoten" dasselbe wie „es steht etwas
-        /// darin". Damit war das Anlegen folgenlos - und ein Knoten ohne
-        /// Ablage liesse sich überhaupt nie abonnieren.
+        /// Before, "the node exists" meant the same as "something stands in
+        /// it". With that the creating had no consequence - and a node without
+        /// storage could never be subscribed to at all.
         /// </remarks>
         [Test]
         public async Task ACreatedNode_CanBeSubscribed_BeforeAnythingIsPublished()
@@ -1377,19 +1367,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await ConnectClientAsync("bob");
 
-            var angelegt = await AskAsync(bob, "new-1",
-                                          PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:leer", "new-1"));
+            var created = await AskAsync(bob, "new-1",
+                                         PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:empty", "new-1"));
 
-            Assert.That(angelegt.Attr("type"), Is.EqualTo("result"));
+            Assert.That(created.Attr("type"), Is.EqualTo("result"));
 
             var alice = await ConnectClientAsync("alice");
 
-            var zusage = await AskAsync(alice, "sub-31",
-                                        PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:leer",
-                                                                alice.BareJid, "sub-31"));
+            var grant = await AskAsync(alice, "sub-31",
+                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:empty",
+                                                               alice.BareJid, "sub-31"));
 
-            Assert.That(zusage.Attr("type"), Is.EqualTo("result"),
-                        "Ein angelegter Knoten muss abonnierbar sein.");
+            Assert.That(grant.Attr("type"), Is.EqualTo("result"),
+                        "A created node has to be subscribable.");
 
         }
 
@@ -1398,13 +1388,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CreatingANodeTwice_IsRejected()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 8.1.3: Was es gibt, wird nicht noch einmal
-        /// angelegt.
+        /// XEP-0060, section 8.1.3: what exists is not created a second time.
         /// </summary>
         /// <remarks>
-        /// Stillschweigend gelten zu lassen hiesse, eine bestehende
-        /// Einstellung durch eine neue zu ersetzen, ohne dass jemand danach
-        /// gefragt hat - und die neue wäre die Vorgabe.
+        /// To let it pass in silence would mean replacing an existing setting
+        /// with a new one without anybody having asked for it - and the new one
+        /// would be the default.
         /// </remarks>
         [Test]
         public async Task CreatingANodeTwice_IsRejected()
@@ -1412,13 +1401,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            var antwort = await AskAsync(bob, "new-2",
-                                         PubSubBuilder.CreateNode($"bob@{Server.Domain}", Node, "new-2"));
+            var reply = await AskAsync(bob, "new-2",
+                                       PubSubBuilder.CreateNode($"bob@{Server.Domain}", Node, "new-2"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort), Is.EqualTo("conflict"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("conflict"));
             });
 
         }
@@ -1428,7 +1417,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CreatingWithAConfiguration_AppliesIt()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 8.1.3: Anlegen und einstellen in einem Zug.
+        /// XEP-0060, section 8.1.3: create and configure in one go.
         /// </summary>
         [Test]
         public async Task CreatingWithAConfiguration_AppliesIt()
@@ -1438,19 +1427,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "new-3",
                            $"<iq type='set' id='new-3'><pubsub xmlns='{PubSubNamespace}'>" +
-                           "<create node='urn:example:knapp'/>" +
+                           "<create node='urn:example:tight'/>" +
                            "<configure>" +
                            ConfigForm("<field var='pubsub#max_items'><value>1</value></field>") +
                            "</configure></pubsub></iq>");
 
-            await AskAsync(bob, "pub-35", PublishIq("pub-35", "urn:example:knapp", "35", "<w xmlns='urn:example:x'>a</w>"));
-            await AskAsync(bob, "pub-36", PublishIq("pub-36", "urn:example:knapp", "36", "<w xmlns='urn:example:x'>b</w>"));
+            await AskAsync(bob, "pub-35", PublishIq("pub-35", "urn:example:tight", "35", "<w xmlns='urn:example:x'>a</w>"));
+            await AskAsync(bob, "pub-36", PublishIq("pub-36", "urn:example:tight", "36", "<w xmlns='urn:example:x'>b</w>"));
 
-            var konto = Server.GetAccount($"bob@{Server.Domain}")!;
+            var account = Server.GetAccount($"bob@{Server.Domain}")!;
 
-            Assert.That(konto.GetPepItems("urn:example:knapp").Select(e => e.ItemId),
+            Assert.That(account.GetPepItems("urn:example:tight").Select(e => e.ItemId),
                         Is.EqualTo(new[] { "36" }),
-                        "Die mitgegebene Einstellung muss von Anfang an gelten.");
+                        "The setting given along has to hold from the start.");
 
         }
 
@@ -1459,15 +1448,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConfiguringSomebodyElsesNode_IsForbidden()
 
         /// <summary>
-        /// Ein PEP-Knoten gehört einem Menschen, und einstellen darf ihn nur
-        /// der.
+        /// A PEP node belongs to a human being, and only they may configure it.
         /// </summary>
         /// <remarks>
-        /// Die vierte Stelle mit dieser Prüfung, und die weitreichendste: Wer
-        /// fremde Knoten einstellen könnte, könnte die Ablage abschalten und
-        /// damit fremde Bundles unerreichbar machen - lautlos, denn ein
-        /// Knoten, der nichts mehr behält, sieht aus wie einer, in den niemand
-        /// etwas geschrieben hat.
+        /// The fourth place with this check, and the furthest-reaching one:
+        /// whoever could configure foreign nodes could switch off the storage
+        /// and thereby make foreign bundles unreachable - silently, because a
+        /// node that keeps nothing any more looks like one nobody has written
+        /// anything into.
         /// </remarks>
         [Test]
         public async Task ConfiguringSomebodyElsesNode_IsForbidden()
@@ -1477,14 +1465,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "cfg-7",
-                                         ConfigureIq("cfg-7", "set",
-                                                     ConfigForm("<field var='pubsub#persist_items'><value>0</value></field>")));
+            var reply = await AskAsync(alice, "cfg-7",
+                                       ConfigureIq("cfg-7", "set",
+                                                   ConfigForm("<field var='pubsub#persist_items'><value>0</value></field>")));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
             });
 
         }
@@ -1494,7 +1482,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ConfiguringANodeThatDoesNotExist_IsRejected()
 
         /// <summary>
-        /// Was es nicht gibt, lässt sich nicht einstellen.
+        /// What does not exist cannot be configured.
         /// </summary>
         [Test]
         public async Task ConfiguringANodeThatDoesNotExist_IsRejected()
@@ -1502,13 +1490,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await ConnectClientAsync("bob");
 
-            var antwort = await AskAsync(bob, "cfg-8",
-                                         ConfigureIq("cfg-8", "get", node: "urn:example:gibtesnicht"));
+            var reply = await AskAsync(bob, "cfg-8",
+                                       ConfigureIq("cfg-8", "get", node: "urn:example:doesnotexist"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort), Is.EqualTo("item-not-found"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("item-not-found"));
             });
 
         }
@@ -1518,20 +1506,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAccessModelNobodyOffered_IsRejected()
 
         /// <summary>
-        /// Was kein Zugriffsmodell ist, wird abgewiesen - und nicht
-        /// stillschweigend zu <c>open</c>.
+        /// What is no access model is refused - and not silently turned into
+        /// <c>open</c>.
         /// </summary>
         /// <remarks>
-        /// <b>Der teuerste Ort für eine Zusage ohne Deckung.</b> Wer etwas
-        /// Verschlossenes einstellt und <c>open</c> bekommt, glaubt seine
-        /// Einträge geschützt und hat sie veröffentlicht.
+        /// <b>The most expensive place for a promise without cover.</b>
+        /// Whoever sets something closed and gets <c>open</c> believes their
+        /// items protected and has published them.
         ///
-        /// <b>Dieser Test hat sein Beispiel zweimal verloren</b>, und beide
-        /// Male aus dem besten Grund: Er hiess bis K13 <c>whitelist</c> und bis
-        /// D93 <c>authorize</c> - jetzt sind beide angeboten, weil sie sich
-        /// durchsetzen lassen. Übrig bleibt der Fall, den es immer geben wird:
-        /// ein Name, den niemand vergeben hat. Hier <c>geschlossen</c>, das wie
-        /// eine Absicht klingt und keine ist.
+        /// <b>This test has lost its example twice</b>, and both times for the
+        /// best reason: it was called <c>whitelist</c> until K13 and
+        /// <c>authorize</c> until D93 - now both are offered, because they can
+        /// be enforced. What is left is the case there will always be: a name
+        /// nobody granted. Here <c>closed</c>, which sounds like an intention
+        /// and is none.
         /// </remarks>
         [Test]
         public async Task AnAccessModelNobodyOffered_IsRejected()
@@ -1539,16 +1527,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            var antwort = await AskAsync(bob, "cfg-9",
-                                         ConfigureIq("cfg-9", "set",
-                                                     ConfigForm("<field var='pubsub#access_model'><value>geschlossen</value></field>")));
+            var reply = await AskAsync(bob, "cfg-9",
+                                       ConfigureIq("cfg-9", "set",
+                                                   ConfigForm("<field var='pubsub#access_model'><value>closed</value></field>")));
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("error"));
 
-            var gelesen = await AskAsync(bob, "cfg-10", ConfigureIq("cfg-10", "get"));
+            var loaded = await AskAsync(bob, "cfg-10", ConfigureIq("cfg-10", "get"));
 
-            Assert.That(ConfigField(gelesen, "pubsub#access_model"), Is.EqualTo("open"),
-                        "Eine abgewiesene Einstellung darf nichts geändert haben.");
+            Assert.That(ConfigField(loaded, "pubsub#access_model"), Is.EqualTo("open"),
+                        "A refused setting must not have changed anything.");
 
         }
 
@@ -1557,15 +1545,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithPresenceAccess_AStranger_GetsNothingAndCannotSubscribe()
 
         /// <summary>
-        /// XEP-0060, Abschnitte 6.5.3 und 6.1.3.4: <c>presence</c> heisst,
-        /// dass nur an den Knoten kommt, wer die Presence des Eigentümers
-        /// sehen darf.
+        /// XEP-0060, sections 6.5.3 and 6.1.3.4: <c>presence</c> means that
+        /// only those get to the node who may see the presence of the owner.
         /// </summary>
         /// <remarks>
-        /// Bis K8 war das Zugriffsmodell gespeichert und wirkungslos - genau
-        /// die Sorte Zusage, gegen die diese Reihe sonst argumentiert. Ein
-        /// Eigentümer, der <c>presence</c> einstellt und <c>open</c> bekommt,
-        /// glaubt seine Einträge geschützt und hat sie veröffentlicht.
+        /// Until K8 the access model was stored and without effect - exactly
+        /// the sort of promise this series otherwise argues against. An owner
+        /// who sets <c>presence</c> and gets <c>open</c> believes their items
+        /// protected and has published them.
         /// </remarks>
         [Test]
         public async Task WithPresenceAccess_AStranger_GetsNothingAndCannotSubscribe()
@@ -1579,24 +1566,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var abgerufen = await AskAsync(alice, "get-20",
-                                           $"<iq type='get' to='bob@{Server.Domain}' id='get-20'>" +
-                                           $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            var fetched = await AskAsync(alice, "get-20",
+                                         $"<iq type='get' to='bob@{Server.Domain}' id='get-20'>" +
+                                         $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
-            var abonniert = await AskAsync(alice, "sub-40",
-                                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
-                                                                   alice.BareJid, "sub-40"));
+            var subscribed = await AskAsync(alice, "sub-40",
+                                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                                                    alice.BareJid, "sub-40"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgerufen.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(abgerufen),       Is.EqualTo("not-authorized"));
-                Assert.That(ErrorTypeOf(abgerufen),       Is.EqualTo("auth"));
-                Assert.That(PubSubConditionOf(abgerufen), Is.EqualTo("presence-subscription-required"));
+                Assert.That(fetched.Attr("type"),       Is.EqualTo("error"));
+                Assert.That(ConditionOf(fetched),       Is.EqualTo("not-authorized"));
+                Assert.That(ErrorTypeOf(fetched),       Is.EqualTo("auth"));
+                Assert.That(PubSubConditionOf(fetched), Is.EqualTo("presence-subscription-required"));
 
-                Assert.That(abonniert.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(abonniert),       Is.EqualTo("not-authorized"));
+                Assert.That(subscribed.Attr("type"),    Is.EqualTo("error"));
+                Assert.That(ConditionOf(subscribed),    Is.EqualTo("not-authorized"));
 
             });
 
@@ -1607,12 +1594,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithPresenceAccess_AContactStillGetsIn()
 
         /// <summary>
-        /// Die Gegenprobe: Wer die Presence sehen darf, kommt an den Knoten.
+        /// The cross-check: whoever may see the presence gets to the node.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde der vorige Test auch gegen einen Server, der bei
-        /// <c>presence</c> einfach jeden abweist - und aus einem
-        /// Zugriffsmodell wäre ein Schloss ohne Schlüssel geworden.
+        /// Without it the previous test would pass against a server that
+        /// simply refuses everybody on <c>presence</c> - and an access model
+        /// would have become a lock without a key.
         /// </remarks>
         [Test]
         public async Task WithPresenceAccess_AContactStillGetsIn()
@@ -1628,17 +1615,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var abgerufen = await AskAsync(alice, "get-21",
-                                           $"<iq type='get' to='bob@{Server.Domain}' id='get-21'>" +
-                                           $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            var fetched = await AskAsync(alice, "get-21",
+                                         $"<iq type='get' to='bob@{Server.Domain}' id='get-21'>" +
+                                         $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
-            Assert.That(abgerufen.Attr("type"), Is.EqualTo("result"));
+            Assert.That(fetched.Attr("type"), Is.EqualTo("result"));
 
-            var abonniert = await AskAsync(alice, "sub-41",
-                                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
-                                                                   alice.BareJid, "sub-41"));
+            var subscribed = await AskAsync(alice, "sub-41",
+                                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                                                    alice.BareJid, "sub-41"));
 
-            Assert.That(abonniert.Attr("type"), Is.EqualTo("result"));
+            Assert.That(subscribed.Attr("type"), Is.EqualTo("result"));
 
         }
 
@@ -1647,14 +1634,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOwner_ReachesHisOwnNode()
 
         /// <summary>
-        /// Der Eigentümer kommt an seinen Knoten, auch bei
-        /// <c>presence</c>.
+        /// The owner gets to their own node, with <c>presence</c> as well.
         /// </summary>
         /// <remarks>
-        /// Er ist bei sich selbst kein Presence-Abonnent. Ein Modell, das ihn
-        /// aus seinem eigenen Knoten aussperrt, hätte den Namen nicht
-        /// verdient - und der Fehler fiele erst auf, wenn ein Client seine
-        /// eigene Geräteliste nicht mehr lesen kann.
+        /// At their own place they are no presence subscriber. A model that
+        /// locked them out of their own node would not deserve the name - and
+        /// the mistake would show only when a client can no longer read its own
+        /// device list.
         /// </remarks>
         [Test]
         public async Task TheOwner_ReachesHisOwnNode()
@@ -1666,11 +1652,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-22", "set",
                                        ConfigForm("<field var='pubsub#access_model'><value>presence</value></field>")));
 
-            var antwort = await AskAsync(bob, "get-22",
-                                         $"<iq type='get' id='get-22'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            var reply = await AskAsync(bob, "get-22",
+                                       $"<iq type='get' id='get-22'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
         }
 
@@ -1679,8 +1665,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PublishOptions_CreateTheNodeAsDemanded()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 7.1.5: Der Knoten entsteht mit den verlangten
-        /// Eigenschaften.
+        /// XEP-0060, section 7.1.5: the node comes about with the demanded
+        /// properties.
         /// </summary>
         [Test]
         public async Task PublishOptions_CreateTheNodeAsDemanded()
@@ -1690,16 +1676,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "pub-40",
                            $"<iq type='set' id='pub-40'><pubsub xmlns='{PubSubNamespace}'>" +
-                           "<publish node='urn:example:eng'><item id='40'>" +
+                           "<publish node='urn:example:narrow'><item id='40'>" +
                            "<w xmlns='urn:example:x'>a</w></item></publish>" +
                            "<publish-options>" +
                            PublishOptionsForm("<field var='pubsub#access_model'><value>presence</value></field>") +
                            "</publish-options></pubsub></iq>");
 
-            var gelesen = await AskAsync(bob, "cfg-23",
-                                         ConfigureIq("cfg-23", "get", node: "urn:example:eng"));
+            var loaded = await AskAsync(bob, "cfg-23",
+                                        ConfigureIq("cfg-23", "get", node: "urn:example:narrow"));
 
-            Assert.That(ConfigField(gelesen, "pubsub#access_model"), Is.EqualTo("presence"));
+            Assert.That(ConfigField(loaded, "pubsub#access_model"), Is.EqualTo("presence"));
 
         }
 
@@ -1708,14 +1694,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PublishOptions_ThatTheNodeDoesNotMeet_StopThePublication()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 7.1.5: Passt der Knoten nicht, wird nicht
-        /// veröffentlicht.
+        /// XEP-0060, section 7.1.5: if the node does not fit, nothing is
+        /// published.
         /// </summary>
         /// <remarks>
-        /// <b>Und nicht veröffentlicht heisst: gar nicht.</b> Ein Dienst, der
-        /// die Bedingung abwiese und den Eintrag trotzdem ablegte, hätte das
-        /// Gegenteil dessen getan, wofür es Bedingungen gibt - der Absender
-        /// nähme an, sein Eintrag liege nicht dort, wo er nun doch liegt.
+        /// <b>And not published means: not at all.</b> A service that refused
+        /// the condition and stored the item all the same would have done the
+        /// opposite of what conditions are there for - the sender would assume
+        /// their item does not lie where it now does lie after all.
         /// </remarks>
         [Test]
         public async Task PublishOptions_ThatTheNodeDoesNotMeet_StopThePublication()
@@ -1727,32 +1713,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-24", "set",
                                        ConfigForm("<field var='pubsub#access_model'><value>presence</value></field>")));
 
-            var antwort = await AskAsync(bob, "pub-41",
-                                         $"<iq type='set' id='pub-41'><pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<publish node='{Node}'><item id='41'>" +
-                                         "<w xmlns='urn:example:x'>b</w></item></publish>" +
-                                         "<publish-options>" +
-                                         PublishOptionsForm("<field var='pubsub#access_model'><value>open</value></field>") +
-                                         "</publish-options></pubsub></iq>");
+            var reply = await AskAsync(bob, "pub-41",
+                                       $"<iq type='set' id='pub-41'><pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<publish node='{Node}'><item id='41'>" +
+                                       "<w xmlns='urn:example:x'>b</w></item></publish>" +
+                                       "<publish-options>" +
+                                       PublishOptionsForm("<field var='pubsub#access_model'><value>open</value></field>") +
+                                       "</publish-options></pubsub></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"),       Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort),       Is.EqualTo("conflict"));
-                Assert.That(PubSubConditionOf(antwort), Is.EqualTo("precondition-not-met"));
+                Assert.That(reply.Attr("type"),       Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply),       Is.EqualTo("conflict"));
+                Assert.That(PubSubConditionOf(reply), Is.EqualTo("precondition-not-met"));
             });
 
-            var konto = Server.GetAccount($"bob@{Server.Domain}")!;
+            var account = Server.GetAccount($"bob@{Server.Domain}")!;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(konto.GetPepItems(Node).Select(e => e.ItemId), Does.Not.Contain("41"),
-                            "Eine abgewiesene Veröffentlichung darf nichts abgelegt haben.");
+                Assert.That(account.GetPepItems(Node).Select(e => e.ItemId), Does.Not.Contain("41"),
+                            "A refused publication must not have stored anything.");
 
-                Assert.That(konto.PepNodeConfiguration(Node)!.AccessModel,
+                Assert.That(account.PepNodeConfiguration(Node)!.AccessModel,
                             Is.EqualTo(PubSubAccessModel.Presence),
-                            "Und sie darf den Knoten nicht umgestellt haben.");
+                            "And it must not have reconfigured the node.");
 
             });
 
@@ -1763,7 +1749,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region PublishOptions_ThatFit_GoThrough()
 
         /// <summary>
-        /// Die Gegenprobe: Passende Bedingungen halten nichts auf.
+        /// The cross-check: fitting conditions hold nothing up.
         /// </summary>
         [Test]
         public async Task PublishOptions_ThatFit_GoThrough()
@@ -1771,15 +1757,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            var antwort = await AskAsync(bob, "pub-42",
-                                         $"<iq type='set' id='pub-42'><pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<publish node='{Node}'><item id='42'>" +
-                                         "<w xmlns='urn:example:x'>c</w></item></publish>" +
-                                         "<publish-options>" +
-                                         PublishOptionsForm("<field var='pubsub#access_model'><value>open</value></field>") +
-                                         "</publish-options></pubsub></iq>");
+            var reply = await AskAsync(bob, "pub-42",
+                                       $"<iq type='set' id='pub-42'><pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<publish node='{Node}'><item id='42'>" +
+                                       "<w xmlns='urn:example:x'>c</w></item></publish>" +
+                                       "<publish-options>" +
+                                       PublishOptionsForm("<field var='pubsub#access_model'><value>open</value></field>") +
+                                       "</publish-options></pubsub></iq>");
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
             Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.GetPepItems(Node).Select(e => e.ItemId),
                         Does.Contain("42"));
@@ -1791,14 +1777,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AConditionNobodyNamed_IsNoCondition()
 
         /// <summary>
-        /// Was im Bedingungsformular nicht steht, wird nicht verlangt.
+        /// What does not stand in the condition form is not demanded.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied zwischen einer Bedingung und einer Einstellung, und
-        /// er liegt genau in diesem <c>null</c>: Es heisst „danach wird nicht
-        /// gefragt" und nicht „Vorgabe". Wer beides verwechselt, weist eine
-        /// Veröffentlichung ab, weil der Knoten in einem Punkt von der Vorgabe
-        /// abweicht, über den der Absender nie etwas gesagt hat.
+        /// The difference between a condition and a setting, and it lies
+        /// exactly in this <c>null</c>: it means "this is not being asked
+        /// about" and not "default". Whoever confuses the two refuses a
+        /// publication because the node differs from the default in a point the
+        /// sender never said anything about.
         /// </remarks>
         [Test]
         public async Task AConditionNobodyNamed_IsNoCondition()
@@ -1810,16 +1796,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-25", "set",
                                        ConfigForm("<field var='pubsub#access_model'><value>presence</value></field>")));
 
-            var antwort = await AskAsync(bob, "pub-44",
-                                         $"<iq type='set' id='pub-44'><pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<publish node='{Node}'><item id='44'>" +
-                                         "<w xmlns='urn:example:x'>e</w></item></publish>" +
-                                         "<publish-options>" +
-                                         PublishOptionsForm("<field var='pubsub#max_items'><value>256</value></field>") +
-                                         "</publish-options></pubsub></iq>");
+            var reply = await AskAsync(bob, "pub-44",
+                                       $"<iq type='set' id='pub-44'><pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<publish node='{Node}'><item id='44'>" +
+                                       "<w xmlns='urn:example:x'>e</w></item></publish>" +
+                                       "<publish-options>" +
+                                       PublishOptionsForm("<field var='pubsub#max_items'><value>256</value></field>") +
+                                       "</publish-options></pubsub></iq>");
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"),
-                        "Über das Zugriffsmodell hat hier niemand etwas verlangt.");
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"),
+                        "About the access model nobody demanded anything here.");
 
             Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.GetPepItems(Node).Select(e => e.ItemId),
                         Does.Contain("44"));
@@ -1831,16 +1817,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOmemoBundleNode_IsOpen_BecauseOmemoDemandsIt()
 
         /// <summary>
-        /// Und damit hat die Bedingung, die OMEMO seit D66 mitschickt, zum
-        /// ersten Mal eine Wirkung.
+        /// And with that the condition OMEMO has been sending along since D66
+        /// has an effect for the first time.
         /// </summary>
         /// <remarks>
-        /// XEP-0384, Abschnitt 5.2 verlangt ein offenes Zugriffsmodell: Wer
-        /// verschlüsselt schreiben will, muss das Bundle lesen können, und das
-        /// ist im Zweifel jemand, der noch in keinem Roster steht. Bis K8 hat
-        /// diese Bedingung niemand gelesen - der Client verlangte einen
-        /// offenen Knoten, bekam ein <c>result</c> und durfte annehmen, sein
-        /// Bundle sei abrufbar.
+        /// XEP-0384, section 5.2 demands an open access model: whoever wants to
+        /// write encrypted has to be able to read the bundle, and in case of
+        /// doubt that is somebody who stands in no roster yet. Until K8 nobody
+        /// read this condition - the client demanded an open node, got a
+        /// <c>result</c> and was entitled to assume its bundle could be
+        /// fetched.
         /// </remarks>
         [Test]
         public async Task TheOmemoBundleNode_IsOpen_BecauseOmemoDemandsIt()
@@ -1854,9 +1840,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                               "31415",
                                               XElement.Parse("<bundle xmlns='urn:xmpp:omemo:2'/>")));
 
-            var konto = Server.GetAccount($"bob@{Server.Domain}")!;
+            var account = Server.GetAccount($"bob@{Server.Domain}")!;
 
-            Assert.That(konto.PepNodeConfiguration(OmemoPep.BundlesNode)!.AccessModel,
+            Assert.That(account.PepNodeConfiguration(OmemoPep.BundlesNode)!.AccessModel,
                         Is.EqualTo(PubSubAccessModel.Open));
 
         }
@@ -1866,12 +1852,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APublishOptionNobodyOffered_IsRejected()
 
         /// <summary>
-        /// Eine Bedingung, über die dieser Dienst nichts zusagen kann, wird
-        /// abgewiesen.
+        /// A condition this service can promise nothing about is refused.
         /// </summary>
         /// <remarks>
-        /// Gerade hier wäre Nachsicht falsch: <b>Eine Bedingung, die
-        /// übergangen wird, ist eine, die der Absender für erfüllt hält.</b>
+        /// Leniency would be wrong precisely here: <b>a condition that is
+        /// passed over is one the sender holds to be met.</b>
         /// </remarks>
         [Test]
         public async Task APublishOptionNobodyOffered_IsRejected()
@@ -1879,15 +1864,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            var antwort = await AskAsync(bob, "pub-43",
-                                         $"<iq type='set' id='pub-43'><pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<publish node='{Node}'><item id='43'>" +
-                                         "<w xmlns='urn:example:x'>d</w></item></publish>" +
-                                         "<publish-options>" +
-                                         PublishOptionsForm("<field var='pubsub#roster_groups_allowed'><value>freunde</value></field>") +
-                                         "</publish-options></pubsub></iq>");
+            var reply = await AskAsync(bob, "pub-43",
+                                       $"<iq type='set' id='pub-43'><pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<publish node='{Node}'><item id='43'>" +
+                                       "<w xmlns='urn:example:x'>d</w></item></publish>" +
+                                       "<publish-options>" +
+                                       PublishOptionsForm("<field var='pubsub#roster_groups_allowed'><value>friends</value></field>") +
+                                       "</publish-options></pubsub></iq>");
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("error"));
 
             Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.GetPepItems(Node).Select(e => e.ItemId),
                         Does.Not.Contain("43"));
@@ -1899,13 +1884,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSubscriptionList_NamesEveryNodeAndSubId()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 5.6: Eine Anfrage, und alle eigenen
-        /// Abonnements stehen da.
+        /// XEP-0060, section 5.6: one request, and all the own subscriptions
+        /// stand there.
         /// </summary>
         /// <remarks>
-        /// Das ist die Frage, die sich ein Client nicht selbst beantworten
-        /// kann: Seine Buchführung steht im Arbeitsspeicher, die Abonnements
-        /// stehen am Konto.
+        /// This is the question a client cannot answer for itself: its books
+        /// stand in memory, the subscriptions stand at the account.
         /// </remarks>
         [Test]
         public async Task TheSubscriptionList_NamesEveryNodeAndSubId()
@@ -1914,33 +1898,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await PublishingBobAsync();
 
             await AskAsync(bob, "new-10",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:zweiter", "new-10"));
+                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-10"));
 
             var alice   = await ConnectClientAsync("alice");
-            var ersteId = await SubscribeAsync(alice, "sub-50");
+            var firstId = await SubscribeAsync(alice, "sub-50");
 
-            var zweite  = await AskAsync(alice, "sub-51",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:zweiter",
+            var second  = await AskAsync(alice, "sub-51",
+                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:second",
                                                                  alice.BareJid, "sub-51"));
 
-            var zweiteId = SubscriptionOf(zweite)?.Attr("subid");
+            var secondId = SubscriptionOf(second)?.Attr("subid");
 
-            var liste = await AskAsync(alice, "list-1", SubscriptionsIq("list-1"));
+            var list = await AskAsync(alice, "list-1", SubscriptionsIq("list-1"));
 
-            var eintraege = SubscriptionsIn(liste);
+            var entries = SubscriptionsIn(list);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(liste.Attr("type"), Is.EqualTo("result"));
+                Assert.That(list.Attr("type"), Is.EqualTo("result"));
 
-                Assert.That(eintraege.Select(e => (e.Attr("node"), e.Attr("subid"))),
-                            Is.EquivalentTo(new[] { (Node, ersteId), ("urn:example:zweiter", zweiteId) }));
+                Assert.That(entries.Select(e => (e.Attr("node"), e.Attr("subid"))),
+                            Is.EquivalentTo(new[] { (Node, firstId), ("urn:example:second", secondId) }));
 
-                Assert.That(eintraege.Select(e => e.Attr("jid")).Distinct(),
+                Assert.That(entries.Select(e => e.Attr("jid")).Distinct(),
                             Is.EqualTo(new[] { alice.BareJid }));
 
-                Assert.That(eintraege.Select(e => e.Attr("subscription")).Distinct(),
+                Assert.That(entries.Select(e => e.Attr("subscription")).Distinct(),
                             Is.EqualTo(new[] { "subscribed" }));
 
             });
@@ -1952,12 +1936,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSubscriptionList_ShowsOnlyMyOwn()
 
         /// <summary>
-        /// Fremde Abonnements zählt niemand auf.
+        /// Foreign subscriptions nobody enumerates.
         /// </summary>
         /// <remarks>
-        /// <b>Das ist eine Auskunft über Menschen und nicht über Knoten.</b>
-        /// Wer sie bekäme, erführe, wer sich wofür interessiert - und Carol
-        /// hätte niemandem etwas gesagt.
+        /// <b>This is information about human beings and not about nodes.</b>
+        /// Whoever got it would learn who is interested in what - and Carol
+        /// would have told nobody anything.
         /// </remarks>
         [Test]
         public async Task TheSubscriptionList_ShowsOnlyMyOwn()
@@ -1971,11 +1955,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             await SubscribeAsync(alice, "sub-53");
 
-            var liste = await AskAsync(alice, "list-2", SubscriptionsIq("list-2"));
+            var list = await AskAsync(alice, "list-2", SubscriptionsIq("list-2"));
 
-            Assert.That(SubscriptionsIn(liste).Select(e => e.Attr("jid")),
+            Assert.That(SubscriptionsIn(list).Select(e => e.Attr("jid")),
                         Is.EqualTo(new[] { alice.BareJid }),
-                        "In der Liste stehen fremde Abonnements.");
+                        "Foreign subscriptions stand in the list.");
 
         }
 
@@ -1984,7 +1968,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSubscriptionList_CanBeScopedToOneNode()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 5.6: mit <c>node</c> nur dessen Abonnements.
+        /// XEP-0060, section 5.6: with <c>node</c> only its subscriptions.
         /// </summary>
         [Test]
         public async Task TheSubscriptionList_CanBeScopedToOneNode()
@@ -1993,20 +1977,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await PublishingBobAsync();
 
             await AskAsync(bob, "new-11",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:zweiter", "new-11"));
+                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-11"));
 
             var alice = await ConnectClientAsync("alice");
 
             await SubscribeAsync(alice, "sub-54");
 
             await AskAsync(alice, "sub-55",
-                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:zweiter",
+                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:second",
                                                    alice.BareJid, "sub-55"));
 
-            var liste = await AskAsync(alice, "list-3", SubscriptionsIq("list-3", "urn:example:zweiter"));
+            var list = await AskAsync(alice, "list-3", SubscriptionsIq("list-3", "urn:example:second"));
 
-            Assert.That(SubscriptionsIn(liste).Select(e => e.Attr("node")),
-                        Is.EqualTo(new[] { "urn:example:zweiter" }));
+            Assert.That(SubscriptionsIn(list).Select(e => e.Attr("node")),
+                        Is.EqualTo(new[] { "urn:example:second" }));
 
         }
 
@@ -2015,13 +1999,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoSubscriptionsOnOneNode_AppearTwice()
 
         /// <summary>
-        /// Und damit wird die Klemme aus K3 auflösbar: Beide Kennungen stehen
-        /// in der Liste.
+        /// And with that the bind from K3 becomes resolvable: both ids stand
+        /// in the list.
         /// </summary>
         /// <remarks>
-        /// Wer nach einem Verbindungsabriss zweimal abonniert hat, konnte
-        /// bisher keines davon beenden - der Dienst verlangt bei mehreren eine
-        /// Kennung, und der Client kannte keine mehr. Hier stehen sie.
+        /// Whoever has subscribed twice after a connection break could until
+        /// now end none of them - the service demands an id when there are
+        /// several, and the client knew none any more. Here they stand.
         /// </remarks>
         [Test]
         public async Task TwoSubscriptionsOnOneNode_AppearTwice()
@@ -2031,13 +2015,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice  = await ConnectClientAsync("alice");
 
-            var erste  = await SubscribeAsync(alice, "sub-56");
-            var zweite = await SubscribeAsync(alice, "sub-57");
+            var first  = await SubscribeAsync(alice, "sub-56");
+            var second = await SubscribeAsync(alice, "sub-57");
 
-            var liste = await AskAsync(alice, "list-4", SubscriptionsIq("list-4"));
+            var list = await AskAsync(alice, "list-4", SubscriptionsIq("list-4"));
 
-            Assert.That(SubscriptionsIn(liste).Select(e => e.Attr("subid")),
-                        Is.EquivalentTo(new[] { erste, zweite }));
+            Assert.That(SubscriptionsIn(list).Select(e => e.Attr("subid")),
+                        Is.EquivalentTo(new[] { first, second }));
 
         }
 
@@ -2046,12 +2030,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAnySubscription_TheListIsEmptyAndNoError()
 
         /// <summary>
-        /// Keine Abonnements sind eine leere Liste und kein Fehler.
+        /// No subscriptions are an empty list and no error.
         /// </summary>
         /// <remarks>
-        /// Die Frage war beantwortbar, die Antwort lautet „keine". Ein Fehler
-        /// hiesse etwas anderes - nämlich dass sich die Frage nicht stellen
-        /// liess, und ein Client müsste anschliessend raten, woran es lag.
+        /// The question was answerable, the answer reads "none". An error would
+        /// mean something else - namely that the question could not be put, and
+        /// a client would afterwards have to guess what it was down to.
         /// </remarks>
         [Test]
         public async Task WithoutAnySubscription_TheListIsEmptyAndNoError()
@@ -2061,12 +2045,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var liste = await AskAsync(alice, "list-5", SubscriptionsIq("list-5"));
+            var list = await AskAsync(alice, "list-5", SubscriptionsIq("list-5"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(liste.Attr("type"), Is.EqualTo("result"));
-                Assert.That(SubscriptionsIn(liste), Is.Empty);
+                Assert.That(list.Attr("type"), Is.EqualTo("result"));
+                Assert.That(SubscriptionsIn(list), Is.Empty);
             });
 
         }
@@ -2076,13 +2060,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOwner_IsTheAccountAndCannotBeChanged()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 8.9: Der Eigentümer steht in der Liste, ohne
-        /// dass ihn jemand eingetragen hätte - und lässt sich nicht umtragen.
+        /// XEP-0060, section 8.9: the owner stands in the list without
+        /// anybody having entered them - and cannot be moved out.
         /// </summary>
         /// <remarks>
-        /// Ein PEP-Knoten gehört dem Menschen, in dessen Konto er steht. Wer
-        /// den Eigentümer wechseln könnte, könnte einem anderen sein eigenes
-        /// Konto wegnehmen.
+        /// A PEP node belongs to the human being in whose account it stands.
+        /// Whoever could change the owner could take away somebody else's own
+        /// account.
         /// </remarks>
         [Test]
         public async Task TheOwner_IsTheAccountAndCannotBeChanged()
@@ -2091,25 +2075,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var liste = await AskAsync(bob, "aff-1", AffiliationsIq("aff-1", "get"));
+            var list = await AskAsync(bob, "aff-1", AffiliationsIq("aff-1", "get"));
 
-            Assert.That(AffiliationsIn(liste).Select(e => (e.Attr("jid"), e.Attr("affiliation"))),
+            Assert.That(AffiliationsIn(list).Select(e => (e.Attr("jid"), e.Attr("affiliation"))),
                         Is.EqualTo(new[] { ($"bob@{Server.Domain}", "owner") }));
 
-            var abgewiesen = await AskAsync(bob, "aff-2",
-                                            AffiliationsIq("aff-2", "set",
-                                                           $"<affiliation jid='{alice.BareJid}' affiliation='owner'/>"));
+            var refused = await AskAsync(bob, "aff-2",
+                                         AffiliationsIq("aff-2", "set",
+                                                        $"<affiliation jid='{alice.BareJid}' affiliation='owner'/>"));
 
-            var selbst = await AskAsync(bob, "aff-3",
-                                        AffiliationsIq("aff-3", "set",
-                                                       $"<affiliation jid='bob@{Server.Domain}' affiliation='member'/>"));
+            var himself = await AskAsync(bob, "aff-3",
+                                         AffiliationsIq("aff-3", "set",
+                                                        $"<affiliation jid='bob@{Server.Domain}' affiliation='member'/>"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(ConditionOf(abgewiesen), Is.EqualTo("not-allowed"),
-                            "Einen zweiten Eigentümer gibt es nicht.");
-                Assert.That(ConditionOf(selbst),     Is.EqualTo("not-allowed"),
-                            "Und der Eigentümer kann sich nicht selbst herabstufen.");
+                Assert.That(ConditionOf(refused), Is.EqualTo("not-allowed"),
+                            "A second owner does not exist.");
+                Assert.That(ConditionOf(himself), Is.EqualTo("not-allowed"),
+                            "And the owner cannot demote themselves.");
             });
 
         }
@@ -2119,14 +2103,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAccountApi_RefusesToMoveTheOwnership()
 
         /// <summary>
-        /// Auch unterhalb des Protokolls: Die Eigentümerschaft ist nicht
-        /// setzbar.
+        /// Below the protocol as well: the ownership cannot be set.
         /// </summary>
         /// <remarks>
-        /// Der Server weist es schon ab, bevor es hierher kommt - diese Prüfung
-        /// ist trotzdem keine doppelte, sondern die Zusage einer öffentlichen
-        /// Methode. Eine, die den Eigentümer stillschweigend änderte, wäre eine
-        /// Falle für den nächsten Aufrufer.
+        /// The server already refuses it before it gets here - this check is no
+        /// duplicate all the same, but the promise of a public method. One that
+        /// silently changed the owner would be a trap for the next caller.
         /// </remarks>
         [Test]
         public async Task TheAccountApi_RefusesToMoveTheOwnership()
@@ -2134,23 +2116,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await PublishingBobAsync();
 
-            var konto = Server.GetAccount($"bob@{Server.Domain}")!;
+            var account = Server.GetAccount($"bob@{Server.Domain}")!;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(konto.SetPepAffiliation(Node, $"alice@{Server.Domain}", PubSubAffiliation.Owner),
+                Assert.That(account.SetPepAffiliation(Node, $"alice@{Server.Domain}", PubSubAffiliation.Owner),
                             Is.False,
-                            "Einen zweiten Eigentümer gibt es nicht.");
+                            "A second owner does not exist.");
 
-                Assert.That(konto.SetPepAffiliation(Node, $"bob@{Server.Domain}", PubSubAffiliation.Member),
+                Assert.That(account.SetPepAffiliation(Node, $"bob@{Server.Domain}", PubSubAffiliation.Member),
                             Is.False,
-                            "Und der Eigentümer ist nicht herabzustufen.");
+                            "And the owner cannot be demoted.");
 
-                Assert.That(konto.PepAffiliationOf(Node, $"bob@{Server.Domain}"),
+                Assert.That(account.PepAffiliationOf(Node, $"bob@{Server.Domain}"),
                             Is.EqualTo(PubSubAffiliation.Owner));
 
-                Assert.That(konto.PepAffiliationOf(Node, $"alice@{Server.Domain}"),
+                Assert.That(account.PepAffiliationOf(Node, $"alice@{Server.Domain}"),
                             Is.EqualTo(PubSubAffiliation.None));
 
             });
@@ -2162,7 +2144,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AffiliationsOfANode_AreTheOwnersBusiness()
 
         /// <summary>
-        /// Wer an einem Knoten was ist, geht nur den Eigentümer an.
+        /// Who is what at a node concerns the owner alone.
         /// </summary>
         [Test]
         public async Task AffiliationsOfANode_AreTheOwnersBusiness()
@@ -2172,12 +2154,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "aff-4", AffiliationsIq("aff-4", "get"));
+            var reply = await AskAsync(alice, "aff-4", AffiliationsIq("aff-4", "get"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(antwort.Attr("type"), Is.EqualTo("error"));
-                Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
+                Assert.That(reply.Attr("type"), Is.EqualTo("error"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
             });
 
         }
@@ -2187,13 +2169,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APublisher_MayPublishIntoAForeignNode()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 4.1: Ein <c>publisher</c> darf in einen fremden
-        /// Knoten schreiben - und die Meldung kommt trotzdem vom Eigentümer.
+        /// XEP-0060, section 4.1: a <c>publisher</c> may write into a foreign
+        /// node - and the event comes from the owner all the same.
         /// </summary>
         /// <remarks>
-        /// Der zweite Teil ist der wichtige. Käme sie vom Schreibenden, wäre
-        /// sie eine Falschaussage über die Herkunft - und der Spoofing-Schutz
-        /// des Empfängers hätte recht, sie zu verwerfen.
+        /// The second part is the important one. If it came from the writer, it
+        /// would be a false statement about the origin - and the spoofing
+        /// protection of the receiver would be right to throw it away.
         /// </remarks>
         [Test]
         public async Task APublisher_MayPublishIntoAForeignNode()
@@ -2209,25 +2191,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var carol = await ConnectClientAsync("carol");
             await SubscribeAsync(carol, "sub-60");
 
-            var ereignisse = CollectEvents(carol);
+            var events = CollectEvents(carol);
 
-            var antwort = await AskAsync(alice, "pub-50",
-                                         $"<iq type='set' to='bob@{Server.Domain}' id='pub-50'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<publish node='{Node}'><item id='50'>" +
-                                         "<w xmlns='urn:example:x'>von Alice</w></item></publish>" +
-                                         "</pubsub></iq>");
+            var reply = await AskAsync(alice, "pub-50",
+                                       $"<iq type='set' to='bob@{Server.Domain}' id='pub-50'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<publish node='{Node}'><item id='50'>" +
+                                       "<w xmlns='urn:example:x'>from Alice</w></item></publish>" +
+                                       "</pubsub></iq>");
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
             Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.GetPepItems(Node).Select(e => e.ItemId),
                         Does.Contain("50"),
-                        "Der Eintrag gehört in Bobs Knoten und nicht in Alices.");
+                        "The item belongs in Bob's node and not in Alice's.");
 
-            await WaitFor(() => Count(ereignisse) > 0, "die Benachrichtigung an den Abonnenten");
+            await WaitFor(() => Count(events) > 0, "the notification to the subscriber");
 
-            Assert.That(ereignisse[0], Does.Contain($"from='bob@{Server.Domain}'"),
-                        "Die Meldung kommt vom Eigentümer des Knotens.");
+            Assert.That(events[0], Does.Contain($"from='bob@{Server.Domain}'"),
+                        "The event comes from the owner of the node.");
 
         }
 
@@ -2236,12 +2218,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheRole_PublishingIntoAForeignNodeStaysForbidden()
 
         /// <summary>
-        /// Die Gegenprobe: Ohne Rolle bleibt es bei der Absage.
+        /// The cross-check: without the role the refusal stands.
         /// </summary>
         /// <remarks>
-        /// Ohne sie prüfte der vorige Test nur, dass überhaupt jemand schreiben
-        /// darf - und die Prüfung, gegen die die OMEMO-Signatur steht, wäre
-        /// stillschweigend entfallen.
+        /// Without it the previous test would only check that somebody may
+        /// write at all - and the check the OMEMO signature stands against
+        /// would have fallen away in silence.
         /// </remarks>
         [Test]
         public async Task WithoutTheRole_PublishingIntoAForeignNodeStaysForbidden()
@@ -2251,16 +2233,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(alice, "pub-51",
-                                         $"<iq type='set' to='bob@{Server.Domain}' id='pub-51'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<publish node='{Node}'><item id='51'>" +
-                                         "<w xmlns='urn:example:x'>gefälscht</w></item></publish>" +
-                                         "</pubsub></iq>");
+            var reply = await AskAsync(alice, "pub-51",
+                                       $"<iq type='set' to='bob@{Server.Domain}' id='pub-51'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<publish node='{Node}'><item id='51'>" +
+                                       "<w xmlns='urn:example:x'>forged</w></item></publish>" +
+                                       "</pubsub></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
                 Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.GetPepItems(Node).Select(e => e.ItemId),
                             Does.Not.Contain("51"));
             });
@@ -2272,7 +2254,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APublisher_MayNotConfigureTheNode()
 
         /// <summary>
-        /// Schreiben dürfen heisst nicht bestimmen dürfen.
+        /// Being allowed to write does not mean being allowed to decide.
         /// </summary>
         [Test]
         public async Task APublisher_MayNotConfigureTheNode()
@@ -2285,11 +2267,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            AffiliationsIq("aff-6", "set",
                                           $"<affiliation jid='{alice.BareJid}' affiliation='publisher'/>"));
 
-            var antwort = await AskAsync(alice, "cfg-30",
-                                         ConfigureIq("cfg-30", "set",
-                                                     ConfigForm("<field var='pubsub#persist_items'><value>0</value></field>")));
+            var reply = await AskAsync(alice, "cfg-30",
+                                       ConfigureIq("cfg-30", "set",
+                                                   ConfigForm("<field var='pubsub#persist_items'><value>0</value></field>")));
 
-            Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
+            Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
 
         }
 
@@ -2298,20 +2280,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARole_BelongsToANodeAndNotToAnAccount()
 
         /// <summary>
-        /// Wer an einem Knoten schreiben darf, darf es nicht überall.
+        /// Whoever may write at one node may not do it everywhere.
         /// </summary>
         /// <remarks>
-        /// <b>Der Test hiess zuerst „ein Publizierender kann keine Knoten
-        /// anlegen" und prüfte etwas, das es gar nicht gibt:</b> An einem
-        /// Knoten, den es nicht gibt, hat niemand eine Rolle - die Absage
-        /// kommt schon von der Rollenprüfung. Die eigens dafür geschriebene
-        /// Prüfung auf die Existenz war damit unerreichbar und ist wieder
-        /// draussen.
+        /// <b>The test was first called "a publisher cannot create nodes" and
+        /// checked something that does not exist at all:</b> at a node that
+        /// does not exist nobody has a role - the refusal already comes from
+        /// the role check. The existence check written expressly for it was
+        /// thereby unreachable and is out again.
         ///
-        /// Was übrig bleibt, ist die Regel dahinter, und die ist prüfbar: Eine
-        /// Rolle gehört einem Knoten und nicht einem Konto. Sonst wäre ein
-        /// einmal vergebenes Schreibrecht ein Schreibrecht auf alles - auch
-        /// auf den OMEMO-Knoten, an dem sonst die Signatur steht.
+        /// What is left is the rule behind it, and that is checkable: a role
+        /// belongs to a node and not to an account. Otherwise a write
+        /// permission granted once would be a write permission on everything -
+        /// on the OMEMO node as well, where the signature otherwise stands.
         /// </remarks>
         [Test]
         public async Task ARole_BelongsToANodeAndNotToAnAccount()
@@ -2321,23 +2302,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             await AskAsync(bob, "new-21",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:zweiter", "new-21"));
+                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-21"));
 
             await AskAsync(bob, "aff-7",
                            AffiliationsIq("aff-7", "set",
                                           $"<affiliation jid='{alice.BareJid}' affiliation='publisher'/>"));
 
-            var antwort = await AskAsync(alice, "pub-52",
-                                         $"<iq type='set' to='bob@{Server.Domain}' id='pub-52'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'>" +
-                                         "<publish node='urn:example:zweiter'><item id='52'>" +
-                                         "<w xmlns='urn:example:x'>a</w></item></publish>" +
-                                         "</pubsub></iq>");
+            var reply = await AskAsync(alice, "pub-52",
+                                       $"<iq type='set' to='bob@{Server.Domain}' id='pub-52'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'>" +
+                                       "<publish node='urn:example:second'><item id='52'>" +
+                                       "<w xmlns='urn:example:x'>a</w></item></publish>" +
+                                       "</pubsub></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
-                Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.GetPepItems("urn:example:zweiter"),
+                Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
+                Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.GetPepItems("urn:example:second"),
                             Is.Empty);
             });
 
@@ -2348,18 +2329,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnOutcast_IsLockedOutAndLosesHisSubscription()
 
         /// <summary>
-        /// XEP-0060, Abschnitte 6.1.3.8 und 8.9.4: Ausgeschlossen heisst
-        /// ausgeschlossen - und bestehende Abonnements enden.
+        /// XEP-0060, sections 6.1.3.8 and 8.9.4: locked out means locked out -
+        /// and existing subscriptions end.
         /// </summary>
         /// <remarks>
-        /// Ihn nur an neuen zu hindern hiesse, den Ausschluss von dem Zufall
-        /// abhängig zu machen, ob er vorher schon da war.
+        /// To hinder them only at new ones would mean making the lockout depend
+        /// on the coincidence of whether they were there before.
         ///
-        /// Die Absage ist eine andere als beim Zugriffsmodell:
-        /// <c>&lt;forbidden/&gt;</c> statt <c>&lt;not-authorized/&gt;</c>.
-        /// Letzteres nennt mit der Presence-Anfrage den Weg hinein - für einen
-        /// Ausgeschlossenen gäbe es den nicht, und ihn darauf zu schicken wäre
-        /// eine falsche Auskunft.
+        /// The refusal is another one than with the access model:
+        /// <c>&lt;forbidden/&gt;</c> instead of <c>&lt;not-authorized/&gt;</c>.
+        /// The latter names the way in with the presence request - for somebody
+        /// locked out there would be none, and to send them down that road
+        /// would be false information.
         /// </remarks>
         [Test]
         public async Task AnOutcast_IsLockedOutAndLosesHisSubscription()
@@ -2374,22 +2355,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            AffiliationsIq("aff-8", "set",
                                           $"<affiliation jid='{alice.BareJid}' affiliation='outcast'/>"));
 
-            var abgerufen = await AskAsync(alice, "get-30",
-                                           $"<iq type='get' to='bob@{Server.Domain}' id='get-30'>" +
-                                           $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            var fetched = await AskAsync(alice, "get-30",
+                                         $"<iq type='get' to='bob@{Server.Domain}' id='get-30'>" +
+                                         $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
-            var abonniert = await AskAsync(alice, "sub-62",
-                                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
-                                                                   alice.BareJid, "sub-62"));
+            var subscribed = await AskAsync(alice, "sub-62",
+                                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                                                    alice.BareJid, "sub-62"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(ConditionOf(abgerufen), Is.EqualTo("forbidden"));
-                Assert.That(ConditionOf(abonniert), Is.EqualTo("forbidden"));
+                Assert.That(ConditionOf(fetched),    Is.EqualTo("forbidden"));
+                Assert.That(ConditionOf(subscribed), Is.EqualTo("forbidden"));
 
                 Assert.That(Server.GetAccount($"bob@{Server.Domain}")!.PepSubscriptions(Node), Is.Empty,
-                            "Das bestehende Abonnement hätte enden müssen.");
+                            "The existing subscription should have ended.");
 
             });
 
@@ -2400,16 +2381,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownRole_IsRejectedAndChangesNothing()
 
         /// <summary>
-        /// Eine Rolle, die dieser Dienst nicht kennt, wird abgewiesen.
+        /// A role this service does not know is refused.
         /// </summary>
         /// <remarks>
-        /// <b>Besonders teuer wäre hier die Nachsicht:</b> Wer jemanden
-        /// ausschliessen will und sich vertippt, bekäme sonst ein
-        /// <c>result</c> und hielte den Ausschluss für vollzogen.
+        /// <b>Leniency would be especially expensive here:</b> whoever wants to
+        /// lock somebody out and mistypes would otherwise get a <c>result</c>
+        /// and hold the lockout to be done.
         ///
-        /// Und geprüft wird alles, bevor irgendetwas gilt: Eine Anfrage, die
-        /// zur Hälfte wirkt, wäre schlimmer als eine, die ganz abgewiesen wird
-        /// - der Absender wüsste nicht, welche Hälfte.
+        /// And everything is checked before anything holds: a request that
+        /// takes effect by half would be worse than one refused entirely - the
+        /// sender would not know which half.
         /// </remarks>
         [Test]
         public async Task AnUnknownRole_IsRejectedAndChangesNothing()
@@ -2418,18 +2399,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var antwort = await AskAsync(bob, "aff-9",
-                                         AffiliationsIq("aff-9", "set",
-                                                        $"<affiliation jid='{alice.BareJid}' affiliation='publisher'/>" +
-                                                        $"<affiliation jid='carol@{Server.Domain}' affiliation='publish-only'/>"));
+            var reply = await AskAsync(bob, "aff-9",
+                                       AffiliationsIq("aff-9", "set",
+                                                      $"<affiliation jid='{alice.BareJid}' affiliation='publisher'/>" +
+                                                      $"<affiliation jid='carol@{Server.Domain}' affiliation='publish-only'/>"));
 
-            Assert.That(ConditionOf(antwort), Is.EqualTo("bad-request"));
+            Assert.That(ConditionOf(reply), Is.EqualTo("bad-request"));
 
-            var liste = await AskAsync(bob, "aff-10", AffiliationsIq("aff-10", "get"));
+            var list = await AskAsync(bob, "aff-10", AffiliationsIq("aff-10", "get"));
 
-            Assert.That(AffiliationsIn(liste).Select(e => e.Attr("jid")),
+            Assert.That(AffiliationsIn(list).Select(e => e.Attr("jid")),
                         Is.EqualTo(new[] { $"bob@{Server.Domain}" }),
-                        "Auch die gültige Hälfte darf nicht gewirkt haben.");
+                        "The valid half must not have taken effect either.");
 
         }
 
@@ -2438,7 +2419,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TakingTheRoleBack_EndsThePermission()
 
         /// <summary>
-        /// <c>none</c> nimmt die Rolle zurück - und mit ihr, was sie erlaubte.
+        /// <c>none</c> takes the role back - and with it what it allowed.
         /// </summary>
         [Test]
         public async Task TakingTheRoleBack_EndsThePermission()
@@ -2455,20 +2436,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            AffiliationsIq("aff-12", "set",
                                           $"<affiliation jid='{alice.BareJid}' affiliation='none'/>"));
 
-            var antwort = await AskAsync(alice, "pub-53",
-                                         $"<iq type='set' to='bob@{Server.Domain}' id='pub-53'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'>" +
-                                         $"<publish node='{Node}'><item id='53'>" +
-                                         "<w xmlns='urn:example:x'>zu spät</w></item></publish>" +
-                                         "</pubsub></iq>");
+            var reply = await AskAsync(alice, "pub-53",
+                                       $"<iq type='set' to='bob@{Server.Domain}' id='pub-53'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'>" +
+                                       $"<publish node='{Node}'><item id='53'>" +
+                                       "<w xmlns='urn:example:x'>too late</w></item></publish>" +
+                                       "</pubsub></iq>");
 
-            Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
+            Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
 
-            var liste = await AskAsync(bob, "aff-13", AffiliationsIq("aff-13", "get"));
+            var list = await AskAsync(bob, "aff-13", AffiliationsIq("aff-13", "get"));
 
-            Assert.That(AffiliationsIn(liste).Select(e => e.Attr("jid")),
+            Assert.That(AffiliationsIn(list).Select(e => e.Attr("jid")),
                         Is.EqualTo(new[] { $"bob@{Server.Domain}" }),
-                        "Eine zurückgenommene Rolle steht nicht mehr in der Liste.");
+                        "A role taken back does not stand in the list any more.");
 
         }
 
@@ -2477,11 +2458,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MyOwnAffiliations_AreListedAcrossNodes()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 5.7: Was bin ich wo?
+        /// XEP-0060, section 5.7: what am I where?
         /// </summary>
         /// <remarks>
-        /// Wie bei den Abonnements: die Rollen des Fragenden, nie die eines
-        /// anderen. Wer fremde aufzählen dürfte, erführe, wer wo etwas darf.
+        /// As with the subscriptions: the roles of the one asking, never those
+        /// of another. Whoever were allowed to enumerate foreign ones would
+        /// learn who may do what where.
         /// </remarks>
         [Test]
         public async Task MyOwnAffiliations_AreListedAcrossNodes()
@@ -2490,7 +2472,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await PublishingBobAsync();
 
             await AskAsync(bob, "new-20",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:zweiter", "new-20"));
+                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-20"));
 
             var alice = await ConnectClientAsync("alice");
             var carol = await ConnectClientAsync("carol");
@@ -2500,21 +2482,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                           $"<affiliation jid='{alice.BareJid}' affiliation='publisher'/>"));
 
             await AskAsync(bob, "aff-15",
-                           AffiliationsIq("aff-15", "set", node: "urn:example:zweiter",
-                                          inhalt: $"<affiliation jid='{carol.BareJid}' affiliation='member'/>"));
+                           AffiliationsIq("aff-15", "set", node: "urn:example:second",
+                                          content: $"<affiliation jid='{carol.BareJid}' affiliation='member'/>"));
 
-            var meine = await AskAsync(alice, "own-1", OwnAffiliationsIq("own-1"));
+            var mine = await AskAsync(alice, "own-1", OwnAffiliationsIq("own-1"));
 
-            Assert.That(AffiliationsIn(meine, PubSubNamespace)
+            Assert.That(AffiliationsIn(mine, PubSubNamespace)
                             .Select(e => (e.Attr("node"), e.Attr("affiliation"))),
                         Is.EqualTo(new[] { (Node, "publisher") }),
-                        "Carols Rolle geht Alice nichts an.");
+                        "Carol's role is none of Alice's business.");
 
             var bobs = await AskAsync(bob, "own-2", OwnAffiliationsIq("own-2"));
 
             Assert.That(AffiliationsIn(bobs, PubSubNamespace).Select(e => e.Attr("affiliation")).Distinct(),
                         Is.EqualTo(new[] { "owner" }),
-                        "Dem Eigentümer gehören alle seine Knoten.");
+                        "All their nodes belong to the owner.");
 
         }
 
@@ -2523,20 +2505,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OnAWhitelistedNode_OnlyTheListGetsIn()
 
         /// <summary>
-        /// XEP-0060, Abschnitt 4.5: <c>whitelist</c> - und damit entscheidet
-        /// <c>member</c> zum ersten Mal etwas.
+        /// XEP-0060, section 4.5: <c>whitelist</c> - and with that
+        /// <c>member</c> decides something for the first time.
         /// </summary>
         /// <remarks>
-        /// <b>Das strengste der drei Modelle und das einzige, bei dem der
-        /// Roster nichts entscheidet.</b> Presence-Berechtigung entsteht
-        /// nebenbei - jemand nimmt einen Kontakt auf, und schon sieht er mehr.
-        /// Eine Liste entsteht nicht nebenbei.
+        /// <b>The strictest of the three models and the only one where the
+        /// roster decides nothing.</b> Presence permission comes about in
+        /// passing - somebody takes up a contact, and already they see more. A
+        /// list does not come about in passing.
         /// </remarks>
         [Test]
         public async Task OnAWhitelistedNode_OnlyTheListGetsIn()
         {
 
-            // Carol ist Kontakt und stünde bei 'presence' drin - hier nicht.
+            // Carol is a contact and would be in on 'presence' - here not.
             MakeContacts("carol", "bob");
 
             var bob   = await PublishingBobAsync();
@@ -2551,36 +2533,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-40", "set",
                                        ConfigForm("<field var='pubsub#access_model'><value>whitelist</value></field>")));
 
-            var gelesen = await AskAsync(bob, "cfg-40b", ConfigureIq("cfg-40b", "get"));
+            var loaded = await AskAsync(bob, "cfg-40b", ConfigureIq("cfg-40b", "get"));
 
-            Assert.That(ConfigField(gelesen, "pubsub#access_model"), Is.EqualTo("whitelist"),
-                        "Das Formular muss das Modell beim Namen nennen - sonst hielte der " +
-                        "Eigentümer den Knoten für offen und liesse ihn geschlossen, oder umgekehrt.");
+            Assert.That(ConfigField(loaded, "pubsub#access_model"), Is.EqualTo("whitelist"),
+                        "The form has to name the model by its name - otherwise the owner " +
+                        "would hold the node to be open and leave it closed, or the other way round.");
 
-            var mitglied = await AskAsync(alice, "get-40",
-                                          $"<iq type='get' to='bob@{Server.Domain}' id='get-40'>" +
-                                          $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            var member = await AskAsync(alice, "get-40",
+                                        $"<iq type='get' to='bob@{Server.Domain}' id='get-40'>" +
+                                        $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
-            var kontakt = await AskAsync(carol, "get-41",
+            var contact = await AskAsync(carol, "get-41",
                                          $"<iq type='get' to='bob@{Server.Domain}' id='get-41'>" +
                                          $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
-            var eigener = await AskAsync(bob, "get-42",
-                                         $"<iq type='get' id='get-42'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            var own = await AskAsync(bob, "get-42",
+                                     $"<iq type='get' id='get-42'>" +
+                                     $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(mitglied.Attr("type"), Is.EqualTo("result"),
-                            "Wer auf der Liste steht, kommt herein.");
+                Assert.That(member.Attr("type"), Is.EqualTo("result"),
+                            "Whoever stands on the list gets in.");
 
-                Assert.That(kontakt.Attr("type"), Is.EqualTo("error"),
-                            "Ein Kontakt steht nicht deshalb auf der Liste.");
-                Assert.That(ConditionOf(kontakt),  Is.EqualTo("not-authorized"));
+                Assert.That(contact.Attr("type"), Is.EqualTo("error"),
+                            "A contact does not stand on the list for that reason.");
+                Assert.That(ConditionOf(contact),  Is.EqualTo("not-authorized"));
 
-                Assert.That(eigener.Attr("type"), Is.EqualTo("result"),
-                            "Der Eigentümer steht auf keiner Liste und kommt trotzdem an seinen Knoten.");
+                Assert.That(own.Attr("type"), Is.EqualTo("result"),
+                            "The owner stands on no list and gets to their node all the same.");
 
             });
 
@@ -2591,12 +2573,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OnAWhitelistedNode_AMemberMaySubscribe()
 
         /// <summary>
-        /// Und dasselbe beim Abonnieren.
+        /// And the same with the subscribing.
         /// </summary>
         /// <remarks>
-        /// Beide Wege gehören geprüft: Ein Modell, das nur beim Abrufen gilt,
-        /// liesse sich mit einem Abonnement umgehen - der Ausgesperrte bekäme
-        /// die Einträge zugestellt, statt sie zu holen.
+        /// Both ways belong checked: a model that holds only on fetching could
+        /// be got around with a subscription - the one locked out would have
+        /// the items delivered instead of fetching them.
         /// </remarks>
         [Test]
         public async Task OnAWhitelistedNode_AMemberMaySubscribe()
@@ -2614,19 +2596,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-41", "set",
                                        ConfigForm("<field var='pubsub#access_model'><value>whitelist</value></field>")));
 
-            var mitglied = await AskAsync(alice, "sub-70",
+            var member   = await AskAsync(alice, "sub-70",
                                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
                                                                   alice.BareJid, "sub-70"));
 
-            var fremder  = await AskAsync(carol, "sub-71",
+            var stranger = await AskAsync(carol, "sub-71",
                                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
                                                                   carol.BareJid, "sub-71"));
 
             Assert.Multiple(() =>
             {
-                Assert.That(mitglied.Attr("type"), Is.EqualTo("result"));
-                Assert.That(fremder.Attr("type"),  Is.EqualTo("error"));
-                Assert.That(ConditionOf(fremder),  Is.EqualTo("not-authorized"));
+                Assert.That(member.Attr("type"),   Is.EqualTo("result"));
+                Assert.That(stranger.Attr("type"), Is.EqualTo("error"));
+                Assert.That(ConditionOf(stranger), Is.EqualTo("not-authorized"));
             });
 
         }
@@ -2636,12 +2618,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APublisher_IsOnTheListToo()
 
         /// <summary>
-        /// Wer schreiben darf, darf auch lesen.
+        /// Whoever may write may also read.
         /// </summary>
         /// <remarks>
-        /// Alles andere wäre eine Rolle, die man nur mit einer zweiten
-        /// zusammen gebrauchen kann - und der Eigentümer müsste jedem
-        /// Publizierenden daran denken, ihn auch noch auf die Liste zu setzen.
+        /// Anything else would be a role one can use only together with a
+        /// second one - and the owner would have to remember, for every
+        /// publisher, to put them on the list as well.
         /// </remarks>
         [Test]
         public async Task APublisher_IsOnTheListToo()
@@ -2658,11 +2640,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            ConfigureIq("cfg-42", "set",
                                        ConfigForm("<field var='pubsub#access_model'><value>whitelist</value></field>")));
 
-            var antwort = await AskAsync(alice, "get-43",
-                                         $"<iq type='get' to='bob@{Server.Domain}' id='get-43'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            var reply = await AskAsync(alice, "get-43",
+                                       $"<iq type='get' to='bob@{Server.Domain}' id='get-43'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
-            Assert.That(antwort.Attr("type"), Is.EqualTo("result"));
+            Assert.That(reply.Attr("type"), Is.EqualTo("result"));
 
         }
 
@@ -2671,14 +2653,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnOutcast_StaysOutOfAnOpenNodeToo()
 
         /// <summary>
-        /// Und der Ausschluss steht über dem Modell - auch über
-        /// <c>whitelist</c>.
+        /// And the lockout stands above the model - above <c>whitelist</c> as
+        /// well.
         /// </summary>
         /// <remarks>
-        /// Das Zugriffsmodell sagt, wer hereindarf; die Rolle sagt, wer
-        /// draussen bleibt. Ein Ausgeschlossener, den jemand versehentlich auf
-        /// die Liste setzt, bleibt draussen - sonst hinge der Ausschluss davon
-        /// ab, in welcher Reihenfolge zwei Anweisungen kamen.
+        /// The access model says who may come in; the role says who stays out.
+        /// Somebody locked out whom another puts on the list by mistake stays
+        /// out - otherwise the lockout would depend on the order in which two
+        /// instructions came.
         /// </remarks>
         [Test]
         public async Task AnOutcast_StaysOutOfAnOpenNodeToo()
@@ -2691,18 +2673,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            AffiliationsIq("aff-23", "set",
                                           $"<affiliation jid='{alice.BareJid}' affiliation='outcast'/>"));
 
-            // Der Knoten bleibt offen - der Ausschluss allein muss reichen.
-            var antwort = await AskAsync(alice, "get-44",
-                                         $"<iq type='get' to='bob@{Server.Domain}' id='get-44'>" +
-                                         $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
+            // The node stays open - the lockout alone has to be enough.
+            var reply = await AskAsync(alice, "get-44",
+                                       $"<iq type='get' to='bob@{Server.Domain}' id='get-44'>" +
+                                       $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(ConditionOf(antwort), Is.EqualTo("forbidden"));
+                Assert.That(ConditionOf(reply), Is.EqualTo("forbidden"));
                 Assert.That(Server.GetAccount($"bob@{Server.Domain}")!
                                   .PepNodeConfiguration(Node)!.AccessModel,
                             Is.EqualTo(PubSubAccessModel.Open),
-                            "Der Knoten stand offen - es lag allein an der Rolle.");
+                            "The node stood open - it was down to the role alone.");
             });
 
         }
@@ -2712,51 +2694,50 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheSubmittedForm_IsReadStrictly()
 
         /// <summary>
-        /// Was ein abgeschicktes Formular sagt - und was es nicht sagen darf.
+        /// What a submitted form says - and what it must not say.
         /// </summary>
         /// <remarks>
-        /// Ohne Server, weil es hier um das Lesen geht und nicht um den Weg.
-        /// Die vier Schreibweisen aus XEP-0004, Abschnitt 3.3 stehen alle
-        /// darin: Was hereinkommt, hat ein anderer geschrieben, und der darf
-        /// wählen.
+        /// Without a server, because this is about the reading and not about
+        /// the way. The four spellings from XEP-0004, section 3.3 all stand in
+        /// it: what comes in was written by somebody else, and they may choose.
         /// </remarks>
         [Test]
         public void TheSubmittedForm_IsReadStrictly()
         {
 
-            static XElement Formular(String inhalt)
-                => XElement.Parse($"<x xmlns='jabber:x:data' type='submit'>{inhalt}</x>");
+            static XElement Form(String content)
+                => XElement.Parse($"<x xmlns='jabber:x:data' type='submit'>{content}</x>");
 
-            static String Feld(String wert)
-                => $"<field var='pubsub#deliver'><value>{wert}</value></field>";
+            static String Field(String value)
+                => $"<field var='pubsub#deliver'><value>{value}</value></field>";
 
             Assert.Multiple(() =>
             {
 
-                foreach (var (wert, erwartet) in new[] { ("1", true), ("true", true),
+                foreach (var (value, expected) in new[] { ("1", true), ("true", true),
                                                          ("0", false), ("false", false) })
                 {
-                    Assert.That(PubSubSubscriptionOptions.TryRead(Formular(Feld(wert)), out var gelesen),
-                                Is.True, $"'{wert}' ist eine zulässige Schreibweise.");
-                    Assert.That(gelesen!.Deliver, Is.EqualTo(erwartet), $"'{wert}'");
+                    Assert.That(PubSubSubscriptionOptions.TryRead(Form(Field(value)), out var loaded),
+                                Is.True, $"'{value}' is an allowed spelling.");
+                    Assert.That(loaded!.Deliver, Is.EqualTo(expected), $"'{value}'");
                 }
 
-                Assert.That(PubSubSubscriptionOptions.TryRead(Formular(Feld("vielleicht")), out _),
-                            Is.False, "Alles andere ist kein Wahrheitswert.");
+                Assert.That(PubSubSubscriptionOptions.TryRead(Form(Field("maybe")), out _),
+                            Is.False, "Everything else is no truth value.");
 
-                Assert.That(PubSubSubscriptionOptions.TryRead(Formular(""), out var leer), Is.True);
-                Assert.That(leer!.Deliver, Is.True,
-                            "Ein fehlendes Feld steht auf der Vorgabe.");
+                Assert.That(PubSubSubscriptionOptions.TryRead(Form(""), out var empty), Is.True);
+                Assert.That(empty!.Deliver, Is.True,
+                            "A missing field stands on the default.");
 
-                // Ein Formular für einen anderen Zweck - etwa die
-                // publish-options aus XEP-0384 - trägt zufällig kein bekanntes
-                // Feld und ginge sonst als leere Einstellung durch.
+                // A form for another purpose - the publish-options from
+                // XEP-0384, say - happens to carry no known field and would
+                // otherwise pass as an empty setting.
                 Assert.That(PubSubSubscriptionOptions.TryRead(
-                                Formular("<field var='FORM_TYPE' type='hidden'>" +
-                                         "<value>http://jabber.org/protocol/pubsub#publish-options</value></field>"),
+                                Form("<field var='FORM_TYPE' type='hidden'>" +
+                                     "<value>http://jabber.org/protocol/pubsub#publish-options</value></field>"),
                                 out _),
                             Is.False,
-                            "Ein Formular für einen anderen Zweck ist keine Einstellung.");
+                            "A form for another purpose is no setting.");
 
             });
 
