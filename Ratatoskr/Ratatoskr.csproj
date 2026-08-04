@@ -21,7 +21,7 @@
       already: whoever uses a transitive dependency directly loses it at the
       moment at which the previous owner puts it down.
     -->
-    <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
   </ItemGroup>
 
   <ItemGroup>
