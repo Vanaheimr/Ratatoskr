@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push supersedes an in-flight run for the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # windows-latest, like Hermod and Styx. Here the reason is inherited rather
+    # than our own: Ratatoskr itself looks platform-neutral, but it builds
+    # Hermod, and that one pulls in System.Diagnostics.PerformanceCounter,
+    # System.IO.Ports and System.Drawing.Common. Linux would be cheaper and is
+    # worth a second matrix entry - but not before someone has seen it pass.
+    runs-on: windows-latest
+    steps:
+      # Three checkouts side by side, because this repository cannot be built
+      # on its own. Ratatoskr.csproj and RatatoskrTests.csproj reference
+      # ..\..\Hermod\Hermod\Hermod.csproj - a SIBLING directory - and Hermod in
+      # turn references ..\..\Styx\... the same way. There are no submodules for
+      # either, so the layout the relative paths assume has to be reproduced by
+      # hand:
+      #
+      #   Ratatoskr/   Hermod/   Styx/
+      #
+      # Note what this does not do: pin either of them. We build against Hermod
+      # master and Styx master, so a breaking change over there turns this red
+      # without anything in Ratatoskr having moved. That is the honest signal,
+      # but it is a choice - the superproject (Jabber) pins all three through
+      # submodules and is where a reproducible build lives.
+      - uses: actions/checkout@v4
+        with:
+          path: Ratatoskr
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Vanaheimr/Hermod
+          path: Hermod
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Vanaheimr/Styx
+          path: Styx
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        working-directory: Ratatoskr
+        run: dotnet build RatatoskrTests/RatatoskrTests.csproj --configuration Release
+
+      # No filter: what needs an environment this runner does not have skips
+      # itself, and only that. Three groups are affected, and none of them can
+      # be made to run here:
+      #
+      #   - the federation tests against Prosody and ejabberd, which want both
+      #     servers rootless in WSL and their certificates over
+      #     JABBER_PROSODY_CERTS / JABBER_EJABBERD_CERTS;
+      #   - the stream-management tests against the same two;
+      #   - the three OMEMO tests against python-omemo, which the oracle calls
+      #     through WSL.
+      #
+      # Measured, not supposed: without the certificate variables the suite
+      # comes out at 1115 passed, 25 skipped, 0 failed. That measurement ran on
+      # a machine that does have WSL, so the three oracle tests still ran there;
+      # a hosted runner has none and skips those as well. Expect 28 skipped
+      # here - and read a rise above that as a question, not as noise. The
+      # number of skipped tests is the only thing that tells a run which
+      # measured something from one which measured nothing.
+      #
+      # There is deliberately no nightly counterpart to this file. Hermod has
+      # one because its live DNS probes need nothing but a network; what is
+      # skipped here needs two XMPP servers and a Python implementation set up
+      # by hand in WSL, and a hosted runner cannot provide that at all. Those
+      # checks happen on the machine that has the setup, and the work plan says
+      # so.
+      - name: Test
+        timeout-minutes: 45
+        working-directory: Ratatoskr
+        run: dotnet test RatatoskrTests/RatatoskrTests.csproj --configuration Release --no-build --logger "console;verbosity=normal"
