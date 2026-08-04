@@ -32,8 +32,8 @@ jobs:
       # Note what this does not do: pin either of them. We build against Hermod
       # master and Styx master, so a breaking change over there turns this red
       # without anything in Ratatoskr having moved. That is the honest signal,
-      # but it is a choice - the superproject (Jabber) pins all three through
-      # submodules and is where a reproducible build lives.
+      # but it is a choice - the superproject (XMPPConformanceTests) pins all
+      # three submodules and is where a reproducible build lives.
       - uses: actions/checkout@v4
         with:
           path: Ratatoskr
@@ -58,9 +58,9 @@ jobs:
 
       # This suite tests the library against itself, and that is the whole
       # point of E19: everything that needs a foreign implementation - Prosody,
-      # ejabberd, python-omemo - moved to the Jabber repository, where the
-      # setups that produce those far sides have always lived. So a hosted
-      # runner can execute all of it.
+      # ejabberd, python-omemo - moved to the XMPPConformanceTests repository,
+      # where the setups that produce those far sides have always lived. So a
+      # hosted runner can execute all of it.
       #
       # Expect 1110 passed, 1 skipped. The one is a test for a property that
       # exists only in STARTTLS operation; it is the only environment-dependent

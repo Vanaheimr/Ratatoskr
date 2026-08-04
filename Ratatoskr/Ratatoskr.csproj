@@ -40,7 +40,7 @@
       server would land in Hermod's log again instead of failing the test -
       exactly the state D18, D19 and D54 took three steps to leave.
     -->
-    <InternalsVisibleTo Include="org.GraphDefined.Vanaheimr.Ratatoskr.Jabber.Tests" />
+    <InternalsVisibleTo Include="org.GraphDefined.Vanaheimr.Ratatoskr.XMPPConformanceTests" />
   </ItemGroup>
 
   <ItemGroup>

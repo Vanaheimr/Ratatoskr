@@ -21,8 +21,10 @@ Ratatoskr is the squirrel that runs up and down the world tree in the Edda,
 carrying messages between the eagle in the crown and the dragon at the root.
 A messenger, not a party to the conversation.
 
-A console client built on this library, and the setup for the tests against
-foreign servers, live in the **Jabber** project.
+A console client built on this library lives in
+**[XMPPConsole](https://github.com/Vanaheimr/XMPPConsole)**; the checks against
+foreign servers, together with the setups that produce them, live in
+**XMPPConformanceTests**.
 
 ## Authentication
 
@@ -58,9 +60,9 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 
 | XEP | Name | Status | Note |
 |-----|------|--------|------|
-| XEP-0013 | Flexible Offline Message Retrieval | ⛔ | Listed as *Deprecated* by the XSF (version 1.3, 2021-05-04): "Implementation of the protocol described herein is not recommended." Offline storage stays with the automatic flush per RFC 6121 §8.5.2.2.1 and XEP-0160 — see the Jabber project's work plan, D37 |
+| XEP-0013 | Flexible Offline Message Retrieval | ⛔ | Listed as *Deprecated* by the XSF (version 1.3, 2021-05-04): "Implementation of the protocol described herein is not recommended." Offline storage stays with the automatic flush per RFC 6121 §8.5.2.2.1 and XEP-0160 — see the work plan of the XMPPConformanceTests project, D37 |
 | XEP-0030 | Service Discovery | ✅ | disco#info and disco#items, both queried and answered. The request's `node` is mirrored back per §3.2; only nodes that denote this entity are answered — the caps node with and without the current `#ver` (XEP-0115 §6.2). Every other one, including a stale `ver`, gets `<item-not-found/>` with the query echoed back. disco#items answers from `DiscoManager.LocalItems` (empty by default: a client has no sub-entities); a `node` there is a branch in the tree and is rejected. The test server keeps no nodes and rejects every one |
-| XEP-0060 | Publish-Subscribe | ⚠️ | Incoming events are parsed, checked against spoofing, and carry their `SubID` from the SHIM header. Outgoing, every request is correlated with its reply: a subscription counts only after the service has confirmed it, `pending` is not a confirmation, several subscriptions to the same node stand side by side, and without a `subid` neither unsubscribing nor configuring happens when there are several. Per-subscription configuration (§6.3) and node configuration (§8.2) are read and set — only what the service confirmed is recorded, and `<create/>` sends its settings along, so the node is never briefly open in between. Affiliations are read and assigned (§5.7/§8.9); a list with one unreadable entry counts as unreadable as a whole. The owner sees the subscribers of their node (§8.8.1) and can remove them (§8.8.2) — remove only: a client that signs others up unasked has no name here. An unsubscription by the service (§8.8.4) strikes the subscription from our own bookkeeping; a confirmation by notification is accepted only if there is **an open request of our own** to match it (§8.6) — otherwise a service could sign the client up unasked. A `pending` is recorded but does not count as a subscription: "what did I apply for" and "am I subscribed" are two questions. As an owner, the client shows incoming requests and answers them (§8.6.1/§8.6.2). Nodes are deleted and purged (§8.4/§8.5) — **a deleted node takes the subscription to it along, a purged one does not** — and the strike-out is per service and not per name: `urn:xmpp:omemo:2:bundles` is called that at every account. Individual items are retracted (§7.2); incoming, the retraction is reported with the ids of the affected items and leaves the subscription standing. See the Jabber project's work plan, D70–D90 |
+| XEP-0060 | Publish-Subscribe | ⚠️ | Incoming events are parsed, checked against spoofing, and carry their `SubID` from the SHIM header. Outgoing, every request is correlated with its reply: a subscription counts only after the service has confirmed it, `pending` is not a confirmation, several subscriptions to the same node stand side by side, and without a `subid` neither unsubscribing nor configuring happens when there are several. Per-subscription configuration (§6.3) and node configuration (§8.2) are read and set — only what the service confirmed is recorded, and `<create/>` sends its settings along, so the node is never briefly open in between. Affiliations are read and assigned (§5.7/§8.9); a list with one unreadable entry counts as unreadable as a whole. The owner sees the subscribers of their node (§8.8.1) and can remove them (§8.8.2) — remove only: a client that signs others up unasked has no name here. An unsubscription by the service (§8.8.4) strikes the subscription from our own bookkeeping; a confirmation by notification is accepted only if there is **an open request of our own** to match it (§8.6) — otherwise a service could sign the client up unasked. A `pending` is recorded but does not count as a subscription: "what did I apply for" and "am I subscribed" are two questions. As an owner, the client shows incoming requests and answers them (§8.6.1/§8.6.2). Nodes are deleted and purged (§8.4/§8.5) — **a deleted node takes the subscription to it along, a purged one does not** — and the strike-out is per service and not per name: `urn:xmpp:omemo:2:bundles` is called that at every account. Individual items are retracted (§7.2); incoming, the retraction is reported with the ids of the affected items and leaves the subscription standing. See the work plan of the XMPPConformanceTests project, D70–D90 |
 | XEP-0085 | Chat State Notifications | ✅ | Sending + receiving |
 | XEP-0115 | Entity Capabilities | ✅ | ver string per §5.1 in full, including `xml:lang` and XEP-0128 forms, checked against both vectors from §5.2 and §5.3; replies are verified per §5.4, otherwise no cache entry |
 | XEP-0128 | Service Discovery Extensions | ✅ | Foreign forms are read, our own are served from `DiscoManager.LocalForms`; both go into the ver string. Empty by default — see below |
@@ -266,7 +268,7 @@ Three layers, cleanly separated:
 
 | Layer | Type | Job |
 |-------|------|-----|
-| UI | — | Command line, command dispatch, presentation. Does not belong in this library; the Jabber project holds a console for it. |
+| UI | — | Command line, command dispatch, presentation. Does not belong in this library; the XMPPConsole project holds a console for it. |
 | Application | `XMPPClient` | Session state (chat partner, pending contact requests, last message id) and composite operations. |
 | Protocol | `XMPPConnection` | WebSocket I/O, SASL, resource binding, stanza routing. |
 
@@ -395,10 +397,10 @@ RatatoskrTests/
 
 **This suite tests the library against itself.** Everything that needs a
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
-lives in the Jabber project, where the setups that produce those far sides have
-always lived. A checkout of this repository alone therefore runs all of it:
-1110 passed, 1 skipped, and that one checks a property which exists only in
-STARTTLS operation. **How many were skipped tells you afterwards what was
+lives in the XMPPConformanceTests project, where the setups that produce those
+far sides have always lived. A checkout of this repository alone therefore runs
+all of it: 1110 passed, 1 skipped, and that one checks a property which exists
+only in STARTTLS operation. **How many were skipped tells you afterwards what was
 measured** — here that number should stay at one.
 
 Three tables in the source are **generated, not transcribed**:
@@ -733,10 +735,10 @@ server implementation:
 - **Two foreign peers, no more.** Against Prosody 13 and ejabberd 24.12 both
   S2S directions and both identification methods are verified (STARTTLS, SASL
   EXTERNAL, dialback per XEP-0220 in both roles, XEP-0288). Both setups live in
-  the Jabber project; the tests skip themselves without them. What the second
-  server brought to light was not in the first run: ejabberd announces bidi in
-  the namespace of the enabling element, and we overlooked the offer because of
-  it. A third server would probably find a third thing.
+  the XMPPConformanceTests project; the tests skip themselves without them.
+  What the second server brought to light was not in the first run: ejabberd
+  announces bidi in the namespace of the enabling element, and we overlooked
+  the offer because of it. A third server would probably find a third thing.
 - **Federation.** There are three routes across the domain boundary:
   `DirectServerLinks` (in-process, for tests, without any authentication),
   `WebSocketServerLinks` and `TcpServerLinks` (both with TLS and dialback per
@@ -825,8 +827,8 @@ reproduced. It is made visible via `InternalsVisibleTo` in `Ratatoskr.csproj`.
 
 ## Known limitations
 
-Which of these is tackled in what order is recorded in the Jabber project's
-work plan.
+Which of these is tackled in what order is recorded in the work plan of the
+XMPPConformanceTests project.
 
 ### Architecture
 - **Our own extended information is switchable and off by default.**
@@ -896,8 +898,8 @@ distribution, session store, and the wiring.
   element, the PEP nodes and the course of a conversation over several
   messages — and a real client over a real connection is out of reach anyway:
   Conversations, Dino and Gajim still largely speak OMEMO 0.3.0. The oracle and
-  the tests that drive it live in the Jabber project since E19, with the other
-  checks against foreign implementations
+  the tests that drive it live in the XMPPConformanceTests project since E19,
+  with the other checks against foreign implementations
 - **The session store is not encrypted.** It contains the secret identity key,
   every prekey and every chain key; whoever reads the file reads the
   conversations along with it. It belongs somewhere only this user can reach
@@ -925,10 +927,10 @@ distribution, session store, and the wiring.
 - **No TCP transport** — the client speaks XMPP over WebSocket only (RFC 7395).
   The factory method `CreateTcp`, which produced a `tcp://` URI and did nothing
   else, has been removed: a public method that cannot work is worse than none.
-  A real TCP transport sits under "Optional" (see the Jabber project's work
-  plan, D48): Prosody, ejabberd and the test server all offer WebSocket, so
-  nobody is missing it — and the building blocks (`XmlStreamSplitter`,
-  STARTTLS) already exist on the S2S side.
+  A real TCP transport sits under "Optional" (see the work plan of the
+  XMPPConformanceTests project, D48): Prosody, ejabberd and the test server all
+  offer WebSocket, so nobody is missing it — and the building blocks
+  (`XmlStreamSplitter`, STARTTLS) already exist on the S2S side.
 
 ### Unused API surface
 
