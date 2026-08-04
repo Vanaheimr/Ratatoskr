@@ -31,159 +31,160 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// OMEMO gegen die Referenzimplementierung - python-omemo (Syndace),
-    /// dieselbe Fassung `urn:xmpp:omemo:2`.
+    /// OMEMO against the reference implementation - python-omemo (Syndace),
+    /// the same version `urn:xmpp:omemo:2`.
     /// </summary>
     /// <remarks>
-    /// <b>Diese Sammlung kann eine Klasse von Fehlern grundsätzlich nicht
-    /// finden.</b> Sind beide Seiten derselbe Code, kommen sie auch dann
-    /// überein, wenn beide gleich falsch rechnen. In D62 bis D65 war das
-    /// fünfmal der Befund - ein Info-String, eine Reihenfolge, eine
-    /// Einbettung. Jedes Mal hätten sich zwei Clients dieses Hauses bestens
-    /// verstanden und kein einziger fremder.
+    /// <b>This collection cannot find one class of errors on principle.</b> If
+    /// both sides are the same code, they agree even when both calculate
+    /// wrongly in the same way. In D62 to D65 that was the finding five times -
+    /// an info string, an order, an embedding. Every time two clients of this
+    /// house would have understood each other perfectly and not a single
+    /// foreign one.
     ///
-    /// Dagegen hilft nur eine Gegenstelle, die niemand hier geschrieben hat.
+    /// The only thing that helps against that is a far end nobody here wrote.
     ///
-    /// <b>Diese Tests überspringen sich selbst</b>, wenn das Orakel nicht
-    /// erreichbar ist - wie die Tests gegen Prosody und ejabberd. Ein Lauf
-    /// ohne WSL soll nicht rot sein, nur weniger aussagen. Wie viele
-    /// übersprungen sind, sagt hinterher, was gemessen wurde.
+    /// <b>These tests skip themselves</b> when the oracle is not reachable -
+    /// like the tests against Prosody and ejabberd. A run without WSL is not
+    /// supposed to be red, only to say less. How many are skipped says
+    /// afterwards what was measured.
     ///
-    /// Geprüft wird alles von der Nutzlast abwärts: Bundle-Format, X3DH,
-    /// Ratchet-Anfang, Drahtformat. Die SCE-Hülle bleibt aussen vor -
-    /// python-omemo überlässt sie der Anwendung, die es benutzt.
+    /// What is checked is everything from the payload downwards: bundle
+    /// format, X3DH, the beginning of the ratchet, the wire format. The SCE
+    /// envelope stays out of it - python-omemo leaves it to the application
+    /// using it.
     /// </remarks>
     [TestFixture]
     public class OmemoOracleTests
     {
 
-        #region Das Orakel aufrufen
+        #region Calling the oracle
 
-        private const String LibPfad     = "/tmp/omemo-oracle/lib";
+        private const String LibPath     = "/tmp/omemo-oracle/lib";
 
         /// <summary>
-        /// Das Orakel, relativ zum Testprojekt.
+        /// The oracle, relative to the test project.
         /// </summary>
         /// <remarks>
-        /// Gesucht wird von der Ausgabe aus nach oben, bis genau diese Datei
-        /// daliegt - nicht nach einer Marke des umgebenden Repositories. Bis
-        /// D97 war die Marke `WORKPLAN.md`, und der Pfad zeigte auf
-        /// `Jabber.Tests/`: Beides gehörte dem Programm, nicht der Bibliothek,
-        /// und beides war nach dem Umzug hierher falsch. Ratatoskr muss seine
-        /// eigenen Tests auch dann laufen lassen können, wenn niemand Jabber
-        /// daneben ausgecheckt hat.
+        /// The search goes upwards from the output until precisely this file
+        /// lies there - not after a mark of the surrounding repository. Until
+        /// D97 the mark was `WORKPLAN.md`, and the path pointed at
+        /// `Jabber.Tests/`: both belonged to the program, not to the library,
+        /// and both were wrong here after the move. Ratatoskr has to be able to
+        /// run its own tests even when nobody has checked Jabber out next to
+        /// it.
         /// </remarks>
-        private static readonly String SkriptPfad = Path.Combine("XEPs", "Oracle", "omemo_oracle.py");
+        private static readonly String ScriptPath = Path.Combine("XEPs", "Oracle", "omemo_oracle.py");
 
-        private static String? _grundFuerUeberspringen;
+        private static String? _reasonForSkipping;
 
         [OneTimeSetUp]
-        public void OrakelPruefen()
+        public void CheckTheOracle()
         {
 
-            var (code, _, fehler) = Rufe("bundle", null, pruefen: false);
+            var (code, _, errors) = Call("bundle", null, check: false);
 
             if (code != 0)
-                _grundFuerUeberspringen =
-                    "Das Orakel ist nicht erreichbar (python-omemo in WSL unter " +
-                    $"{LibPfad}): {fehler.Split('\n').LastOrDefault(z => z.Trim().Length > 0)?.Trim()}";
+                _reasonForSkipping =
+                    "The oracle is not reachable (python-omemo in WSL under " +
+                    $"{LibPath}): {errors.Split('\n').LastOrDefault(line => line.Trim().Length > 0)?.Trim()}";
 
         }
 
         [SetUp]
-        public void UeberspringenWennNoetig()
+        public void SkipIfNeeded()
         {
-            if (_grundFuerUeberspringen is not null)
-                Assert.Ignore(_grundFuerUeberspringen);
+            if (_reasonForSkipping is not null)
+                Assert.Ignore(_reasonForSkipping);
         }
 
         /// <summary>
-        /// Startet das Orakel in WSL und gibt zurück, was es gesagt hat.
+        /// Starts the oracle in WSL and returns what it said.
         /// </summary>
         /// <remarks>
-        /// Der Auftrag geht über eine Datei und nicht über die Befehlszeile:
-        /// Ein Bundle mit hundert PreKeys sprengt jede Zeilenlänge, und
-        /// base64 in Anführungszeichen über zwei Betriebssystem-Grenzen
-        /// hinweg ist eine Fehlerquelle, die niemand braucht.
+        /// The job goes over a file and not over the command line: a bundle
+        /// with a hundred PreKeys blows every line length, and base64 in
+        /// quotation marks across two operating system borders is a source of
+        /// errors nobody needs.
         /// </remarks>
-        private static (Int32 Code, String Ausgabe, String Fehler) Rufe(String            modus,
-                                                                        Object?           auftrag,
-                                                                        Boolean           pruefen = true)
+        private static (Int32 Code, String Output, String Errors) Call(String            mode,
+                                                                       Object?           job,
+                                                                        Boolean           check = true)
         {
 
-            var wurzel = new DirectoryInfo(AppContext.BaseDirectory);
+            var root = new DirectoryInfo(AppContext.BaseDirectory);
 
-            while (wurzel is not null && !File.Exists(Path.Combine(wurzel.FullName, SkriptPfad)))
-                wurzel = wurzel.Parent;
+            while (root is not null && !File.Exists(Path.Combine(root.FullName, ScriptPath)))
+                root = root.Parent;
 
-            // Kein Assert.Ignore: Das Orakel liegt in diesem Projekt. Fehlt
-            // es, ist der Checkout kaputt - und ein kaputter Checkout soll rot
-            // sein und nicht übersprungen. Übersprungen wird nur, wenn
-            // python-omemo in WSL fehlt.
-            Assert.That(wurzel, Is.Not.Null,
-                        $"Das Orakel ist nicht zu finden: '{SkriptPfad}' liegt in keinem Verzeichnis " +
-                        $"oberhalb von '{AppContext.BaseDirectory}'.");
+            // No Assert.Ignore: the oracle lies in this project. If it is
+            // missing, the checkout is broken - and a broken checkout is
+            // supposed to be red and not skipped. What is skipped is only the
+            // case where python-omemo in WSL is missing.
+            Assert.That(root, Is.Not.Null,
+                        $"The oracle is not to be found: '{ScriptPath}' lies in no directory " +
+                        $"above '{AppContext.BaseDirectory}'.");
 
-            String? auftragsdatei = null;
+            String? jobFile = null;
 
-            if (auftrag is not null)
+            if (job is not null)
             {
-                auftragsdatei = Path.Combine(Path.GetTempPath(), $"orakel-{Guid.NewGuid():N}.json");
-                File.WriteAllText(auftragsdatei, JsonSerializer.Serialize(auftrag));
+                jobFile = Path.Combine(Path.GetTempPath(), $"orakel-{Guid.NewGuid():N}.json");
+                File.WriteAllText(jobFile, JsonSerializer.Serialize(job));
             }
 
-            var befehl = $"PYTHONPATH={LibPfad} python3 '{WslPfad(Path.Combine(wurzel!.FullName, SkriptPfad))}'" +
-                         $" {modus}" +
-                         (auftragsdatei is not null ? $" '{WslPfad(auftragsdatei)}'" : "");
+            var command = $"PYTHONPATH={LibPath} python3 '{WslPath(Path.Combine(root!.FullName, ScriptPath))}'" +
+                         $" {mode}" +
+                         (jobFile is not null ? $" '{WslPath(jobFile)}'" : "");
 
-            var start = new ProcessStartInfo("wsl", $"-d Debian -- bash -c \"{befehl}\"") {
+            var start                   = new ProcessStartInfo("wsl", $"-d Debian -- bash -c \"{command}\"") {
                 RedirectStandardOutput  = true,
                 RedirectStandardError   = true,
                 UseShellExecute         = false
             };
 
-            using var prozess = Process.Start(start)!;
+            using var process = Process.Start(start)!;
 
-            var ausgabe = prozess.StandardOutput.ReadToEnd();
-            var fehler  = prozess.StandardError.ReadToEnd();
+            var output = process.StandardOutput.ReadToEnd();
+            var errors = process.StandardError.ReadToEnd();
 
-            prozess.WaitForExit(120_000);
+            process.WaitForExit(120_000);
 
-            if (auftragsdatei is not null)
-                try { File.Delete(auftragsdatei); } catch { /* egal */ }
+            if (jobFile is not null)
+                try { File.Delete(jobFile); } catch { /* does not matter */ }
 
-            if (pruefen && prozess.ExitCode != 0)
-                Assert.Fail($"Das Orakel scheiterte im Modus '{modus}':\n{fehler}");
+            if (check && process.ExitCode != 0)
+                Assert.Fail($"The oracle failed in mode '{mode}':\n{errors}");
 
-            return (prozess.ExitCode, ausgabe, fehler);
+            return (process.ExitCode, output, errors);
 
         }
 
-        private static String WslPfad(String windowsPfad)
-            => "/mnt/" + Char.ToLowerInvariant(windowsPfad[0]) +
-               windowsPfad[2..].Replace('\\', '/');
+        private static String WslPath(String windowsPath)
+            => "/mnt/" + Char.ToLowerInvariant(windowsPath[0]) +
+               windowsPath[2..].Replace('\\', '/');
 
-        private static JsonElement Antwort(String ausgabe)
-            => JsonDocument.Parse(ausgabe.Trim()).RootElement;
+        private static JsonElement Reply(String output)
+            => JsonDocument.Parse(output.Trim()).RootElement;
 
-        private static String B64(Byte[] daten)
-            => Convert.ToBase64String(daten);
+        private static String B64(Byte[] data)
+            => Convert.ToBase64String(data);
 
         #endregion
 
-        #region Unser Bundle als Auftrag
+        #region Our bundle as a job
 
         /// <summary>
-        /// Unser Bundle in der Gestalt, die das Orakel erwartet.
+        /// Our bundle in the shape the oracle expects.
         /// </summary>
-        private static Object AlsAuftrag(OmemoIdentity eigen, String jid, String? plaintext = null)
+        private static Object AsJob(OmemoIdentity own, String jid, String? plaintext = null)
         {
 
-            var bundle = eigen.Bundle();
+            var bundle = own.Bundle();
 
             return new Dictionary<String, Object?> {
                 ["jid"]                 = jid,
-                ["device_id"]           = eigen.DeviceId,
+                ["device_id"]           = own.DeviceId,
                 ["identity_key"]        = B64(bundle.IdentityKey),
                 ["signed_pre_key_id"]   = bundle.SignedPreKeyId,
                 ["signed_pre_key"]      = B64(bundle.SignedPreKey),
@@ -206,34 +207,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheReferenceAcceptsOurBundle()
 
         /// <summary>
-        /// Die Referenzimplementierung nimmt unser Bundle an - <b>und prüft
-        /// dabei die Signatur über den Signed PreKey selbst</b>.
+        /// The reference implementation takes our bundle - <b>and checks the
+        /// signature over the signed PreKey itself while doing so</b>.
         /// </summary>
         /// <remarks>
-        /// Das war eine ungeprüfte Annahme aus D63, ausdrücklich als solche
-        /// vermerkt: Unterschrieben wird der Signed PreKey in Montgomery-Form.
-        /// Abschnitt 5.3.2 sagt nur „the signed PreKey signature" und lässt
-        /// die Kodierung offen. <b>Hier entscheidet sich, ob die Lesart
-        /// stimmt</b> - eine fremde Bibliothek prüft die Signatur mit ihrer
-        /// eigenen Vorstellung davon, worüber sie geht.
+        /// That was an unchecked assumption from D63, expressly noted as such:
+        /// the signed PreKey is signed in Montgomery form. Section 5.3.2 says
+        /// only "the signed PreKey signature" and leaves the encoding open.
+        /// <b>Here it is decided whether the reading holds</b> - a foreign
+        /// library checks the signature with its own idea of what it goes over.
         /// </remarks>
         [Test]
         public void TheReferenceAcceptsOurBundle()
         {
 
-            var eigen = OmemoIdentity.Create();
+            var own = OmemoIdentity.Create();
 
-            var (code, ausgabe, fehler) = Rufe("encrypt",
-                                               AlsAuftrag(eigen, "wir@example.org", "Probe"),
-                                               pruefen: false);
+            var (code, output, errors) = Call("encrypt",
+                                              AsJob(own, "us@example.org", "Sample"),
+                                               check: false);
 
             Assert.That(code, Is.EqualTo(0),
-                        "Die Referenzimplementierung hat unser Bundle abgelehnt. Wenn hier von " +
-                        "einer ungültigen Signatur die Rede ist, unterschreiben wir den Signed " +
-                        "PreKey über etwas anderes als sie erwartet - die ungeprüfte Annahme aus " +
-                        $"D63:\n{fehler}");
+                        "The reference implementation refused our bundle. If there is talk here " +
+                        "of an invalid signature, we sign the signed PreKey over something other " +
+                        "than what it expects - the unchecked assumption from " +
+                        $"D63:\n{errors}");
 
-            Assert.That(Antwort(ausgabe).GetProperty("key").GetString(), Is.Not.Empty);
+            Assert.That(Reply(output).GetProperty("key").GetString(), Is.Not.Empty);
 
         }
 
@@ -242,61 +242,61 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WeCanReadWhatTheReferenceWrote()
 
         /// <summary>
-        /// <b>Der Test, für den es diese Etappe gibt:</b> Die
-        /// Referenzimplementierung verschlüsselt, wir entschlüsseln.
+        /// <b>The test this stage exists for:</b> the reference implementation
+        /// encrypts, we decrypt.
         /// </summary>
         /// <remarks>
-        /// Was hier alles zugleich geprüft wird, und zwar gegen fremden Code:
-        /// die Kodierung des Bundles, die Reihenfolge der vier
-        /// Diffie-Hellman, der Info-String von X3DH, der 0xFF-Vorspann, die
-        /// Beigabe aus beiden IdentityKeys, der Anfang der Ratsche, die
-        /// Info-Strings der Wurzelkette und des Nachrichtenschlüssels, die
-        /// Konstanten 0x01/0x02, die Protobuf-Feldnummern, die Einbettung des
-        /// Geheimtexts in die Nachricht, die Kürzung des HMAC und die
-        /// Ableitung der Nutzlast.
+        /// What is checked here all at once, and that against foreign code: the
+        /// encoding of the bundle, the order of the four Diffie-Hellmans, the
+        /// info string of X3DH, the 0xFF prefix, the addition out of both
+        /// identity keys, the beginning of the ratchet, the info strings of the
+        /// root chain and of the message key, the constants 0x01/0x02, the
+        /// protobuf field numbers, the embedding of the ciphertext into the
+        /// message, the truncation of the HMAC and the derivation of the
+        /// payload.
         ///
-        /// <b>Jeder einzelne dieser Punkte war in D62 bis D65 eine überlebende
-        /// Mutation oder ein Fund beim Lesen.</b> Dieser eine Test hätte sie
-        /// alle gefunden.
+        /// <b>Every single one of these points was a surviving mutation or a
+        /// find while reading in D62 to D65.</b> This one test would have found
+        /// them all.
         /// </remarks>
         [Test]
         public void WeCanReadWhatTheReferenceWrote()
         {
 
-            const String geheim = "Von der Referenzimplementierung geschrieben";
+            const String secret = "Written by the reference implementation";
 
-            var eigen  = OmemoIdentity.Create();
-            var jid    = "wir@example.org";
+            var own  = OmemoIdentity.Create();
+            var jid  = "us@example.org";
 
-            var (_, ausgabe, _) = Rufe("encrypt", AlsAuftrag(eigen, jid, geheim));
-            var antwort         = Antwort(ausgabe);
+            var (_, output, _) = Call("encrypt", AsJob(own, jid, secret));
+            var reply         = Reply(output);
 
-            // Geprüft wird auf der Schicht, die das Orakel abdeckt: vom
-            // Schlüsselaustausch bis zur Nutzlast. Die SCE-Hülle bleibt
-            // aussen vor - python-omemo überlässt sie der Anwendung, und eine
-            // Hülle, die ich selbst im Orakel bauen würde, wäre keine fremde
-            // Prüfung, sondern dieselbe Annahme zweimal.
-            var austausch = OmemoKeyExchange.Decode(
-                                Convert.FromBase64String(antwort.GetProperty("key").GetString()!));
+            // What is checked is on the layer the oracle covers: from the key
+            // exchange to the payload. The SCE envelope stays out of it -
+            // python-omemo leaves it to the application, and an envelope I
+            // would build in the oracle myself would be no foreign check but
+            // the same assumption twice.
+            var exchange = OmemoKeyExchange.Decode(
+                               Convert.FromBase64String(reply.GetProperty("key").GetString()!));
 
-            var x3dh = X3DH.Accept(eigen,
-                                   austausch.IdentityKey,
-                                   austausch.EphemeralKey,
-                                   austausch.SignedPreKeyId,
-                                   austausch.PreKeyId == 0 ? null : austausch.PreKeyId);
+            var x3dh = X3DH.Accept(own,
+                                   exchange.IdentityKey,
+                                   exchange.EphemeralKey,
+                                   exchange.SignedPreKeyId,
+                                   exchange.PreKeyId == 0 ? null : exchange.PreKeyId);
 
-            var ratchet = DoubleRatchet.InitiateAsReceiver(x3dh.SharedSecret, eigen.SignedPreKey);
+            var ratchet = DoubleRatchet.InitiateAsReceiver(x3dh.SharedSecret, own.SignedPreKey);
 
-            var schluesselUndHmac = ratchet.Decrypt(
-                                        OmemoWireFormat.Decode(austausch.Message),
+            var keyAndHmac = ratchet.Decrypt(
+                                 OmemoWireFormat.Decode(exchange.Message),
                                         x3dh.AssociatedData);
 
-            var klartext = OmemoPayloadCipher.Decrypt(
-                               Convert.FromBase64String(antwort.GetProperty("payload").GetString()!),
-                               schluesselUndHmac);
+            var plaintext = OmemoPayloadCipher.Decrypt(
+                                Convert.FromBase64String(reply.GetProperty("payload").GetString()!),
+                               keyAndHmac);
 
-            Assert.That(Encoding.UTF8.GetString(klartext), Is.EqualTo(geheim),
-                        "Was die Referenzimplementierung geschrieben hat, konnten wir nicht lesen.");
+            Assert.That(Encoding.UTF8.GetString(plaintext), Is.EqualTo(secret),
+                        "What the reference implementation wrote, we could not read.");
 
         }
 
@@ -305,42 +305,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheReferenceCanReadWhatWeWrote()
 
         /// <summary>
-        /// Die Gegenrichtung: <b>wir</b> verschlüsseln, die
-        /// Referenzimplementierung liest.
+        /// The reverse direction: <b>we</b> encrypt, the reference
+        /// implementation reads.
         /// </summary>
         /// <remarks>
-        /// <b>Das ist die Richtung, die darüber entscheidet, ob uns jemand
-        /// lesen kann.</b> Die Hinrichtung prüft, ob wir fremde Nachrichten
-        /// verstehen; erst diese hier prüft, ob unsere verstanden werden - und
-        /// das ist die Frage, an der ein Client scheitert, ohne dass es
-        /// jemandem auffällt: Wer nie eine Antwort bekommt, weiss nicht, ob
-        /// niemand schreiben wollte oder niemand lesen konnte.
+        /// <b>That is the direction deciding whether anybody can read us.</b>
+        /// The forward direction checks whether we understand foreign messages;
+        /// only this one checks whether ours are understood - and that is the
+        /// question a client fails at without anybody noticing: whoever never
+        /// gets an answer does not know whether nobody wanted to write or
+        /// nobody could read.
         ///
-        /// Geprüft wird dabei zusätzlich unsere Kodierung des
-        /// Schlüsselaustauschs: Die Bibliothek trennt aus unserem
-        /// <c>&lt;key kex='true'/&gt;</c> beide Teile heraus - der
-        /// Austausch und die eingepackte Nachricht. Gelingt das, stimmen
-        /// unsere Feldnummern.
+        /// What is checked on top of that is our encoding of the key exchange:
+        /// the library separates both parts out of our
+        /// <c>&lt;key kex='true'/&gt;</c> - the exchange and the packed-in
+        /// message. If that succeeds, our field numbers hold.
         /// </remarks>
         [Test]
         public void TheReferenceCanReadWhatWeWrote()
         {
 
-            const String geheim = "Von uns geschrieben, von der Referenz gelesen";
+            const String secret = "Written by us, read by the reference";
 
-            var zustand = Path.Combine(Path.GetTempPath(), $"orakel-state-{Guid.NewGuid():N}.json");
+            var state = Path.Combine(Path.GetTempPath(), $"orakel-state-{Guid.NewGuid():N}.json");
 
             try
             {
 
-                // 1. Das Orakel gibt sein Bundle heraus - und merkt sich seine
-                //    Schlüssel in einer Datei, sonst wäre der zweite Aufruf
-                //    ein anderes Gerät.
-                var (_, bundleAusgabe, _) = Rufe("bundle", new Dictionary<String, Object> {
-                                                               ["state"] = WslPfad(zustand)
+                // 1. The oracle hands its bundle out - and remembers its keys
+                //    in a file, otherwise the second call would be a different
+                //    device.
+                var (_, bundleOutput, _) = Call("bundle", new Dictionary<String, Object> {
+                                                              ["state"] = WslPath(state)
                                                            });
 
-                var b = Antwort(bundleAusgabe);
+                var b = Reply(bundleOutput);
 
                 var bundle = new OmemoBundle(
                                  Convert.FromBase64String(b.GetProperty("identity_key").GetString()!),
@@ -352,45 +351,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                                        p.GetProperty("id").GetUInt32(),
                                                        Convert.FromBase64String(p.GetProperty("key").GetString()!)))]);
 
-                // Und schon hier fällt eine Prüfung an: Wir rechnen die
-                // Signatur der Referenz nach.
+                // And a check falls due here already: we recalculate the
+                // signature of the reference.
                 Assert.That(bundle.SignatureIsValid(), Is.True,
-                            "Wir halten die Signatur der Referenzimplementierung für ungültig - " +
-                            "dann prüfen wir über etwas anderes, als sie unterschreibt.");
+                            "We consider the signature of the reference implementation invalid - " +
+                            "then we check over something other than what it signs.");
 
-                // 2. Wir verschlüsseln dagegen.
-                var eigen     = OmemoIdentity.Create();
-                var x3dh      = X3DH.Initiate(eigen, bundle);
-                var ratchet   = DoubleRatchet.InitiateAsSender(x3dh.SharedSecret, bundle.SignedPreKey);
-                var nutzlast  = OmemoPayloadCipher.Encrypt(Encoding.UTF8.GetBytes(geheim));
-                var inhalt    = ratchet.Encrypt(nutzlast.KeyAndHmac, x3dh.AssociatedData);
+                // 2. We encrypt against it.
+                var own      = OmemoIdentity.Create();
+                var x3dh     = X3DH.Initiate(own, bundle);
+                var ratchet  = DoubleRatchet.InitiateAsSender(x3dh.SharedSecret, bundle.SignedPreKey);
+                var payload  = OmemoPayloadCipher.Encrypt(Encoding.UTF8.GetBytes(secret));
+                var content  = ratchet.Encrypt(payload.KeyAndHmac, x3dh.AssociatedData);
 
-                var austausch = new OmemoKeyExchange(x3dh.UsedPreKeyId ?? 0,
-                                                     bundle.SignedPreKeyId,
-                                                     eigen.PublicIdentityKey,
+                var exchange = new OmemoKeyExchange(x3dh.UsedPreKeyId ?? 0,
+                                                    bundle.SignedPreKeyId,
+                                                     own.PublicIdentityKey,
                                                      x3dh.EphemeralKey!,
-                                                     OmemoWireFormat.Encode(inhalt));
+                                                     OmemoWireFormat.Encode(content));
 
-                // 3. Das Orakel liest.
-                var (code, ausgabe, fehler) = Rufe("decrypt",
-                                                   new Dictionary<String, Object> {
-                                                       ["state"]             = WslPfad(zustand),
-                                                       ["key"]               = B64(austausch.Encode()),
-                                                       ["payload"]           = B64(nutzlast.Ciphertext),
-                                                       ["sender_jid"]        = "wir@example.org",
-                                                       ["sender_device_id"]  = (Int32) eigen.DeviceId
+                // 3. The oracle reads.
+                var (code, output, errors) = Call("decrypt",
+                                                  new Dictionary<String, Object> {
+                                                       ["state"]             = WslPath(state),
+                                                       ["key"]               = B64(exchange.Encode()),
+                                                       ["payload"]           = B64(payload.Ciphertext),
+                                                       ["sender_jid"]        = "us@example.org",
+                                                       ["sender_device_id"]  = (Int32) own.DeviceId
                                                    },
-                                                   pruefen: false);
+                                                   check: false);
 
                 Assert.That(code, Is.EqualTo(0),
-                            $"Die Referenzimplementierung konnte unsere Nachricht nicht lesen:\n{fehler}");
+                            $"The reference implementation could not read our message:\n{errors}");
 
-                Assert.That(Antwort(ausgabe).GetProperty("plaintext").GetString(), Is.EqualTo(geheim));
+                Assert.That(Reply(output).GetProperty("plaintext").GetString(), Is.EqualTo(secret));
 
             }
             finally
             {
-                try { File.Delete(zustand); } catch { /* egal */ }
+                try { File.Delete(state); } catch { /* does not matter */ }
             }
 
         }

@@ -31,49 +31,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0352: Client State Indication - der Client sagt, ob ein Mensch
-    /// hinsieht.
+    /// XEP-0352: Client State Indication - the client says whether a human
+    /// being is looking.
     /// </summary>
     /// <remarks>
-    /// Zwei Ebenen, und beide sind nötig. Die Einteilung - was warten kann,
-    /// was fallengelassen wird, was sofort hinausgeht - ist eine reine
-    /// Funktion und einzeln prüfbar. Ob der Server sich daran hält,
-    /// beantwortet nur ein Durchlauf: Der Puffer sitzt in derselben Methode,
-    /// die zählt (XEP-0198) und aufhebt (Wiederaufnahme), und was er dort
-    /// verschiebt, fällt an der Funktion nicht auf.
+    /// Two levels, and both are necessary. The division - what can wait, what
+    /// is dropped, what goes out at once - is a pure function and checkable on
+    /// its own. Whether the server keeps to it only a round trip answers: the
+    /// buffer sits in the same method that counts (XEP-0198) and keeps
+    /// (resumption), and what it shifts there does not stand out at the
+    /// function.
     /// </remarks>
     [TestFixture]
     public class ClientStateIndicationTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private String Presence(String von = "bob", String resource = "x")
-            => $"<presence from='{von}@{Server.Domain}/{resource}' to='alice@{Server.Domain}/r'/>";
+        private String Presence(String sender = "bob", String resource = "x")
+            => $"<presence from='{sender}@{Server.Domain}/{resource}' to='alice@{Server.Domain}/r'/>";
 
         /// <summary>
-        /// Verbindet Alice und erklärt ihre Sitzung für inaktiv - über den
-        /// Client, damit auch der Weg über die Leitung geprüft ist.
+        /// Connects Alice and declares her session inactive - over the client,
+        /// so that the path over the wire is checked as well.
         /// </summary>
-        private async Task<(XMPPClient Client, XMPPSession Session)> InaktivAsync()
+        private async Task<(XMPPClient Client, XMPPSession Session)> InactiveAsync()
         {
 
             var client   = await ConnectClientAsync();
             var session  = Server.SessionOf(client.FullJid)!;
 
             Assert.That(await client.SetActiveAsync(false), Is.True,
-                        "Der Server hat XEP-0352 nicht angekündigt.");
+                        "The server did not announce XEP-0352.");
 
             await WaitFor(() => !session.ClientIsActive,
-                          "die vom Server übernommene Inaktivität");
+                          "the inactivity taken over by the server");
 
             return (client, session);
 
         }
 
-        /// <summary>Die an den Client geschickten Rahmen, die diesen Text enthalten.</summary>
-        private static IReadOnlyList<String> Zugestellt(XMPPSession session, String enthaelt)
-            => [.. session.Sent.Where(f => f.Contains(enthaelt, StringComparison.Ordinal))];
+        /// <summary>The frames sent to the client that contain this text.</summary>
+        private static IReadOnlyList<String> Delivered(XMPPSession session, String contains)
+            => [.. session.Sent.Where(f => f.Contains(contains, StringComparison.Ordinal))];
 
         #endregion
 
@@ -81,7 +81,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region APresenceUpdate_CanWait()
 
         /// <summary>
-        /// Eine Presence-Änderung ist das Beispiel, mit dem XEP-0352 anfängt.
+        /// A presence change is the example XEP-0352 begins with.
         /// </summary>
         [Test]
         public void APresenceUpdate_CanWait()
@@ -96,14 +96,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ASubscriptionRequest_CannotWait()
 
         /// <summary>
-        /// Eine Kontaktanfrage ist eine Presence und trotzdem keine
-        /// Anwesenheitsmeldung: Sie wartet auf die Entscheidung eines
-        /// Menschen (RFC 6121, Abschnitt 3.1.3).
+        /// A contact request is a presence and no presence notification
+        /// nevertheless: it waits for the decision of a human being (RFC 6121,
+        /// section 3.1.3).
         /// </summary>
         /// <remarks>
-        /// Der Unterschied ist der zwischen „später auch noch wahr" und „wird
-        /// nie beantwortet". Wer sie zurückhält, hält keinen Verkehr auf,
-        /// sondern ein Gespräch, das noch nicht angefangen hat.
+        /// The difference is the one between "true later as well" and "will
+        /// never be answered". Whoever holds it back holds no traffic back but
+        /// a conversation that has not begun yet.
         /// </remarks>
         [Test]
         public void ASubscriptionRequest_CannotWait()
@@ -111,11 +111,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                foreach (var art in new[] { "subscribe", "subscribed", "unsubscribe", "unsubscribed" })
+                foreach (var kind in new[] { "subscribe", "subscribed", "unsubscribe", "unsubscribed" })
                     Assert.That(ClientStateIndication.HandlingOf(
-                                    $"<presence xmlns='jabber:client' type='{art}' from='bob@example'/>"),
+                                    $"<presence xmlns='jabber:client' type='{kind}' from='bob@example'/>"),
                                 Is.EqualTo(ClientStateHandling.Immediately),
-                                $"type='{art}'");
+                                $"type='{kind}'");
 
             });
         }
@@ -125,19 +125,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessageWithText_IsTheReasonTheDeviceRings()
 
         /// <summary>
-        /// Eine Nachricht mit Text geht sofort hinaus.
+        /// A message with text goes out at once.
         /// </summary>
         /// <remarks>
-        /// XEP-0352 ist eine Sparmassnahme für den Akku und keine
-        /// Ruhefunktion für den Menschen davor. Wer hier zurückhielte, machte
-        /// aus einer Verkehrsersparnis eine Zustellverzögerung.
+        /// XEP-0352 is an economy measure for the battery and no do-not-disturb
+        /// function for the human being in front of it. Whoever held back here
+        /// would make a delivery delay out of a saving of traffic.
         /// </remarks>
         [Test]
         public void AMessageWithText_IsTheReasonTheDeviceRings()
         {
             Assert.That(ClientStateIndication.HandlingOf(
                             "<message xmlns='jabber:client' from='bob@example/x' type='chat'>" +
-                            "<body>Hallo</body></message>"),
+                            "<body>Hello</body></message>"),
                         Is.EqualTo(ClientStateHandling.Immediately));
         }
 
@@ -146,15 +146,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatState_IsDiscardedAndNotHeld()
 
         /// <summary>
-        /// „schreibt gerade" wird fallengelassen und nicht aufgehoben.
+        /// "is typing" is dropped and not kept.
         /// </summary>
         /// <remarks>
-        /// Der Grund ist nicht Sparsamkeit, sondern Wahrheit: Ein
-        /// zurückgehaltenes <c>&lt;composing/&gt;</c> wäre bei der Zustellung
-        /// keine verspätete Auskunft mehr, sondern eine falsche - der Kontakt
-        /// hat längst aufgehört. XEP-0352, Abschnitt 3 nennt genau das:
-        /// „Discard messages containing only Chat State Notifications ...
-        /// payloads."
+        /// The reason is not thrift but truth: a held-back
+        /// <c>&lt;composing/&gt;</c> would not be a late piece of information
+        /// at the delivery any more but a wrong one - the contact stopped long
+        /// ago. XEP-0352, section 3 names precisely that: "Discard messages
+        /// containing only Chat State Notifications ... payloads."
         /// </remarks>
         [Test]
         public void AChatState_IsDiscardedAndNotHeld()
@@ -170,13 +169,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatStateWithAThread_IsStillOnlyAChatState()
 
         /// <summary>
-        /// Ein <c>&lt;thread/&gt;</c> daneben macht daraus keine Nachricht.
+        /// A <c>&lt;thread/&gt;</c> next to it does not make a message out of
+        /// it.
         /// </summary>
         /// <remarks>
-        /// XEP-0085 empfiehlt genau diese Kombination. Wer die Kinder zählt,
-        /// statt die Erweiterungen zu betrachten, hält jede Chat-State-Meldung
-        /// mit Thread für etwas Inhaltliches - und hebt dann eben doch auf,
-        /// was in fünf Minuten gelogen ist.
+        /// XEP-0085 recommends precisely this combination. Whoever counts the
+        /// children instead of looking at the extensions takes every chat state
+        /// notification with a thread for something of substance - and then
+        /// does keep what is a lie in five minutes after all.
         /// </remarks>
         [Test]
         public void AChatStateWithAThread_IsStillOnlyAChatState()
@@ -193,13 +193,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnEmptyBody_IsNotText()
 
         /// <summary>
-        /// Ein leeres <c>&lt;body/&gt;</c> ist kein Text.
+        /// An empty <c>&lt;body/&gt;</c> is no text.
         /// </summary>
         /// <remarks>
-        /// Manche Clients führen es neben ihren Chat States mit. Zählte es als
-        /// Inhalt, ginge jede „schreibt gerade"-Meldung dieser Clients sofort
-        /// hinaus - und die Sparmassnahme wäre gegenüber genau den Clients
-        /// wirkungslos, die am meisten davon hätten.
+        /// Some clients carry it along next to their chat states. Were it to
+        /// count as content, every "is typing" notification of these clients
+        /// would go out at once - and the economy measure would be without
+        /// effect towards precisely the clients that would have the most from
+        /// it.
         /// </remarks>
         [Test]
         public void AnEmptyBody_IsNotText()
@@ -216,12 +217,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AReceipt_IsHeldAndNotDiscarded()
 
         /// <summary>
-        /// Eine Empfangsbestätigung (XEP-0184) wartet, aber sie verfällt nicht.
+        /// A delivery receipt (XEP-0184) waits, but it does not expire.
         /// </summary>
         /// <remarks>
-        /// Der Unterschied zum Chat State: „angekommen" bleibt wahr. Wer sie
-        /// fallenliesse, nähme dem Absender eine Auskunft, die er nie wieder
-        /// bekommt.
+        /// The difference to the chat state: "arrived" stays true. Whoever
+        /// dropped it would take a piece of information from the sender that
+        /// they never get again.
         /// </remarks>
         [Test]
         public void AReceipt_IsHeldAndNotDiscarded()
@@ -234,13 +235,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                 "<received xmlns='urn:xmpp:receipts' id='m1'/></message>"),
                             Is.EqualTo(ClientStateHandling.Queued));
 
-                // Und eine Nachricht ganz ohne Erweiterung erst recht nicht:
-                // „nur Chat States" heisst mindestens einer. Ohne diese
-                // Untergrenze verfiele jede Nachricht, die keine Erweiterung
-                // mitbringt - eine Betreffänderung etwa.
+                // And a message entirely without an extension all the less:
+                // "only chat states" means at least one. Without this lower
+                // bound every message not bringing an extension along would
+                // expire - a change of subject, say.
                 Assert.That(ClientStateIndication.HandlingOf(
                                 "<message xmlns='jabber:client' from='bob@example/x' type='groupchat'>" +
-                                "<subject>Mittagessen</subject></message>"),
+                                "<subject>Lunch</subject></message>"),
                             Is.EqualTo(ClientStateHandling.Queued));
 
             });
@@ -251,13 +252,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIq_IsNeverHeldBack()
 
         /// <summary>
-        /// Ein <c>iq</c> ist eine Frage mit Frist.
+        /// An <c>iq</c> is a question with a deadline.
         /// </summary>
         /// <remarks>
-        /// Wer es zurückhält, lässt beim Absender die Frist ablaufen und
-        /// stellt es danach zu - die Antwort käme zu einer Frage, die niemand
-        /// mehr stellt. Dasselbe gilt für jede Nonza: Ein <c>&lt;a/&gt;</c>
-        /// gehört nicht zum Verkehr, sondern zum Stream.
+        /// Whoever holds it back lets the deadline run out at the sender and
+        /// delivers it afterwards - the answer would come to a question nobody
+        /// puts any more. The same holds for every nonza: an <c>&lt;a/&gt;</c>
+        /// does not belong to the traffic but to the stream.
         /// </remarks>
         [Test]
         public void AnIq_IsNeverHeldBack()
@@ -287,38 +288,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheLatestPresencePerContact_Wins()
 
         /// <summary>
-        /// Abgelöst wird je Full-JID, nicht je Mensch.
+        /// What is superseded is superseded per full JID, not per human being.
         /// </summary>
         /// <remarks>
-        /// Abschnitt 3: „push the latest presence from <b>each contact</b>".
-        /// Zwei Geräte desselben Menschen sind zwei Anwesenheiten - verdrängte
-        /// die eine die andere, verschwände sein Telefon aus der Liste, weil
-        /// sein Rechner sich abgemeldet hat.
+        /// Section 3: "push the latest presence from <b>each contact</b>". Two
+        /// devices of the same human being are two presences - were the one to
+        /// displace the other, their phone would vanish from the list because
+        /// their desktop signed off.
         /// </remarks>
         [Test]
         public void TheLatestPresencePerContact_Wins()
         {
 
-            var handy   = "<presence xmlns='jabber:client' from='bob@example/handy'/>";
-            var weg     = "<presence xmlns='jabber:client' from='bob@example/handy' type='unavailable'/>";
-            var rechner = "<presence xmlns='jabber:client' from='bob@example/rechner'/>";
+            var mobile  = "<presence xmlns='jabber:client' from='bob@example/mobile'/>";
+            var gone    = "<presence xmlns='jabber:client' from='bob@example/mobile' type='unavailable'/>";
+            var desktop = "<presence xmlns='jabber:client' from='bob@example/desktop'/>";
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(ClientStateIndication.SupersedeKey(weg),
-                            Is.EqualTo(ClientStateIndication.SupersedeKey(handy)),
-                            "Eine Abmeldung löst die Anmeldung derselben Resource ab.");
+                Assert.That(ClientStateIndication.SupersedeKey(gone),
+                            Is.EqualTo(ClientStateIndication.SupersedeKey(mobile)),
+                            "A sign-off supersedes the login of the same resource.");
 
-                Assert.That(ClientStateIndication.SupersedeKey(rechner),
-                            Is.Not.EqualTo(ClientStateIndication.SupersedeKey(handy)),
-                            "Zwei Geräte sind zwei Anwesenheiten.");
+                Assert.That(ClientStateIndication.SupersedeKey(desktop),
+                            Is.Not.EqualTo(ClientStateIndication.SupersedeKey(mobile)),
+                            "Two devices are two presences.");
 
                 Assert.That(ClientStateIndication.SupersedeKey(
-                                "<message xmlns='jabber:client' from='bob@example/handy'>" +
+                                "<message xmlns='jabber:client' from='bob@example/mobile'>" +
                                 "<received xmlns='urn:xmpp:receipts' id='m1'/></message>"),
                             Is.Null,
-                            "Eine Nachricht wird durch nichts abgelöst.");
+                            "A message is superseded by nothing.");
 
             });
 
@@ -330,8 +331,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFeature_IsAnnouncedAfterAuthentication()
 
         /// <summary>
-        /// XEP-0352, Abschnitt 4.1: Der Server kündigt die Erweiterung in den
-        /// Features nach der Anmeldung an.
+        /// XEP-0352, section 4.1: The server announces the extension in the
+        /// features after the login.
         /// </summary>
         [Test]
         public async Task TheFeature_IsAnnouncedAfterAuthentication()
@@ -344,12 +345,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(client.SupportsClientStateIndication, Is.True,
-                            "Der Client hat die Ankündigung nicht gelesen.");
+                            "The client did not read the announcement.");
 
                 Assert.That(session.Sent.Count(f => f.StartsWith("<stream:features", StringComparison.Ordinal) &&
                                                     f.Contains(ClientStateIndication.Namespace, StringComparison.Ordinal)),
                             Is.EqualTo(1),
-                            "Die Ankündigung steht nicht in genau einem der beiden Feature-Sätze.");
+                            "The announcement does not stand in exactly one of the two feature sets.");
 
             });
 
@@ -360,13 +361,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheAnnouncement_TheClientSaysNothing()
 
         /// <summary>
-        /// Ohne Ankündigung schickt der Client kein <c>&lt;inactive/&gt;</c>.
+        /// Without the announcement the client sends no
+        /// <c>&lt;inactive/&gt;</c>.
         /// </summary>
         /// <remarks>
-        /// Ein Server, der die Erweiterung nicht kennt, sieht ein unbekanntes
-        /// Element auf Stream-Ebene und darf den Stream beenden (RFC 6120,
-        /// Abschnitt 4.9.3.24). Aus der Sparmassnahme würde ein
-        /// Verbindungsabbruch - und zwar genau dann, wenn niemand hinsieht.
+        /// A server not knowing the extension sees an unknown element at stream
+        /// level and may end the stream (RFC 6120, section 4.9.3.24). Out of
+        /// the economy measure would come a torn connection - and that
+        /// precisely when nobody is looking.
         /// </remarks>
         [Test]
         public async Task WithoutTheAnnouncement_TheClientSaysNothing()
@@ -377,23 +379,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client   = await ConnectClientAsync();
             var session  = Server.SessionOf(client.FullJid)!;
 
-            var gemeldet = await client.SetActiveAsync(false);
+            var reported = await client.SetActiveAsync(false);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(client.SupportsClientStateIndication, Is.False);
 
-                Assert.That(gemeldet, Is.False,
-                            "Der Client meldet einen Erfolg, den es nicht gab.");
+                Assert.That(reported, Is.False,
+                            "The client reports a success there was none of.");
 
                 Assert.That(client.IsActive, Is.True,
-                            "Der Client hält sich für inaktiv, der Server weiss nichts davon.");
+                            "The client considers itself inactive, the server knows nothing of it.");
 
                 Assert.That(session.Received.Any(f => f.Contains(ClientStateIndication.Namespace,
                                                                  StringComparison.Ordinal)),
                             Is.False,
-                            "Es ging doch etwas hinaus.");
+                            "Something did go out after all.");
 
             });
 
@@ -404,12 +406,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheServerAnswersNothing()
 
         /// <summary>
-        /// XEP-0352, Abschnitt 4.2: „There is no reply from the server to
-        /// either of these elements."
+        /// XEP-0352, section 4.2: "There is no reply from the server to either
+        /// of these elements."
         /// </summary>
         /// <remarks>
-        /// Eine Bestätigung wäre der Widerspruch in sich: Sie weckte das
-        /// Gerät genau in dem Augenblick, in dem es sich schlafen legt.
+        /// A confirmation would be the contradiction in itself: it would wake
+        /// the device at precisely the moment it lies down to sleep.
         /// </remarks>
         [Test]
         public async Task TheServerAnswersNothing()
@@ -418,15 +420,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client   = await ConnectClientAsync();
             var session  = Server.SessionOf(client.FullJid)!;
 
-            var vorher = session.Sent.Count;
+            var before = session.Sent.Count;
 
             await client.SetActiveAsync(false);
 
-            await WaitFor(() => !session.ClientIsActive, "die übernommene Inaktivität");
+            await WaitFor(() => !session.ClientIsActive, "the inactivity taken over");
 
-            Assert.That(session.Sent.Count, Is.EqualTo(vorher),
-                        "Der Server hat auf das <inactive/> geantwortet: " +
-                        String.Join(" | ", session.Sent.Skip(vorher)));
+            Assert.That(session.Sent.Count, Is.EqualTo(before),
+                        "The server answered the <inactive/>: " +
+                        String.Join(" | ", session.Sent.Skip(before)));
 
         }
 
@@ -435,27 +437,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnInactiveClient_GetsNoPresence()
 
         /// <summary>
-        /// Presence wird zurückgehalten, solange niemand hinsieht - und beim
-        /// <c>&lt;active/&gt;</c> nachgeliefert.
+        /// Presence is held back as long as nobody is looking - and handed over
+        /// at the <c>&lt;active/&gt;</c>.
         /// </summary>
         [Test]
         public async Task AnInactiveClient_GetsNoPresence()
         {
 
-            var (client, session) = await InaktivAsync();
+            var (client, session) = await InactiveAsync();
 
             await session.SendAsync(Presence());
 
             Assert.Multiple(() =>
             {
-                Assert.That(Zugestellt(session, "bob@"), Is.Empty, "Die Presence ging trotzdem hinaus.");
+                Assert.That(Delivered(session, "bob@"), Is.Empty, "The presence went out nevertheless.");
                 Assert.That(session.HeldWhileInactive, Is.EqualTo(1));
             });
 
             Assert.That(await client.SetActiveAsync(true), Is.True);
 
-            await WaitFor(() => Zugestellt(session, "bob@").Count == 1,
-                          "die nachgelieferte Presence");
+            await WaitFor(() => Delivered(session, "bob@").Count == 1,
+                          "the presence handed over");
 
             Assert.That(session.HeldWhileInactive, Is.EqualTo(0));
 
@@ -466,34 +468,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessage_TakesTheHeldStanzasWithIt()
 
         /// <summary>
-        /// Was zurückgehalten wurde, geht <b>vor</b> der Nachricht hinaus, die
-        /// den Puffer leert.
+        /// What was held back goes out <b>before</b> the message emptying the
+        /// buffer.
         /// </summary>
         /// <remarks>
-        /// RFC 6120, Abschnitt 10.1 verlangt die Reihenfolge zwischen zwei
-        /// Entitäten. Ohne diese Regel überholte Bobs Nachricht seine eigene
-        /// Presence: Alice sähe erst „Bob schreibt: bin unterwegs" und danach,
-        /// dass Bob online gegangen ist.
+        /// RFC 6120, section 10.1 demands the order between two entities.
+        /// Without this rule Bob's message would overtake his own presence:
+        /// Alice would first see "Bob writes: on my way" and afterwards that
+        /// Bob went online.
         /// </remarks>
         [Test]
         public async Task AMessage_TakesTheHeldStanzasWithIt()
         {
 
-            var (_, session) = await InaktivAsync();
+            var (_, session) = await InactiveAsync();
 
             await session.SendAsync(Presence());
             await session.SendAsync($"<message from='bob@{Server.Domain}/x' to='{session.FullJid}' " +
-                                    "type='chat'><body>Bin unterwegs</body></message>");
+                                    "type='chat'><body>On my way</body></message>");
 
-            var bob = Zugestellt(session, "bob@");
+            var bob = Delivered(session, "bob@");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bob.Count, Is.EqualTo(2), "Nicht beides angekommen.");
+                Assert.That(bob.Count, Is.EqualTo(2), "Not both arrived.");
 
                 Assert.That(bob[0], Does.StartWith("<presence"),
-                            "Die Nachricht hat die zurückgehaltene Presence überholt.");
+                            "The message overtook the held-back presence.");
 
                 Assert.That(session.HeldWhileInactive, Is.EqualTo(0));
 
@@ -506,13 +508,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region OnlyTheLatestPresence_ArrivesOnTheWire()
 
         /// <summary>
-        /// Fünf Wechsel eines Kontakts hinterlassen eine Presence, nicht fünf.
+        /// Five changes of one contact leave one presence behind, not five.
         /// </summary>
         [Test]
         public async Task OnlyTheLatestPresence_ArrivesOnTheWire()
         {
 
-            var (client, session) = await InaktivAsync();
+            var (client, session) = await InactiveAsync();
 
             for (var i = 0; i < 4; i++)
             {
@@ -521,28 +523,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                         $"to='alice@{Server.Domain}/r' type='unavailable'/>");
             }
 
-            // Ein zweites Gerät desselben Kontakts wird davon nicht verdrängt.
-            await session.SendAsync(Presence(resource: "rechner"));
+            // A second device of the same contact is not displaced by it.
+            await session.SendAsync(Presence(resource: "desktop"));
 
             Assert.That(session.HeldWhileInactive, Is.EqualTo(2),
-                        "Zurückgehalten werden sollten genau zwei Anwesenheiten: " +
+                        "What should have been held back are exactly two presences: " +
                         String.Join(" | ", session.HeldStanzas));
 
             await client.SetActiveAsync(true);
 
-            await WaitFor(() => Zugestellt(session, "bob@").Count == 2,
-                          "die beiden nachgelieferten Presences");
+            await WaitFor(() => Delivered(session, "bob@").Count == 2,
+                          "the two presences handed over");
 
-            var zugestellt = Zugestellt(session, "bob@");
+            var delivered = Delivered(session, "bob@");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(zugestellt[0], Does.Contain("type='unavailable'"),
-                            "Nachgeliefert wurde nicht die letzte Presence des Handys.");
+                Assert.That(delivered[0], Does.Contain("type='unavailable'"),
+                            "What was handed over was not the last presence of the mobile.");
 
-                Assert.That(zugestellt[1], Does.Contain("/rechner"),
-                            "Das zweite Gerät fehlt.");
+                Assert.That(delivered[1], Does.Contain("/desktop"),
+                            "The second device is missing.");
 
             });
 
@@ -553,13 +555,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AChatStateWhileInactive_NeverArrives()
 
         /// <summary>
-        /// Ein Chat State wird fallengelassen und kommt auch später nicht.
+        /// A chat state is dropped and does not come later either.
         /// </summary>
         [Test]
         public async Task AChatStateWhileInactive_NeverArrives()
         {
 
-            var (client, session) = await InaktivAsync();
+            var (client, session) = await InactiveAsync();
 
             await session.SendAsync($"<message from='bob@{Server.Domain}/x' to='{session.FullJid}' " +
                                     "type='chat'><composing xmlns='http://jabber.org/protocol/chatstates'/></message>");
@@ -568,15 +570,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.SetActiveAsync(true);
 
-            // Der Puffer geht beim <active/> heraus; wäre der Chat State darin
-            // gelandet, käme er jetzt.
+            // The buffer goes out at the <active/>; had the chat state landed
+            // in it, it would come now.
             await session.SendAsync($"<message from='bob@{Server.Domain}/x' to='{session.FullJid}' " +
-                                    "type='chat'><body>Da bin ich</body></message>");
+                                    "type='chat'><body>Here I am</body></message>");
 
-            await WaitFor(() => Zugestellt(session, "Da bin ich").Count == 1, "die Nachricht danach");
+            await WaitFor(() => Delivered(session, "Here I am").Count == 1, "the message afterwards");
 
-            Assert.That(Zugestellt(session, "chatstates"), Is.Empty,
-                        "Der Chat State wurde aufgehoben statt fallengelassen.");
+            Assert.That(Delivered(session, "chatstates"), Is.Empty,
+                        "The chat state was kept instead of dropped.");
 
         }
 
@@ -585,20 +587,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnIqWhileInactive_ArrivesAtOnce()
 
         /// <summary>
-        /// Ein <c>iq</c> geht auch an einen schlafenden Client sofort hinaus.
+        /// An <c>iq</c> goes out at once to a sleeping client as well.
         /// </summary>
         [Test]
         public async Task AnIqWhileInactive_ArrivesAtOnce()
         {
 
-            var (_, session) = await InaktivAsync();
+            var (_, session) = await InactiveAsync();
 
             await session.SendAsync($"<iq from='{Server.Domain}' to='{session.FullJid}' " +
                                     "type='get' id='csi-ping'><ping xmlns='urn:xmpp:ping'/></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(Zugestellt(session, "csi-ping"), Is.Not.Empty, "Das iq wurde zurückgehalten.");
+                Assert.That(Delivered(session, "csi-ping"), Is.Not.Empty, "The iq was held back.");
                 Assert.That(session.HeldWhileInactive, Is.EqualTo(0));
             });
 
@@ -609,39 +611,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFullBuffer_EmptiesItself()
 
         /// <summary>
-        /// Der Puffer hat eine Obergrenze - und geht beim Überlauf hinaus,
-        /// statt etwas wegzuwerfen.
+        /// The buffer has an upper limit - and goes out at the overflow instead
+        /// of throwing something away.
         /// </summary>
         /// <remarks>
-        /// Ein Client, der sich für inaktiv erklärt und dann nicht mehr
-        /// wiederkommt, nötigte dem Server sonst mit einem einzigen
-        /// <c>&lt;inactive/&gt;</c> unbegrenzt Speicher ab. Beim Überlauf
-        /// bekommt er Verkehr, den er gerade nicht wollte - das ist die
-        /// freundlichere der beiden Möglichkeiten.
+        /// A client declaring itself inactive and then not coming back again
+        /// would otherwise force unlimited memory on the server with a single
+        /// <c>&lt;inactive/&gt;</c>. At the overflow it gets traffic it did not
+        /// want just then - that is the friendlier of the two possibilities.
         /// </remarks>
         [Test]
         public async Task AFullBuffer_EmptiesItself()
         {
 
-            var (_, session) = await InaktivAsync();
+            var (_, session) = await InactiveAsync();
 
             session.MaxHeldWhileInactive = 2;
 
-            // Drei verschiedene Kontakte, damit sich nichts gegenseitig ablöst.
+            // Three different contacts, so that nothing supersedes anything.
             await session.SendAsync(Presence("bob"));
             await session.SendAsync(Presence("carol"));
 
-            Assert.That(session.HeldWhileInactive, Is.EqualTo(2), "Zu früh geleert.");
+            Assert.That(session.HeldWhileInactive, Is.EqualTo(2), "Emptied too early.");
 
             await session.SendAsync(Presence("dave"));
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(session.HeldWhileInactive, Is.EqualTo(0), "Der volle Puffer blieb liegen.");
+                Assert.That(session.HeldWhileInactive, Is.EqualTo(0), "The full buffer stayed put.");
 
-                foreach (var kontakt in new[] { "bob@", "carol@", "dave@" })
-                    Assert.That(Zugestellt(session, kontakt).Count, Is.EqualTo(1), kontakt);
+                foreach (var contact in new[] { "bob@", "carol@", "dave@" })
+                    Assert.That(Delivered(session, contact).Count, Is.EqualTo(1), contact);
 
             });
 
@@ -652,32 +653,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ANonza_DoesNotWakeTheBuffer()
 
         /// <summary>
-        /// Eine Nonza geht hinaus, ohne den Puffer mitzunehmen.
+        /// A nonza goes out without taking the buffer along.
         /// </summary>
         /// <remarks>
-        /// Ein <c>&lt;r/&gt;</c> des Servers (XEP-0198) fragt nach dem
-        /// Empfangszähler und trägt keine Reihenfolge. Leerte es den Puffer,
-        /// wäre jede Zählnachfrage ein Weckruf durch die Hintertür - und der
-        /// Server hebelte seine eigene Sparmassnahme aus, ohne dass der Client
-        /// je <c>&lt;active/&gt;</c> gesagt hätte.
+        /// An <c>&lt;r/&gt;</c> of the server (XEP-0198) asks after the receive
+        /// counter and carries no order. Were it to empty the buffer, every
+        /// counting query would be a wake-up call through the back door - and
+        /// the server would defeat its own economy measure without the client
+        /// ever having said <c>&lt;active/&gt;</c>.
         ///
-        /// Die Zählung bleibt dabei stimmig: Was zurückgehalten wird, ist
-        /// nicht gesendet und damit auch nicht gezählt - der Client meldet
-        /// genau so viel, wie ihn erreicht hat.
+        /// The counting stays consistent in this: what is held back is not sent
+        /// and thereby not counted either - the client reports exactly as much
+        /// as reached it.
         /// </remarks>
         [Test]
         public async Task ANonza_DoesNotWakeTheBuffer()
         {
 
-            var (_, session) = await InaktivAsync();
+            var (_, session) = await InactiveAsync();
 
             await session.SendAsync(Presence());
             await session.RequestAckAsync();
 
             Assert.Multiple(() =>
             {
-                Assert.That(session.HeldWhileInactive, Is.EqualTo(1), "Das <r/> hat den Puffer geleert.");
-                Assert.That(Zugestellt(session, "<r "),  Is.Not.Empty, "Das <r/> selbst kam nicht hinaus.");
+                Assert.That(session.HeldWhileInactive, Is.EqualTo(1), "The <r/> emptied the buffer.");
+                Assert.That(Delivered(session, "<r "),  Is.Not.Empty, "The <r/> itself did not go out.");
             });
 
         }
@@ -687,15 +688,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutTheAnnouncement_TheServerDoesNotObey()
 
         /// <summary>
-        /// Ein Server, der die Erweiterung nicht angeboten hat, handelt auch
-        /// nicht danach.
+        /// A server that has not offered the extension does not act on it
+        /// either.
         /// </summary>
         /// <remarks>
-        /// Der umgekehrte Fall wäre der gefährlichere: Ein Server, der
-        /// schweigt und trotzdem zurückhält, liesse den Client seine Kontakte
-        /// für still halten. Deshalb gilt das <c>&lt;inactive/&gt;</c> hier
-        /// wie jedes andere unangekündigte Element auf Stream-Ebene -
-        /// RFC 6120, Abschnitt 4.9.3.24.
+        /// The reverse case would be the more dangerous one: a server keeping
+        /// silent and holding back nevertheless would let the client take its
+        /// contacts for quiet. That is why the <c>&lt;inactive/&gt;</c> counts
+        /// here like every other unannounced element at stream level -
+        /// RFC 6120, section 4.9.3.24.
         /// </remarks>
         [Test]
         public async Task WithoutTheAnnouncement_TheServerDoesNotObey()
@@ -710,10 +711,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => session.Sent.Any(f => f.Contains("unsupported-stanza-type",
                                                                  StringComparison.Ordinal)),
-                          "den Stream-Fehler auf das unangekündigte Element");
+                          "the stream error on the unannounced element");
 
             Assert.That(session.ClientIsActive, Is.True,
-                        "Der Server hat einen Zustand übernommen, den er nie angeboten hat.");
+                        "The server took over a state it never offered.");
 
         }
 
@@ -722,13 +723,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region BeforeAuthentication_TheStateIsNotAccepted()
 
         /// <summary>
-        /// Vor der Anmeldung gibt es niemanden, dessen Zustand zu schonen wäre.
+        /// Before the login there is nobody whose state would have to be
+        /// spared.
         /// </summary>
         /// <remarks>
-        /// XEP-0352, Abschnitt 4.1: angekündigt wird die Erweiterung in den
-        /// Features <b>nach</b> der Anmeldung. Was noch nicht angekündigt war,
-        /// gilt auch noch nicht - sonst hätte ein Unangemeldeter einen Zustand
-        /// an einer Sitzung, die noch niemandem gehört.
+        /// XEP-0352, section 4.1: the extension is announced in the features
+        /// <b>after</b> the login. What was not announced yet does not hold yet
+        /// either - otherwise somebody not logged in would have a state at a
+        /// session that belongs to nobody yet.
         /// </remarks>
         [Test]
         public async Task BeforeAuthentication_TheStateIsNotAccepted()
@@ -741,27 +743,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await socket.ConnectAsync(new Uri(Server.Uri), CancellationToken.None);
 
-            async Task Sende(String rahmen)
-                => await socket.SendAsync(Encoding.UTF8.GetBytes(rahmen),
+            async Task Send(String frame)
+                => await socket.SendAsync(Encoding.UTF8.GetBytes(frame),
                                           WebSocketMessageType.Text, true, CancellationToken.None);
 
-            await Sende("<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
-                        $"to='{Server.Domain}' version='1.0'/>");
+            await Send("<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' " +
+                       $"to='{Server.Domain}' version='1.0'/>");
 
             await WaitFor(() => Server.Sessions.Any(s => s.Sent.Any(f => f.Contains("mechanisms",
                                                                                      StringComparison.Ordinal))),
-                          "die Features des Servers");
+                          "the features of the server");
 
             var session = Server.Sessions.Last();
 
-            await Sende(ClientStateIndication.InactiveXml);
+            await Send(ClientStateIndication.InactiveXml);
 
             await WaitFor(() => session.Sent.Any(f => f.Contains("unsupported-stanza-type",
                                                                  StringComparison.Ordinal)),
-                          "den Stream-Fehler auf das Element vor der Anmeldung");
+                          "the stream error on the element before the login");
 
             Assert.That(session.ClientIsActive, Is.True,
-                        "Ein Unangemeldeter hat den Zustand der Sitzung verändert.");
+                        "Somebody not logged in changed the state of the session.");
 
         }
 
@@ -770,15 +772,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AtTheEndOfTheStream_NothingIsLeftBehind()
 
         /// <summary>
-        /// Reisst die Verbindung, während etwas zurückgehalten wird, landet es
-        /// im Puffer der unbestätigten Stanzas - und geht mit der
-        /// Wiederaufnahme nach.
+        /// If the connection tears while something is held back, it lands in
+        /// the buffer of the unacknowledged stanzas - and goes along with the
+        /// resumption.
         /// </summary>
         /// <remarks>
-        /// Ohne das wäre die Sparmassnahme bei jedem Abriss ein Verlust: Der
-        /// Rückkehrer bekäme alles nachgeliefert ausser dem, was der Server
-        /// eigens für ihn beiseitegelegt hat. Und niemand erführe davon - die
-        /// Stanza wurde nie gezählt, also fehlt sie auch keiner Zählung.
+        /// Without that the economy measure would be a loss at every tear: the
+        /// returning one would get everything handed over except what the
+        /// server put aside especially for them. And nobody would learn of it -
+        /// the stanza was never counted, so it is missing from no count either.
         /// </remarks>
         [Test]
         public async Task AtTheEndOfTheStream_NothingIsLeftBehind()
@@ -790,11 +792,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var session = Server.SessionOf(client.FullJid)!;
 
-            await WaitFor(() => session.StreamManagementEnabled, "ausgehandeltes Stream Management");
+            await WaitFor(() => session.StreamManagementEnabled, "the negotiated stream management");
 
             await client.SendRawAsync(ClientStateIndication.InactiveXml);
 
-            await WaitFor(() => !session.ClientIsActive, "die übernommene Inaktivität");
+            await WaitFor(() => !session.ClientIsActive, "the inactivity taken over");
 
             await session.SendAsync(Presence());
 
@@ -802,17 +804,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             session.Kill();
 
-            await WaitFor(() => Server.ResumableStreamCount > 0, "die abgelegte Sitzung");
+            await WaitFor(() => Server.ResumableStreamCount > 0, "the stored session");
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(session.HeldWhileInactive, Is.EqualTo(0),
-                            "Der Puffer blieb an der toten Sitzung hängen.");
+                            "The buffer stayed hanging on the dead session.");
 
                 Assert.That(session.PendingToClient.Any(e => e.Stanza.Contains("bob@", StringComparison.Ordinal)),
                             Is.True,
-                            "Die zurückgehaltene Presence ist nicht in den Puffer der unbestätigten gelangt.");
+                            "The held-back presence did not get into the buffer of the unacknowledged ones.");
 
             });
 
@@ -823,16 +825,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AfterAReconnect_TheClientSaysItAgain()
 
         /// <summary>
-        /// XEP-0352, Abschnitt 5.2: Auch ein wiederaufgenommener Stream fängt
-        /// aktiv an - also erklärt sich der Client erneut.
+        /// XEP-0352, section 5.2: A resumed stream begins active as well - so
+        /// the client declares itself anew.
         /// </summary>
         /// <remarks>
-        /// „Stream resumption does not affect the current CSI state, which
-        /// always defaults to 'active' for new and resumed streams." Der
-        /// Server hat den Zustand vergessen, das Gerät liegt aber in derselben
-        /// Tasche wie vorher. Ohne diese Wiederholung wäre jede Störung ein
-        /// stilles Ende der Sparmassnahme - und niemand bemerkte es, denn
-        /// alles funktioniert ja weiter.
+        /// "Stream resumption does not affect the current CSI state, which
+        /// always defaults to 'active' for new and resumed streams." The server
+        /// has forgotten the state, but the device lies in the same pocket as
+        /// before. Without this repetition every disturbance would be a silent
+        /// end of the economy measure - and nobody would notice it, because
+        /// everything goes on working after all.
         /// </remarks>
         [Test]
         public async Task AfterAReconnect_TheClientSaysItAgain()
@@ -843,14 +845,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.SetActiveAsync(false);
 
-            await WaitFor(() => !session.ClientIsActive, "die übernommene Inaktivität");
+            await WaitFor(() => !session.ClientIsActive, "the inactivity taken over");
 
             session.Kill();
 
             await WaitFor(() => Server.Sessions.Any(s => s.IsOpen &&
                                                          !ReferenceEquals(s, session) &&
                                                          !s.ClientIsActive),
-                          "die erneute Erklärung auf dem neuen Stream");
+                          "the renewed declaration on the new stream");
 
         }
 
