@@ -31,30 +31,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Das Drahtformat von OMEMO: die drei Protobuf-Nachrichten, das
-    /// <c>&lt;encrypted/&gt;</c>-Element und die SCE-Hülle (XEP-0420).
+    /// The wire format of OMEMO: the three protobuf messages, the
+    /// <c>&lt;encrypted/&gt;</c> element and the SCE envelope (XEP-0420).
     /// </summary>
     /// <remarks>
-    /// <b>Hier zählt jedes Byte, und zwar gegen die Spezifikation und nicht
-    /// gegen sich selbst.</b> Ein Format, das sich selbst lesen kann, ist noch
-    /// keines - das ist die Lehre aus D62 bis D64. Die erwarteten Bytes stehen
-    /// deshalb ausgeschrieben da, wo es geht.
+    /// <b>Here every byte counts, and that against the specification and not
+    /// against itself.</b> A format that can read itself is none yet - that is
+    /// the lesson from D62 to D64. The expected bytes therefore stand written
+    /// out where it is possible.
     /// </remarks>
     [TestFixture]
     public class OmemoWireFormatTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private static String Hex(Byte[] bytes)
             => Convert.ToHexString(bytes).ToLowerInvariant();
 
-        private static Byte[] Muster(Int32 laenge, Byte start = 0)
+        private static Byte[] Pattern(Int32 length, Byte start = 0)
         {
 
-            var b = new Byte[laenge];
+            var b = new Byte[length];
 
-            for (var i = 0; i < laenge; i++)
+            for (var i = 0; i < length; i++)
                 b[i] = (Byte) (start + i);
 
             return b;
@@ -67,33 +67,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheMessage_IsEncodedFieldByField()
 
         /// <summary>
-        /// <c>OMEMOMessage.proto</c> - Feld für Feld nachgerechnet.
+        /// <c>OMEMOMessage.proto</c> - recalculated field by field.
         /// </summary>
         /// <remarks>
-        /// <c>08</c> ist Feld 1 als Varint, <c>10</c> Feld 2, <c>1a</c> Feld 3
-        /// als längenbegrenzt, <c>22</c> Feld 4. Der Geheimtext steht also
-        /// <b>im</b> Protobuf mit Kennung und Längenangabe - und genau darüber
-        /// läuft der HMAC.
+        /// <c>08</c> is field 1 as a varint, <c>10</c> field 2, <c>1a</c>
+        /// field 3 as length-delimited, <c>22</c> field 4. The ciphertext
+        /// therefore stands <b>inside</b> the protobuf with a tag and a length
+        /// - and precisely over that the HMAC runs.
         /// </remarks>
         [Test]
         public void TheMessage_IsEncodedFieldByField()
         {
 
-            var dh      = Muster(32);
-            var geheim  = Muster(16, 100);
+            var dh          = Pattern(32);
+            var ciphertext  = Pattern(16, 100);
 
-            var kopf = new RatchetHeader(dh, 2, 1);
+            var header = new RatchetHeader(dh, 2, 1);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(kopf.Encode()),
+                Assert.That(Hex(header.Encode()),
                             Is.EqualTo("0801" + "1002" + "1a20" + Hex(dh)),
-                            "Der Kopf ohne Geheimtext");
+                            "The header without a ciphertext");
 
-                Assert.That(Hex(kopf.Encode(geheim)),
-                            Is.EqualTo("0801" + "1002" + "1a20" + Hex(dh) + "2210" + Hex(geheim)),
-                            "Der Kopf mit Geheimtext");
+                Assert.That(Hex(header.Encode(ciphertext)),
+                            Is.EqualTo("0801" + "1002" + "1a20" + Hex(dh) + "2210" + Hex(ciphertext)),
+                            "The header with a ciphertext");
 
             });
 
@@ -104,33 +104,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheMac_CoversTheEncodedMessage()
 
         /// <summary>
-        /// Der HMAC läuft über <c>ad ‖ OMEMOMessage.proto</c> - mit dem
-        /// Geheimtext im Protobuf und nicht dahinter.
+        /// The HMAC runs over <c>ad ‖ OMEMOMessage.proto</c> - with the
+        /// ciphertext inside the protobuf and not behind it.
         /// </summary>
         /// <remarks>
-        /// <b>Dieser Test kam durch einen Fund beim Lesen der Spezifikation
-        /// zustande, nicht durch eine Mutation.</b> In D64 hing der Geheimtext
-        /// roh hinter dem Kopf; die Spezifikation verlangt ihn als Feld 4 der
-        /// kodierten Nachricht. Der Unterschied sind drei Byte - Kennung und
-        /// Längenangabe -, und beide Seiten dieses Hauses hätten ihn nie
-        /// bemerkt. Gegen einen fremden Client hätte keine einzige Prüfsumme
-        /// gestimmt.
+        /// <b>This test came about through a find while reading the
+        /// specification, not through a mutation.</b> In D64 the ciphertext
+        /// hung raw behind the header; the specification demands it as field 4
+        /// of the encoded message. The difference is three bytes - tag and
+        /// length -, and both sides of this house would never have noticed it.
+        /// Against a foreign client not a single checksum would have held.
         ///
-        /// Deshalb steht die Rechnung hier von Hand daneben.
+        /// That is why the calculation stands here by hand next to it.
         /// </remarks>
         [Test]
         public void TheMac_CoversTheEncodedMessage()
         {
 
-            var authKey  = Muster(32);
-            var beigabe  = Encoding.UTF8.GetBytes("AD");
-            var kopf     = new RatchetHeader(Muster(32), 7, 3);
-            var geheim   = Muster(48, 200);
+            var authKey         = Pattern(32);
+            var associatedData  = Encoding.UTF8.GetBytes("AD");
+            var header          = new RatchetHeader(Pattern(32), 7, 3);
+            var ciphertext      = Pattern(48, 200);
 
-            Byte[] erwartet = [.. beigabe, .. kopf.Encode(geheim)];
+            Byte[] expected = [.. associatedData, .. header.Encode(ciphertext)];
 
-            Assert.That(Hex(DoubleRatchet.Mac(authKey, beigabe, kopf, geheim)),
-                        Is.EqualTo(Hex(HMACSHA256.HashData(authKey, erwartet)[..16])));
+            Assert.That(Hex(DoubleRatchet.Mac(authKey, associatedData, header, ciphertext)),
+                        Is.EqualTo(Hex(HMACSHA256.HashData(authKey, expected)[..16])));
 
         }
 
@@ -139,42 +138,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARatchetMessage_SurvivesTheWire()
 
         /// <summary>
-        /// Eine Ratchet-Nachricht überlebt die Kodierung als
-        /// <c>OMEMOAuthenticatedMessage</c> - und lässt sich danach noch
-        /// entschlüsseln.
+        /// A ratchet message survives the encoding as
+        /// <c>OMEMOAuthenticatedMessage</c> - and can still be decrypted
+        /// afterwards.
         /// </summary>
         /// <remarks>
-        /// Der letzte Teil ist der wichtige: Eine Kodierung, die sich lesen
-        /// lässt, aber den HMAC ungültig macht, fiele an einem blossen
-        /// Vergleich der Felder nicht auf.
+        /// The last part is the important one: an encoding that can be read but
+        /// makes the HMAC invalid would not stand out at a mere comparison of
+        /// the fields.
         /// </remarks>
         [Test]
         public void ARatchetMessage_SurvivesTheWire()
         {
 
-            var geheimnis  = RandomNumberGenerator.GetBytes(32);
-            var bobsKey    = Curve25519.GenerateKeyPair();
-            var beigabe    = Encoding.UTF8.GetBytes("AD");
+            var sharedSecret    = RandomNumberGenerator.GetBytes(32);
+            var bobsKey         = Curve25519.GenerateKeyPair();
+            var associatedData  = Encoding.UTF8.GetBytes("AD");
 
-            var alice = DoubleRatchet.InitiateAsSender(geheimnis, bobsKey.PublicKey);
-            var bob   = DoubleRatchet.InitiateAsReceiver(geheimnis, bobsKey);
+            var alice = DoubleRatchet.InitiateAsSender(sharedSecret, bobsKey.PublicKey);
+            var bob   = DoubleRatchet.InitiateAsReceiver(sharedSecret, bobsKey);
 
-            var nachricht = alice.Encrypt(Encoding.UTF8.GetBytes("durch den Draht"), beigabe);
+            var message = alice.Encrypt(Encoding.UTF8.GetBytes("through the wire"), associatedData);
 
-            var draht     = OmemoWireFormat.Encode(nachricht);
-            var zurueck   = OmemoWireFormat.Decode(draht);
+            var wire   = OmemoWireFormat.Encode(message);
+            var back   = OmemoWireFormat.Decode(wire);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(zurueck.Header.MessageNumber,       Is.EqualTo(nachricht.Header.MessageNumber));
-                Assert.That(zurueck.Header.PreviousChainLength, Is.EqualTo(nachricht.Header.PreviousChainLength));
-                Assert.That(Hex(zurueck.Header.DhPublicKey),    Is.EqualTo(Hex(nachricht.Header.DhPublicKey)));
-                Assert.That(Hex(zurueck.Ciphertext),            Is.EqualTo(Hex(nachricht.Ciphertext)));
-                Assert.That(Hex(zurueck.Mac),                   Is.EqualTo(Hex(nachricht.Mac)));
+                Assert.That(back.Header.MessageNumber,       Is.EqualTo(message.Header.MessageNumber));
+                Assert.That(back.Header.PreviousChainLength, Is.EqualTo(message.Header.PreviousChainLength));
+                Assert.That(Hex(back.Header.DhPublicKey),    Is.EqualTo(Hex(message.Header.DhPublicKey)));
+                Assert.That(Hex(back.Ciphertext),            Is.EqualTo(Hex(message.Ciphertext)));
+                Assert.That(Hex(back.Mac),                   Is.EqualTo(Hex(message.Mac)));
 
-                Assert.That(bob.Decrypt(zurueck, beigabe),
-                            Is.EqualTo(Encoding.UTF8.GetBytes("durch den Draht")));
+                Assert.That(bob.Decrypt(back, associatedData),
+                            Is.EqualTo(Encoding.UTF8.GetBytes("through the wire")));
 
             });
 
@@ -185,15 +184,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMissingField_IsAnError()
 
         /// <summary>
-        /// Ein fehlendes Pflichtfeld ist ein Formatfehler und kein
-        /// Vorgabewert.
+        /// A missing mandatory field is a format error and no default value.
         /// </summary>
         /// <remarks>
-        /// Protocol Buffers kennt für <c>uint32</c> die Null und für
-        /// <c>bytes</c> das leere Feld. Beides liesse sich stillschweigend
-        /// einsetzen - die Nachricht sähe dann aus wie die erste einer Kette
-        /// mit leerem Ratchet-Schlüssel, liesse sich nicht entschlüsseln, und
-        /// niemand wüsste, dass ein Feld fehlte.
+        /// Protocol Buffers knows the zero for <c>uint32</c> and the empty
+        /// field for <c>bytes</c>. Both could be inserted silently - the
+        /// message would then look like the first of a chain with an empty
+        /// ratchet key, could not be decrypted, and nobody would know that a
+        /// field was missing.
         /// </remarks>
         [Test]
         public void AMissingField_IsAnError()
@@ -202,51 +200,51 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                // Eine beglaubigte Nachricht ohne MAC.
-                var ohneMac = new List<Byte>();
-                Protobuf.WriteBytes(ohneMac, 2, Muster(20));
+                // An authenticated message without a MAC.
+                var withoutMac = new List<Byte>();
+                Protobuf.WriteBytes(withoutMac, 2, Pattern(20));
 
-                Assert.That(() => OmemoWireFormat.Decode([.. ohneMac]),
-                            Throws.TypeOf<FormatException>(), "MAC fehlt");
+                Assert.That(() => OmemoWireFormat.Decode([.. withoutMac]),
+                            Throws.TypeOf<FormatException>(), "MAC missing");
 
-                // Ein MAC der falschen Länge - und zwar um eine sonst
-                // einwandfreie Nachricht herum.
+                // A MAC of the wrong length - and that around an otherwise
+                // flawless message.
                 //
-                // Die frühere Fassung packte hier zufällige Bytes als innere
-                // Nachricht ein. Die scheiterten schon beim Protobuf-Lesen,
-                // und der Test bestand deshalb auch dann, wenn die
-                // Längenprüfung fehlte - er prüfte den falschen Grund. Die
-                // Mutation, die genau diese Prüfung entfernt, hat ihn
-                // überlebt.
-                var innereNachricht = new RatchetHeader(Muster(32), 0, 0).Encode(Muster(16));
+                // The earlier version packed random bytes in here as the inner
+                // message. Those failed at the protobuf reading already, and
+                // the test therefore passed even when the length check was
+                // missing - it checked the wrong reason. The mutation removing
+                // precisely this check survived it.
+                var innerMessage = new RatchetHeader(Pattern(32), 0, 0).Encode(Pattern(16));
 
-                var kurzerMac = new List<Byte>();
-                Protobuf.WriteBytes(kurzerMac, 1, Muster(8));
-                Protobuf.WriteBytes(kurzerMac, 2, innereNachricht);
+                var shortMac = new List<Byte>();
+                Protobuf.WriteBytes(shortMac, 1, Pattern(8));
+                Protobuf.WriteBytes(shortMac, 2, innerMessage);
 
-                Assert.That(() => OmemoWireFormat.Decode([.. kurzerMac]),
-                            Throws.TypeOf<FormatException>(), "MAC zu kurz");
+                Assert.That(() => OmemoWireFormat.Decode([.. shortMac]),
+                            Throws.TypeOf<FormatException>(), "MAC too short");
 
-                // Zur Gegenprobe: mit 16 Byte MAC geht dieselbe Nachricht durch.
-                var richtig = new List<Byte>();
-                Protobuf.WriteBytes(richtig, 1, Muster(16));
-                Protobuf.WriteBytes(richtig, 2, innereNachricht);
+                // As a counter-check: with a 16 byte MAC the same message gets
+                // through.
+                var correct = new List<Byte>();
+                Protobuf.WriteBytes(correct, 1, Pattern(16));
+                Protobuf.WriteBytes(correct, 2, innerMessage);
 
-                Assert.That(() => OmemoWireFormat.Decode([.. richtig]),
-                            Throws.Nothing, "Die Gegenprobe scheitert - dann prüft der Test etwas anderes.");
+                Assert.That(() => OmemoWireFormat.Decode([.. correct]),
+                            Throws.Nothing, "The counter-check fails - then the test checks something else.");
 
-                // Eine Nachricht ohne Ratchet-Schlüssel.
-                var innen = new List<Byte>();
-                Protobuf.WriteUInt32(innen, 1, 0);
-                Protobuf.WriteUInt32(innen, 2, 0);
-                Protobuf.WriteBytes (innen, 4, Muster(16));
+                // A message without a ratchet key.
+                var inner = new List<Byte>();
+                Protobuf.WriteUInt32(inner, 1, 0);
+                Protobuf.WriteUInt32(inner, 2, 0);
+                Protobuf.WriteBytes (inner, 4, Pattern(16));
 
-                var aussen = new List<Byte>();
-                Protobuf.WriteBytes(aussen, 1, Muster(16));
-                Protobuf.WriteBytes(aussen, 2, [.. innen]);
+                var outer = new List<Byte>();
+                Protobuf.WriteBytes(outer, 1, Pattern(16));
+                Protobuf.WriteBytes(outer, 2, [.. inner]);
 
-                Assert.That(() => OmemoWireFormat.Decode([.. aussen]),
-                            Throws.TypeOf<FormatException>(), "Ratchet-Schlüssel fehlt");
+                Assert.That(() => OmemoWireFormat.Decode([.. outer]),
+                            Throws.TypeOf<FormatException>(), "Ratchet key missing");
 
             });
 
@@ -257,29 +255,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheKeyExchange_RoundTrips()
 
         /// <summary>
-        /// <c>OMEMOKeyExchange.proto</c> - hin und zurück, und die Feldnummern
-        /// nachgerechnet.
+        /// <c>OMEMOKeyExchange.proto</c> - there and back, and the field
+        /// numbers recalculated.
         /// </summary>
         [Test]
         public void TheKeyExchange_RoundTrips()
         {
 
-            var austausch = new OmemoKeyExchange(31, 2, Muster(32), Muster(32, 50), Muster(70, 90));
+            var exchange = new OmemoKeyExchange(31, 2, Pattern(32), Pattern(32, 50), Pattern(70, 90));
 
-            var kodiert = austausch.Encode();
-            var gelesen = OmemoKeyExchange.Decode(kodiert);
+            var encoded = exchange.Encode();
+            var decoded = OmemoKeyExchange.Decode(encoded);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen.PreKeyId,        Is.EqualTo(31u));
-                Assert.That(gelesen.SignedPreKeyId,  Is.EqualTo(2u));
-                Assert.That(Hex(gelesen.IdentityKey),   Is.EqualTo(Hex(austausch.IdentityKey)));
-                Assert.That(Hex(gelesen.EphemeralKey),  Is.EqualTo(Hex(austausch.EphemeralKey)));
-                Assert.That(Hex(gelesen.Message),       Is.EqualTo(Hex(austausch.Message)));
+                Assert.That(decoded.PreKeyId,        Is.EqualTo(31u));
+                Assert.That(decoded.SignedPreKeyId,  Is.EqualTo(2u));
+                Assert.That(Hex(decoded.IdentityKey),   Is.EqualTo(Hex(exchange.IdentityKey)));
+                Assert.That(Hex(decoded.EphemeralKey),  Is.EqualTo(Hex(exchange.EphemeralKey)));
+                Assert.That(Hex(decoded.Message),       Is.EqualTo(Hex(exchange.Message)));
 
                 // pk_id = 1, spk_id = 2, ik = 3, ek = 4, message = 5
-                Assert.That(Hex(kodiert), Does.StartWith("081f" + "1002" + "1a20"));
+                Assert.That(Hex(encoded), Does.StartWith("081f" + "1002" + "1a20"));
 
             });
 
@@ -290,8 +288,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheEncryptedElement_RoundTrips()
 
         /// <summary>
-        /// Das <c>&lt;encrypted/&gt;</c>-Element: gebaut, gelesen, und die
-        /// Gestalt geprüft.
+        /// The <c>&lt;encrypted/&gt;</c> element: built, read, and the shape
+        /// checked.
         /// </summary>
         [Test]
         public void TheEncryptedElement_RoundTrips()
@@ -300,62 +298,62 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var element = new OmemoEncryptedElement(
                               12345,
                               new Dictionary<String, IReadOnlyList<OmemoKey>> {
-                                  ["bob@example.org"]    = [new OmemoKey(1, Muster(20), false),
-                                                            new OmemoKey(2, Muster(20, 40), true)],
-                                  ["alice@example.org"]  = [new OmemoKey(9, Muster(20, 80), false)]
+                                  ["bob@example.org"]    = [new OmemoKey(1, Pattern(20), false),
+                                                            new OmemoKey(2, Pattern(20, 40), true)],
+                                  ["alice@example.org"]  = [new OmemoKey(9, Pattern(20, 80), false)]
                               },
-                              Muster(64));
+                              Pattern(64));
 
             var xml = element.ToXml();
 
-            // In eine Nachricht einpacken, wie es auf der Leitung wäre.
+            // Pack it into a message, as it would be on the wire.
             var stanza = XElement.Parse(
                              $"<message xmlns='jabber:client' from='bob@example.org/x' " +
                              $"to='alice@example.org/y' type='chat'>{xml}</message>");
 
-            Assert.That(OmemoEncryptedElement.TryRead(stanza, out var gelesen), Is.True);
+            Assert.That(OmemoEncryptedElement.TryRead(stanza, out var decoded), Is.True);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(gelesen!.SenderDeviceId, Is.EqualTo(12345u));
-                Assert.That(gelesen.Keys, Has.Count.EqualTo(2));
+                Assert.That(decoded!.SenderDeviceId, Is.EqualTo(12345u));
+                Assert.That(decoded.Keys, Has.Count.EqualTo(2));
 
-                Assert.That(Hex(gelesen.Payload!), Is.EqualTo(Hex(Muster(64))));
+                Assert.That(Hex(decoded.Payload!), Is.EqualTo(Hex(Pattern(64))));
 
-                var fuerBob2 = gelesen.KeyFor("bob@example.org", 2);
-                Assert.That(fuerBob2,                Is.Not.Null);
-                Assert.That(fuerBob2!.IsKeyExchange, Is.True);
-                Assert.That(Hex(fuerBob2.Data),      Is.EqualTo(Hex(Muster(20, 40))));
+                var forBob2 = decoded.KeyFor("bob@example.org", 2);
+                Assert.That(forBob2,                Is.Not.Null);
+                Assert.That(forBob2!.IsKeyExchange, Is.True);
+                Assert.That(Hex(forBob2.Data),      Is.EqualTo(Hex(Pattern(20, 40))));
 
-                var fuerBob1 = gelesen.KeyFor("bob@example.org", 1);
-                Assert.That(fuerBob1!.IsKeyExchange, Is.False,
-                            "Ohne kex-Attribut gilt 'false' (Abschnitt 4.5).");
+                var forBob1 = decoded.KeyFor("bob@example.org", 1);
+                Assert.That(forBob1!.IsKeyExchange, Is.False,
+                            "Without a kex attribute 'false' holds (section 4.5).");
 
-                // Die Gerätekennung allein reicht nicht - sie gehört zu einem
-                // JID. Gerät 1 gibt es bei Bob, nicht bei Alice.
-                Assert.That(gelesen.KeyFor("alice@example.org", 1), Is.Null);
-                Assert.That(gelesen.KeyFor("carol@example.org", 1), Is.Null);
+                // The device id alone is not enough - it belongs to a JID.
+                // Device 1 exists at Bob's, not at Alice's.
+                Assert.That(decoded.KeyFor("alice@example.org", 1), Is.Null);
+                Assert.That(decoded.KeyFor("carol@example.org", 1), Is.Null);
 
-                // Der Vorgabewert steht nicht in der Stanza.
+                // The default value does not stand in the stanza.
                 //
-                // Hier stand eine Suche nach der Zeichenfolge "kex='false'" im
-                // ausgegebenen XML - und die konnte nie zutreffen:
-                // XElement.ToString schreibt Attribute mit doppelten
-                // Anführungszeichen. Der Test bestand also immer, auch als die
-                // Mutation den Vorgabewert ausschrieb. Gefragt wird jetzt das
-                // Attribut selbst.
+                // Here stood a search for the character sequence "kex='false'"
+                // in the emitted XML - and that could never hold:
+                // XElement.ToString writes attributes with double quotation
+                // marks. The test therefore always passed, even when the
+                // mutation wrote the default value out. What is asked now is
+                // the attribute itself.
                 XNamespace ns = OmemoEncryptedElement.Namespace;
 
-                var ohneKex = xml.Descendants(ns + "key")
+                var withoutKex = xml.Descendants(ns + "key")
                                  .Where(k => k.Attr("rid") is "1" or "9")
                                  .ToList();
 
-                Assert.That(ohneKex, Has.Count.EqualTo(2), "Die Schlüssel ohne kex fehlen.");
+                Assert.That(withoutKex, Has.Count.EqualTo(2), "The keys without a kex are missing.");
 
-                foreach (var k in ohneKex)
+                foreach (var k in withoutKex)
                     Assert.That(k.Attribute("kex"), Is.Null,
-                                $"Bei rid={k.Attr("rid")} steht ein ausgeschriebener Vorgabewert.");
+                                $"At rid={k.Attr("rid")} a written-out default value stands.");
 
             });
 
@@ -366,13 +364,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessageWithoutPayload_IsValid()
 
         /// <summary>
-        /// Eine Nachricht ohne <c>&lt;payload/&gt;</c> ist keine kaputte,
-        /// sondern eine ohne Inhalt.
+        /// A message without a <c>&lt;payload/&gt;</c> is not a broken one but
+        /// one without content.
         /// </summary>
         /// <remarks>
-        /// Sie heisst „ich habe die Sitzung neu aufgebaut" und trägt nur den
-        /// Schlüsselaustausch. So bekommt eine Gegenstelle eine Sitzung, ohne
-        /// dass ein Mensch etwas schreiben müsste.
+        /// It means "I have built the session up anew" and carries only the key
+        /// exchange. That way a far end gets a session without a human being
+        /// having to write anything.
         /// </remarks>
         [Test]
         public void AMessageWithoutPayload_IsValid()
@@ -381,19 +379,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var element = new OmemoEncryptedElement(
                               7,
                               new Dictionary<String, IReadOnlyList<OmemoKey>> {
-                                  ["bob@example.org"] = [new OmemoKey(1, Muster(20), true)]
+                                  ["bob@example.org"] = [new OmemoKey(1, Pattern(20), true)]
                               },
                               null);
 
             var stanza = XElement.Parse(
                              $"<message xmlns='jabber:client' from='a@b/c' type='chat'>{element.ToXml()}</message>");
 
-            Assert.That(OmemoEncryptedElement.TryRead(stanza, out var gelesen), Is.True);
+            Assert.That(OmemoEncryptedElement.TryRead(stanza, out var decoded), Is.True);
 
             Assert.Multiple(() =>
             {
-                Assert.That(gelesen!.Payload, Is.Null);
-                Assert.That(gelesen.KeyFor("bob@example.org", 1)!.IsKeyExchange, Is.True);
+                Assert.That(decoded!.Payload, Is.Null);
+                Assert.That(decoded.KeyFor("bob@example.org", 1)!.IsKeyExchange, Is.True);
             });
 
         }
@@ -403,37 +401,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnEncryptedElementInsideACarbon_IsNotTheOuterOne()
 
         /// <summary>
-        /// Die Verschlüsselung einer eingepackten Nachricht gehört nicht der
-        /// äusseren.
+        /// The encryption of a packed-in message does not belong to the outer
+        /// one.
         /// </summary>
         /// <remarks>
-        /// Dieselbe Falle wie beim Verzugsstempel (D59) und beim
-        /// Korrekturvermerk (D60): Ein Carbon bringt in seinem
-        /// <c>&lt;forwarded/&gt;</c> eine vollständige eigene Nachricht mit.
-        /// Wer die ganze Stanza durchsucht, hält die äussere für verschlüsselt
-        /// und entschlüsselt eine Nutzlast, die zu einer anderen Sitzung
-        /// gehört.
+        /// The same trap as with the delay stamp (D59) and with the correction
+        /// note (D60): a carbon brings a complete message of its own along in
+        /// its <c>&lt;forwarded/&gt;</c>. Whoever searches the whole stanza
+        /// takes the outer one for encrypted and decrypts a payload belonging
+        /// to a different session.
         /// </remarks>
         [Test]
         public void AnEncryptedElementInsideACarbon_IsNotTheOuterOne()
         {
 
-            var innen = new OmemoEncryptedElement(
+            var inner = new OmemoEncryptedElement(
                             7,
                             new Dictionary<String, IReadOnlyList<OmemoKey>> {
-                                ["bob@example.org"] = [new OmemoKey(1, Muster(20), false)]
+                                ["bob@example.org"] = [new OmemoKey(1, Pattern(20), false)]
                             },
-                            Muster(32)).ToXml();
+                            Pattern(32)).ToXml();
 
             var carbon = XElement.Parse(
                              "<message xmlns='jabber:client' from='alice@example.org' type='chat'>" +
                              "<received xmlns='urn:xmpp:carbons:2'>" +
                              "<forwarded xmlns='urn:xmpp:forward:0'>" +
-                             $"<message xmlns='jabber:client'>{innen}</message>" +
+                             $"<message xmlns='jabber:client'>{inner}</message>" +
                              "</forwarded></received></message>");
 
             Assert.That(OmemoEncryptedElement.TryRead(carbon, out _), Is.False,
-                        "Die äussere Nachricht gilt als verschlüsselt.");
+                        "The outer message counts as encrypted.");
 
         }
 
@@ -442,41 +439,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ABrokenElement_IsRefusedWithoutThrowing()
 
         /// <summary>
-        /// Was sich nicht lesen lässt, ergibt <c>false</c> - und keine
-        /// Ausnahme.
+        /// What cannot be read yields <c>false</c> - and no exception.
         /// </summary>
         /// <remarks>
-        /// Eine unverständliche Nachricht ist für den Empfänger dasselbe wie
-        /// keine. Ein Absturz wäre die schlechtere Antwort: Er liesse sich von
-        /// jedem auslösen, der ein <c>&lt;key/&gt;</c> mit krummem Base64
-        /// schickt.
+        /// An incomprehensible message is the same as none for the recipient. A
+        /// crash would be the worse answer: it could be triggered by anyone
+        /// sending a <c>&lt;key/&gt;</c> with crooked base64.
         /// </remarks>
         [Test]
         public void ABrokenElement_IsRefusedWithoutThrowing()
         {
 
-            String[] kaputt = [
+            String[] broken = [
 
-                // Keine Gerätekennung
+                // No device id
                 "<encrypted xmlns='urn:xmpp:omemo:2'><header/></encrypted>",
 
-                // Kennung ist keine Zahl
-                "<encrypted xmlns='urn:xmpp:omemo:2'><header sid='keine-zahl'/></encrypted>",
+                // The id is no number
+                "<encrypted xmlns='urn:xmpp:omemo:2'><header sid='not-a-number'/></encrypted>",
 
-                // Krummes Base64 im Schlüssel
+                // Crooked base64 in the key
                 "<encrypted xmlns='urn:xmpp:omemo:2'><header sid='1'>" +
-                "<keys jid='bob@example.org'><key rid='1'>!!!kein base64!!!</key></keys>" +
+                "<keys jid='bob@example.org'><key rid='1'>!!!not base64!!!</key></keys>" +
                 "</header></encrypted>",
 
-                // Ein Schlüssel ohne rid
+                // A key without a rid
                 "<encrypted xmlns='urn:xmpp:omemo:2'><header sid='1'>" +
                 "<keys jid='bob@example.org'><key>AAAA</key></keys></header></encrypted>",
 
-                // Keys ohne jid
+                // Keys without a jid
                 "<encrypted xmlns='urn:xmpp:omemo:2'><header sid='1'>" +
                 "<keys><key rid='1'>AAAA</key></keys></header></encrypted>",
 
-                // Krummes Base64 in der Nutzlast
+                // Crooked base64 in the payload
                 "<encrypted xmlns='urn:xmpp:omemo:2'><header sid='1'/>" +
                 "<payload>!!!</payload></encrypted>"
 
@@ -485,7 +480,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                foreach (var text in kaputt)
+                foreach (var text in broken)
                 {
 
                     var stanza = XElement.Parse(
@@ -504,7 +499,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheEnvelope_CarriesContentAndAffixes()
 
         /// <summary>
-        /// Die SCE-Hülle (XEP-0420): Inhalt, Absender, Zeit und Polsterung.
+        /// The SCE envelope (XEP-0420): content, sender, time and padding.
         /// </summary>
         [Test]
         public void TheEnvelope_CarriesContentAndAffixes()
@@ -512,28 +507,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             XNamespace client = "jabber:client";
 
-            var huelle = new SceEnvelope([new XElement(client + "body", "Treffen wir uns um acht?")],
-                                         From: "alice@example.org",
+            var envelope = new SceEnvelope([new XElement(client + "body", "Shall we meet at eight?")],
+                                           From: "alice@example.org",
                                          Time: new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero));
 
-            var xml = huelle.ToXml();
+            var xml = envelope.ToXml();
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(xml.Child(SceEnvelope.Namespace, "content"), Is.Not.Null);
                 Assert.That(xml.Child(SceEnvelope.Namespace, "rpad"),    Is.Not.Null,
-                            "XEP-0420 verlangt die Polsterung.");
+                            "XEP-0420 demands the padding.");
 
                 Assert.That(xml.Child(SceEnvelope.Namespace, "time")?.Attr("stamp"),
                             Is.EqualTo("2026-08-01T12:00:00Z"));
 
-                Assert.That(SceEnvelope.TryRead(xml, out var gelesen, "alice@example.org/handy"),
+                Assert.That(SceEnvelope.TryRead(xml, out var decoded, "alice@example.org/mobile"),
                             Is.True,
-                            "Der Absender aus der Stanza gehört zu demselben Menschen.");
+                            "The sender from the stanza belongs to the same human being.");
 
-                Assert.That(gelesen!.Content.Single().Value, Is.EqualTo("Treffen wir uns um acht?"));
-                Assert.That(gelesen.From, Is.EqualTo("alice@example.org"));
+                Assert.That(decoded!.Content.Single().Value, Is.EqualTo("Shall we meet at eight?"));
+                Assert.That(decoded.From, Is.EqualTo("alice@example.org"));
 
             });
 
@@ -544,16 +539,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AForwardedEnvelope_IsRefused()
 
         /// <summary>
-        /// Nennt die Hülle einen anderen Absender als die Stanza, wird sie
-        /// abgewiesen.
+        /// If the envelope names a different sender than the stanza, it is
+        /// turned away.
         /// </summary>
         /// <remarks>
-        /// <b>Das ist der Angriff, gegen den die Beigabe steht:</b> Jemand
-        /// fängt einen Geheimtext ab und schickt ihn unter eigenem Namen
-        /// weiter. Die Verschlüsselung bleibt gültig - sie wurde ja nicht
-        /// angetastet -, und ohne diesen Abgleich sähe der Empfänger eine
-        /// Nachricht, die nie an ihn gerichtet war, mit einem Absender, der
-        /// sie nie geschrieben hat.
+        /// <b>That is the attack the associated data stands against:</b>
+        /// somebody catches a ciphertext and passes it on under their own name.
+        /// The encryption stays valid - it was not touched after all -, and
+        /// without this comparison the recipient would see a message that was
+        /// never addressed to them, with a sender who never wrote it.
         /// </remarks>
         [Test]
         public void AForwardedEnvelope_IsRefused()
@@ -561,18 +555,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             XNamespace client = "jabber:client";
 
-            var huelle = new SceEnvelope([new XElement(client + "body", "vertraulich")],
-                                         From: "alice@example.org").ToXml();
+            var envelope = new SceEnvelope([new XElement(client + "body", "confidential")],
+                                           From: "alice@example.org").ToXml();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(SceEnvelope.TryRead(huelle, out _, "mallory@example.org/x"), Is.False,
-                            "Eine weitergereichte Hülle wurde angenommen.");
+                Assert.That(SceEnvelope.TryRead(envelope, out _, "mallory@example.org/x"), Is.False,
+                            "An envelope passed on was accepted.");
 
-                // Ohne Erwartung wird nicht abgeglichen - der Aufrufer weiss
-                // dann selbst, was er tut.
-                Assert.That(SceEnvelope.TryRead(huelle, out _), Is.True);
+                // Without an expectation no comparison happens - the caller
+                // then knows themselves what they are doing.
+                Assert.That(SceEnvelope.TryRead(envelope, out _), Is.True);
 
             });
 
@@ -583,14 +577,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePadding_IsRandomEveryTime()
 
         /// <summary>
-        /// Die Polsterung ist bei jedem Aufruf eine andere.
+        /// The padding is a different one at every call.
         /// </summary>
         /// <remarks>
-        /// Ohne sie verriete die Länge des Geheimtextes die Länge der
-        /// Nachricht - bei „ja" und „nein" ist das der ganze Inhalt. Wäre sie
-        /// bei gleichem Inhalt gleich, wären zwei gleiche Nachrichten wieder
-        /// gleich lang, und die Massnahme wäre genau so weit wirkungslos, wie
-        /// sie gedacht war.
+        /// Without it the length of the ciphertext would give the length of the
+        /// message away - with "yes" and "no" that is the whole content. Were
+        /// it the same for the same content, two equal messages would be
+        /// equally long again, and the measure would be without effect exactly
+        /// as far as it was intended.
         /// </remarks>
         [Test]
         public void ThePadding_IsRandomEveryTime()
@@ -598,20 +592,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             XNamespace client = "jabber:client";
 
-            var huelle = new SceEnvelope([new XElement(client + "body", "ja")]);
+            var envelope = new SceEnvelope([new XElement(client + "body", "yes")]);
 
-            var laengen = new HashSet<Int32>();
+            var lengths = new HashSet<Int32>();
 
             for (var i = 0; i < 30; i++)
-                laengen.Add(huelle.ToXml().Child(SceEnvelope.Namespace, "rpad")!.Value.Length);
+                lengths.Add(envelope.ToXml().Child(SceEnvelope.Namespace, "rpad")!.Value.Length);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(laengen, Has.Count.GreaterThan(1),
-                            "Die Polsterung hat immer dieselbe Länge.");
+                Assert.That(lengths, Has.Count.GreaterThan(1),
+                            "The padding always has the same length.");
 
-                Assert.That(laengen.Max(), Is.LessThanOrEqualTo(SceEnvelope.MaxPadding));
+                Assert.That(lengths.Max(), Is.LessThanOrEqualTo(SceEnvelope.MaxPadding));
 
             });
 
