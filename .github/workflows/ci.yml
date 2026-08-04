@@ -34,21 +34,21 @@ jobs:
       # without anything in Ratatoskr having moved. That is the honest signal,
       # but it is a choice - the superproject (XMPPConformanceTests) pins all
       # three submodules and is where a reproducible build lives.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: Ratatoskr
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: Vanaheimr/Hermod
           path: Hermod
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: Vanaheimr/Styx
           path: Styx
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
