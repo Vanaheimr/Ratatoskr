@@ -2,6 +2,8 @@
 
 # Ratatoskr — XMPP for .NET 10
 
+[![CI](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/ci.yml/badge.svg)](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/ci.yml)
+
 An XMPP library: client, server, and the extensions in between. WebSocket
 transport per RFC 7395, TCP for server-to-server, SCRAM authentication,
 federation across the domain boundary, publish-subscribe, and end-to-end
