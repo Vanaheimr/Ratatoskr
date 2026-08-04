@@ -30,24 +30,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Der Double Ratchet (XEP-0384, Abschnitt 4.3).
+    /// The double ratchet (XEP-0384, section 4.3).
     /// </summary>
     /// <remarks>
-    /// <b>Hier sind Fehler still, und deshalb sehen diese Tests anders aus als
-    /// die übrigen.</b> Eine Ratsche, die nicht weiterläuft, verschlüsselt
-    /// weiterhin einwandfrei - sie tut es nur immer wieder mit demselben
-    /// Schlüssel. Ein Test, der nur „hin und zurück ergibt den Klartext"
-    /// prüft, bestünde auch dann. Geprüft wird deshalb zusätzlich, dass sich
-    /// die Geheimtexte <i>unterscheiden</i>, dass Schlüssel <i>verschwinden</i>
-    /// und dass eine Nachricht an falscher Stelle <i>abgewiesen</i> wird.
+    /// <b>Here errors are silent, and that is why these tests look different
+    /// from the rest.</b> A ratchet that does not run on goes on encrypting
+    /// flawlessly - it only does so again and again with the same key. A test
+    /// checking only "there and back yields the plaintext" would pass then as
+    /// well. What is checked on top is therefore that the ciphertexts
+    /// <i>differ</i>, that keys <i>vanish</i> and that a message in the wrong
+    /// place is <i>turned away</i>.
     /// </remarks>
     [TestFixture]
     public class DoubleRatchetTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        private static readonly Byte[] Beigabe = Encoding.UTF8.GetBytes("AD");
+        private static readonly Byte[] AssociatedData = Encoding.UTF8.GetBytes("AD");
 
         private static String Hex(Byte[] bytes)
             => Convert.ToHexString(bytes).ToLowerInvariant();
@@ -56,17 +56,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             => Encoding.UTF8.GetBytes(s);
 
         /// <summary>
-        /// Ein Paar Ratschen, wie es nach X3DH entsteht: Alice ruft an, Bob
-        /// hat seinen Signed PreKey.
+        /// A pair of ratchets as it comes about after X3DH: Alice calls, Bob
+        /// has his signed PreKey.
         /// </summary>
-        private static (DoubleRatchet Alice, DoubleRatchet Bob) Paar()
+        private static (DoubleRatchet Alice, DoubleRatchet Bob) Pair()
         {
 
-            var geheimnis  = RandomNumberGenerator.GetBytes(32);
-            var bobsKey    = Curve25519.GenerateKeyPair();
+            var sharedSecret  = RandomNumberGenerator.GetBytes(32);
+            var bobsKey       = Curve25519.GenerateKeyPair();
 
-            return (DoubleRatchet.InitiateAsSender(geheimnis, bobsKey.PublicKey),
-                    DoubleRatchet.InitiateAsReceiver(geheimnis, bobsKey));
+            return (DoubleRatchet.InitiateAsSender(sharedSecret, bobsKey.PublicKey),
+                    DoubleRatchet.InitiateAsReceiver(sharedSecret, bobsKey));
 
         }
 
@@ -76,32 +76,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheFirstMessage_Arrives()
 
         /// <summary>
-        /// Der einfachste Fall - und zugleich der, in dem die angerufene Seite
-        /// ihre Ketten überhaupt erst bekommt.
+        /// The simplest case - and at the same time the one in which the called
+        /// side gets its chains in the first place.
         /// </summary>
         [Test]
         public void TheFirstMessage_Arrives()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(alice.CanSend, Is.True,  "Die anrufende Seite kann sofort senden.");
-                Assert.That(bob.CanSend,   Is.False, "Die angerufene Seite kann noch nicht senden.");
+                Assert.That(alice.CanSend, Is.True,  "The calling side can send at once.");
+                Assert.That(bob.CanSend,   Is.False, "The called side cannot send yet.");
 
             });
 
-            var nachricht = alice.Encrypt(Text("Hallo Bob"), Beigabe);
+            var message = alice.Encrypt(Text("Hello Bob"), AssociatedData);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bob.Decrypt(nachricht, Beigabe), Is.EqualTo(Text("Hallo Bob")));
+                Assert.That(bob.Decrypt(message, AssociatedData), Is.EqualTo(Text("Hello Bob")));
 
                 Assert.That(bob.CanSend, Is.True,
-                            "Nach der ersten Nachricht muss die angerufene Seite antworten können.");
+                            "After the first message the called side has to be able to answer.");
 
             });
 
@@ -112,35 +112,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region EveryMessage_HasItsOwnKey()
 
         /// <summary>
-        /// Zweimal derselbe Klartext ergibt zwei verschiedene Geheimtexte.
+        /// Twice the same plaintext yields two different ciphertexts.
         /// </summary>
         /// <remarks>
-        /// <b>Der Test, der eine stehengebliebene Ratsche findet.</b> Läuft die
-        /// symmetrische Kette nicht weiter, entschlüsselt trotzdem alles
-        /// richtig - nur mit demselben Schlüssel, demselben IV und damit
-        /// demselben Geheimtext. Wer denselben Text zweimal schreibt, verrät
-        /// es dann jedem Mitlesenden.
+        /// <b>The test that finds a ratchet standing still.</b> If the
+        /// symmetric chain does not run on, everything still decrypts correctly
+        /// - only with the same key, the same IV and thereby the same
+        /// ciphertext. Whoever writes the same text twice gives it away to
+        /// everybody reading along.
         /// </remarks>
         [Test]
         public void EveryMessage_HasItsOwnKey()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
-            var erste   = alice.Encrypt(Text("dasselbe"), Beigabe);
-            var zweite  = alice.Encrypt(Text("dasselbe"), Beigabe);
+            var first   = alice.Encrypt(Text("the same"), AssociatedData);
+            var second  = alice.Encrypt(Text("the same"), AssociatedData);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(zweite.Ciphertext), Is.Not.EqualTo(Hex(erste.Ciphertext)),
-                            "Zweimal derselbe Geheimtext - die Kette steht.");
+                Assert.That(Hex(second.Ciphertext), Is.Not.EqualTo(Hex(first.Ciphertext)),
+                            "Twice the same ciphertext - the chain stands still.");
 
-                Assert.That(erste.Header.MessageNumber,  Is.EqualTo(0u));
-                Assert.That(zweite.Header.MessageNumber, Is.EqualTo(1u));
+                Assert.That(first.Header.MessageNumber,  Is.EqualTo(0u));
+                Assert.That(second.Header.MessageNumber, Is.EqualTo(1u));
 
-                Assert.That(bob.Decrypt(erste,  Beigabe), Is.EqualTo(Text("dasselbe")));
-                Assert.That(bob.Decrypt(zweite, Beigabe), Is.EqualTo(Text("dasselbe")));
+                Assert.That(bob.Decrypt(first,  AssociatedData), Is.EqualTo(Text("the same")));
+                Assert.That(bob.Decrypt(second, AssociatedData), Is.EqualTo(Text("the same")));
 
             });
 
@@ -151,51 +151,51 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AConversation_TurnsTheDhRatchet()
 
         /// <summary>
-        /// Ein Hin und Her über mehrere Runden - und der Ratchet-Schlüssel
-        /// wechselt dabei.
+        /// A back and forth over several rounds - and the ratchet key changes
+        /// while doing so.
         /// </summary>
         /// <remarks>
-        /// Das ist die zweite Ratsche und der Grund für „Break-in Recovery":
-        /// Wer den Zustand einmal gestohlen hat, verliert ihn wieder, sobald
-        /// die beiden einmal in beide Richtungen geschrieben haben. Wechselte
-        /// der Schlüssel nicht, bliebe der Dieb für immer dabei.
+        /// That is the second ratchet and the reason for "break-in recovery":
+        /// whoever has stolen the state once loses it again as soon as the two
+        /// have written in both directions. Were the key not to change, the
+        /// thief would stay in on it forever.
         /// </remarks>
         [Test]
         public void AConversation_TurnsTheDhRatchet()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
-            var ersterSchluessel = alice.Encrypt(Text("1"), Beigabe);
-            bob.Decrypt(ersterSchluessel, Beigabe);
+            var firstKey = alice.Encrypt(Text("1"), AssociatedData);
+            bob.Decrypt(firstKey, AssociatedData);
 
-            var bobsAntwort = bob.Encrypt(Text("2"), Beigabe);
+            var bobsReply = bob.Encrypt(Text("2"), AssociatedData);
 
-            Assert.That(Hex(bobsAntwort.Header.DhPublicKey),
-                        Is.Not.EqualTo(Hex(ersterSchluessel.Header.DhPublicKey)),
-                        "Beide Seiten benutzen denselben Ratchet-Schlüssel.");
+            Assert.That(Hex(bobsReply.Header.DhPublicKey),
+                        Is.Not.EqualTo(Hex(firstKey.Header.DhPublicKey)),
+                        "Both sides use the same ratchet key.");
 
-            Assert.That(alice.Decrypt(bobsAntwort, Beigabe), Is.EqualTo(Text("2")));
+            Assert.That(alice.Decrypt(bobsReply, AssociatedData), Is.EqualTo(Text("2")));
 
-            // Und weiter, über mehrere Runden.
-            var schluessel = new List<String>();
+            // And on, over several rounds.
+            var keys = new List<String>();
 
             for (var i = 0; i < 5; i++)
             {
 
-                var hin = alice.Encrypt(Text($"A{i}"), Beigabe);
-                Assert.That(bob.Decrypt(hin, Beigabe), Is.EqualTo(Text($"A{i}")));
+                var there = alice.Encrypt(Text($"A{i}"), AssociatedData);
+                Assert.That(bob.Decrypt(there, AssociatedData), Is.EqualTo(Text($"A{i}")));
 
-                var zurueck = bob.Encrypt(Text($"B{i}"), Beigabe);
-                Assert.That(alice.Decrypt(zurueck, Beigabe), Is.EqualTo(Text($"B{i}")));
+                var back = bob.Encrypt(Text($"B{i}"), AssociatedData);
+                Assert.That(alice.Decrypt(back, AssociatedData), Is.EqualTo(Text($"B{i}")));
 
-                schluessel.Add(Hex(hin.Header.DhPublicKey));
-                schluessel.Add(Hex(zurueck.Header.DhPublicKey));
+                keys.Add(Hex(there.Header.DhPublicKey));
+                keys.Add(Hex(back.Header.DhPublicKey));
 
             }
 
-            Assert.That(schluessel.Distinct().Count(), Is.EqualTo(schluessel.Count),
-                        "Ein Ratchet-Schlüssel kam zweimal vor.");
+            Assert.That(keys.Distinct().Count(), Is.EqualTo(keys.Count),
+                        "A ratchet key occurred twice.");
 
         }
 
@@ -204,40 +204,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region MessagesOutOfOrder_StillArrive()
 
         /// <summary>
-        /// Nachrichten, die überholt wurden, lassen sich später noch lesen.
+        /// Messages that were overtaken can still be read later.
         /// </summary>
         /// <remarks>
-        /// Der Fall ist nicht ausgedacht: XMPP stellt über verschiedene Wege
-        /// zu, und eine Nachricht kann hinter einer späteren ankommen. Ohne
-        /// die beiseitegelegten Schlüssel wäre sie verloren - und zwar
-        /// endgültig, weil ihr Schlüssel beim Vorspulen vergessen worden wäre.
+        /// The case is not made up: XMPP delivers over different paths, and a
+        /// message can arrive behind a later one. Without the keys put aside it
+        /// would be lost - and that for good, because its key would have been
+        /// forgotten while fast-forwarding.
         /// </remarks>
         [Test]
         public void MessagesOutOfOrder_StillArrive()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
-            var eins  = alice.Encrypt(Text("eins"),  Beigabe);
-            var zwei  = alice.Encrypt(Text("zwei"),  Beigabe);
-            var drei  = alice.Encrypt(Text("drei"),  Beigabe);
+            var one    = alice.Encrypt(Text("one"),  AssociatedData);
+            var two    = alice.Encrypt(Text("two"),  AssociatedData);
+            var three  = alice.Encrypt(Text("three"),  AssociatedData);
 
-            // Die dritte kommt zuerst.
-            Assert.That(bob.Decrypt(drei, Beigabe), Is.EqualTo(Text("drei")));
+            // The third one comes first.
+            Assert.That(bob.Decrypt(three, AssociatedData), Is.EqualTo(Text("three")));
 
             Assert.That(bob.SkippedKeys, Is.EqualTo(2),
-                        "Die beiden übersprungenen Schlüssel wurden nicht aufgehoben.");
+                        "The two skipped keys were not kept.");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bob.Decrypt(eins, Beigabe), Is.EqualTo(Text("eins")));
-                Assert.That(bob.Decrypt(zwei, Beigabe), Is.EqualTo(Text("zwei")));
+                Assert.That(bob.Decrypt(one, AssociatedData), Is.EqualTo(Text("one")));
+                Assert.That(bob.Decrypt(two, AssociatedData), Is.EqualTo(Text("two")));
 
             });
 
             Assert.That(bob.SkippedKeys, Is.EqualTo(0),
-                        "Ein benutzter Schlüssel wurde nicht weggeräumt.");
+                        "A used key was not cleared away.");
 
         }
 
@@ -246,47 +246,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AMessageFromAPreviousChain_StillArrives()
 
         /// <summary>
-        /// Eine Nachricht aus der <b>vorigen</b> Kette kommt an, auch wenn die
-        /// Ratsche sich inzwischen gedreht hat.
+        /// A message out of the <b>previous</b> chain arrives, even when the
+        /// ratchet has turned in the meantime.
         /// </summary>
         /// <remarks>
-        /// Dafür steht das <c>pn</c> im Kopf: Es sagt der Gegenseite, wie lang
-        /// die vorige Kette war, damit sie deren Rest ausrechnen und
-        /// beiseitelegen kann, bevor sie die neue beginnt. Ohne dieses Feld
-        /// wäre jede Nachricht verloren, die während eines Richtungswechsels
-        /// unterwegs war - und Richtungswechsel sind der Normalfall eines
-        /// Gesprächs.
+        /// That is what the <c>pn</c> in the header is there for: it tells the
+        /// other side how long the previous chain was, so that it can calculate
+        /// its remainder and put it aside before beginning the new one. Without
+        /// this field every message that was under way during a change of
+        /// direction would be lost - and changes of direction are the normal
+        /// case of a conversation.
         /// </remarks>
         [Test]
         public void AMessageFromAPreviousChain_StillArrives()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
-            // Alice schreibt zweimal; die zweite bleibt unterwegs liegen.
-            var erste     = alice.Encrypt(Text("erste"), Beigabe);
-            var verspaetet = alice.Encrypt(Text("verspätet"), Beigabe);
+            // Alice writes twice; the second one stays lying under way.
+            var first   = alice.Encrypt(Text("first"), AssociatedData);
+            var delayed = alice.Encrypt(Text("delayed"), AssociatedData);
 
-            bob.Decrypt(erste, Beigabe);
+            bob.Decrypt(first, AssociatedData);
 
-            // Bob antwortet - damit dreht sich die Ratsche.
-            var antwort = bob.Encrypt(Text("Antwort"), Beigabe);
-            alice.Decrypt(antwort, Beigabe);
+            // Bob answers - with that the ratchet turns.
+            var reply = bob.Encrypt(Text("Reply"), AssociatedData);
+            alice.Decrypt(reply, AssociatedData);
 
-            // Alice schreibt in der neuen Kette.
-            var neue = alice.Encrypt(Text("neue Kette"), Beigabe);
+            // Alice writes in the new chain.
+            var newOne = alice.Encrypt(Text("new chain"), AssociatedData);
 
-            Assert.That(neue.Header.PreviousChainLength, Is.EqualTo(2u),
-                        "Die Länge der vorigen Kette steht nicht im Kopf.");
+            Assert.That(newOne.Header.PreviousChainLength, Is.EqualTo(2u),
+                        "The length of the previous chain does not stand in the header.");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bob.Decrypt(neue, Beigabe), Is.EqualTo(Text("neue Kette")));
+                Assert.That(bob.Decrypt(newOne, AssociatedData), Is.EqualTo(Text("new chain")));
 
-                // Und jetzt die liegengebliebene aus der alten Kette.
-                Assert.That(bob.Decrypt(verspaetet, Beigabe), Is.EqualTo(Text("verspätet")),
-                            "Die Nachricht aus der vorigen Kette ist verloren.");
+                // And now the one left lying out of the old chain.
+                Assert.That(bob.Decrypt(delayed, AssociatedData), Is.EqualTo(Text("delayed")),
+                            "The message out of the previous chain is lost.");
 
             });
 
@@ -297,28 +297,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AReplayedMessage_IsRefused()
 
         /// <summary>
-        /// Dieselbe Nachricht ein zweites Mal wird abgewiesen.
+        /// The same message a second time is turned away.
         /// </summary>
         /// <remarks>
-        /// Ihr Schlüssel ist nach dem ersten Mal fort - entweder verbraucht
-        /// oder aus dem Vorrat der übersprungenen entfernt. <b>Das ist keine
-        /// Nebenwirkung, sondern der Zweck:</b> Ohne sie liesse sich eine alte
-        /// Nachricht beliebig oft einspielen, und der Empfänger zeigte sie
-        /// jedesmal als neu an.
+        /// Its key is gone after the first time - either consumed or removed
+        /// from the store of the skipped ones. <b>That is no side effect but
+        /// the purpose:</b> without it an old message could be played in as
+        /// often as one likes, and the recipient would show it as new every
+        /// time.
         /// </remarks>
         [Test]
         public void AReplayedMessage_IsRefused()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
-            var nachricht = alice.Encrypt(Text("nur einmal"), Beigabe);
+            var message = alice.Encrypt(Text("only once"), AssociatedData);
 
-            Assert.That(bob.Decrypt(nachricht, Beigabe), Is.EqualTo(Text("nur einmal")));
+            Assert.That(bob.Decrypt(message, AssociatedData), Is.EqualTo(Text("only once")));
 
-            Assert.That(() => bob.Decrypt(nachricht, Beigabe),
+            Assert.That(() => bob.Decrypt(message, AssociatedData),
                         Throws.InstanceOf<Exception>(),
-                        "Dieselbe Nachricht liess sich ein zweites Mal lesen.");
+                        "The same message could be read a second time.");
 
         }
 
@@ -327,71 +327,71 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ATamperedMessage_IsRefused()
 
         /// <summary>
-        /// Verändertes verrät sich - im Geheimtext wie im Kopf.
+        /// What is changed gives itself away - in the ciphertext as in the
+        /// header.
         /// </summary>
         /// <remarks>
-        /// Der Kopf ist mitgeprüft, weil er in die Beigabe eingeht
-        /// (<c>ad ‖ OMEMOMessage.proto(header)</c>). Ohne das liesse sich eine
-        /// gültige Nachricht an eine andere Stelle der Kette verschieben: Der
-        /// Empfänger nähme dann einen anderen Schlüssel, und was er
-        /// entschlüsselt, wäre Zufall - aber die Herkunft sähe unversehrt aus.
+        /// The header is checked along, because it goes into the associated
+        /// data (<c>ad ‖ OMEMOMessage.proto(header)</c>). Without that a valid
+        /// message could be moved to another place of the chain: the recipient
+        /// would then take a different key, and what they decrypt would be
+        /// chance - but the origin would look intact.
         /// </remarks>
         [Test]
         public void ATamperedMessage_IsRefused()
         {
 
-            // Jeder Fall bekommt ein frisches Paar, und das ist keine
-            // Umständlichkeit: Eine abgewiesene Nachricht verändert den
-            // Zustand der Ratsche trotzdem - ein Vorspulen hat stattgefunden,
-            // ein Schlüssel ist verbraucht. Standen die Fälle hintereinander
-            // auf demselben Paar, scheiterte der zweite an den Folgen des
-            // ersten statt an seinem eigenen Grund.
+            // Every case gets a fresh pair, and that is no fussiness: a message
+            // turned away changes the state of the ratchet nevertheless - a
+            // fast-forward has taken place, a key is consumed. Had the cases
+            // stood one after another on the same pair, the second would have
+            // failed at the consequences of the first instead of at its own
+            // reason.
             //
-            // Genau daran ist die Mutation „der HMAC wird nicht geprüft"
-            // vorbeigekommen: Der dritte Fall - die fremde Beigabe - hätte sie
-            // erschlagen, prüfte aber auf einer Ratsche, die durch die beiden
-            // Fälle davor schon weitergelaufen war, und warf deshalb aus einem
-            // ganz anderen Grund.
+            // Precisely that is what the mutation "the HMAC is not checked" got
+            // past: the third case - the foreign associated data - would have
+            // struck it dead, but checked on a ratchet that had already run on
+            // through the two cases before it, and therefore threw for an
+            // entirely different reason.
 
             Assert.Multiple(() =>
             {
 
                 {
-                    var (alice, bob) = Paar();
-                    var nachricht    = alice.Encrypt(Text("unverändert"), Beigabe);
+                    var (alice, bob) = Pair();
+                    var message    = alice.Encrypt(Text("unchanged"), AssociatedData);
 
-                    var geheim = (Byte[]) nachricht.Ciphertext.Clone();
-                    geheim[0] ^= 0x01;
+                    var ciphertext = (Byte[]) message.Ciphertext.Clone();
+                    ciphertext[0] ^= 0x01;
 
-                    Assert.That(() => bob.Decrypt(nachricht with { Ciphertext = geheim }, Beigabe),
+                    Assert.That(() => bob.Decrypt(message with { Ciphertext = ciphertext }, AssociatedData),
                                 Throws.TypeOf<CryptographicException>(),
-                                "Ein verändertes Byte im Geheimtext kam durch.");
+                                "A changed byte in the ciphertext got through.");
                 }
 
                 {
-                    var (alice, bob) = Paar();
-                    var nachricht    = alice.Encrypt(Text("unverändert"), Beigabe);
+                    var (alice, bob) = Pair();
+                    var message    = alice.Encrypt(Text("unchanged"), AssociatedData);
 
                     Assert.That(() => bob.Decrypt(
-                                    nachricht with { Header = nachricht.Header with { MessageNumber = 7 } },
-                                    Beigabe),
+                                    message with { Header = message.Header with { MessageNumber = 7 } },
+                                    AssociatedData),
                                 Throws.InstanceOf<Exception>(),
-                                "Eine verschobene Nummer kam durch.");
+                                "A shifted number got through.");
                 }
 
                 {
-                    // Der schärfste der drei: Am Geheimtext ist nichts
-                    // verändert, und der Nachrichtenschlüssel stimmt. Allein
-                    // die Beigabe ist eine andere - wird sie nicht geprüft,
-                    // entschlüsselt diese Nachricht anstandslos, und eine
-                    // gültige Nachricht liesse sich in eine fremde Sitzung
-                    // verschieben.
-                    var (alice, bob) = Paar();
-                    var nachricht    = alice.Encrypt(Text("unverändert"), Beigabe);
+                    // The sharpest of the three: nothing is changed at the
+                    // ciphertext, and the message key holds. The associated
+                    // data alone is a different one - if it is not checked,
+                    // this message decrypts without objection, and a valid
+                    // message could be moved into a foreign session.
+                    var (alice, bob) = Pair();
+                    var message    = alice.Encrypt(Text("unchanged"), AssociatedData);
 
-                    Assert.That(() => bob.Decrypt(nachricht, Text("andere Beigabe")),
+                    Assert.That(() => bob.Decrypt(message, Text("other associated data")),
                                 Throws.TypeOf<CryptographicException>(),
-                                "Eine fremde Beigabe kam durch - die Sitzung ist nicht gebunden.");
+                                "A foreign associated data got through - the session is not bound.");
                 }
 
             });
@@ -403,48 +403,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ARidiculousMessageNumber_IsRefused()
 
         /// <summary>
-        /// Eine Nachricht mit einer sehr grossen Nummer wird abgewiesen, statt
-        /// den Empfänger rechnen zu lassen.
+        /// A message with a very large number is turned away instead of letting
+        /// the recipient calculate.
         /// </summary>
         /// <remarks>
-        /// <b>Das ist eine Abwehr, keine Ordnungsfrage.</b> Ohne Obergrenze
-        /// genügt eine einzige Nachricht mit <c>n = 4000000000</c>, und der
-        /// Empfänger rechnet vier Milliarden Schlüssel aus, bevor er merkt,
-        /// dass sie nicht stimmt. Ein Angreifer braucht dafür weder Schlüssel
-        /// noch Zugang - er braucht nur diese eine Zahl.
+        /// <b>That is a defence, not a question of order.</b> Without an upper
+        /// bound a single message with <c>n = 4000000000</c> is enough, and the
+        /// recipient calculates four billion keys before noticing that it does
+        /// not hold. An attacker needs neither a key nor access for that - they
+        /// need only this one number.
         ///
-        /// Die Prüfung steht deshalb <b>vor</b> der Schleife: Eine, die in ihr
-        /// stünde, käme zu spät.
+        /// The check therefore stands <b>before</b> the loop: one standing in
+        /// it would come too late.
         /// </remarks>
         [Test]
         public void ARidiculousMessageNumber_IsRefused()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
-            var erste = alice.Encrypt(Text("eins"), Beigabe);
-            bob.Decrypt(erste, Beigabe);
+            var first = alice.Encrypt(Text("one"), AssociatedData);
+            bob.Decrypt(first, AssociatedData);
 
-            var boshaft = alice.Encrypt(Text("zwei"), Beigabe);
+            var malicious = alice.Encrypt(Text("two"), AssociatedData);
 
-            var stoppuhr = System.Diagnostics.Stopwatch.StartNew();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             Assert.That(() => bob.Decrypt(
-                            boshaft with { Header = boshaft.Header with { MessageNumber = 4_000_000_000 } },
-                            Beigabe),
+                            malicious with { Header = malicious.Header with { MessageNumber = 4_000_000_000 } },
+                            AssociatedData),
                         Throws.TypeOf<CryptographicException>(),
-                        "Die unsinnige Nummer wurde angenommen.");
+                        "The nonsensical number was accepted.");
 
-            stoppuhr.Stop();
+            stopwatch.Stop();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(stoppuhr.ElapsedMilliseconds, Is.LessThan(1000),
-                            "Die Abweisung hat gerechnet, statt zu prüfen.");
+                Assert.That(stopwatch.ElapsedMilliseconds, Is.LessThan(1000),
+                            "The refusal calculated instead of checking.");
 
                 Assert.That(bob.SkippedKeys, Is.LessThanOrEqualTo(DoubleRatchet.MaxSkip),
-                            "Es wurden mehr Schlüssel aufgehoben als erlaubt.");
+                            "More keys were kept than permitted.");
 
             });
 
@@ -455,42 +455,40 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheChainStep_MatchesTheSpecificationLiterally()
 
         /// <summary>
-        /// Nachrichtenschlüssel aus <c>HMAC(ck, 0x01)</c>, nächster
-        /// Kettenschlüssel aus <c>HMAC(ck, 0x02)</c> - und zwar in dieser
-        /// Zuordnung.
+        /// The message key out of <c>HMAC(ck, 0x01)</c>, the next chain key out
+        /// of <c>HMAC(ck, 0x02)</c> - and that in this assignment.
         /// </summary>
         /// <remarks>
-        /// <b>Hier stand ein Test, der nichts prüfte.</b> Er rechnete die
-        /// beiden Konstanten im Test selbst nach und stellte fest, dass sie
-        /// verschiedene Ergebnisse liefern - über den Quelltext sagte er
-        /// nichts. Die Mutation, die beide auf <c>0x01</c> setzt, überlebte
-        /// ihn folgerichtig.
+        /// <b>Here stood a test that checked nothing.</b> It recalculated the
+        /// two constants in the test itself and established that they deliver
+        /// different results - about the source it said nothing. The mutation
+        /// setting both to <c>0x01</c> survived it consequently.
         ///
-        /// <b>Und das wäre die schwerste Lücke dieser ganzen Etappe
-        /// gewesen:</b> Wären Nachrichten- und Kettenschlüssel dieselben
-        /// Bytes, könnte jeder, der eine einzige Nachricht mitliest, die ganze
-        /// weitere Kette ausrechnen. Aus Forward Secrecy würde ihr Gegenteil -
-        /// und nichts sähe anders aus, denn beide Seiten rechnen ja gleich
-        /// falsch.
+        /// <b>And that would have been the heaviest gap of this whole
+        /// stage:</b> were the message and the chain key the same bytes,
+        /// anybody reading a single message along could calculate the whole
+        /// further chain. Out of forward secrecy would come its opposite - and
+        /// nothing would look different, because both sides calculate equally
+        /// wrongly after all.
         /// </remarks>
         [Test]
         public void TheChainStep_MatchesTheSpecificationLiterally()
         {
 
-            var kette = RandomNumberGenerator.GetBytes(32);
+            var chain = RandomNumberGenerator.GetBytes(32);
 
-            var (mk, ck) = DoubleRatchet.AdvanceChain(kette);
+            var (mk, ck) = DoubleRatchet.AdvanceChain(chain);
 
             Assert.Multiple(() =>
             {
 
                 Assert.That(Hex(mk),
-                            Is.EqualTo(Hex(HMACSHA256.HashData(kette, new Byte[] { 0x01 }))),
-                            "Der Nachrichtenschlüssel entsteht nicht aus 0x01.");
+                            Is.EqualTo(Hex(HMACSHA256.HashData(chain, new Byte[] { 0x01 }))),
+                            "The message key does not come about out of 0x01.");
 
                 Assert.That(Hex(ck),
-                            Is.EqualTo(Hex(HMACSHA256.HashData(kette, new Byte[] { 0x02 }))),
-                            "Der nächste Kettenschlüssel entsteht nicht aus 0x02.");
+                            Is.EqualTo(Hex(HMACSHA256.HashData(chain, new Byte[] { 0x02 }))),
+                            "The next chain key does not come about out of 0x02.");
 
                 Assert.That(Hex(mk), Is.Not.EqualTo(Hex(ck)));
 
@@ -503,60 +501,57 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRootChain_MatchesTheSpecificationLiterally()
 
         /// <summary>
-        /// Die Wurzelkette: der Wurzelschlüssel ist das <b>Salz</b>, der
-        /// Diffie-Hellman-Wert das Eingabematerial, „OMEMO Root Chain" der
-        /// Info-String, und die 64 Byte teilen sich in neue Wurzel und neue
-        /// Kette.
+        /// The root chain: the root key is the <b>salt</b>, the Diffie-Hellman
+        /// value the input material, "OMEMO Root Chain" the info string, and
+        /// the 64 bytes divide into the new root and the new chain.
         /// </summary>
         /// <remarks>
-        /// <b>Zum vierten Mal dieselbe Lehre, und diesmal die teuerste.</b>
-        /// Ohne diesen Test überlebten vier Mutationen: Salz und
-        /// Eingabematerial vertauscht, Info-String weg, und - am schlimmsten -
-        /// beide Hälften aus derselben. Die letzte macht Wurzel- und
-        /// Kettenschlüssel zu denselben Bytes; aus einer mitgelesenen
-        /// Nachricht liesse sich damit die Wurzel und daraus die ganze Sitzung
-        /// aufrollen.
+        /// <b>The same lesson for the fourth time, and this time the most
+        /// expensive one.</b> Without this test four mutations survived: salt
+        /// and input material swapped, the info string gone, and - worst - both
+        /// halves out of the same one. The last one makes the root and the
+        /// chain key the same bytes; out of one message read along the root and
+        /// out of it the whole session could be rolled up.
         ///
-        /// Keine davon fiel auf, weil <b>beide Seiten dieselbe Funktion
-        /// benutzen und deshalb weiterhin übereinkamen</b>. Ein Test, der
-        /// „beide bekommen dasselbe heraus" prüft, kann eine falsche
-        /// Ableitung nicht von einer richtigen unterscheiden - er prüft nur,
-        /// dass sie auf beiden Seiten gleich ist.
+        /// None of them stood out, because <b>both sides use the same function
+        /// and therefore went on agreeing</b>. A test checking "both come out
+        /// with the same thing" cannot tell a wrong derivation from a right one
+        /// - it checks only that it is equal on both sides.
         ///
-        /// Also wieder: die Vorschrift ein zweites Mal wörtlich, mit einem
-        /// zweiten HKDF nachgerechnet.
+        /// So again: the provision a second time literally, recalculated with a
+        /// second HKDF.
         /// </remarks>
         [Test]
         public void TheRootChain_MatchesTheSpecificationLiterally()
         {
 
-            var wurzel   = RandomNumberGenerator.GetBytes(32);
-            var dhWert   = RandomNumberGenerator.GetBytes(32);
+            var root      = RandomNumberGenerator.GetBytes(32);
+            var dhValue   = RandomNumberGenerator.GetBytes(32);
 
             var hkdf = new Org.BouncyCastle.Crypto.Generators.HkdfBytesGenerator(
                            new Org.BouncyCastle.Crypto.Digests.Sha256Digest());
 
             hkdf.Init(new Org.BouncyCastle.Crypto.Parameters.HkdfParameters(
-                          dhWert,                                        // Eingabematerial
-                          wurzel,                                        // Salz
-                          Encoding.UTF8.GetBytes("OMEMO Root Chain")));  // Info
+                          dhValue,                                        // input material
+                          root,                                        // salt
+                          Encoding.UTF8.GetBytes("OMEMO Root Chain")));  // info
 
-            var erwartet = new Byte[64];
-            hkdf.GenerateBytes(erwartet, 0, erwartet.Length);
+            var expected = new Byte[64];
+            hkdf.GenerateBytes(expected, 0, expected.Length);
 
-            var (neueWurzel, neueKette) = DoubleRatchet.DeriveRootChain(wurzel, dhWert);
+            var (newRoot, newChain) = DoubleRatchet.DeriveRootChain(root, dhValue);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(neueWurzel), Is.EqualTo(Hex(erwartet[..32])),
-                            "Die neue Wurzel ist nicht die erste Hälfte.");
+                Assert.That(Hex(newRoot), Is.EqualTo(Hex(expected[..32])),
+                            "The new root is not the first half.");
 
-                Assert.That(Hex(neueKette), Is.EqualTo(Hex(erwartet[32..])),
-                            "Die neue Kette ist nicht die zweite Hälfte.");
+                Assert.That(Hex(newChain), Is.EqualTo(Hex(expected[32..])),
+                            "The new chain is not the second half.");
 
-                Assert.That(Hex(neueWurzel), Is.Not.EqualTo(Hex(neueKette)),
-                            "Wurzel und Kette sind dieselben Bytes - die Sitzung liesse sich aufrollen.");
+                Assert.That(Hex(newRoot), Is.Not.EqualTo(Hex(newChain)),
+                            "Root and chain are the same bytes - the session could be rolled up.");
 
             });
 
@@ -567,8 +562,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheMessageKeyMaterial_MatchesTheSpecificationLiterally()
 
         /// <summary>
-        /// Das Material eines Nachrichtenschlüssels: 80 Byte, Salz aus 32
-        /// Nullbyte, Info „OMEMO Message Key Material".
+        /// The material of a message key: 80 bytes, salt out of 32 zero bytes,
+        /// info "OMEMO Message Key Material".
         /// </summary>
         [Test]
         public void TheMessageKeyMaterial_MatchesTheSpecificationLiterally()
@@ -584,16 +579,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           new Byte[32],
                           Encoding.UTF8.GetBytes("OMEMO Message Key Material")));
 
-            var erwartet = new Byte[80];
-            hkdf.GenerateBytes(erwartet, 0, erwartet.Length);
+            var expected = new Byte[80];
+            hkdf.GenerateBytes(expected, 0, expected.Length);
 
             var (key, authKey, iv) = DoubleRatchet.Material(mk);
 
             Assert.Multiple(() =>
             {
-                Assert.That(Hex(key),      Is.EqualTo(Hex(erwartet[..32])));
-                Assert.That(Hex(authKey),  Is.EqualTo(Hex(erwartet[32..64])));
-                Assert.That(Hex(iv),       Is.EqualTo(Hex(erwartet[64..])));
+                Assert.That(Hex(key),      Is.EqualTo(Hex(expected[..32])));
+                Assert.That(Hex(authKey),  Is.EqualTo(Hex(expected[32..64])));
+                Assert.That(Hex(iv),       Is.EqualTo(Hex(expected[64..])));
             });
 
         }
@@ -603,20 +598,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheHeader_IsEncodedAsSpecified()
 
         /// <summary>
-        /// Der Kopf als <c>OMEMOMessage.proto</c> - Feld für Feld
-        /// nachgerechnet.
+        /// The header as <c>OMEMOMessage.proto</c> - recalculated field by
+        /// field.
         /// </summary>
         /// <remarks>
-        /// <b>Zum vierten Mal dieselbe Vorsichtsmassnahme wie in D62 und
-        /// D63.</b> Diese Bytes gehen in die Beigabe ein; beide Seiten müssen
-        /// aus demselben Kopf dieselben bilden. Eine falsche Feldnummer oder
-        /// eine andere Reihenfolge fiele im Haus nicht auf - beide Seiten
-        /// rechnen ja gleich falsch -, und erst ein fremder Client bekäme
-        /// lauter ungültige Prüfsummen.
+        /// <b>The same precaution for the fourth time as in D62 and D63.</b>
+        /// These bytes go into the associated data; both sides have to form the
+        /// same ones out of the same header. A wrong field number or a
+        /// different order would not stand out in the house - both sides
+        /// calculate equally wrongly after all -, and only a foreign client
+        /// would get nothing but invalid checksums.
         ///
-        /// Deshalb stehen die erwarteten Bytes hier ausgeschrieben:
-        /// <c>08</c> ist Feld 1 als Varint, <c>10</c> Feld 2 als Varint,
-        /// <c>1a</c> Feld 3 als längenbegrenzt, <c>20</c> die Länge 32.
+        /// That is why the expected bytes stand written out here: <c>08</c> is
+        /// field 1 as a varint, <c>10</c> field 2 as a varint, <c>1a</c>
+        /// field 3 as length-delimited, <c>20</c> the length 32.
         /// </remarks>
         [Test]
         public void TheHeader_IsEncodedAsSpecified()
@@ -626,26 +621,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             for (var i = 0; i < 32; i++)
                 dh[i] = (Byte) i;
 
-            var kodiert = new RatchetHeader(dh, 300, 5).Encode();
+            var encoded = new RatchetHeader(dh, 300, 5).Encode();
 
             Assert.Multiple(() =>
             {
 
-                // n = 5 (Feld 1), pn = 300 (Feld 2, zwei Varint-Byte),
-                // dh_pub = 32 Byte (Feld 3).
-                Assert.That(Hex(kodiert),
+                // n = 5 (field 1), pn = 300 (field 2, two varint bytes),
+                // dh_pub = 32 bytes (field 3).
+                Assert.That(Hex(encoded),
                             Is.EqualTo("0805" + "10ac02" + "1a20" + Hex(dh)));
 
-                // Und die Gegenprobe: gelesen ergibt es wieder dieselben Werte.
-                var felder = Protobuf.Read(kodiert).ToList();
+                // And the counter-check: read back it yields the same values
+                // again.
+                var fields = Protobuf.Read(encoded).ToList();
 
-                Assert.That(felder, Has.Count.EqualTo(3));
-                Assert.That(felder[0].Field, Is.EqualTo(1));
-                Assert.That(felder[0].Number, Is.EqualTo(5u));
-                Assert.That(felder[1].Field, Is.EqualTo(2));
-                Assert.That(felder[1].Number, Is.EqualTo(300u));
-                Assert.That(felder[2].Field, Is.EqualTo(3));
-                Assert.That(Hex(felder[2].Data), Is.EqualTo(Hex(dh)));
+                Assert.That(fields, Has.Count.EqualTo(3));
+                Assert.That(fields[0].Field, Is.EqualTo(1));
+                Assert.That(fields[0].Number, Is.EqualTo(5u));
+                Assert.That(fields[1].Field, Is.EqualTo(2));
+                Assert.That(fields[1].Number, Is.EqualTo(300u));
+                Assert.That(fields[2].Field, Is.EqualTo(3));
+                Assert.That(Hex(fields[2].Data), Is.EqualTo(Hex(dh)));
 
             });
 
@@ -656,54 +652,54 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ALongConversation_StaysInStep()
 
         /// <summary>
-        /// Fünfzig Nachrichten in wechselnder Richtung, teils vertauscht
-        /// zugestellt.
+        /// Fifty messages in alternating directions, delivered partly out of
+        /// order.
         /// </summary>
         /// <remarks>
-        /// Der Test, der die drei Fälle des Entschlüsselns gegeneinander
-        /// stellt: beiseitegelegter Schlüssel, Richtungswechsel und Vorspulen
-        /// in der laufenden Kette. Jeder für sich ist leicht; falsch wird es
-        /// an ihren Rändern, und die kommen nur in einem längeren Verlauf vor.
+        /// The test that puts the three cases of decrypting against each other:
+        /// a key put aside, a change of direction and fast-forwarding in the
+        /// running chain. Each on its own is easy; it goes wrong at their
+        /// edges, and those occur only in a longer course.
         /// </remarks>
         [Test]
         public void ALongConversation_StaysInStep()
         {
 
-            var (alice, bob) = Paar();
+            var (alice, bob) = Pair();
 
-            var zufall     = new Random(20260801);
-            var unterwegs  = new List<(RatchetMessage Nachricht, String Text, Boolean VonAlice)>();
+            var random    = new Random(20260801);
+            var inFlight  = new List<(RatchetMessage Message, String Text, Boolean FromAlice)>();
 
-            for (var runde = 0; runde < 25; runde++)
+            for (var round = 0; round < 25; round++)
             {
 
-                var vonAlice  = runde % 3 != 2;
-                var text      = $"Nachricht {runde}";
+                var fromAlice  = round % 3 != 2;
+                var text       = $"Message {round}";
 
-                // Wer gerade nicht senden kann, hört erst zu.
-                if (!vonAlice && !bob.CanSend)
+                // Whoever cannot send just now listens first.
+                if (!fromAlice && !bob.CanSend)
                     continue;
 
-                unterwegs.Add(((vonAlice ? alice : bob).Encrypt(Text(text), Beigabe), text, vonAlice));
+                inFlight.Add(((fromAlice ? alice : bob).Encrypt(Text(text), AssociatedData), text, fromAlice));
 
-                // Ab und zu wird zugestellt, was liegt - in beliebiger
-                // Reihenfolge.
-                if (runde % 4 == 3)
+                // Now and then what is lying about is delivered - in an
+                // arbitrary order.
+                if (round % 4 == 3)
                 {
 
-                    foreach (var (nachricht, text_, vonAlice_) in unterwegs.OrderBy(_ => zufall.Next()))
-                        Assert.That((vonAlice_ ? bob : alice).Decrypt(nachricht, Beigabe),
+                    foreach (var (message, text_, fromAlice_) in inFlight.OrderBy(_ => random.Next()))
+                        Assert.That((fromAlice_ ? bob : alice).Decrypt(message, AssociatedData),
                                     Is.EqualTo(Text(text_)),
                                     text_);
 
-                    unterwegs.Clear();
+                    inFlight.Clear();
 
                 }
 
             }
 
-            foreach (var (nachricht, text, vonAlice) in unterwegs.OrderBy(_ => zufall.Next()))
-                Assert.That((vonAlice ? bob : alice).Decrypt(nachricht, Beigabe),
+            foreach (var (message, text, fromAlice) in inFlight.OrderBy(_ => random.Next()))
+                Assert.That((fromAlice ? bob : alice).Decrypt(message, AssociatedData),
                             Is.EqualTo(Text(text)),
                             text);
 

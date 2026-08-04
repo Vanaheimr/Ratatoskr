@@ -29,23 +29,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// X3DH (XEP-0384, Abschnitt 4.2): eine Sitzung beginnt, ohne dass beide
-    /// gleichzeitig da sind.
+    /// X3DH (XEP-0384, section 4.2): a session begins without both being there
+    /// at the same time.
     /// </summary>
     /// <remarks>
-    /// Der Kern jedes Tests hier ist derselbe: <b>Beide Seiten müssen
-    /// dasselbe herausbekommen.</b> Ein Fehler in der Reihenfolge der vier
-    /// Diffie-Hellman-Werte, in der Zuordnung der Schlüssel oder in der
-    /// Beigabe liefert kein schlechtes Geheimnis - er liefert ein
-    /// einwandfreies, das nur die andere Seite nicht kennt. Das fällt ohne
-    /// diesen Vergleich erst bei der ersten Nachricht auf, und dort sieht es
-    /// aus wie eine Fälschung.
+    /// The core of every test here is the same: <b>both sides have to come out
+    /// with the same thing.</b> An error in the order of the four
+    /// Diffie-Hellman values, in the assignment of the keys or in the
+    /// associated data delivers no bad secret - it delivers a flawless one that
+    /// only the other side does not know. Without this comparison that stands
+    /// out only at the first message, and there it looks like a forgery.
     /// </remarks>
     [TestFixture]
     public class X3DHTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private static String Hex(Byte[] bytes)
             => Convert.ToHexString(bytes).ToLowerInvariant();
@@ -56,8 +55,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region BothSides_DeriveTheSameSecret()
 
         /// <summary>
-        /// Der ganze Zweck: Alice rechnet aus Bobs Bundle, Bob rechnet aus
-        /// Alices Nachricht, und beide haben dasselbe.
+        /// The whole purpose: Alice calculates out of Bob's bundle, Bob
+        /// calculates out of Alice's message, and both have the same thing.
         /// </summary>
         [Test]
         public void BothSides_DeriveTheSameSecret()
@@ -66,27 +65,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = OmemoIdentity.Create();
             var bob   = OmemoIdentity.Create();
 
-            var beiAlice = X3DH.Initiate(alice, bob.Bundle());
+            var atAlice = X3DH.Initiate(alice, bob.Bundle());
 
-            var beiBob   = X3DH.Accept(bob,
-                                       alice.PublicIdentityKey,
-                                       beiAlice.EphemeralKey!,
+            var atBob   = X3DH.Accept(bob,
+                                      alice.PublicIdentityKey,
+                                       atAlice.EphemeralKey!,
                                        bob.SignedPreKeyId,
-                                       beiAlice.UsedPreKeyId);
+                                       atAlice.UsedPreKeyId);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(beiBob.SharedSecret), Is.EqualTo(Hex(beiAlice.SharedSecret)),
-                            "Die beiden Seiten haben verschiedene Geheimnisse.");
+                Assert.That(Hex(atBob.SharedSecret), Is.EqualTo(Hex(atAlice.SharedSecret)),
+                            "The two sides have different secrets.");
 
-                Assert.That(beiAlice.SharedSecret.Length, Is.EqualTo(32));
+                Assert.That(atAlice.SharedSecret.Length, Is.EqualTo(32));
 
-                Assert.That(Hex(beiBob.AssociatedData), Is.EqualTo(Hex(beiAlice.AssociatedData)),
-                            "Die Beigabe stimmt nicht überein - die Reihenfolge der IdentityKeys.");
+                Assert.That(Hex(atBob.AssociatedData), Is.EqualTo(Hex(atAlice.AssociatedData)),
+                            "The associated data does not agree - the order of the identity keys.");
 
-                Assert.That(beiAlice.UsedPreKeyId, Is.Not.Null,
-                            "Ein frisches Bundle bringt PreKeys mit; es wurde keiner benutzt.");
+                Assert.That(atAlice.UsedPreKeyId, Is.Not.Null,
+                            "A fresh bundle brings PreKeys along; none was used.");
 
             });
 
@@ -97,12 +96,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TwoSessions_DoNotShareASecret()
 
         /// <summary>
-        /// Zwei Sitzungen zum selben Gerät ergeben verschiedene Geheimnisse.
+        /// Two sessions to the same device yield different secrets.
         /// </summary>
         /// <remarks>
-        /// Dafür gibt es die Einwegschlüssel und die PreKeys. Wären zwei erste
-        /// Nachrichten gleich, liesse sich eine alte noch einmal einspielen -
-        /// und die Gegenstelle antwortete darauf, als sei sie neu.
+        /// That is what the one-time keys and the PreKeys are there for. Were
+        /// two first messages equal, an old one could be played in again - and
+        /// the far end would answer it as if it were new.
         /// </remarks>
         [Test]
         public void TwoSessions_DoNotShareASecret()
@@ -112,20 +111,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob     = OmemoIdentity.Create();
             var bundle  = bob.Bundle();
 
-            var erste   = X3DH.Initiate(alice, bundle, bundle.PreKeys[0].Id);
-            var zweite  = X3DH.Initiate(alice, bundle, bundle.PreKeys[1].Id);
+            var first   = X3DH.Initiate(alice, bundle, bundle.PreKeys[0].Id);
+            var second  = X3DH.Initiate(alice, bundle, bundle.PreKeys[1].Id);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(zweite.SharedSecret), Is.Not.EqualTo(Hex(erste.SharedSecret)));
+                Assert.That(Hex(second.SharedSecret), Is.Not.EqualTo(Hex(first.SharedSecret)));
 
-                Assert.That(Hex(zweite.EphemeralKey!), Is.Not.EqualTo(Hex(erste.EphemeralKey!)),
-                            "Zweimal derselbe Einwegschlüssel.");
+                Assert.That(Hex(second.EphemeralKey!), Is.Not.EqualTo(Hex(first.EphemeralKey!)),
+                            "Twice the same one-time key.");
 
-                // Und die Beigabe ist in beiden dieselbe: Sie beschreibt, wer
-                // miteinander spricht, nicht welche Sitzung.
-                Assert.That(Hex(zweite.AssociatedData), Is.EqualTo(Hex(erste.AssociatedData)));
+                // And the associated data is the same in both: it describes who
+                // is speaking with whom, not which session.
+                Assert.That(Hex(second.AssociatedData), Is.EqualTo(Hex(first.AssociatedData)));
 
             });
 
@@ -136,13 +135,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AUsedPreKey_IsGone()
 
         /// <summary>
-        /// Ein benutzter PreKey ist danach fort - und ein zweiter Versuch
-        /// darauf scheitert.
+        /// A used PreKey is gone afterwards - and a second attempt on it fails.
         /// </summary>
         /// <remarks>
-        /// Entnehmen und Löschen sind ein Schritt. Ein PreKey, der zweimal
-        /// gilt, ergibt zweimal dieselbe Sitzung, und damit ist sie
-        /// wiederholbar.
+        /// Taking out and deleting are one step. A PreKey holding twice yields
+        /// the same session twice, and with that it is repeatable.
         /// </remarks>
         [Test]
         public void AUsedPreKey_IsGone()
@@ -152,22 +149,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob     = OmemoIdentity.Create();
             var bundle  = bob.Bundle();
 
-            var vorher  = bob.AvailablePreKeys;
-            var beiAlice = X3DH.Initiate(alice, bundle);
+            var before  = bob.AvailablePreKeys;
+            var atAlice = X3DH.Initiate(alice, bundle);
 
-            X3DH.Accept(bob, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
-                        bob.SignedPreKeyId, beiAlice.UsedPreKeyId);
+            X3DH.Accept(bob, alice.PublicIdentityKey, atAlice.EphemeralKey!,
+                        bob.SignedPreKeyId, atAlice.UsedPreKeyId);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(bob.AvailablePreKeys, Is.EqualTo(vorher - 1),
-                            "Der PreKey wurde nicht verbraucht.");
+                Assert.That(bob.AvailablePreKeys, Is.EqualTo(before - 1),
+                            "The PreKey was not consumed.");
 
-                Assert.That(() => X3DH.Accept(bob, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
-                                              bob.SignedPreKeyId, beiAlice.UsedPreKeyId),
+                Assert.That(() => X3DH.Accept(bob, alice.PublicIdentityKey, atAlice.EphemeralKey!,
+                                              bob.SignedPreKeyId, atAlice.UsedPreKeyId),
                             Throws.TypeOf<CryptographicException>(),
-                            "Dieselbe erste Nachricht liess sich ein zweites Mal annehmen.");
+                            "The same first message could be accepted a second time.");
 
             });
 
@@ -178,15 +175,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAPreKey_TheSessionStillStarts()
 
         /// <summary>
-        /// Ist der Vorrat leer, beginnt die Sitzung trotzdem - nur ohne den
-        /// vierten Diffie-Hellman.
+        /// If the store is empty, the session begins nevertheless - only
+        /// without the fourth Diffie-Hellman.
         /// </summary>
         /// <remarks>
-        /// Das ist ausdrücklich vorgesehen und kostet genau eine Eigenschaft:
-        /// Zwei erste Nachrichten an dasselbe Gerät könnten dann dieselbe
-        /// Sitzung ergeben, wenn auch der Einwegschlüssel derselbe wäre. Eine
-        /// Verweigerung wäre die schlechtere Antwort - sie machte einen
-        /// leeren Vorrat zu einem Ausfall der Erreichbarkeit.
+        /// That is expressly provided for and costs exactly one property: two
+        /// first messages to the same device could then yield the same session
+        /// if the one-time key were the same as well. A refusal would be the
+        /// worse answer - it would make an empty store into a failure of
+        /// reachability.
         /// </remarks>
         [Test]
         public void WithoutAPreKey_TheSessionStillStarts()
@@ -195,17 +192,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = OmemoIdentity.Create();
             var bob   = OmemoIdentity.Create();
 
-            var ohnePreKeys = bob.Bundle() with { PreKeys = [] };
+            var withoutPreKeys = bob.Bundle() with { PreKeys = [] };
 
-            var beiAlice = X3DH.Initiate(alice, ohnePreKeys);
+            var atAlice = X3DH.Initiate(alice, withoutPreKeys);
 
-            var beiBob   = X3DH.Accept(bob, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
-                                       bob.SignedPreKeyId, null);
+            var atBob   = X3DH.Accept(bob, alice.PublicIdentityKey, atAlice.EphemeralKey!,
+                                      bob.SignedPreKeyId, null);
 
             Assert.Multiple(() =>
             {
-                Assert.That(beiAlice.UsedPreKeyId, Is.Null);
-                Assert.That(Hex(beiBob.SharedSecret), Is.EqualTo(Hex(beiAlice.SharedSecret)));
+                Assert.That(atAlice.UsedPreKeyId, Is.Null);
+                Assert.That(Hex(atBob.SharedSecret), Is.EqualTo(Hex(atAlice.SharedSecret)));
             });
 
         }
@@ -215,18 +212,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ATamperedBundle_IsRefused()
 
         /// <summary>
-        /// Ein Bundle mit falscher Signatur führt zum Abbruch, nicht zu einer
-        /// Warnung.
+        /// A bundle with a wrong signature leads to a break-off, not to a
+        /// warning.
         /// </summary>
         /// <remarks>
-        /// Das Bundle kommt vom Server der Gegenstelle - also von genau der
-        /// Partei, gegen die eine Ende-zu-Ende-Verschlüsselung schützen soll.
-        /// Tauschte er den Signed PreKey gegen seinen eigenen, läse er jede
-        /// erste Nachricht mit, und der Fingerabdruck des IdentityKey bliebe
-        /// dabei unverändert: Der Mensch, der ihn vergleicht, sähe nichts.
+        /// The bundle comes from the server of the far end - so from precisely
+        /// the party an end-to-end encryption is supposed to protect against.
+        /// Were it to exchange the signed PreKey for one of its own, it would
+        /// read every first message along, and the fingerprint of the identity
+        /// key would stay unchanged in doing so: the human being comparing it
+        /// would see nothing.
         ///
-        /// Eine Sitzung auf einem solchen Bundle wäre schlimmer als keine -
-        /// sie sähe aus wie eine verschlüsselte.
+        /// A session on such a bundle would be worse than none - it would look
+        /// like an encrypted one.
         /// </remarks>
         [Test]
         public void ATamperedBundle_IsRefused()
@@ -234,34 +232,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = OmemoIdentity.Create();
             var bob   = OmemoIdentity.Create();
-            var boese = OmemoIdentity.Create();
+            var evil  = OmemoIdentity.Create();
 
             Assert.Multiple(() =>
             {
 
-                // Der Signed PreKey ausgetauscht, die Signatur stehengelassen.
-                var untergeschoben = bob.Bundle() with {
-                                         SignedPreKey = boese.SignedPreKey.PublicKey
+                // The signed PreKey exchanged, the signature left standing.
+                var substituted                       = bob.Bundle() with {
+                                         SignedPreKey = evil.SignedPreKey.PublicKey
                                      };
 
-                Assert.That(untergeschoben.SignatureIsValid(), Is.False);
-                Assert.That(() => X3DH.Initiate(alice, untergeschoben),
+                Assert.That(substituted.SignatureIsValid(), Is.False);
+                Assert.That(() => X3DH.Initiate(alice, substituted),
                             Throws.TypeOf<CryptographicException>(),
-                            "Ein untergeschobener Signed PreKey kam durch.");
+                            "A substituted signed PreKey got through.");
 
-                // Der IdentityKey ausgetauscht, alles andere gelassen: Dann
-                // passt die Signatur nicht mehr zum genannten Absender.
-                var fremderIk = bob.Bundle() with { IdentityKey = boese.PublicIdentityKey };
+                // The identity key exchanged, everything else left: then the
+                // signature does not fit the named sender any more.
+                var foreignIk = bob.Bundle() with { IdentityKey = evil.PublicIdentityKey };
 
-                Assert.That(fremderIk.SignatureIsValid(), Is.False);
-                Assert.That(() => X3DH.Initiate(alice, fremderIk),
+                Assert.That(foreignIk.SignatureIsValid(), Is.False);
+                Assert.That(() => X3DH.Initiate(alice, foreignIk),
                             Throws.TypeOf<CryptographicException>());
 
-                // Ein einzelnes verbogenes Byte in der Signatur.
-                var verbogen = (Byte[]) bob.Bundle().SignedPreKeySignature.Clone();
-                verbogen[0] ^= 0x01;
+                // A single bent byte in the signature.
+                var bent = (Byte[]) bob.Bundle().SignedPreKeySignature.Clone();
+                bent[0] ^= 0x01;
 
-                Assert.That((bob.Bundle() with { SignedPreKeySignature = verbogen }).SignatureIsValid(),
+                Assert.That((bob.Bundle() with { SignedPreKeySignature = bent }).SignatureIsValid(),
                             Is.False);
 
             });
@@ -273,20 +271,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownSignedPreKey_IsRefused()
 
         /// <summary>
-        /// Nennt die Gegenstelle einen Signed PreKey, den es hier nie gab,
-        /// wird abgewiesen statt geraten.
+        /// If the far end names a signed PreKey that never existed here, it is
+        /// turned away instead of guessed.
         /// </summary>
         /// <remarks>
-        /// <b>Dieser Test hat sich mit D67 geändert, und das gehört
-        /// vermerkt.</b> Bis dahin wurde jeder Signed PreKey ausser dem
-        /// aktuellen abgewiesen - auch der eben erst abgelöste, und damit jede
-        /// Nachricht, die während des Wechsels unterwegs war. Seit dem
-        /// Sitzungsspeicher wird genau <i>einer</i> aufgehoben; geprüft wird
-        /// das in <c>AMessageForTheRotatedSignedPreKey_StillArrives</c>.
+        /// <b>This test changed with D67, and that belongs noted.</b> Until
+        /// then every signed PreKey except the current one was turned away -
+        /// including the one just superseded, and with it every message that
+        /// was under way during the change. Since the session store precisely
+        /// <i>one</i> is kept; what checks that is
+        /// <c>AMessageForTheRotatedSignedPreKey_StillArrives</c>.
         ///
-        /// Hier bleibt die Frage, um die es diesem Test immer ging: Eine
-        /// Kennung, die zu <b>keinem</b> vorhandenen Schlüssel gehört, wird
-        /// abgewiesen und nicht durch den nächstbesten ersetzt.
+        /// What stays here is the question this test was always about: an id
+        /// belonging to <b>no</b> existing key is turned away and not replaced
+        /// by the nearest one to hand.
         /// </remarks>
         [Test]
         public void AnUnknownSignedPreKey_IsRefused()
@@ -295,13 +293,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = OmemoIdentity.Create();
             var bob   = OmemoIdentity.Create();
 
-            var beiAlice = X3DH.Initiate(alice, bob.Bundle());
+            var atAlice = X3DH.Initiate(alice, bob.Bundle());
 
-            Assert.That(() => X3DH.Accept(bob, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
+            Assert.That(() => X3DH.Accept(bob, alice.PublicIdentityKey, atAlice.EphemeralKey!,
                                           99u,
-                                          beiAlice.UsedPreKeyId),
+                                          atAlice.UsedPreKeyId),
                         Throws.TypeOf<CryptographicException>(),
-                        "Eine unbekannte Kennung wurde durch den nächstbesten Schlüssel ersetzt.");
+                        "An unknown id was replaced by the nearest key to hand.");
 
         }
 
@@ -310,39 +308,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheIdentityKey_TravelsInEdwardsForm()
 
         /// <summary>
-        /// Der IdentityKey geht in Ed25519-Form über die Leitung und wird für
-        /// den Diffie-Hellman zurückgerechnet.
+        /// The identity key goes over the wire in Ed25519 form and is
+        /// calculated back for the Diffie-Hellman.
         /// </summary>
         /// <remarks>
-        /// XEP-0384, Abschnitt 5.3.2: „The public key is ALWAYS transferred in
-        /// its Ed25519 form." Beide Richtungen müssen zusammenpassen -
-        /// andernfalls rechnet die eine Seite mit einem anderen Punkt als die
-        /// andere, und zwar ohne Fehlermeldung: Beides sind 32 gültige Byte.
+        /// XEP-0384, section 5.3.2: "The public key is ALWAYS transferred in
+        /// its Ed25519 form." Both directions have to fit together - otherwise
+        /// the one side calculates with a different point than the other, and
+        /// that without an error message: both are 32 valid bytes.
         /// </remarks>
         [Test]
         public void TheIdentityKey_TravelsInEdwardsForm()
         {
 
-            var eigen = OmemoIdentity.Create();
+            var own = OmemoIdentity.Create();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(eigen.PublicIdentityKey),
-                            Is.Not.EqualTo(Hex(eigen.IdentityKey.PublicKey)),
-                            "Beide Formen sind gleich - dann wurde nicht umgerechnet.");
+                Assert.That(Hex(own.PublicIdentityKey),
+                            Is.Not.EqualTo(Hex(own.IdentityKey.PublicKey)),
+                            "Both forms are equal - then nothing was converted.");
 
-                Assert.That(Hex(Curve25519.EdwardsToMontgomery(eigen.PublicIdentityKey)),
-                            Is.EqualTo(Hex(eigen.IdentityKey.PublicKey)),
-                            "Hin und zurück ergibt nicht denselben Schlüssel.");
+                Assert.That(Hex(Curve25519.EdwardsToMontgomery(own.PublicIdentityKey)),
+                            Is.EqualTo(Hex(own.IdentityKey.PublicKey)),
+                            "There and back does not yield the same key.");
 
-                Assert.That(eigen.Fingerprint, Has.Length.EqualTo(64));
+                Assert.That(own.Fingerprint, Has.Length.EqualTo(64));
 
-                // Und die eigene Signatur prüft sich über die Ed25519-Form -
-                // das ist die Fassung, die die Gegenstelle bekommt.
-                Assert.That(Curve25519.VerifyEdwards(eigen.PublicIdentityKey,
-                                                     eigen.SignedPreKey.PublicKey,
-                                                     eigen.SignedPreKeySignature),
+                // And our own signature checks out over the Ed25519 form - that
+                // is the version the far end gets.
+                Assert.That(Curve25519.VerifyEdwards(own.PublicIdentityKey,
+                                                     own.SignedPreKey.PublicKey,
+                                                     own.SignedPreKeySignature),
                             Is.True);
 
             });
@@ -354,21 +352,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePreKeys_AreDistinctAndNumbered()
 
         /// <summary>
-        /// Hundert PreKeys, alle verschieden, fortlaufend nummeriert - und
-        /// nachgefüllt wird ohne Wiederverwendung der Kennungen.
+        /// A hundred PreKeys, all different, numbered consecutively - and the
+        /// refilling happens without reusing the ids.
         /// </summary>
         /// <remarks>
-        /// Eine wiederverwendete Kennung wäre eine Verwechslung: Eine
-        /// Nachricht, die unterwegs liegenblieb und den alten PreKey nennt,
-        /// fände beim Ankommen einen neuen unter derselben Nummer - und ergäbe
-        /// eine Sitzung, die es nie gab.
+        /// A reused id would be a mix-up: a message that stayed lying under way
+        /// and names the old PreKey would find a new one under the same number
+        /// on arrival - and would yield a session that never existed.
         /// </remarks>
         [Test]
         public void ThePreKeys_AreDistinctAndNumbered()
         {
 
-            var eigen  = OmemoIdentity.Create();
-            var bundle = eigen.Bundle();
+            var own    = OmemoIdentity.Create();
+            var bundle = own.Bundle();
 
             Assert.Multiple(() =>
             {
@@ -377,34 +374,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(bundle.PreKeys.Select(p => p.Id).Distinct().Count(),
                             Is.EqualTo(OmemoIdentity.PreKeyCount),
-                            "Zwei PreKeys teilen sich eine Kennung.");
+                            "Two PreKeys share one id.");
 
                 Assert.That(bundle.PreKeys.Select(p => Hex(p.PublicKey)).Distinct().Count(),
                             Is.EqualTo(OmemoIdentity.PreKeyCount),
-                            "Zwei PreKeys sind derselbe Schlüssel.");
+                            "Two PreKeys are the same key.");
 
                 Assert.That(bundle.PreKeys.All(p => p.Id > 0), Is.True,
-                            "Abschnitt 5.3.2 verlangt positive Kennungen.");
+                            "Section 5.3.2 demands positive ids.");
 
             });
 
-            // Zwei verbrauchen, nachfüllen: wieder hundert, und die beiden
-            // Kennungen kommen nicht wieder.
-            var verbraucht = new[] { bundle.PreKeys[0].Id, bundle.PreKeys[1].Id };
+            // Consume two, refill: a hundred again, and the two ids do not come
+            // back.
+            var used = new[] { bundle.PreKeys[0].Id, bundle.PreKeys[1].Id };
 
-            foreach (var id in verbraucht)
-                eigen.TakePreKey(id);
+            foreach (var id in used)
+                own.TakePreKey(id);
 
-            var nachher = eigen.ReplenishPreKeys();
+            var after = own.ReplenishPreKeys();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(nachher, Has.Count.EqualTo(OmemoIdentity.PreKeyCount));
+                Assert.That(after, Has.Count.EqualTo(OmemoIdentity.PreKeyCount));
 
-                foreach (var id in verbraucht)
-                    Assert.That(nachher.Any(p => p.Id == id), Is.False,
-                                $"Die Kennung {id} wurde wiederverwendet.");
+                foreach (var id in used)
+                    Assert.That(after.Any(p => p.Id == id), Is.False,
+                                $"The id {id} was reused.");
 
             });
 
@@ -415,40 +412,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheRotation_ChangesKeyAndSignature()
 
         /// <summary>
-        /// Der Wechsel des Signed PreKey erneuert Schlüssel, Kennung und
-        /// Signatur - und lässt den IdentityKey stehen.
+        /// The change of the signed PreKey renews the key, the id and the
+        /// signature - and leaves the identity key standing.
         /// </summary>
         /// <remarks>
-        /// Der Wechsel ist der Grund, warum ein gestohlener Schlüssel nicht
-        /// rückwirkend alles öffnet. Der IdentityKey darf dabei nicht
-        /// mitwechseln: An seinem Fingerabdruck hängt jeder Vergleich, den ein
-        /// Mensch je angestellt hat.
+        /// The change is the reason why a stolen key does not open everything
+        /// retroactively. The identity key must not change along with it: on
+        /// its fingerprint hangs every comparison a human being ever made.
         /// </remarks>
         [Test]
         public void TheRotation_ChangesKeyAndSignature()
         {
 
-            var eigen   = OmemoIdentity.Create();
-            var vorher  = eigen.Bundle();
+            var own     = OmemoIdentity.Create();
+            var before  = own.Bundle();
 
-            eigen.RotateSignedPreKey();
+            own.RotateSignedPreKey();
 
-            var nachher = eigen.Bundle();
+            var after = own.Bundle();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Hex(nachher.SignedPreKey), Is.Not.EqualTo(Hex(vorher.SignedPreKey)));
-                Assert.That(nachher.SignedPreKeyId,    Is.GreaterThan(vorher.SignedPreKeyId));
+                Assert.That(Hex(after.SignedPreKey), Is.Not.EqualTo(Hex(before.SignedPreKey)));
+                Assert.That(after.SignedPreKeyId,    Is.GreaterThan(before.SignedPreKeyId));
 
-                Assert.That(Hex(nachher.SignedPreKeySignature),
-                            Is.Not.EqualTo(Hex(vorher.SignedPreKeySignature)));
+                Assert.That(Hex(after.SignedPreKeySignature),
+                            Is.Not.EqualTo(Hex(before.SignedPreKeySignature)));
 
-                Assert.That(nachher.SignatureIsValid(), Is.True,
-                            "Der neue Signed PreKey ist nicht gültig unterschrieben.");
+                Assert.That(after.SignatureIsValid(), Is.True,
+                            "The new signed PreKey is not validly signed.");
 
-                Assert.That(Hex(nachher.IdentityKey), Is.EqualTo(Hex(vorher.IdentityKey)),
-                            "Der IdentityKey hat mitgewechselt - jeder Fingerabdruck-Vergleich wäre wertlos.");
+                Assert.That(Hex(after.IdentityKey), Is.EqualTo(Hex(before.IdentityKey)),
+                            "The identity key changed along - every fingerprint comparison would be worthless.");
 
             });
 
@@ -459,25 +455,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheAssociatedData_IsInitiatorThenResponder()
 
         /// <summary>
-        /// <c>AD = Encode(IK_A) ‖ Encode(IK_B)</c> - der Anrufende zuerst,
-        /// und zwar wörtlich.
+        /// <c>AD = Encode(IK_A) ‖ Encode(IK_B)</c> - the calling one first, and
+        /// that literally.
         /// </summary>
         /// <remarks>
-        /// <b>Auch dieser Test kam durch eine überlebende Mutation dazu</b>,
-        /// und es ist zum dritten Mal dasselbe Muster: Die Reihenfolge liess
-        /// sich in der Hilfsfunktion umdrehen, ohne dass ein Test etwas sagte -
-        /// beide Seiten rufen dieselbe Funktion auf und kommen weiterhin
-        /// überein. Ein Vergleich „beide bekommen dasselbe" kann so etwas
-        /// grundsätzlich nicht finden.
+        /// <b>This test came about through a surviving mutation as well</b>,
+        /// and it is the same pattern for the third time: the order could be
+        /// turned round in the helper function without a test saying anything -
+        /// both sides call the same function and go on agreeing. A comparison
+        /// of "both get the same thing" cannot find such a thing on principle.
         ///
-        /// Der Schaden träte erst gegenüber einem fremden Client auf: Seine
-        /// Beigabe sähe anders aus, jede Nachricht scheiterte an einer
-        /// Prüfung, die mit ihrem Inhalt nichts zu tun hat - und die
-        /// Fehlersuche begänne bei der Verschlüsselung statt bei diesen 64
-        /// Byte.
+        /// The damage would occur only towards a foreign client: its associated
+        /// data would look different, every message would fail at a check that
+        /// has nothing to do with its content - and the search for the error
+        /// would begin at the encryption instead of at these 64 bytes.
         ///
-        /// Deshalb steht hier nicht „beide gleich", sondern welche Hälfte wem
-        /// gehört.
+        /// That is why what stands here is not "both equal" but which half
+        /// belongs to whom.
         /// </remarks>
         [Test]
         public void TheAssociatedData_IsInitiatorThenResponder()
@@ -486,26 +480,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = OmemoIdentity.Create();
             var bob   = OmemoIdentity.Create();
 
-            var beiAlice = X3DH.Initiate(alice, bob.Bundle());
+            var atAlice = X3DH.Initiate(alice, bob.Bundle());
 
-            var beiBob   = X3DH.Accept(bob, alice.PublicIdentityKey, beiAlice.EphemeralKey!,
-                                       bob.SignedPreKeyId, beiAlice.UsedPreKeyId);
+            var atBob   = X3DH.Accept(bob, alice.PublicIdentityKey, atAlice.EphemeralKey!,
+                                      bob.SignedPreKeyId, atAlice.UsedPreKeyId);
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(beiAlice.AssociatedData, Has.Length.EqualTo(64));
+                Assert.That(atAlice.AssociatedData, Has.Length.EqualTo(64));
 
-                Assert.That(Hex(beiAlice.AssociatedData[..32]),
+                Assert.That(Hex(atAlice.AssociatedData[..32]),
                             Is.EqualTo(Hex(alice.PublicIdentityKey)),
-                            "Die erste Hälfte gehört dem Anrufenden.");
+                            "The first half belongs to the calling one.");
 
-                Assert.That(Hex(beiAlice.AssociatedData[32..]),
+                Assert.That(Hex(atAlice.AssociatedData[32..]),
                             Is.EqualTo(Hex(bob.PublicIdentityKey)),
-                            "Die zweite Hälfte gehört dem Angerufenen.");
+                            "The second half belongs to the called one.");
 
-                Assert.That(Hex(beiBob.AssociatedData), Is.EqualTo(Hex(beiAlice.AssociatedData)),
-                            "Und der Angerufene rechnet dieselbe Beigabe aus.");
+                Assert.That(Hex(atBob.AssociatedData), Is.EqualTo(Hex(atAlice.AssociatedData)),
+                            "And the called one calculates the same associated data.");
 
             });
 
@@ -516,21 +510,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheDerivation_MatchesTheSpecificationLiterally()
 
         /// <summary>
-        /// Die Ableitung, mit einem zweiten HKDF und den Vorschriften aus
-        /// Abschnitt 4.2 buchstäblich hingeschrieben.
+        /// The derivation, with a second HKDF and the provisions from
+        /// section 4.2 written out literally.
         /// </summary>
         /// <remarks>
-        /// <b>Aus derselben Erfahrung wie in D62.</b> Der 0xFF-Vorspann und
-        /// der Info-String lassen sich beide ändern, ohne dass irgendein
-        /// anderer Test etwas sagt: Beide Seiten rechnen ja mit derselben
-        /// Funktion und kommen weiterhin überein. Der Schaden träte erst
-        /// gegenüber einem fremden Client auf - und den gibt es hier nicht.
+        /// <b>Out of the same experience as in D62.</b> The 0xFF prefix and the
+        /// info string can both be changed without any other test saying
+        /// anything: both sides calculate with the same function after all and
+        /// go on agreeing. The damage would occur only towards a foreign client
+        /// - and there is none here.
         ///
-        /// Also steht die Vorschrift hier ein zweites Mal und wörtlich: 32
-        /// Byte 0xFF davor, 32 Nullbyte als Salz, „OMEMO X3DH" als Info, 32
-        /// Byte Ausgabe, HKDF über SHA-256. Wer eines davon im Quelltext
-        /// ändert, muss es hier mitändern - und sieht dabei, dass er die
-        /// Spezifikation verlässt.
+        /// So the provision stands here a second time and literally: 32 bytes
+        /// of 0xFF in front, 32 zero bytes as salt, "OMEMO X3DH" as info, 32
+        /// bytes of output, HKDF over SHA-256. Whoever changes one of these in
+        /// the source has to change it along here - and sees in doing so that
+        /// they are leaving the specification.
         /// </remarks>
         [Test]
         public void TheDerivation_MatchesTheSpecificationLiterally()
@@ -549,10 +543,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           new Byte[32],
                           System.Text.Encoding.UTF8.GetBytes("OMEMO X3DH")));
 
-            var erwartet = new Byte[32];
-            hkdf.GenerateBytes(erwartet, 0, erwartet.Length);
+            var expected = new Byte[32];
+            hkdf.GenerateBytes(expected, 0, expected.Length);
 
-            Assert.That(Hex(X3DH.Derive(dh1, dh2, dh3, dh4)), Is.EqualTo(Hex(erwartet)));
+            Assert.That(Hex(X3DH.Derive(dh1, dh2, dh3, dh4)), Is.EqualTo(Hex(expected)));
 
         }
 
@@ -561,16 +555,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region TheOrderOfTheFour_Matters()
 
         /// <summary>
-        /// Die vier Diffie-Hellman-Werte gehen in fester Reihenfolge ein.
+        /// The four Diffie-Hellman values go in in a fixed order.
         /// </summary>
         /// <remarks>
-        /// Der Test rechnet die Ableitung mit vertauschten Werten von Hand
-        /// nach und stellt fest, dass etwas anderes herauskommt. Das ist keine
-        /// Selbstverständlichkeit, sondern die Aussage: Wer hier vertauscht,
-        /// bekommt ein ebenso gutes Geheimnis - nur eben ein anderes als die
-        /// Gegenstelle. Der Fehler zeigt sich dann nicht in dieser Rechnung,
-        /// sondern erst bei der ersten Nachricht, und sieht dort aus wie eine
-        /// Fälschung.
+        /// The test recalculates the derivation with swapped values by hand and
+        /// establishes that something else comes out. That is no matter of
+        /// course but the statement: whoever swaps here gets an equally good
+        /// secret - only a different one from the far end. The error then shows
+        /// itself not in this calculation but only at the first message, and
+        /// there it looks like a forgery.
         /// </remarks>
         [Test]
         public void TheOrderOfTheFour_Matters()
@@ -580,36 +573,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob    = OmemoIdentity.Create();
             var bundle = bob.Bundle();
 
-            var richtig = X3DH.Initiate(alice, bundle);
+            var correct = X3DH.Initiate(alice, bundle);
 
-            // Dieselben vier Werte, andere Reihenfolge - von Hand
-            // nachgerechnet, damit die Vertauschung sichtbar ist und nicht in
-            // einer Mutation versteckt.
-            var ihrIk  = bundle.IdentityKeyForAgreement();
-            var ihrSpk = bundle.SignedPreKey;
-            var preKey = bundle.PreKeys.First(p => p.Id == richtig.UsedPreKeyId);
+            // The same four values, a different order - recalculated by hand,
+            // so that the swap is visible and not hidden in a mutation.
+            var theirIk  = bundle.IdentityKeyForAgreement();
+            var theirSpk = bundle.SignedPreKey;
+            var preKey   = bundle.PreKeys.First(p => p.Id == correct.UsedPreKeyId);
 
-            // Der Einwegschlüssel ist geheim geblieben; ohne ihn lässt sich
-            // die richtige Rechnung nicht wiederholen. Also eine zweite
-            // Sitzung mit bekanntem Einwegschlüssel.
+            // The one-time key has stayed secret; without it the right
+            // calculation cannot be repeated. So a second session with a known
+            // one-time key.
             var ephemeral = Curve25519.GenerateKeyPair();
 
-            var dh1 = Curve25519.Agree(alice.IdentityKey.PrivateKey, ihrSpk);
-            var dh2 = Curve25519.Agree(ephemeral.PrivateKey,         ihrIk);
-            var dh3 = Curve25519.Agree(ephemeral.PrivateKey,         ihrSpk);
+            var dh1 = Curve25519.Agree(alice.IdentityKey.PrivateKey, theirSpk);
+            var dh2 = Curve25519.Agree(ephemeral.PrivateKey,         theirIk);
+            var dh3 = Curve25519.Agree(ephemeral.PrivateKey,         theirSpk);
             var dh4 = Curve25519.Agree(ephemeral.PrivateKey,         preKey.PublicKey);
 
-            Byte[] Ableiten(params Byte[][] werte)
+            Byte[] Derive(params Byte[][] values)
                 => System.Security.Cryptography.HKDF.DeriveKey(
                        HashAlgorithmName.SHA256,
-                       ikm:           [.. Enumerable.Repeat((Byte) 0xFF, 32), .. werte.SelectMany(w => w)],
+                       ikm:           [.. Enumerable.Repeat((Byte) 0xFF, 32), .. values.SelectMany(w => w)],
                        salt:          new Byte[32],
                        info:          System.Text.Encoding.UTF8.GetBytes(X3DH.Info),
                        outputLength:  32);
 
-            Assert.That(Hex(Ableiten(dh2, dh1, dh3, dh4)),
-                        Is.Not.EqualTo(Hex(Ableiten(dh1, dh2, dh3, dh4))),
-                        "Die Reihenfolge der vier Werte ändert nichts - dann prüft hier niemand mit.");
+            Assert.That(Hex(Derive(dh2, dh1, dh3, dh4)),
+                        Is.Not.EqualTo(Hex(Derive(dh1, dh2, dh3, dh4))),
+                        "The order of the four values changes nothing - then nobody here is checking.");
 
         }
 
