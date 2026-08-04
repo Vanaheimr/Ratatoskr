@@ -18,11 +18,11 @@
     <ProjectReference Include="..\Ratatoskr\Ratatoskr.csproj" />
 
     <!--
-      Die Foederationstests loesen selbst auf und binden selbst: IPPort,
-      IPv4Address, IPSocket und der DNSClient kommen von Hermod, nicht von
-      Ratatoskr. Ausdruecklich aufgefuehrt aus demselben Grund wie die Pakete
-      drueben - wer eine transitive Abhaengigkeit direkt benutzt, verliert sie
-      in dem Augenblick, in dem der Vorbesitzer sie ablegt.
+      The federation tests resolve and bind themselves: IPPort, IPv4Address,
+      IPSocket and the DNSClient come from Hermod, not from Ratatoskr. Listed
+      expressly for the same reason as the packages over there - whoever uses
+      a transitive dependency directly loses it at the moment at which the
+      previous owner puts it down.
     -->
     <ProjectReference Include="..\..\Hermod\Hermod\Hermod.csproj" />
   </ItemGroup>
