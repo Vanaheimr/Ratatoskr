@@ -28,18 +28,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// Die XEP-Nutzlasten innerhalb einer Stanza in gültiger, aber
-    /// ungewöhnlicher Schreibweise.
+    /// The XEP payloads inside a stanza in a valid but unusual spelling.
     ///
-    /// Der Stanza-Rahmen wird bereits mit einem XML-Parser gelesen; diese Tests
-    /// nehmen sich die Auswertung der Kindelemente vor - Chat States,
-    /// Chat Marker, Quittungen, Carbons und Entity Capabilities.
+    /// The stanza frame is already read with an XML parser; these tests take on
+    /// the evaluation of the child elements - chat states, chat markers,
+    /// receipts, carbons and entity capabilities.
     /// </summary>
     [TestFixture]
     public class XepPayloadParsingTests : AXMPPTests
     {
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         private async Task<(XMPPClient Client, XMPPSession Session)> ConnectedPairAsync()
         {
@@ -47,7 +46,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
 
             await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
-                          "Serversitzung zum Client");
+                          "the server session to the client");
 
             return (client, Server.SessionOf(client.FullJid)!);
 
@@ -61,10 +60,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ChatState_InAForeignNamespace_IsIgnored()
 
         /// <summary>
-        /// Ein <c>&lt;composing/&gt;</c> zählt nur, wenn es zu XEP-0085 gehört.
-        /// Eine Erkennung über <c>Contains("&lt;composing")</c> prüft den
-        /// Namespace gar nicht und meldet jedes gleichnamige Element - etwa aus
-        /// einer beliebigen Erweiterung - als Tippanzeige.
+        /// A <c>&lt;composing/&gt;</c> counts only when it belongs to XEP-0085.
+        /// A recognition over <c>Contains("&lt;composing")</c> does not check
+        /// the namespace at all and reports every element of the same name -
+        /// out of an arbitrary extension, say - as a typing notification.
         /// </summary>
         [Test]
         public async Task ChatState_InAForeignNamespace_IsIgnored()
@@ -77,13 +76,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat' id='cs1'>" +
-                "<composing xmlns='urn:example:etwas-anderes'/>" +
+                "<composing xmlns='urn:example:something-else'/>" +
                 "<body>Text</body></message>");
 
-            await WaitFor(() => client.LastReceivedMessageId == "cs1", "zugestellte Nachricht");
+            await WaitFor(() => client.LastReceivedMessageId == "cs1", "the delivered message");
 
             Assert.That(reported, Is.Null,
-                        "Ein fremdes <composing/> ist keine Chat-State-Meldung.");
+                        "A foreign <composing/> is no chat state notification.");
 
         }
 
@@ -92,8 +91,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ChatState_InsideForwarded_DoesNotLeakOut()
 
         /// <summary>
-        /// Eine weitergeleitete Nachricht bringt ihren eigenen Chat State mit.
-        /// Der gehört zur eingebetteten Nachricht, nicht zur äusseren.
+        /// A forwarded message brings its own chat state along. That one
+        /// belongs to the embedded message, not to the outer one.
         /// </summary>
         [Test]
         public async Task ChatState_InsideForwarded_DoesNotLeakOut()
@@ -112,10 +111,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 "</message></forwarded>" +
                 "<body>Text</body></message>");
 
-            await WaitFor(() => client.LastReceivedMessageId == "cs2", "zugestellte Nachricht");
+            await WaitFor(() => client.LastReceivedMessageId == "cs2", "the delivered message");
 
             Assert.That(reported, Is.Null,
-                        "Der Chat State der eingebetteten Nachricht darf nicht nach aussen wirken.");
+                        "The chat state of the embedded message must not take effect outside.");
 
         }
 
@@ -124,7 +123,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ChatState_IsStillRecognised()
 
         /// <summary>
-        /// Kontrollgruppe: der Normalfall muss weiter erkannt werden.
+        /// Control group: the normal case has to go on being recognised.
         /// </summary>
         [Test]
         public async Task ChatState_IsStillRecognised()
@@ -139,7 +138,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat'>" +
                 "<composing xmlns='http://jabber.org/protocol/chatstates'/></message>");
 
-            await WaitFor(() => reported is not null, "gemeldeter Chat State");
+            await WaitFor(() => reported is not null, "the reported chat state");
 
             Assert.That(reported, Is.EqualTo(ChatState.Composing));
 
@@ -150,9 +149,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ChatMarker_WithAttributesInAnyOrder_IsRecognised()
 
         /// <summary>
-        /// Das frühere Muster verlangte <c>xmlns</c> vor <c>id</c>. XML kennt
-        /// keine Attributreihenfolge - ein Server, der sie andersherum
-        /// schreibt, wurde still ignoriert.
+        /// The former pattern demanded <c>xmlns</c> before <c>id</c>. XML knows
+        /// no attribute order - a server writing them the other way round was
+        /// silently ignored.
         /// </summary>
         [Test]
         public async Task ChatMarker_WithAttributesInAnyOrder_IsRecognised()
@@ -167,7 +166,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat'>" +
                 "<displayed id='abc-123' xmlns='urn:xmpp:chat-markers:0'/></message>");
 
-            await WaitFor(() => reported is not null, "gemeldeter Chat Marker");
+            await WaitFor(() => reported is not null, "the reported chat marker");
 
             Assert.Multiple(() =>
             {
@@ -182,8 +181,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ChatMarker_InAForeignNamespace_IsIgnored()
 
         /// <summary>
-        /// <c>&lt;received/&gt;</c> gibt es in XEP-0333 <b>und</b> in XEP-0184.
-        /// Ohne Namespace-Prüfung sind sie nicht auseinanderzuhalten.
+        /// <c>&lt;received/&gt;</c> exists in XEP-0333 <b>and</b> in XEP-0184.
+        /// Without a namespace check they cannot be told apart.
         /// </summary>
         [Test]
         public async Task ChatMarker_InAForeignNamespace_IsIgnored()
@@ -196,10 +195,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat' id='cm2'>" +
-                "<received id='abc' xmlns='urn:example:etwas-anderes'/>" +
+                "<received id='abc' xmlns='urn:example:something-else'/>" +
                 "<body>Text</body></message>");
 
-            await WaitFor(() => client.LastReceivedMessageId == "cm2", "zugestellte Nachricht");
+            await WaitFor(() => client.LastReceivedMessageId == "cm2", "the delivered message");
 
             Assert.That(reported, Is.Null);
 
@@ -210,9 +209,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReceiptRequest_WithDoubleQuotedNamespace_IsAnswered()
 
         /// <summary>
-        /// Die Prüfung suchte wörtlich nach <c>xmlns='urn:xmpp:receipts'</c> -
-        /// also nur mit einfachen Anführungszeichen. XML lässt beide Formen zu;
-        /// gegen einen Server, der doppelte benutzt, blieb jede Quittung aus.
+        /// The check looked literally for <c>xmlns='urn:xmpp:receipts'</c> -
+        /// that is, only with single quotation marks. XML permits both forms;
+        /// against a server using double ones every receipt failed to come.
         /// </summary>
         [Test]
         public async Task ReceiptRequest_WithDoubleQuotedNamespace_IsAnswered()
@@ -222,12 +221,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat' id='r1'>" +
-                "<body>Bitte quittieren</body>" +
+                "<body>Please acknowledge</body>" +
                 "<request xmlns=\"urn:xmpp:receipts\"/></message>");
 
             await WaitFor(() => session.Received.Any(f => f.Contains("urn:xmpp:receipts", StringComparison.Ordinal) &&
                                                           f.Contains("id='r1'", StringComparison.Ordinal)),
-                          "Quittung vom Client");
+                          "the receipt from the client");
 
             Assert.Pass();
 
@@ -238,9 +237,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ReceiptRequest_InsideForwarded_IsNotAnswered()
 
         /// <summary>
-        /// Die Bitte um eine Quittung in einer weitergeleiteten Nachricht gilt
-        /// nicht für die äussere - sonst quittiert der Client eine Nachricht,
-        /// die er nie erhalten hat.
+        /// The request for a receipt in a forwarded message does not hold for
+        /// the outer one - otherwise the client acknowledges a message it never
+        /// received.
         /// </summary>
         [Test]
         public async Task ReceiptRequest_InsideForwarded_IsNotAnswered()
@@ -251,18 +250,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat' id='r2'>" +
                 "<forwarded xmlns='urn:xmpp:forward:0'>" +
-                "<message xmlns='jabber:client' id='innen'>" +
+                "<message xmlns='jabber:client' id='inner'>" +
                 "<request xmlns='urn:xmpp:receipts'/></message></forwarded>" +
                 "<body>Text</body></message>");
 
-            await WaitFor(() => client.LastReceivedMessageId == "r2", "zugestellte Nachricht");
+            await WaitFor(() => client.LastReceivedMessageId == "r2", "the delivered message");
 
             var answered = await XMPPServer.WaitUntilAsync(
                                () => session.Received.Any(f => f.Contains("urn:xmpp:receipts", StringComparison.Ordinal)),
                                TimeSpan.FromSeconds(1));
 
             Assert.That(answered, Is.False,
-                        "Für eine eingebettete Bitte darf keine Quittung gesendet werden.");
+                        "For an embedded request no receipt may be sent.");
 
         }
 
@@ -271,8 +270,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Carbon_WithEntitiesInTheBody_IsUnescaped()
 
         /// <summary>
-        /// Der Inhalt einer gespiegelten Nachricht gehört genauso aufgelöst wie
-        /// der einer direkten.
+        /// The content of a mirrored message belongs resolved just like that of
+        /// a direct one.
         /// </summary>
         [Test]
         public async Task Carbon_WithEntitiesInTheBody_IsUnescaped()
@@ -287,11 +286,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<message xmlns='jabber:client' from='{client.BareJid}' to='{client.FullJid}'>" +
                 "<sent xmlns='urn:xmpp:carbons:2'>" +
                 "<forwarded xmlns='urn:xmpp:forward:0'>" +
-                $"<message xmlns='jabber:client' from='{client.BareJid}/andere' to='{Bob}' type='chat'>" +
+                $"<message xmlns='jabber:client' from='{client.BareJid}/other' to='{Bob}' type='chat'>" +
                 "<body>3 &gt; 2 &amp;&amp; 1 &lt; 2</body>" +
                 "</message></forwarded></sent></message>");
 
-            await WaitFor(() => reported is not null, "gemeldeter Carbon");
+            await WaitFor(() => reported is not null, "the reported carbon");
 
             Assert.That(reported!.Body, Is.EqualTo("3 > 2 && 1 < 2"));
 

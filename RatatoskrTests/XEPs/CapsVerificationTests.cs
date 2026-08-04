@@ -31,22 +31,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0115, Abschnitt 5.4: Der Cache nimmt eine disco#info-Antwort erst
-    /// auf, wenn ihr Hash den angekündigten <c>ver</c>-Wert ergibt.
+    /// XEP-0115, section 5.4: The cache takes a disco#info answer in only once
+    /// its hash yields the announced <c>ver</c> value.
     /// </summary>
     /// <remarks>
-    /// Ohne diese Prüfung war der Cache von jedem vergiftbar, dessen Presence
-    /// hier ankommt. Der Angreifer kündigt das <c>node#ver</c>-Paar eines
-    /// verbreiteten Clients an und antwortet auf die folgende Abfrage mit einer
-    /// Liste seiner Wahl; unter diesem Paar liegt fortan seine Liste, und
-    /// ausgeliefert wird sie an jeden weiteren Kontakt, der dasselbe Paar
-    /// ankündigt — ohne dass der je gefragt würde.
+    /// Without this check the cache was poisonable by everyone whose presence
+    /// arrives here. The attacker announces the <c>node#ver</c> pair of a
+    /// widespread client and answers the following query with a list of their
+    /// choice; from then on their list lies under this pair, and it is handed
+    /// out to every further contact announcing the same pair — without that one
+    /// ever being asked.
     ///
-    /// Geprüft wird ohne Server: <see cref="DiscoManager"/> bekommt eine
-    /// Sende-Funktion, die die Abfrage nur mitschreibt, und die Antwort wird
-    /// von Hand eingespeist. Nur so lässt sich eine Antwort bauen, die zum
-    /// angekündigten Hash nicht passt — ein ehrlicher Client käme gar nicht
-    /// dazu.
+    /// What is checked works without a server: <see cref="DiscoManager"/> gets
+    /// a send function that only writes the query down, and the answer is fed
+    /// in by hand. Only that way can an answer be built that does not fit the
+    /// announced hash — an honest client would not even get to it.
     /// </remarks>
     [TestFixture]
     public class CapsVerificationTests
@@ -54,28 +53,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        private const String Knoten   = "https://example.org/client";
+        private const String NodeName   = "https://example.org/client";
         private const String Mallory  = "mallory@example.org/r";
         private const String Alice    = "alice@example.org/r";
 
-        /// <summary>Die Features, die der verbreitete Client wirklich hat.</summary>
-        private static readonly String[] Echt = [
+        /// <summary>The features the widespread client really has.</summary>
+        private static readonly String[] Real = [
             "http://jabber.org/protocol/caps",
             "http://jabber.org/protocol/disco#info"
         ];
 
-        /// <summary>Die Liste, die der Angreifer stattdessen unterschieben will.</summary>
-        private static readonly String[] Untergeschoben = [
-            "urn:xmpp:receipts"
+        /// <summary>The list the attacker wants to substitute instead.</summary>
+        private static readonly String[] Substituted = [
+         "urn:xmpp:receipts"
         ];
 
-        private static readonly DiscoIdentity Identitaet = new("client", "pc", "Exodus 0.9.1");
+        private static readonly DiscoIdentity Identity = new("client", "pc", "Exodus 0.9.1");
 
         private DiscoManager        disco       = null!;
         private EntityCapsManager   caps        = null!;
-        private List<String>        gesendet    = null!;
-        private List<String>        abgelehnt   = null!;
-        private List<DiscoInfo>     gemeldet    = null!;
+        private List<String>        sent    = null!;
+        private List<String>        refused   = null!;
+        private List<DiscoInfo>     reported    = null!;
 
         #endregion
 
@@ -85,88 +84,88 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void Setup()
         {
 
-            gesendet   = [];
-            abgelehnt  = [];
-            gemeldet   = [];
+            sent      = [];
+            refused   = [];
+            reported  = [];
 
             disco = new DiscoManager(xml =>
             {
-                lock (gesendet) gesendet.Add(xml);
+                lock (sent) sent.Add(xml);
                 return Task.CompletedTask;
             });
 
-            caps = new EntityCapsManager(disco) { Node = Knoten };
+            caps = new EntityCapsManager(disco) { Node = NodeName };
 
-            caps.OnCapsRejected   += (from, grund) => { lock (abgelehnt) abgelehnt.Add(grund); };
-            caps.OnCapsDiscovered += (from, info)  => { lock (gemeldet)  gemeldet.Add(info);   };
+            caps.OnCapsRejected   += (from, reason) => { lock (refused) refused.Add(reason); };
+            caps.OnCapsDiscovered += (from, info)  => { lock (reported)  reported.Add(info);   };
 
         }
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
-        /// <summary>Der Verification String über diese Features.</summary>
+        /// <summary>The verification string over these features.</summary>
         private static String VerOf(params String[] features)
-            => EntityCapsManager.VerificationString([Identitaet], features);
+            => EntityCapsManager.VerificationString([Identity], features);
 
-        /// <summary>Eine disco#info-Antwort mit genau diesen Features.</summary>
-        private static String Antwort(params String[] features)
+        /// <summary>A disco#info answer with exactly these features.</summary>
+        private static String Reply(params String[] features)
             => "<query xmlns='http://jabber.org/protocol/disco#info'>" +
-               $"<identity category='{Identitaet.Category}' type='{Identitaet.Type}' " +
-               $"name='{Identitaet.Name}'/>" +
+               $"<identity category='{Identity.Category}' type='{Identity.Type}' " +
+               $"name='{Identity.Name}'/>" +
                String.Concat(features.Select(f => $"<feature var='{f}'/>")) +
                "</query>";
 
         /// <summary>
-        /// Eine disco#info-Antwort mit einem softwareinfo-Formular, dessen
-        /// <c>os</c>-Feld diesen Wert trägt.
+        /// A disco#info answer with a softwareinfo form whose <c>os</c> field
+        /// carries this value.
         /// </summary>
-        private static String AntwortMitFormular(String os)
+        private static String ReplyWithForm(String os)
             => "<query xmlns='http://jabber.org/protocol/disco#info'>" +
-               $"<identity category='{Identitaet.Category}' type='{Identitaet.Type}' " +
-               $"name='{Identitaet.Name}'/>" +
-               String.Concat(Echt.Select(f => $"<feature var='{f}'/>")) +
+               $"<identity category='{Identity.Category}' type='{Identity.Type}' " +
+               $"name='{Identity.Name}'/>" +
+               String.Concat(Real.Select(f => $"<feature var='{f}'/>")) +
                "<x xmlns='jabber:x:data' type='result'>" +
                "<field var='FORM_TYPE' type='hidden'>" +
                "<value>urn:xmpp:dataforms:softwareinfo</value></field>" +
                $"<field var='os'><value>{os}</value></field>" +
                "</x></query>";
 
-        /// <summary>Der dazu passende Verification String.</summary>
-        private static String VerMitFormular(String os)
+        /// <summary>The verification string that goes with it.</summary>
+        private static String VerWithForm(String os)
             => EntityCapsManager.VerificationString(
-                   [Identitaet],
-                   Echt,
+                   [Identity],
+                   Real,
                    [new DiscoForm([
                         new DiscoField("FORM_TYPE", "hidden", ["urn:xmpp:dataforms:softwareinfo"]),
                         new DiscoField("os",        null,     [os])
                     ])]);
 
-        private Int32 Abfragen
+        private Int32 Queries
         {
-            get { lock (gesendet) return gesendet.Count; }
+            get { lock (sent) return sent.Count; }
         }
 
-        /// <summary>Wartet, bis so viele disco#info-Abfragen abgeschickt sind.</summary>
+        /// <summary>Waits until this many disco#info queries have been sent off.</summary>
         private async Task WaitForQueries(Int32 count)
         {
 
-            var ok = await XMPPServer.WaitUntilAsync(() => Abfragen >= count);
+            var ok = await XMPPServer.WaitUntilAsync(() => Queries >= count);
 
             Assert.That(ok, Is.True,
-                        $"Erwartet waren {count} disco#info-Abfragen, abgeschickt wurden {Abfragen}.");
+                        $"Expected were {count} disco#info queries, sent off were {Queries}.");
 
         }
 
-        /// <summary>Beantwortet die zuletzt abgeschickte Abfrage.</summary>
+        /// <summary>Answers the query that was sent off last.</summary>
         private void Answer(String from, String query)
         {
 
-            String letzte;
-            lock (gesendet) letzte = gesendet[^1];
+            String last;
+            lock (sent) last = sent[^1];
 
-            var id = Regex.Match(letzte, @"id='([^']+)'").Groups[1].Value;
+            var id = Regex.Match(last, @"id='([^']+)'").Groups[1].Value;
 
             disco.ProcessInfoResult(id,
                                     XElement.Parse($"<iq type='result' id='{id}'>{query}</iq>"),
@@ -180,32 +179,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAnswerThatDoesNotHashToTheAnnouncedVer_IsNotCached()
 
         /// <summary>
-        /// Der Kern: Wer ein <c>ver</c> ankündigt und etwas anderes antwortet,
-        /// kommt nicht in den Cache.
+        /// The core: whoever announces a <c>ver</c> and answers something else
+        /// does not get into the cache.
         /// </summary>
         [Test]
         public async Task AnAnswerThatDoesNotHashToTheAnnouncedVer_IsNotCached()
         {
 
-            var ver     = VerOf(Echt);
-            var laeuft  = caps.ProcessCapsAsync(Mallory, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            var ver      = VerOf(Real);
+            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
-            Answer(Mallory, Antwort(Untergeschoben));
-            await laeuft;
+            Answer(Mallory, Reply(Substituted));
+            await running;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(caps.GetCachedInfo($"{Knoten}#{ver}"), Is.Null,
-                            "Die untergeschobene Antwort darf nicht im Cache stehen.");
+                Assert.That(caps.GetCachedInfo($"{NodeName}#{ver}"), Is.Null,
+                            "The substituted answer must not stand in the cache.");
 
-                Assert.That(abgelehnt, Is.Not.Empty, "Die Ablehnung muss gemeldet werden.");
+                Assert.That(refused, Is.Not.Empty, "The refusal has to be reported.");
 
-                // Gemeldet wird sie trotzdem: Sie ist das, was diese Entity über
-                // sich selbst sagt, und genau das ergäbe auch eine gewöhnliche
-                // disco#info-Abfrage. Verweigert wird nur das Bündeln.
-                Assert.That(gemeldet, Has.Count.EqualTo(1));
+                // It is reported nevertheless: it is what this entity says about
+                // itself, and precisely that would come out of an ordinary
+                // disco#info query as well. What is refused is only the
+                // bundling.
+                Assert.That(reported, Has.Count.EqualTo(1));
 
             });
 
@@ -216,34 +216,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAnswerThatHashesToTheAnnouncedVer_IsCached()
 
         /// <summary>
-        /// Die Gegenprobe: Die ehrliche Antwort wird abgelegt.
+        /// The counter-check: the honest answer is stored.
         /// </summary>
         /// <remarks>
-        /// Ohne sie bestünde die Sammlung auch dann, wenn schlicht nichts mehr
-        /// in den Cache käme — und der ganze Zweck von XEP-0115, die zweite
-        /// Abfrage zu sparen, wäre still verschwunden.
+        /// Without it the collection would pass even if simply nothing got into
+        /// the cache any more — and the whole purpose of XEP-0115, to save the
+        /// second query, would have vanished silently.
         /// </remarks>
         [Test]
         public async Task AnAnswerThatHashesToTheAnnouncedVer_IsCached()
         {
 
-            var ver     = VerOf(Echt);
-            var laeuft  = caps.ProcessCapsAsync(Alice, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            var ver      = VerOf(Real);
+            var running  = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
-            Answer(Alice, Antwort(Echt));
-            await laeuft;
+            Answer(Alice, Reply(Real));
+            await running;
 
-            var abgelegt = caps.GetCachedInfo($"{Knoten}#{ver}");
+            var stored = caps.GetCachedInfo($"{NodeName}#{ver}");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelegt, Is.Not.Null, "Die geprüfte Antwort gehört in den Cache.");
-                Assert.That(abgelegt!.Features, Is.EquivalentTo(Echt));
+                Assert.That(stored, Is.Not.Null, "The checked answer belongs into the cache.");
+                Assert.That(stored!.Features, Is.EquivalentTo(Real));
 
-                Assert.That(abgelehnt, Is.Empty,
-                            $"Ohne Grund abgelehnt: {String.Join(" | ", abgelehnt)}");
+                Assert.That(refused, Is.Empty,
+                            $"Refused without a reason: {String.Join(" | ", refused)}");
 
             });
 
@@ -254,45 +254,44 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ThePoisonedEntryIsNotServedToTheNextContact()
 
         /// <summary>
-        /// Der eigentliche Schaden, ausbuchstabiert: Was der Angreifer
-        /// hinterlässt, darf dem nächsten Kontakt nicht als dessen Auskunft
-        /// ausgeliefert werden.
+        /// The actual damage, spelled out: what the attacker leaves behind must
+        /// not be handed to the next contact as that one's information.
         /// </summary>
         /// <remarks>
-        /// Das ist der Test, der die Vergiftung als solche zeigt. Die anderen
-        /// zeigen nur, dass ein Eintrag fehlt — hier fehlt er an der Stelle,
-        /// an der er Wirkung entfaltet hätte: Alice kündigt dasselbe Paar an
-        /// und wird deshalb ein zweites Mal gefragt, statt Mallorys Liste
-        /// untergeschoben zu bekommen.
+        /// That is the test showing the poisoning as such. The others show only
+        /// that an entry is missing — here it is missing at the place where it
+        /// would have taken effect: Alice announces the same pair and is
+        /// therefore asked a second time instead of getting Mallory's list
+        /// substituted.
         /// </remarks>
         [Test]
         public async Task ThePoisonedEntryIsNotServedToTheNextContact()
         {
 
-            var ver = VerOf(Echt);
+            var ver = VerOf(Real);
 
-            // Mallory kündigt das Paar eines verbreiteten Clients an und
-            // antwortet mit einer Liste seiner Wahl.
-            var angriff = caps.ProcessCapsAsync(Mallory, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            // Mallory announces the pair of a widespread client and answers
+            // with a list of their choice.
+            var attack = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
             await WaitForQueries(1);
-            Answer(Mallory, Antwort(Untergeschoben));
-            await angriff;
+            Answer(Mallory, Reply(Substituted));
+            await attack;
 
-            // Alice kündigt dasselbe Paar an - diesmal zu Recht.
-            var ehrlich = caps.ProcessCapsAsync(Alice, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            // Alice announces the same pair - this time rightly.
+            var honest = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
             await WaitForQueries(2);
-            Answer(Alice, Antwort(Echt));
-            await ehrlich;
+            Answer(Alice, Reply(Real));
+            await honest;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(Abfragen, Is.EqualTo(2),
-                            "Alice muss selbst gefragt werden; aus dem Cache bedient zu werden " +
-                            "hiesse, Mallorys Liste für ihre zu halten.");
+                Assert.That(Queries, Is.EqualTo(2),
+                            "Alice has to be asked herself; to be served out of the cache " +
+                            "would mean taking Mallory's list for hers.");
 
-                Assert.That(gemeldet[^1].Features, Is.EquivalentTo(Echt));
-                Assert.That(gemeldet[^1].Features, Does.Not.Contain("urn:xmpp:receipts"));
+                Assert.That(reported[^1].Features, Is.EquivalentTo(Real));
+                Assert.That(reported[^1].Features, Does.Not.Contain("urn:xmpp:receipts"));
 
             });
 
@@ -303,41 +302,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region WithoutAHashAttribute_NothingIsCached()
 
         /// <summary>
-        /// Die Altform aus XEP-0115 vor 1.4: <c>ver</c> ist dort eine
-        /// Versionsnummer und kein Hash. Nachrechnen lässt sich nichts, also
-        /// wird auch nichts abgelegt.
+        /// The old form from XEP-0115 before 1.4: <c>ver</c> is a version
+        /// number there and no hash. Nothing can be recalculated, so nothing is
+        /// stored either.
         /// </summary>
         /// <remarks>
-        /// Ohne diese Regel bliebe der bequemste Weg offen: Wer den Cache
-        /// vergiften will, lässt das <c>hash</c>-Attribut einfach weg.
+        /// Without this rule the most convenient way would stay open: whoever
+        /// wants to poison the cache simply leaves the <c>hash</c> attribute
+        /// out.
         ///
-        /// Geprüft wird auch die Begründung, und das nicht aus Ordnungsliebe:
-        /// Ein fehlendes Attribut fiele sonst unter „unbekannter Algorithmus"
-        /// (<c>null</c> ist nun einmal nicht <c>sha-1</c>), und der eigene
-        /// Zweig dafür wäre nicht mehr als Zierde. Der Unterschied gehört ins
-        /// Protokoll: Die Gegenstelle ist nicht kaputt, sie ist alt.
+        /// What is checked is the reason as well, and that not out of a love of
+        /// order: a missing attribute would otherwise fall under "unknown
+        /// algorithm" (<c>null</c> is after all not <c>sha-1</c>), and the
+        /// branch of its own for it would be nothing but an ornament. The
+        /// difference belongs in the protocol: the far end is not broken, it is
+        /// old.
         /// </remarks>
         [Test]
         public async Task WithoutAHashAttribute_NothingIsCached()
         {
 
-            var ver     = VerOf(Echt);
-            var laeuft  = caps.ProcessCapsAsync(Mallory, Knoten, ver, hash: null);
+            var ver      = VerOf(Real);
+            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, hash: null);
 
             await WaitForQueries(1);
-            Answer(Mallory, Antwort(Echt));
-            await laeuft;
+            Answer(Mallory, Reply(Real));
+            await running;
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(caps.GetCachedInfo($"{Knoten}#{ver}"), Is.Null);
-                Assert.That(gemeldet, Has.Count.EqualTo(1));
+                Assert.That(caps.GetCachedInfo($"{NodeName}#{ver}"), Is.Null);
+                Assert.That(reported, Has.Count.EqualTo(1));
 
-                Assert.That(abgelehnt.Any(g => g.Contains("no hash attribute", StringComparison.Ordinal)),
+                Assert.That(refused.Any(g => g.Contains("no hash attribute", StringComparison.Ordinal)),
                             Is.True,
-                            $"Die Altform muss als solche benannt werden. Gemeldet wurde: " +
-                            $"{String.Join(" | ", abgelehnt)}");
+                            $"The old form has to be named as such. What was reported: " +
+                            $"{String.Join(" | ", refused)}");
 
             });
 
@@ -348,24 +349,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnUnknownHashAlgorithm_IsNotCached()
 
         /// <summary>
-        /// Und ein Algorithmus, den dieser Client nicht rechnen kann, ebenso —
-        /// auch wenn er stärker ist als SHA-1.
+        /// And an algorithm this client cannot calculate likewise — even if it
+        /// is stronger than SHA-1.
         /// </summary>
         [Test]
         public async Task AnUnknownHashAlgorithm_IsNotCached()
         {
 
-            var ver     = VerOf(Echt);
-            var laeuft  = caps.ProcessCapsAsync(Mallory, Knoten, ver, "sha-256");
+            var ver      = VerOf(Real);
+            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, "sha-256");
 
             await WaitForQueries(1);
-            Answer(Mallory, Antwort(Echt));
-            await laeuft;
+            Answer(Mallory, Reply(Real));
+            await running;
 
             Assert.Multiple(() =>
             {
-                Assert.That(caps.GetCachedInfo($"{Knoten}#{ver}"), Is.Null);
-                Assert.That(abgelehnt, Is.Not.Empty);
+                Assert.That(caps.GetCachedInfo($"{NodeName}#{ver}"), Is.Null);
+                Assert.That(refused, Is.Not.Empty);
             });
 
         }
@@ -375,41 +376,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAnswerWithADataForm_IsVerifiedIncludingTheForm()
 
         /// <summary>
-        /// Eine Antwort mit XEP-0128-Datenformular wird geprüft und abgelegt —
-        /// das Formular geht in den Hash ein.
+        /// An answer with an XEP-0128 data form is checked and stored — the
+        /// form goes into the hash.
         /// </summary>
         /// <remarks>
-        /// Der Rahmen wird durch das Gegenstück gleich darunter geschlossen:
-        /// Hier steht, dass ein Formular nicht mehr im Weg ist; dort, dass es
-        /// wirklich mitgerechnet wird. Ohne beides zusammen liesse sich der
-        /// Test auch bestehen, indem man Formulare schlicht übergeht.
+        /// The frame is closed by the counterpart right below: here stands that
+        /// a form is not in the way any more; there, that it is really
+        /// calculated in. Without both together the test could also be passed
+        /// by simply passing forms over.
         /// </remarks>
         [Test]
         public async Task AnAnswerWithADataForm_IsVerifiedIncludingTheForm()
         {
 
-            var ver     = VerMitFormular("Mac");
-            var laeuft  = caps.ProcessCapsAsync(Alice, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            var ver      = VerWithForm("Mac");
+            var running  = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
-            Answer(Alice, AntwortMitFormular("Mac"));
-            await laeuft;
+            Answer(Alice, ReplyWithForm("Mac"));
+            await running;
 
-            var abgelegt = caps.GetCachedInfo($"{Knoten}#{ver}");
+            var stored = caps.GetCachedInfo($"{NodeName}#{ver}");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt, Is.Empty,
-                            $"Ohne Grund abgelehnt: {String.Join(" | ", abgelehnt)}");
+                Assert.That(refused, Is.Empty,
+                            $"Refused without a reason: {String.Join(" | ", refused)}");
 
-                Assert.That(abgelegt, Is.Not.Null,
-                            "Eine Antwort mit Formular gehört genauso in den Cache wie eine ohne.");
+                Assert.That(stored, Is.Not.Null,
+                            "An answer with a form belongs into the cache just like one without.");
 
-                Assert.That(abgelegt!.Forms, Has.Count.EqualTo(1),
-                            "Das Formular muss erhalten bleiben.");
+                Assert.That(stored!.Forms, Has.Count.EqualTo(1),
+                            "The form has to be preserved.");
 
-                Assert.That(abgelegt.Forms[0].FormType,
+                Assert.That(stored.Forms[0].FormType,
                             Is.EqualTo("urn:xmpp:dataforms:softwareinfo"));
 
             });
@@ -421,31 +422,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAnswerWhoseFormWasChanged_IsNotCached()
 
         /// <summary>
-        /// Und die Gegenprobe: Wird am Formular etwas geändert, passt der Hash
-        /// nicht mehr.
+        /// And the counter-check: if something is changed in the form, the hash
+        /// does not fit any more.
         /// </summary>
         /// <remarks>
-        /// Ohne diesen Test wäre „Formulare einfach übergehen" eine bestehende
-        /// Lösung — und damit stünde genau die Lücke wieder offen, um die es
-        /// geht: Zwei Entities, die sich allein in ihren erweiterten Angaben
-        /// unterscheiden, hätten denselben <c>ver</c>-Wert, und die Antwort
-        /// der einen liesse sich der anderen zuschreiben.
+        /// Without this test "simply pass forms over" would be a passing
+        /// solution — and with that precisely the gap this is about would stand
+        /// open again: two entities differing solely in their extended details
+        /// would have the same <c>ver</c> value, and the answer of the one
+        /// could be ascribed to the other.
         /// </remarks>
         [Test]
         public async Task AnAnswerWhoseFormWasChanged_IsNotCached()
         {
 
-            var ver     = VerMitFormular("Mac");
-            var laeuft  = caps.ProcessCapsAsync(Mallory, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            var ver      = VerWithForm("Mac");
+            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
-            Answer(Mallory, AntwortMitFormular("Windows"));
-            await laeuft;
+            Answer(Mallory, ReplyWithForm("Windows"));
+            await running;
 
             Assert.Multiple(() =>
             {
-                Assert.That(caps.GetCachedInfo($"{Knoten}#{ver}"), Is.Null);
-                Assert.That(abgelehnt, Is.Not.Empty);
+                Assert.That(caps.GetCachedInfo($"{NodeName}#{ver}"), Is.Null);
+                Assert.That(refused, Is.Not.Empty);
             });
 
         }
@@ -455,15 +456,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region XmlLangOfAnIdentity_GoesIntoTheHash()
 
         /// <summary>
-        /// Das <c>xml:lang</c> einer Identität geht in den Hash ein — und muss
-        /// dafür erst einmal beim Zerlegen der Antwort erhalten bleiben.
+        /// The <c>xml:lang</c> of an identity goes into the hash — and for that
+        /// it first has to be preserved when the answer is taken apart.
         /// </summary>
         /// <remarks>
-        /// Eine Entity darf denselben Namen in mehreren Sprachen führen; im
-        /// Verification String steht die Sprache zwischen Typ und Name. Wer sie
-        /// beim Zerlegen verliert, errechnet für jede solche Gegenstelle einen
-        /// anderen Wert als sie selbst — und lehnt sie ab, obwohl sie ehrlich
-        /// ist.
+        /// An entity may carry the same name in several languages; in the
+        /// verification string the language stands between type and name.
+        /// Whoever loses it when taking the answer apart calculates a different
+        /// value than every such far end does itself — and refuses it although
+        /// it is honest.
         /// </remarks>
         [Test]
         public async Task XmlLangOfAnIdentity_GoesIntoTheHash()
@@ -471,30 +472,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var ver = EntityCapsManager.VerificationString(
                           [new DiscoIdentity("client", "pc", "Psi 0.11", "en")],
-                          Echt);
+                          Real);
 
-            var antwort =
+            var reply =
                 "<query xmlns='http://jabber.org/protocol/disco#info'>" +
                 "<identity xml:lang='en' category='client' type='pc' name='Psi 0.11'/>" +
-                String.Concat(Echt.Select(f => $"<feature var='{f}'/>")) +
+                String.Concat(Real.Select(f => $"<feature var='{f}'/>")) +
                 "</query>";
 
-            var laeuft = caps.ProcessCapsAsync(Alice, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            var running = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
-            Answer(Alice, antwort);
-            await laeuft;
+            Answer(Alice, reply);
+            await running;
 
-            var abgelegt = caps.GetCachedInfo($"{Knoten}#{ver}");
+            var stored = caps.GetCachedInfo($"{NodeName}#{ver}");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(abgelehnt, Is.Empty,
-                            $"Ohne Grund abgelehnt: {String.Join(" | ", abgelehnt)}");
+                Assert.That(refused, Is.Empty,
+                            $"Refused without a reason: {String.Join(" | ", refused)}");
 
-                Assert.That(abgelegt, Is.Not.Null);
-                Assert.That(abgelegt!.Identities[0].Language, Is.EqualTo("en"));
+                Assert.That(stored, Is.Not.Null);
+                Assert.That(stored!.Identities[0].Language, Is.EqualTo("en"));
 
             });
 
@@ -505,83 +506,84 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AnAmbiguousAnswer_IsNotCached()
 
         /// <summary>
-        /// XEP-0115, Abschnitt 5.4: Eine Antwort, die sich nicht eindeutig in
-        /// eine Zeichenkette überführen lässt, wird als ganze verworfen.
+        /// XEP-0115, section 5.4: An answer that cannot be turned
+        /// unambiguously into a string is discarded as a whole.
         /// </summary>
         /// <remarks>
-        /// Das ist keine Formstrenge. Wo Doppelungen stehen, gibt es mehr als
-        /// eine mögliche Zeichenkette zu derselben Antwort — und damit lässt
-        /// sich zu einem gegebenen Hash eine zweite Antwort bauen. Sich für
-        /// eine Lesart zu entscheiden hiesse, dem Angreifer die Wahl zu lassen,
-        /// welche er meint.
+        /// That is no formal strictness. Where duplications stand there is more
+        /// than one possible string for the same answer — and with that a
+        /// second answer can be built for a given hash. To decide on one
+        /// reading would mean leaving the attacker the choice of which one they
+        /// mean.
         /// </remarks>
         [Test]
         public async Task AnAmbiguousAnswer_IsNotCached()
         {
 
-            const String Ich = "<identity category='client' type='pc' name='Exodus 0.9.1'/>";
+            const String Me = "<identity category='client' type='pc' name='Exodus 0.9.1'/>";
 
-            String Query(String inhalt)
-                => $"<query xmlns='http://jabber.org/protocol/disco#info'>{inhalt}</query>";
+            String Query(String content)
+                => $"<query xmlns='http://jabber.org/protocol/disco#info'>{content}</query>";
 
-            DiscoForm Formular(params String[] typen)
-                => new([new DiscoField("FORM_TYPE", "hidden", typen)]);
+            DiscoForm Form(params String[] types)
+                => new([new DiscoField("FORM_TYPE", "hidden", types)]);
 
-            const String FormularXml =
+            const String FormXml =
                 "<x xmlns='jabber:x:data' type='result'>" +
                 "<field var='FORM_TYPE' type='hidden'><value>urn:test:form</value></field></x>";
 
-            // Entscheidend ist, dass der angekündigte ver-Wert zu der
-            // mehrdeutigen Antwort *passt*: Sonst schlüge schon der
-            // Hash-Vergleich zu, und diese Regeln wären ungeprüft.
-            var faelle = new (String Name, String Antwort, String Ver)[]
+            // What is decisive is that the announced ver value *fits* the
+            // ambiguous answer: otherwise the hash comparison would strike
+            // already, and these rules would be unchecked.
+            var cases = new (String Name, String Reply, String Ver)[]
             {
 
-                ("dasselbe Feature zweimal",
-                 Query(Ich + "<feature var='urn:test:a'/><feature var='urn:test:a'/>"),
-                 EntityCapsManager.VerificationString([Identitaet], ["urn:test:a", "urn:test:a"])),
+                ("the same feature twice",
+                 Query(Me + "<feature var='urn:test:a'/><feature var='urn:test:a'/>"),
+                 EntityCapsManager.VerificationString([Identity], ["urn:test:a", "urn:test:a"])),
 
-                ("dieselbe Identität zweimal",
-                 Query(Ich + Ich),
-                 EntityCapsManager.VerificationString([Identitaet, Identitaet], [])),
+                ("the same identity twice",
+                 Query(Me + Me),
+                 EntityCapsManager.VerificationString([Identity, Identity], [])),
 
-                ("zwei Formulare mit demselben FORM_TYPE",
-                 Query(Ich + FormularXml + FormularXml),
-                 EntityCapsManager.VerificationString([Identitaet], [],
-                                                      [Formular("urn:test:form"),
-                                                       Formular("urn:test:form")])),
+                ("two forms with the same FORM_TYPE",
+                 Query(Me + FormXml + FormXml),
+                 EntityCapsManager.VerificationString([Identity], [],
+                                                      [Form("urn:test:form"),
+                                                       Form("urn:test:form")])),
 
-                // Der zweite Wert verschwindet spurlos aus der Rechnung - das
-                // FORM_TYPE-Feld selbst wird ja nicht mit angehängt. Zwei
-                // verschiedene Antworten ergäben damit denselben Hash.
-                ("ein FORM_TYPE mit zwei Werten",
-                 Query(Ich + "<x xmlns='jabber:x:data' type='result'>" +
+                // The second value vanishes without a trace out of the
+                // calculation - the FORM_TYPE field itself is not appended
+                // after all. Two different answers would thereby yield the same
+                // hash.
+                ("one FORM_TYPE with two values",
+                 Query(Me + "<x xmlns='jabber:x:data' type='result'>" +
                              "<field var='FORM_TYPE' type='hidden'>" +
                              "<value>urn:test:a</value><value>urn:test:b</value></field></x>"),
-                 EntityCapsManager.VerificationString([Identitaet], [],
-                                                      [Formular("urn:test:a", "urn:test:b")]))
+                 EntityCapsManager.VerificationString([Identity], [],
+                                                      [Form("urn:test:a", "urn:test:b")]))
 
             };
 
-            foreach (var (name, antwort, ver) in faelle)
+            foreach (var (name, reply, ver) in cases)
             {
 
                 Setup();
 
-                var laeuft = caps.ProcessCapsAsync(Mallory, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+                var running = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
                 await WaitForQueries(1);
-                Answer(Mallory, antwort);
-                await laeuft;
+                Answer(Mallory, reply);
+                await running;
 
                 Assert.Multiple(() =>
                 {
 
-                    Assert.That(caps.GetCachedInfo($"{Knoten}#{ver}"), Is.Null,
-                                $"Mehrdeutig, aber der Hash stimmte - und abgelegt: {name}.");
+                    Assert.That(caps.GetCachedInfo($"{NodeName}#{ver}"), Is.Null,
+                                $"Ambiguous, but the hash fitted - and stored: {name}.");
 
-                    Assert.That(abgelehnt, Is.Not.Empty,
-                                $"Ohne Meldung durchgelassen: {name}.");
+                    Assert.That(refused, Is.Not.Empty,
+                                $"Let through without a report: {name}.");
 
                 });
 
@@ -594,26 +596,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ACachedEntryIsServedWithoutAsking()
 
         /// <summary>
-        /// Und wozu das Ganze da ist: Ein geprüfter Eintrag erspart dem
-        /// nächsten Kontakt die Abfrage.
+        /// And what the whole thing is there for: a checked entry saves the
+        /// next contact the query.
         /// </summary>
         [Test]
         public async Task ACachedEntryIsServedWithoutAsking()
         {
 
-            var ver = VerOf(Echt);
+            var ver = VerOf(Real);
 
-            var erste = caps.ProcessCapsAsync(Alice, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            var first = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
             await WaitForQueries(1);
-            Answer(Alice, Antwort(Echt));
-            await erste;
+            Answer(Alice, Reply(Real));
+            await first;
 
-            await caps.ProcessCapsAsync(Mallory, Knoten, ver, EntityCapsManager.Sha1Algorithm);
+            await caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             Assert.Multiple(() =>
             {
-                Assert.That(Abfragen, Is.EqualTo(1), "Der Cache muss die zweite Abfrage sparen.");
-                Assert.That(gemeldet, Has.Count.EqualTo(2));
+                Assert.That(Queries, Is.EqualTo(1), "The cache has to save the second query.");
+                Assert.That(reported, Has.Count.EqualTo(2));
             });
 
         }

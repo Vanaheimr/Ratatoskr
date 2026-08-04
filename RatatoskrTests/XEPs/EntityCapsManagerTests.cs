@@ -30,12 +30,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// XEP-0115 Entity Capabilities gegen den Testvektor aus Abschnitt 5.2
+    /// XEP-0115 Entity Capabilities against the test vector from section 5.2
     /// ("Simple Generation Example").
     ///
-    /// Stimmt der Verification String nicht, verwerfen Gegenstellen, die den
-    /// Hash nachrechnen, die eigenen Capabilities - der Fehler bleibt im
-    /// Betrieb aber unsichtbar, weil viele Clients nicht prüfen.
+    /// If the verification string does not hold, far ends recalculating the
+    /// hash discard our own capabilities - the error stays invisible in
+    /// operation though, because many clients do not check.
     /// </summary>
     [TestFixture]
     public class EntityCapsManagerTests
@@ -43,7 +43,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Data
 
-        // XEP-0115, Abschnitt 5.2
+        // XEP-0115, section 5.2
         private const String Xep0115_SimpleVer =
             "QgayPKawpkPSDYmwT/WM94uAlu0=";
 
@@ -54,9 +54,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             "http://jabber.org/protocol/disco#items<" +
             "http://jabber.org/protocol/muc<";
 
-        // XEP-0115, Abschnitt 5.3 ("Complex Generation Example") - zwei
-        // Identitäten, die sich nur in xml:lang und Name unterscheiden, und ein
-        // XEP-0128-Datenformular.
+        // XEP-0115, section 5.3 ("Complex Generation Example") - two
+        // identities differing only in xml:lang and name, and an XEP-0128 data
+        // form.
         private const String Xep0115_ComplexVer =
             "q07IKJEyjvHSyhy//CH0CxmKi8w=";
 
@@ -76,10 +76,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region Hilfsfunktionen
+        #region Helper functions
 
         /// <summary>
-        /// Ein DiscoManager mit genau den angegebenen Identitäten und Features.
+        /// A DiscoManager with exactly the given identities and features.
         /// </summary>
         private static DiscoManager Disco(DiscoIdentity identity, params String[] features)
         {
@@ -97,7 +97,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>
-        /// Ein DiscoManager mit den angegebenen Identitäten und ohne Features.
+        /// A DiscoManager with the given identities and without features.
         /// </summary>
         private static DiscoManager DiscoWithIdentities(params DiscoIdentity[] identities)
         {
@@ -116,11 +116,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static String Sha1Base64(String s)
             => Convert.ToBase64String(SHA1.HashData(Encoding.UTF8.GetBytes(s)));
 
-        /// <summary>Ein Feld eines Datenformulars.</summary>
+        /// <summary>One field of a data form.</summary>
         private static DiscoField Field(String var, params String[] values)
             => new(var, null, values);
 
-        /// <summary>Das softwareinfo-Formular aus XEP-0115, Abschnitt 5.3.</summary>
+        /// <summary>The softwareinfo form from XEP-0115, section 5.3.</summary>
         private static DiscoForm SoftwareInfo()
             => new([
                    new DiscoField("FORM_TYPE", "hidden", ["urn:xmpp:dataforms:softwareinfo"]),
@@ -131,7 +131,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                    Field("software_version", "0.11")
                ]);
 
-        /// <summary>Die beiden Identitäten aus XEP-0115, Abschnitt 5.3.</summary>
+        /// <summary>The two identities from XEP-0115, section 5.3.</summary>
         private static DiscoIdentity[] PsiIdentities()
             => [
                    new("client", "pc", "Psi 0.11", "en"),
@@ -151,8 +151,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Xep0115_SimpleGenerationExample_ProducesExpectedVer()
 
         /// <summary>
-        /// Der Verification String aus XEP-0115 Abschnitt 5.2 muss exakt
-        /// reproduziert werden.
+        /// The verification string from XEP-0115 section 5.2 has to be
+        /// reproduced exactly.
         /// </summary>
         [Test]
         public void Xep0115_SimpleGenerationExample_ProducesExpectedVer()
@@ -175,9 +175,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Xep0115_TestVector_MatchesIndependentlyComputedHash()
 
         /// <summary>
-        /// Gegenprobe: Der veröffentlichte ver-Wert ist tatsächlich der
-        /// SHA-1-Hash des im XEP abgedruckten S-Strings. Damit ist belegt,
-        /// dass der Testvektor selbst stimmt.
+        /// Counter-check: the published ver value really is the SHA-1 hash of
+        /// the S string printed in the XEP. With that it is established that
+        /// the test vector itself is right.
         /// </summary>
         [Test]
         public void Xep0115_TestVector_MatchesIndependentlyComputedHash()
@@ -190,13 +190,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region VerificationString_WorksOnForeignDataToo()
 
         /// <summary>
-        /// Dieselbe Rechnung über fremde Angaben - der Testvektor aus
-        /// Abschnitt 5.2, diesmal nicht aus den eigenen Listen.
+        /// The same calculation over foreign details - the test vector from
+        /// section 5.2, this time not out of our own lists.
         /// </summary>
         /// <remarks>
-        /// Bis dahin liess sich der Hash nur über die eigenen Features bilden.
-        /// Damit war er ein Wert, den dieser Client zwar erzeugt, aber nie
-        /// nachprüft — und genau das Nachprüfen ist der Zweck des Verfahrens.
+        /// Until then the hash could be formed only over our own features. With
+        /// that it was a value this client does produce but never checks — and
+        /// precisely the checking is the purpose of the procedure.
         /// </remarks>
         [Test]
         public void VerificationString_WorksOnForeignDataToo()
@@ -218,16 +218,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Xep0115_ComplexGenerationExample_ProducesExpectedVer()
 
         /// <summary>
-        /// Der Testvektor aus XEP-0115 Abschnitt 5.3 - zwei Identitäten, die
-        /// sich nur in <c>xml:lang</c> und Name unterscheiden, und ein
-        /// XEP-0128-Datenformular.
+        /// The test vector from XEP-0115 section 5.3 - two identities differing
+        /// only in <c>xml:lang</c> and name, and an XEP-0128 data form.
         /// </summary>
         /// <remarks>
-        /// Der Vektor deckt beides zusammen ab, was der einfache aus 5.2 nicht
-        /// zeigt: dass die Sprache zwischen Typ und Name in den Hash eingeht,
-        /// und dass die Formularfelder in der vom XEP verlangten Ordnung
-        /// angehängt werden. Ohne ihn wäre die Rechnung nur gegen sich selbst
-        /// geprüft.
+        /// The vector covers both things together that the simple one from 5.2
+        /// does not show: that the language goes into the hash between type and
+        /// name, and that the form fields are appended in the order the XEP
+        /// demands. Without it the calculation would be checked only against
+        /// itself.
         /// </remarks>
         [Test]
         public void Xep0115_ComplexGenerationExample_ProducesExpectedVer()
@@ -246,8 +245,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Xep0115_ComplexTestVector_MatchesIndependentlyComputedHash()
 
         /// <summary>
-        /// Gegenprobe wie beim einfachen Vektor: Der abgedruckte ver-Wert ist
-        /// der SHA-1-Hash des abgedruckten S-Strings.
+        /// Counter-check as with the simple vector: the printed ver value is
+        /// the SHA-1 hash of the printed S string.
         /// </summary>
         [Test]
         public void Xep0115_ComplexTestVector_MatchesIndependentlyComputedHash()
@@ -260,50 +259,49 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region SoftwareInfo_OmitsWhatIsNotGiven()
 
         /// <summary>
-        /// XEP-0232: Was nicht angegeben wird, taucht im Formular nicht auf -
-        /// und zwar für jedes der vier Felder einzeln.
+        /// XEP-0232: What is not given does not turn up in the form - and that
+        /// for each of the four fields separately.
         /// </summary>
         /// <remarks>
-        /// Ein leeres Feld ist nicht dasselbe wie ein fehlendes: Es ginge in
-        /// den Verification String ein und machte den Hash von dem einer
-        /// Entity verschieden, die dieselbe Auskunft gibt. „Ich sage nichts
-        /// über mein Betriebssystem" und „mein Betriebssystem heisst
-        /// Leerstring" sind zwei verschiedene Aussagen, und nur die erste ist
-        /// gemeint.
+        /// An empty field is not the same as a missing one: It would go into
+        /// the verification string and would make the hash different from that
+        /// of an entity giving the same information. "I say nothing about my
+        /// operating system" and "my operating system is called empty string"
+        /// are two different statements, and only the first one is meant.
         ///
-        /// Jedes Feld für sich, weil ein Test, der immer alle vier füllt, die
-        /// Regel nur an dem einen prüft, das er weglässt.
+        /// Each field on its own, because a test always filling all four checks
+        /// the rule only on the one it leaves out.
         /// </remarks>
         [Test]
         public void SoftwareInfo_OmitsWhatIsNotGiven()
         {
 
-            var leer = DiscoForm.SoftwareInfo();
+            var empty = DiscoForm.SoftwareInfo();
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(leer.Fields, Has.Count.EqualTo(1),
-                            "Ohne jede Angabe bleibt allein das FORM_TYPE-Feld.");
+                Assert.That(empty.Fields, Has.Count.EqualTo(1),
+                            "Without any detail the FORM_TYPE field alone stays.");
 
-                Assert.That(leer.FormType, Is.EqualTo("urn:xmpp:dataforms:softwareinfo"));
+                Assert.That(empty.FormType, Is.EqualTo("urn:xmpp:dataforms:softwareinfo"));
 
-                // Und jedes Feld einzeln: genau das angegebene ist da.
-                Assert.That(Felder(DiscoForm.SoftwareInfo(Software:        "J")),
+                // And each field on its own: precisely the given one is there.
+                Assert.That(Fields(DiscoForm.SoftwareInfo(Software:        "J")),
                             Is.EqualTo(new[] { "software" }));
 
-                Assert.That(Felder(DiscoForm.SoftwareInfo(SoftwareVersion: "1")),
+                Assert.That(Fields(DiscoForm.SoftwareInfo(SoftwareVersion: "1")),
                             Is.EqualTo(new[] { "software_version" }));
 
-                Assert.That(Felder(DiscoForm.SoftwareInfo(OperatingSystem: "W")),
+                Assert.That(Fields(DiscoForm.SoftwareInfo(OperatingSystem: "W")),
                             Is.EqualTo(new[] { "os" }));
 
-                Assert.That(Felder(DiscoForm.SoftwareInfo(OSVersion:       "11")),
+                Assert.That(Fields(DiscoForm.SoftwareInfo(OSVersion:       "11")),
                             Is.EqualTo(new[] { "os_version" }));
 
             });
 
-            static String[] Felder(DiscoForm form)
+            static String[] Fields(DiscoForm form)
                 => [.. form.Fields.Where(f => !f.IsFormType).Select(f => f.Var)];
 
         }
@@ -313,36 +311,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Forms_FieldsAndValues_AreAllSorted()
 
         /// <summary>
-        /// Formulare, Felder und Werte werden sortiert - die Reihenfolge, in
-        /// der sie ankommen, darf den Hash nicht ändern.
+        /// Forms, fields and values are sorted - the order in which they arrive
+        /// must not change the hash.
         /// </summary>
         /// <remarks>
-        /// Sonst berechneten zwei Entities mit demselben Funktionsumfang
-        /// verschiedene Werte, je nachdem, wie ihr Server die Antwort
-        /// zusammensetzt - und jede Prüfung schlüge bei ehrlichen
-        /// Gegenstellen fehl.
+        /// Otherwise two entities with the same range of functions would
+        /// calculate different values depending on how their server puts the
+        /// answer together - and every check would fail with honest far ends.
         /// </remarks>
         [Test]
         public void Forms_FieldsAndValues_AreAllSorted()
         {
 
-            DiscoForm Formular(String typ, params DiscoField[] felder)
-                => new([new DiscoField("FORM_TYPE", "hidden", [typ]), .. felder]);
+            DiscoForm Form(String type, params DiscoField[] fields)
+                => new([new DiscoField("FORM_TYPE", "hidden", [type]), .. fields]);
 
-            var vorwaerts = EntityCapsManager.VerificationString(
-                                [new DiscoIdentity("client", "pc", "Test")],
+            var forwards = EntityCapsManager.VerificationString(
+                               [new DiscoIdentity("client", "pc", "Test")],
                                 [],
-                                [Formular("urn:test:a", Field("x", "1", "2")),
-                                 Formular("urn:test:b", Field("y", "3"), Field("z", "4"))]);
+                                [Form("urn:test:a", Field("x", "1", "2")),
+                                 Form("urn:test:b", Field("y", "3"), Field("z", "4"))]);
 
-            // Dieselben Angaben, überall rückwärts eingetragen.
-            var rueckwaerts = EntityCapsManager.VerificationString(
-                                  [new DiscoIdentity("client", "pc", "Test")],
+            // The same details, entered backwards everywhere.
+            var backwards = EntityCapsManager.VerificationString(
+                                [new DiscoIdentity("client", "pc", "Test")],
                                   [],
-                                  [Formular("urn:test:b", Field("z", "4"), Field("y", "3")),
-                                   Formular("urn:test:a", Field("x", "2", "1"))]);
+                                  [Form("urn:test:b", Field("z", "4"), Field("y", "3")),
+                                   Form("urn:test:a", Field("x", "2", "1"))]);
 
-            Assert.That(rueckwaerts, Is.EqualTo(vorwaerts));
+            Assert.That(backwards, Is.EqualTo(forwards));
 
         }
 
@@ -351,33 +348,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AFormWithoutAHiddenFormType_IsIgnored()
 
         /// <summary>
-        /// Ein Formular ohne gültiges FORM_TYPE zählt nicht mit - XEP-0115
-        /// Abschnitt 5.4: „ignore the form but continue processing".
+        /// A form without a valid FORM_TYPE does not count - XEP-0115
+        /// section 5.4: "ignore the form but continue processing".
         /// </summary>
         /// <remarks>
-        /// Das ist der Unterschied ums Ganze: Ein solches Formular macht die
-        /// Antwort nicht ungültig, es geht nur nicht in den Hash ein. Wer es
-        /// stattdessen mitrechnet, kommt bei einer Gegenstelle, die sich ans
-        /// XEP hält, auf einen anderen Wert; wer die ganze Antwort verwirft,
-        /// verweigert ihr grundlos die Auskunft.
+        /// That is the difference that makes all the difference: such a form
+        /// does not make the answer invalid, it only does not go into the hash.
+        /// Whoever calculates it in instead arrives at a different value with a
+        /// far end keeping to the XEP; whoever discards the whole answer
+        /// refuses it the information without a reason.
         /// </remarks>
         [Test]
         public void AFormWithoutAHiddenFormType_IsIgnored()
         {
 
-            var ohne = EntityCapsManager.VerificationString(
-                           [new DiscoIdentity("client", "pc", "Test")],
+            var without = EntityCapsManager.VerificationString(
+                              [new DiscoIdentity("client", "pc", "Test")],
                            ["urn:test:a"]);
 
-            // Ganz ohne FORM_TYPE.
-            var ohneTyp = EntityCapsManager.VerificationString(
-                              [new DiscoIdentity("client", "pc", "Test")],
+            // Entirely without a FORM_TYPE.
+            var withoutType = EntityCapsManager.VerificationString(
+                                  [new DiscoIdentity("client", "pc", "Test")],
                               ["urn:test:a"],
                               [new DiscoForm([Field("os", "Mac")])]);
 
-            // Mit FORM_TYPE, aber nicht als hidden deklariert.
-            var falscherTyp = EntityCapsManager.VerificationString(
-                                  [new DiscoIdentity("client", "pc", "Test")],
+            // With a FORM_TYPE, but not declared as hidden.
+            var wrongType = EntityCapsManager.VerificationString(
+                                [new DiscoIdentity("client", "pc", "Test")],
                                   ["urn:test:a"],
                                   [new DiscoForm([
                                        new DiscoField("FORM_TYPE", "text-single", ["urn:test:form"]),
@@ -386,8 +383,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(ohneTyp,     Is.EqualTo(ohne));
-                Assert.That(falscherTyp, Is.EqualTo(ohne));
+                Assert.That(withoutType,     Is.EqualTo(without));
+                Assert.That(wrongType, Is.EqualTo(without));
             });
 
         }
@@ -397,9 +394,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region VerificationString_IsIndependentOfInsertionOrder()
 
         /// <summary>
-        /// Die Reihenfolge, in der Features registriert werden, darf den Hash
-        /// nicht beeinflussen - sonst berechnen zwei Instanzen desselben
-        /// Clients unterschiedliche Werte.
+        /// The order in which features are registered must not influence the
+        /// hash - otherwise two instances of the same client calculate
+        /// different values.
         /// </summary>
         [Test]
         public void VerificationString_IsIndependentOfInsertionOrder()
@@ -429,8 +426,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region CapsElement_CarriesSha1HashAndVer()
 
         /// <summary>
-        /// Das c-Element für die Presence muss Namespace, hash='sha-1', node
-        /// und den berechneten ver-Wert tragen.
+        /// The c element for the presence has to carry the namespace,
+        /// hash='sha-1', node and the calculated ver value.
         /// </summary>
         [Test]
         public void CapsElement_CarriesSha1HashAndVer()
@@ -463,14 +460,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Features_AreSortedByOctetOrder()
 
         /// <summary>
-        /// REGRESSIONSTEST - XEP-0115 Abschnitt 5.1 verlangt eine Sortierung in
-        /// Oktett-Reihenfolge.
+        /// REGRESSION TEST - XEP-0115 section 5.1 demands a sorting in octet
+        /// order.
         ///
-        /// Früher nutzte CalculateVerificationString <c>Order()</c>, also den
-        /// kulturabhängigen Standardvergleich: dort steht 'a' vor 'B', in
-        /// Oktett-Reihenfolge dagegen 'B' (0x42) vor 'a' (0x61). Für die aktuelle
-        /// Feature-Liste des Clients fallen beide Reihenfolgen zufällig zusammen,
-        /// der offizielle Testvektor allein deckt den Fehler also nicht auf.
+        /// CalculateVerificationString formerly used <c>Order()</c>, that is,
+        /// the culture-dependent default comparison: there 'a' stands before
+        /// 'B', in octet order on the other hand 'B' (0x42) before 'a' (0x61).
+        /// For the current feature list of the client both orders coincide by
+        /// chance, so the official test vector alone does not uncover the
+        /// error.
         /// </summary>
         [Test]
         public void Features_AreSortedByOctetOrder()
@@ -480,7 +478,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var caps = new EntityCapsManager(Disco(identity, "urn:test:a", "urn:test:B"));
 
-            // Oktett-Reihenfolge: 'B' (0x42) vor 'a' (0x61)
+            // Octet order: 'B' (0x42) before 'a' (0x61)
             var expected = Sha1Base64("client/pc//Test<urn:test:B<urn:test:a<");
 
             Assert.That(caps.CalculateVerificationString(), Is.EqualTo(expected));
@@ -492,13 +490,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Identities_AreSortedByOctetOrderIncludingName()
 
         /// <summary>
-        /// REGRESSIONSTEST - XEP-0115 Abschnitt 5.1 sortiert Identitäten über
-        /// category/type/xml:lang/name in Oktett-Reihenfolge.
+        /// REGRESSION TEST - XEP-0115 section 5.1 sorts identities over
+        /// category/type/xml:lang/name in octet order.
         ///
-        /// Zwei Identitäten mit gleicher category/type müssen sich also über den
-        /// Namen ordnen, und zwar oktettweise ('B' 0x42 vor 'a' 0x61). Früher
-        /// sortierte CalculateVerificationString nur über category/type; für
-        /// gleiche Präfixe blieb damit die Einfügereihenfolge stehen.
+        /// Two identities with the same category/type therefore have to order
+        /// themselves over the name, and that octet by octet ('B' 0x42 before
+        /// 'a' 0x61). CalculateVerificationString formerly sorted only over
+        /// category/type; for equal prefixes the insertion order thereby
+        /// stayed.
         /// </summary>
         [Test]
         public void Identities_AreSortedByOctetOrderIncludingName()
