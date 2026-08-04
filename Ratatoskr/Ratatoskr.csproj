@@ -26,6 +26,21 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="org.GraphDefined.Vanaheimr.Ratatoskr.Tests" />
+
+    <!--
+      The second name is back, and it is not the stopgap D97 removed. That one
+      named an assembly for a move that had not happened; this one names the
+      suite that holds the interoperability tests since E19 - the checks
+      against Prosody, ejabberd and python-omemo, which live where their setups
+      live and not here.
+
+      What it is needed for is one member: XMPPServer.OnInstanceCreated, the
+      internal event the guard from D54 hangs itself on. Without this line the
+      moved tests would run without that guard, and a programming error in the
+      server would land in Hermod's log again instead of failing the test -
+      exactly the state D18, D19 and D54 took three steps to leave.
+    -->
+    <InternalsVisibleTo Include="org.GraphDefined.Vanaheimr.Ratatoskr.Jabber.Tests" />
   </ItemGroup>
 
   <ItemGroup>

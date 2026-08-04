@@ -384,19 +384,20 @@ RatatoskrTests/
 ├── Auth/               SASL/SCRAM, mechanism policy, accounts and certificates
 ├── Streams/            Negotiation, binding, TLS, deadlines, reconnect
 ├── StreamManagement/   XEP-0198: counting, acking, resuming
-├── Federation/         S2S: dialback, SRV, TCP/WebSocket, foreign servers
+├── Federation/         S2S: dialback, SRV, TCP/WebSocket, between two of ours
 ├── Routing/            Delivery rules, several resources, offline storage
 ├── Rosters/            Roster, subscriptions, versioning, push security
 ├── Stanzas/            Building, parsing and errors of individual stanzas
 └── XEPs/               XEP-0115 caps and the payloads of the remaining XEPs
 ```
 
-Part of the suite needs a **foreign** peer: Prosody, ejabberd, and python-omemo
-as a reference. Without them those tests skip themselves — a run without them
-is not red, it just says less. **How many were skipped tells you afterwards
-what was measured.** The setup for the two servers lives in the Jabber project,
-that for the oracle in
-[RatatoskrTests/XEPs/Oracle](RatatoskrTests/XEPs/Oracle/README.md).
+**This suite tests the library against itself.** Everything that needs a
+foreign implementation — Prosody, ejabberd and python-omemo as a reference —
+lives in the Jabber project, where the setups that produce those far sides have
+always lived. A checkout of this repository alone therefore runs all of it:
+1110 passed, 1 skipped, and that one checks a property which exists only in
+STARTTLS operation. **How many were skipped tells you afterwards what was
+measured** — here that number should stay at one.
 
 Three tables in the source are **generated, not transcribed**:
 `tools/unicode/` and `tools/stringprep/` fetch the Unicode file resp. the RFC
@@ -892,8 +893,9 @@ distribution, session store, and the wiring.
   foreign code**. What remains unproven is the SCE envelope, the `<encrypted/>`
   element, the PEP nodes and the course of a conversation over several
   messages — and a real client over a real connection is out of reach anyway:
-  Conversations, Dino and Gajim still largely speak OMEMO 0.3.0. See
-  [RatatoskrTests/XEPs/Oracle](RatatoskrTests/XEPs/Oracle/README.md)
+  Conversations, Dino and Gajim still largely speak OMEMO 0.3.0. The oracle and
+  the tests that drive it live in the Jabber project since E19, with the other
+  checks against foreign implementations
 - **The session store is not encrypted.** It contains the secret identity key,
   every prekey and every chain key; whoever reads the file reads the
   conversations along with it. It belongs somewhere only this user can reach

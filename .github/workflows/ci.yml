@@ -56,32 +56,19 @@ jobs:
         working-directory: Ratatoskr
         run: dotnet build RatatoskrTests/RatatoskrTests.csproj --configuration Release
 
-      # No filter: what needs an environment this runner does not have skips
-      # itself, and only that. Three groups are affected, and none of them can
-      # be made to run here:
+      # This suite tests the library against itself, and that is the whole
+      # point of E19: everything that needs a foreign implementation - Prosody,
+      # ejabberd, python-omemo - moved to the Jabber repository, where the
+      # setups that produce those far sides have always lived. So a hosted
+      # runner can execute all of it.
       #
-      #   - the federation tests against Prosody and ejabberd, which want both
-      #     servers rootless in WSL and their certificates over
-      #     JABBER_PROSODY_CERTS / JABBER_EJABBERD_CERTS;
-      #   - the stream-management tests against the same two;
-      #   - the three OMEMO tests against python-omemo, which the oracle calls
-      #     through WSL.
-      #
-      # Measured, not supposed: without the certificate variables the suite
-      # comes out at 1115 passed, 25 skipped, 0 failed. That measurement ran on
-      # a machine that does have WSL, so the three oracle tests still ran there;
-      # a hosted runner has none and skips those as well. Expect 28 skipped
-      # here - and read a rise above that as a question, not as noise. The
-      # number of skipped tests is the only thing that tells a run which
-      # measured something from one which measured nothing.
-      #
-      # There is deliberately no nightly counterpart to this file. Hermod has
-      # one because its live DNS probes need nothing but a network; what is
-      # skipped here needs two XMPP servers and a Python implementation set up
-      # by hand in WSL, and a hosted runner cannot provide that at all. Those
-      # checks happen on the machine that has the setup, and the work plan says
-      # so.
+      # Expect 1110 passed, 1 skipped. The one is a test for a property that
+      # exists only in STARTTLS operation; it is the only environment-dependent
+      # test left here. Read anything above that as a question, not as noise:
+      # the number of skipped tests is the only thing that tells a run which
+      # measured something from one which measured nothing, and this project
+      # has been caught by that twice (D54, D97).
       - name: Test
-        timeout-minutes: 45
+        timeout-minutes: 30
         working-directory: Ratatoskr
         run: dotnet test RatatoskrTests/RatatoskrTests.csproj --configuration Release --no-build --logger "console;verbosity=normal"
