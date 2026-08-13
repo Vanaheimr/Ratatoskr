@@ -1,10 +1,23 @@
 name: CI
 
+# master, not main. Every remote this repository has - GitHub, git1 and git2 -
+# reports `master` as HEAD, and none of them carries a `main` at all. This said
+# `main` from E18a until now, which means the workflow never fired once:
+# `on: push: branches:` matches a branch *name*, and a name that does not exist
+# matches nothing. Nothing reports that. The Actions tab stays empty and the
+# badge added in E18b reads "no status", which looks like "has not run yet"
+# rather than "cannot run" - so the one thing that would have shown the mistake
+# reads as if there were none. Hermod and Styx both say `master`; this was the
+# outlier.
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
+  # Manual runs from the Actions tab ("Run workflow"), as in the conformance
+  # suites. It is also the cheapest way to see a change to this file take
+  # effect without pushing a commit to find out.
+  workflow_dispatch:
 
 # A newer push supersedes an in-flight run for the same branch.
 concurrency:
