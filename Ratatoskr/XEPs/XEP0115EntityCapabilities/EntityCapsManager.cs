@@ -44,6 +44,15 @@ public sealed class EntityCapsManager
     /// <summary>The namespace of the data forms (XEP-0004).</summary>
     private const string DataFormNamespace = "jabber:x:data";
 
+    /// <summary>
+    /// Why the legacy form cannot be checked. In one place because two paths
+    /// report it: the one that declines to ask, and the verification of an
+    /// answer that reached it anyway.
+    /// </summary>
+    private const string LegacyFormReason =
+        "The caps element carries no hash attribute (legacy form before XEP-0115 1.4); " +
+        "the ver value is therefore no hash and cannot be recomputed.";
+
     private readonly DiscoManager _disco;
     private readonly Dictionary<string, DiscoInfo> _cache = new();
     private readonly object _lock = new();
@@ -201,10 +210,12 @@ public sealed class EntityCapsManager
     /// the answer, not a freely chosen identifier. One only has to recompute it.
     /// </remarks>
     /// <param name="hash">
-    /// The algorithm from the <c>hash</c> attribute. If it is missing or is one
-    /// other than <c>sha-1</c>, the <c>ver</c> value is not recomputable (with
-    /// the legacy form from XEP-0115 before version 1.4 it is a version number) -
-    /// it is then still queried, but no longer stored.
+    /// The algorithm from the <c>hash</c> attribute. A missing one is the legacy
+    /// form from XEP-0115 before version 1.4, where <c>ver</c> is a version
+    /// number: there nothing is asked and nothing stored, only
+    /// <see cref="OnCapsRejected"/> is raised. An algorithm other than
+    /// <c>sha-1</c> is still queried - that far end does keep to the current
+    /// form, its answer is merely not recomputable here - but not stored either.
     /// </param>
     public async Task ProcessCapsAsync(string             from,
                                        string             node,
@@ -221,6 +232,29 @@ public sealed class EntityCapsManager
                 OnCapsDiscovered?.Invoke(from, cached);
                 return;
             }
+        }
+
+        // XEP-0115 before 1.4: 'ver' is a version number there and no hash.
+        // Nothing can be recomputed, so by section 5.4 nothing may be stored -
+        // and what is never stored need not be asked for either. The query that
+        // stood here was a round trip whose answer was discarded, once per
+        // presence and for as long as the contact keeps appearing, because the
+        // cache it would have filled stays empty by design.
+        //
+        // It was not merely useless, it was usually wrong. node#ver is built out
+        // of a version number in this form, and that is frequently a node the
+        // far end never announced: Trillian answers
+        // 'http://trillian.im/caps#6.6.0.83/iPhone' with item-not-found, which
+        // arrives as a stanza error for a question nobody was waiting for.
+        //
+        // What this gives up is named rather than hidden: the features of such
+        // clients are not learned at all any more. Nothing remembered is lost -
+        // they were never cached - only the single uncached look, and whoever
+        // needs it asks disco#info directly, without a node.
+        if (hash is null)
+        {
+            OnCapsRejected?.Invoke(from, LegacyFormReason);
+            return;
         }
 
         // Not in the cache yet - query disco#info
@@ -248,9 +282,13 @@ public sealed class EntityCapsManager
     private static string? VerificationFailure(DiscoInfo Info, string Ver, string? Hash)
     {
 
+        // Unreachable from ProcessCapsAsync, which turns back before the query
+        // in this case. It stays because this is where the rule belongs: the
+        // one caller may not be the only one forever, and a verification that
+        // silently let a missing hash pass would be the cheapest way to poison
+        // the cache.
         if (Hash is null)
-            return "The caps element carries no hash attribute (legacy form before XEP-0115 1.4); " +
-                   "the ver value is therefore no hash and cannot be recomputed.";
+            return LegacyFormReason;
 
         if (Hash != Sha1Algorithm)
             return $"Unknown hash algorithm '{Hash}'; only {Sha1Algorithm} can be recomputed.";

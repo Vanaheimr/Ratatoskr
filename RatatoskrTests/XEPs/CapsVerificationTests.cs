@@ -299,17 +299,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region WithoutAHashAttribute_NothingIsCached()
+        #region WithoutAHashAttribute_NothingIsAsked()
 
         /// <summary>
         /// The old form from XEP-0115 before 1.4: <c>ver</c> is a version
         /// number there and no hash. Nothing can be recalculated, so nothing is
-        /// stored either.
+        /// stored - and nothing is asked for either.
         /// </summary>
         /// <remarks>
         /// Without this rule the most convenient way would stay open: whoever
         /// wants to poison the cache simply leaves the <c>hash</c> attribute
         /// out.
+        ///
+        /// That nothing is *asked* is the younger half and the one worth
+        /// checking. This used to send the query off and throw the answer away,
+        /// which cost a round trip per presence forever, since the cache that
+        /// would have ended it stays empty here by design. With a real far end
+        /// it cost more than that: node#ver out of a version number is usually a
+        /// node nobody announced, and Trillian answers its own with
+        /// item-not-found - a stanza error arriving for a question nobody was
+        /// waiting for.
         ///
         /// What is checked is the reason as well, and that not out of a love of
         /// order: a missing attribute would otherwise fall under "unknown
@@ -319,21 +328,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// old.
         /// </remarks>
         [Test]
-        public async Task WithoutAHashAttribute_NothingIsCached()
+        public async Task WithoutAHashAttribute_NothingIsAsked()
         {
 
-            var ver      = VerOf(Real);
-            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, hash: null);
+            var ver = VerOf(Real);
 
-            await WaitForQueries(1);
-            Answer(Mallory, Reply(Real));
-            await running;
+            await caps.ProcessCapsAsync(Mallory, NodeName, ver, hash: null);
 
             Assert.Multiple(() =>
             {
 
+                Assert.That(Queries, Is.EqualTo(0),
+                            "An answer that may not be stored need not be fetched. " +
+                            $"Sent off were: {String.Join(" | ", sent)}");
+
                 Assert.That(caps.GetCachedInfo($"{NodeName}#{ver}"), Is.Null);
-                Assert.That(reported, Has.Count.EqualTo(1));
+                Assert.That(reported, Is.Empty,
+                            "Nothing was asked, so there is nothing to report.");
 
                 Assert.That(refused.Any(g => g.Contains("no hash attribute", StringComparison.Ordinal)),
                             Is.True,
