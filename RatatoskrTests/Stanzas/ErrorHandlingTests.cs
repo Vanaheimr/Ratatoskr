@@ -58,6 +58,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// counterpart that does not support XEP-0199 at all thereby looked like
         /// an especially fast one.
         /// </summary>
+        /// <remarks>
+        /// The refusal is read on <c>OnPingError</c> and no longer on the general
+        /// <c>OnStanzaError</c>, and that is the second thing checked here. An
+        /// error belonging to a pending request is delivered to that request; the
+        /// general event is what is left for stanzas belonging to nobody. Both at
+        /// once made a caught error indistinguishable from an uncaught one -
+        /// which is what it looked like in the console: a line about a refusal
+        /// nobody needed to act on.
+        /// </remarks>
         [Test]
         public async Task RejectedPing_ReturnsNullInsteadOfARoundTripTime()
         {
@@ -66,8 +75,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            StanzaError? reported = null;
-            client.OnStanzaError += (_, error) => reported = error;
+            StanzaError? reported  = null;
+            StanzaError? general   = null;
+            client.Connection.Ping!.OnPingError += (_, error) => reported = error;
+            client.OnStanzaError                += (_, error) => general  = error;
 
             var rtt = await client.PingAsync();
 
@@ -83,6 +94,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(reported,            Is.Not.Null, "The error was not reported.");
                 Assert.That(reported!.Condition, Is.EqualTo("service-unavailable"));
                 Assert.That(reported!.Type,      Is.EqualTo(StanzaErrorType.Cancel));
+
+                Assert.That(general, Is.Null,
+                            "Whoever asked has been told; a second report through " +
+                            "the general event makes a caught error look uncaught.");
             });
 
         }
@@ -122,8 +137,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            StanzaError? reported = null;
-            client.OnStanzaError += (_, error) => reported = error;
+            StanzaError? reported  = null;
+            StanzaError? general   = null;
+            client.Connection.Disco!.OnQueryError += (_, error) => reported = error;
+            client.OnStanzaError                  += (_, error) => general  = error;
 
             var info = await client.Connection.Disco!.QueryInfoAsync(Server.Domain,
                                                                      timeout: TimeSpan.FromSeconds(5));
@@ -135,6 +152,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(info, Is.Null,
                             "A refused query must not deliver a result.");
 
+                Assert.That(general, Is.Null,
+                            "The query knows its own refusal; the general event is " +
+                            "for stanzas nobody was waiting for.");
+
                 Assert.That(reported,            Is.Not.Null);
                 Assert.That(reported!.Condition, Is.EqualTo("item-not-found"));
                 Assert.That(reported!.Type,      Is.EqualTo(StanzaErrorType.Modify));
@@ -144,6 +165,54 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 // not look at at all, and the query does not even name a node.
                 Assert.That(reported!.Text,      Is.EqualTo("This information is not given here."));
             });
+
+        }
+
+        #endregion
+
+        #region AnErrorNobodyWaitsFor_IsStillReported()
+
+        /// <summary>
+        /// The counter-check to the two above, and the reason the suppression is
+        /// tied to the pending request rather than to the id prefix: an
+        /// <c>iq error</c> carrying a disco id that belongs to no query is
+        /// reported through the general event.
+        /// </summary>
+        /// <remarks>
+        /// Without this the improvement would be a hiding place. Whoever filtered
+        /// by the prefix alone would silence exactly the stanzas worth a line: a
+        /// refusal to something never sent, or an answer arriving so late that
+        /// the query it belongs to is already gone. ProcessError says which of
+        /// the two it is - it returns false when no pending request carried the
+        /// id - and only its <c>true</c> silences the general report.
+        /// </remarks>
+        [Test]
+        public async Task AnErrorNobodyWaitsFor_IsStillReported()
+        {
+
+            var client = await ConnectClientAsync();
+
+            StanzaError? general = null;
+            client.OnStanzaError += (_, error) => general = error;
+
+            // An IQ without a type, which the server refuses with
+            // <bad-request/> (RFC 6120, section 8.2.3) - and the refusal carries
+            // the id back. That id looks like one of ours, but no query of that
+            // name is outstanding: DiscoManager knows nothing of it.
+            //
+            // The refusal is fetched this way rather than injected because a
+            // client cannot deliver an <iq type='error'> to another one here -
+            // the server does not route those. What is needed is an error that
+            // really arrives, and the server writes one itself on request.
+            await client.SendRawAsync(
+                      "<iq id='disco-info-nobody-waits'>" +
+                          "<ping xmlns='urn:xmpp:ping'/>" +
+                      "</iq>");
+
+            await WaitFor(() => general is not null,
+                          "the report of an error belonging to no request");
+
+            Assert.That(general!.Condition, Is.EqualTo("bad-request"));
 
         }
 

@@ -1823,16 +1823,37 @@ public sealed class XMPPConnection : IAsyncDisposable
             _logger.LogDebug("Stanza error on IQ '{Id}' from {From}: {Error}",
                              id ?? "(without id)", from ?? "(server)", parsed);
 
+            // Whoever asked is told, and only what nobody was waiting for is
+            // reported generally. Both ProcessError methods already say which of
+            // the two it is - they return false precisely when no pending request
+            // carried this id - and that answer was thrown away here: an error
+            // that had just been handed to its caller was announced a second time
+            // through OnStanzaError, at Information level, and was thereby not to
+            // be told apart from one nobody had caught.
+            //
+            // The difference is not cosmetic. A refused disco query reaches its
+            // caller as null and the caller decides what that means; the general
+            // event is what remains for stanzas belonging to nobody - a refusal to
+            // something never sent, or an answer so late that the request it
+            // belongs to is already gone. Those are worth a line. A 404 to a query
+            // this client itself sent and is already handling is not.
+            //
+            // The Debug line above stays unconditional: whoever reads the trace
+            // wants every refusal, caught or not.
+            var claimed = false;
+
             if (id != null)
             {
                 if (id.StartsWith("ping-"))
-                    Ping?.ProcessError(id, parsed);
+                    claimed = Ping?.ProcessError(id, parsed) == true;
 
                 else if (id.StartsWith("disco-info-") || id.StartsWith("disco-items-"))
-                    Disco?.ProcessError(id, parsed);
+                    claimed = Disco?.ProcessError(id, parsed) == true;
             }
 
-            OnStanzaError?.Invoke(from, parsed);
+            if (!claimed)
+                OnStanzaError?.Invoke(from, parsed);
+
             return;
 
         }
