@@ -17,6 +17,7 @@
 
 #region Usings
 
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -36,6 +37,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// </summary>
 public sealed class SCRAMAuthenticator
 {
+
+    /// <summary>
+    /// The fewest iterations this client will compute with.
+    /// </summary>
+    /// <remarks>
+    /// RFC 7677, section 4 asks for at least 4096 for SCRAM-SHA-256, and RFC
+    /// 5802 names the same number for SCRAM-SHA-1. Both say SHOULD; here it is
+    /// a MUST, and the reason is that the value arrives from the party this
+    /// mechanism exists to distrust. Nothing signs the server-first-message.
+    /// </remarks>
+    public const Int32 MinimumIterations = 4096;
+
+    /// <summary>
+    /// The most.
+    /// </summary>
+    /// <remarks>
+    /// No specification names an upper bound, because no specification worried
+    /// about a server attacking its own client. One frame carrying
+    /// <c>i=2147483647</c> keeps this process in PBKDF2 for hours, and it costs
+    /// whoever sends it nothing at all - they only have to write the number
+    /// down. A million is far above what any real deployment uses and far below
+    /// where the wait stops being a wait.
+    /// </remarks>
+    public const Int32 MaximumIterations = 1_000_000;
+
     private readonly string _username;
     private readonly string _password;
     private readonly SCRAMMechanism _mechanism;
@@ -104,7 +130,7 @@ public sealed class SCRAMAuthenticator
             throw new AuthenticationException("The server nonce does not contain the client nonce - possible MITM attack!");
 
         var salt = Convert.FromBase64String(saltBase64);
-        var iterations = int.Parse(iterationsStr);
+        var iterations = ReadIterationCount(iterationsStr);
 
         // Compute SaltedPassword = Hi(password, salt, iterations)
         _saltedPassword = Hi(_password, salt, iterations);
@@ -175,6 +201,61 @@ public sealed class SCRAMAuthenticator
     }
 
     // ===== Crypto Helpers =====
+
+    /// <summary>
+    /// The iteration count from the server-first-message, examined before
+    /// anything is computed with it.
+    /// </summary>
+    /// <remarks>
+    /// <b>This number comes from the party SCRAM is built against.</b> Nothing
+    /// signs the server-first-message; whoever sits on the connection writes
+    /// what they like into it, and it lands unchecked in a key derivation.
+    /// Both directions hurt, and each in its own way:
+    ///
+    /// <c>i=1</c> makes the derivation cheap - and it is cheap for whoever
+    /// afterwards guesses the password from the recorded handshake, not for the
+    /// login, which succeeds either way. A downgrade nobody notices, because
+    /// nothing about it looks wrong.
+    ///
+    /// <c>i=2147483647</c> costs nothing to send and hours to compute. One
+    /// frame, and this process is busy.
+    ///
+    /// The parsing is strict for a reason of its own: RFC 5802 allows digits
+    /// there and nothing else. <c>Int32.Parse</c> took a leading minus, and
+    /// PBKDF2 then threw an ArgumentOutOfRangeException out of the middle of
+    /// the handshake - an error about a parameter, where the truth was that the
+    /// far side had sent nonsense.
+    /// </remarks>
+    /// <exception cref="AuthenticationException">
+    /// When the count is no number, or lies outside the window.
+    /// </exception>
+    private static Int32 ReadIterationCount(String Value)
+    {
+
+        // NumberStyles.None: no sign, no space, no thousands separator. All
+        // three would be a spelling variant of something the grammar does not
+        // have.
+        if (!Int32.TryParse(Value, NumberStyles.None, CultureInfo.InvariantCulture, out var iterations))
+            throw new AuthenticationException(
+                      $"The server names '{Value}' as its SCRAM iteration count. RFC 5802 has " +
+                      $"digits there and nothing else.");
+
+        if (iterations < MinimumIterations)
+            throw new AuthenticationException(
+                      $"The server names {iterations} SCRAM iterations; at least " +
+                      $"{MinimumIterations} are required (RFC 7677, section 4). A count this low " +
+                      $"is what somebody sets who wants to read the password out of a recorded " +
+                      $"handshake afterwards - the login itself succeeds either way.");
+
+        if (iterations > MaximumIterations)
+            throw new AuthenticationException(
+                      $"The server names {iterations} SCRAM iterations; at most " +
+                      $"{MaximumIterations} are computed. Beyond that the login is no longer a " +
+                      $"login but a wait that the far side sets the length of.");
+
+        return iterations;
+
+    }
 
     private byte[] Hi(string password, byte[] salt, int iterations)
     {

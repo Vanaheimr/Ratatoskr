@@ -74,6 +74,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static String FromB64(String s)
             => Encoding.UTF8.GetString(Convert.FromBase64String(s));
 
+        /// <summary>
+        /// The RFC 7677 server-first-message with another iteration count.
+        /// Derived from the real vector and not written afresh, so that nonce
+        /// and salt stay the ones the authenticator expects - everything before
+        /// the count has to pass, or the test would be measuring the nonce
+        /// check.
+        /// </summary>
+        private static String Sha256_ServerFirstWith(String IterationCount)
+            => Sha256_ServerFirst.Replace(",i=4096", $",i={IterationCount}");
+
+        /// <summary>
+        /// An authenticator that has said its client-first-message and is
+        /// waiting for the answer.
+        /// </summary>
+        private static SCRAMAuthenticator AwaitingServerFirst()
+        {
+            var scram = Authenticator(SCRAMMechanism.ScramSha256, Sha256_ClientNonce);
+            scram.CreateClientFirstMessage();
+            return scram;
+        }
+
         #endregion
 
 
@@ -307,6 +328,125 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.That(() => scram.ProcessServerFirstMessage(B64(serverFirst)),
                         Throws.Nothing);
+
+        }
+
+        #endregion
+
+
+        // ----- The iteration count comes from the untrusted side -----
+        //
+        // Nothing signs the server-first-message. Everything below is therefore
+        // about a number that an attacker on the connection writes as they
+        // please, and that used to reach the key derivation unexamined.
+
+        #region TooFewIterations_AreRefused()
+
+        /// <summary>
+        /// <c>i=1</c> is the quiet attack of the two. The login succeeds, the
+        /// password is right, nothing looks wrong - and whoever recorded the
+        /// handshake can guess the password from it for almost nothing, because
+        /// the derivation they have to repeat per guess has been made cheap.
+        /// </summary>
+        [Test]
+        public void TooFewIterations_AreRefused()
+        {
+
+            var scram = AwaitingServerFirst();
+
+            var thrown = Assert.Throws<AuthenticationException>(
+                             () => scram.ProcessServerFirstMessage(B64(Sha256_ServerFirstWith("1"))));
+
+            Assert.That(thrown!.Message, Does.Contain(SCRAMAuthenticator.MinimumIterations.ToString()));
+
+        }
+
+        #endregion
+
+        #region TooManyIterations_AreRefused()
+
+        /// <summary>
+        /// The loud one, and the cheaper to mount: one frame with a large
+        /// number, and this process computes PBKDF2 for hours. It costs the
+        /// sender the writing of the number.
+        /// </summary>
+        [Test]
+        public void TooManyIterations_AreRefused()
+        {
+
+            var scram = AwaitingServerFirst();
+
+            Assert.Throws<AuthenticationException>(
+                () => scram.ProcessServerFirstMessage(B64(Sha256_ServerFirstWith("2147483647"))));
+
+        }
+
+        #endregion
+
+        #region TheBoundsThemselves_AreInside()
+
+        /// <summary>
+        /// Both ends of the window belong to it. 4096 is not an accident but
+        /// the number both RFCs name and both test vectors use - a check that
+        /// refused it would have failed every vector in this file.
+        /// </summary>
+        /// <remarks>
+        /// The upper end really computes a million iterations, which takes about
+        /// a second. That is the price of knowing the comparison is not off by
+        /// one, and off-by-one is the only mistake this line can make.
+        /// </remarks>
+        [Test]
+        public void TheBoundsThemselves_AreInside()
+        {
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(() => AwaitingServerFirst().ProcessServerFirstMessage(
+                                      B64(Sha256_ServerFirstWith(SCRAMAuthenticator.MinimumIterations.ToString()))),
+                            Throws.Nothing);
+
+                Assert.That(() => AwaitingServerFirst().ProcessServerFirstMessage(
+                                      B64(Sha256_ServerFirstWith(SCRAMAuthenticator.MaximumIterations.ToString()))),
+                            Throws.Nothing);
+
+            });
+
+        }
+
+        #endregion
+
+        #region AnIterationCountThatIsNoNumber_IsRefusedAsOne()
+
+        /// <summary>
+        /// Three of these used to leave through a door of their own:
+        /// <c>Int32.Parse</c> threw a FormatException on "abc", an
+        /// OverflowException past Int32, and it <b>accepted</b> the minus -
+        /// whereupon PBKDF2 threw an ArgumentOutOfRangeException from inside the
+        /// handshake. An error about a parameter, where the truth was that the
+        /// far side had sent nonsense.
+        ///
+        /// The empty value is the fourth and was never one of them: with nothing
+        /// behind the <c>i=</c> the extraction finds no value at all and the null
+        /// check above throws before the parsing. It rides along to keep it that
+        /// way, since a later reader has no way of telling the two apart by
+        /// looking - and both are the same answer.
+        ///
+        /// They belong together and they belong to this mechanism, so they all
+        /// arrive as one AuthenticationException that a caller can catch.
+        /// </summary>
+        [Test]
+        public void AnIterationCountThatIsNoNumber_IsRefusedAsOne()
+        {
+
+            Assert.Multiple(() =>
+            {
+                foreach (var nonsense in new[] { "abc", "-1", "99999999999999999999", "" })
+                    Assert.That(() => AwaitingServerFirst().ProcessServerFirstMessage(
+                                          B64(Sha256_ServerFirstWith(nonsense))),
+                                Throws.TypeOf<AuthenticationException>(),
+                                $"iteration count '{nonsense}'");
+            });
 
         }
 
