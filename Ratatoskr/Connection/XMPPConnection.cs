@@ -118,7 +118,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <c>Contains("id='roster1'")</c> on the raw text, a message with that
     /// character sequence in it could also replace the answer.
     /// </summary>
-    private readonly Dictionary<string, TaskCompletionSource<XElement>> _pendingIqs = new();
+    private readonly Dictionary<string, PendingIq> _pendingIqs = new();
+
+    /// <summary>
+    /// An IQ that has gone out, and whom its answer has to come from.
+    /// </summary>
+    /// <param name="Completion">Whoever is waiting for it.</param>
+    /// <param name="ExpectedFrom">
+    /// The entity that was addressed - or null when the request carried no
+    /// <c>to</c> and thereby went to one's own server (RFC 6120, section
+    /// 10.3.3).
+    /// </param>
+    private sealed record PendingIq(TaskCompletionSource<XElement>  Completion,
+                                    String?                         ExpectedFrom);
 
     /// <summary>
     /// The last error from <see cref="ConnectInternalAsync"/> - so that
@@ -1112,10 +1124,16 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// receive loop and is assigned by its id, instead of the waiting party
     /// reading from the socket itself.
     /// </remarks>
+    /// <param name="expectedFrom">
+    /// Whom the request is addressed to, and thereby the only entity whose
+    /// answer counts. Left out for everything that carries no <c>to</c> and
+    /// therefore asks one's own server.
+    /// </param>
     /// <returns>The answer, or null on a timeout.</returns>
     private async Task<XElement?> SendIqAsync(string             id,
                                               string             xml,
-                                              CancellationToken  ct)
+                                              CancellationToken  ct,
+                                              string?            expectedFrom   = null)
     {
 
         // RunContinuationsAsynchronously: the answer is delivered on the thread
@@ -1124,7 +1142,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         var tcs = new TaskCompletionSource<XElement>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         lock (_iqLock)
-            _pendingIqs[id] = tcs;
+            _pendingIqs[id] = new PendingIq(tcs, expectedFrom);
 
         try
         {
@@ -1152,24 +1170,118 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
-    /// Delivers an IQ answer to the waiting party, if there is one.
+    /// Delivers an IQ answer to the waiting party, if there is one and if it
+    /// comes from the entity that was asked.
     /// </summary>
-    private bool TryCompleteIq(string id, XElement element)
+    /// <remarks>
+    /// <b>The identifier alone is not an assignment.</b> It is chosen by this
+    /// side, it is short, and it stands in the stanza for anyone to read; the
+    /// full JID it is addressed to is broadcast in every presence. Anybody
+    /// allowed to write to this client can therefore send an <c>&lt;iq
+    /// type='result'/&gt;</c> with a plausible identifier and, if they are
+    /// quicker than the entity actually asked, be believed instead of it.
+    ///
+    /// Where that hurts is the bundle fetch: OMEMO looks up the keys of a peer
+    /// through <see cref="FetchPepAsync"/>, and a substituted answer carries
+    /// substituted keys. An established peer is caught afterwards by the
+    /// identity check, which refuses a changed key - the first contact is not,
+    /// and the first contact is the whole point of the fetch. XEP-0384 exists
+    /// to keep the server out of the conversation; without this comparison one
+    /// stranger on the same server would do.
+    ///
+    /// Compared bare, as everywhere in this house: a request to a full JID may
+    /// be answered by the same account, and that is a person, not a stranger.
+    /// </remarks>
+    private bool TryCompleteIq(string id, XElement element, String? from)
     {
 
-        TaskCompletionSource<XElement>? tcs;
+        PendingIq?  pending;
+        Boolean     wrongSender;
 
         lock (_iqLock)
         {
-            if (!_pendingIqs.TryGetValue(id, out tcs))
+
+            if (!_pendingIqs.TryGetValue(id, out pending))
                 return false;
 
-            _pendingIqs.Remove(id);
+            wrongSender = !AnswerBelongsHere(pending.ExpectedFrom, from);
+
+            // Taken out only once the sender fits. Removing it either way would
+            // hand the forgery a second prize: the real answer would arrive
+            // afterwards and find nothing to belong to, so whoever cannot be
+            // believed could at least make sure nobody else is. As it stands, a
+            // forged answer costs nothing but a line in the log, and the request
+            // keeps waiting for the one it asked.
+            if (!wrongSender)
+                _pendingIqs.Remove(id);
+
         }
 
-        return tcs.TrySetResult(element);
+        // Outside the lock: the handler is somebody else's code, and holding
+        // the IQ lock while it runs is how a receive loop stops.
+        if (wrongSender)
+        {
+
+            var asked = pending.ExpectedFrom ?? "one's own server";
+
+            _logger.LogWarning("IQ '{Id}' was answered by {From}, but {Asked} was asked",
+                               id, from ?? "an unnamed sender", asked);
+
+            OnSpoofingAttempt?.Invoke($"IQ '{id}' answered by {from ?? "an unnamed sender"} " +
+                                      $"instead of {asked}");
+
+            return false;
+
+        }
+
+        return pending.Completion.TrySetResult(element);
 
     }
+
+    /// <summary>
+    /// May an answer from this sender belong to a request addressed there?
+    /// </summary>
+    internal Boolean AnswerBelongsHere(String? ExpectedFrom, String? From)
+    {
+
+        // No 'from' is one's own server, and it can be nothing else. RFC 6120,
+        // section 8.1.2.1 obliges the server to write the sender's full JID
+        // onto every stanza it accepts from a client, overriding whatever
+        // stood there. A peer therefore cannot produce this: what they send
+        // arrives carrying their own address, which is exactly what the
+        // comparison below then catches.
+        //
+        // So the permission costs nothing here. Against the server itself this
+        // comparison never protected and never could - it routes everything
+        // and may put any address it likes on top; that is the party OMEMO
+        // fends off with fingerprints, one layer up, not with a from-check.
+        //
+        // Demanding one is also simply wrong. A server may answer an addressed
+        // request without naming itself, and the one in this repository does
+        // precisely that on several of its paths. Requiring it pushed ten tests
+        // into the ten-second timeout, and only three of them asserted strictly
+        // enough to fail. The other seven kept passing while measuring a
+        // timeout instead of an answer, which is the more unpleasant half of
+        // it: a defence that quietly stops conversations looks from the outside
+        // exactly like one that works.
+        if (From is null)
+            return true;
+
+        // Nobody was addressed, so the request went to one's own server. Then
+        // it reports under the account's own bare JID, or under the domain.
+        if (ExpectedFrom is null)
+            return SameEntity(From, _jid) ||
+                   String.Equals(From, _domain, StringComparison.OrdinalIgnoreCase);
+
+        // Somebody was addressed, and only they may answer.
+        return SameEntity(From, ExpectedFrom);
+
+    }
+
+    private static Boolean SameEntity(String? One, String? Other)
+
+        => One is not null && Other is not null &&
+           JidUtilities.Bare(One) == JidUtilities.Bare(Other);
 
     /// <summary>
     /// Cancels all open IQ requests. Without that a reconnect would first wait
@@ -1179,7 +1291,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     private void CancelPendingIqs()
     {
 
-        List<TaskCompletionSource<XElement>> pending;
+        List<PendingIq> pending;
 
         lock (_iqLock)
         {
@@ -1187,8 +1299,8 @@ public sealed class XMPPConnection : IAsyncDisposable
             _pendingIqs.Clear();
         }
 
-        foreach (var tcs in pending)
-            tcs.TrySetCanceled();
+        foreach (var open in pending)
+            open.Completion.TrySetCanceled();
 
     }
 
@@ -1400,8 +1512,13 @@ public sealed class XMPPConnection : IAsyncDisposable
     ///
     /// The raw text is additionally passed through, because the XEP managers
     /// still expect it - their conversion is outstanding.
+    ///
+    /// Internal and not private, so that a test can play a frame in the way the
+    /// receive loop would. What arrives here has already passed the socket and
+    /// says nothing about who sent it - which is the point for anything testing
+    /// a stanza that lies about its sender.
     /// </summary>
-    private void ProcessStanza(string stanza)
+    internal void ProcessStanza(string stanza)
     {
         try
         {
@@ -1806,7 +1923,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // the id goes before everything else - before the error path too,
         // because for the waiting party an 'error' is just as much an answer as
         // a 'result'.
-        if (id is not null && type is "result" or "error" && TryCompleteIq(id, element))
+        if (id is not null && type is "result" or "error" && TryCompleteIq(id, element, from))
             return;
 
         // RFC 6120, section 8.3: An iq 'error' is not an answer with content but
@@ -2502,7 +2619,8 @@ public sealed class XMPPConnection : IAsyncDisposable
     {
 
         var id       = $"pep-{Interlocked.Increment(ref _pepCounter)}";
-        var response = await SendIqAsync(id, OmemoPep.FetchIq(id, bareJid, node, itemId), ct);
+        var response = await SendIqAsync(id, OmemoPep.FetchIq(id, bareJid, node, itemId), ct,
+                                         expectedFrom: bareJid);
 
         if (response is null || response.Attr("type") != "result")
             return null;
@@ -3023,7 +3141,8 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var answer   = await SendIqAsync(id, PubSubBuilder.Subscribe(target, nodeId, BareJid, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.Subscribe(target, nodeId, BareJid, id), ct,
+                                         expectedFrom: target);
 
         if (answer is null)
         {
@@ -3097,7 +3216,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         var id       = NextPubSubId();
         var answer   = await SendIqAsync(id,
                                          PubSubBuilder.Unsubscribe(target, nodeId, BareJid, id, used),
-                                         ct);
+                                         ct,
+                                         expectedFrom: target);
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3141,7 +3261,8 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var answer   = await SendIqAsync(id, PubSubBuilder.GetSubscriptions(target, id, nodeId), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetSubscriptions(target, id, nodeId), ct,
+                                         expectedFrom: target);
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3253,7 +3374,8 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var answer   = await SendIqAsync(id, PubSubBuilder.GetNodeSubscriptions(target, nodeId, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetNodeSubscriptions(target, nodeId, id), ct,
+                                         expectedFrom: target);
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3327,8 +3449,13 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                                           CancellationToken  ct)
     {
 
-        var id       = XElement.Parse(iq).Attr("id")!;
-        var answer   = await SendIqAsync(id, iq, ct);
+        // Parsed once and asked twice. The identifier was already read back out
+        // of the finished XML rather than made up a second time; the address it
+        // goes to is read from the same place and for the same reason, so that
+        // what is waited for cannot drift from what was sent.
+        var request  = XElement.Parse(iq);
+        var id       = request.Attr("id")!;
+        var answer   = await SendIqAsync(id, iq, ct, expectedFrom: request.Attr("to"));
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3388,7 +3515,8 @@ public sealed class XMPPConnection : IAsyncDisposable
             return null;
 
         var id       = NextPubSubId();
-        var answer   = await SendIqAsync(id, PubSubBuilder.GetOptions(target, nodeId, BareJid, id, used), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetOptions(target, nodeId, BareJid, id, used), ct,
+                                         expectedFrom: target);
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3438,7 +3566,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                                          PubSubBuilder.SetOptions(target, nodeId, BareJid, id, used,
                                                                   options.ToSubmit()
                                                                          .ToString(SaveOptions.DisableFormatting)),
-                                         ct);
+                                         ct,
+                                         expectedFrom: target);
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3539,7 +3668,8 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var answer   = await SendIqAsync(id, PubSubBuilder.GetNodeConfig(target, nodeId, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetNodeConfig(target, nodeId, id), ct,
+                                         expectedFrom: target);
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3682,8 +3812,13 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                    CancellationToken  ct)
     {
 
-        var id       = XElement.Parse(iq).Attr("id")!;
-        var answer   = await SendIqAsync(id, iq, ct);
+        // Parsed once and asked twice. The identifier was already read back out
+        // of the finished XML rather than made up a second time; the address it
+        // goes to is read from the same place and for the same reason, so that
+        // what is waited for cannot drift from what was sent.
+        var request  = XElement.Parse(iq);
+        var id       = request.Attr("id")!;
+        var answer   = await SendIqAsync(id, iq, ct, expectedFrom: request.Attr("to"));
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -3719,7 +3854,8 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var target   = service ?? PubSub!.PubSubService;
         var id       = NextPubSubId();
-        var answer   = await SendIqAsync(id, PubSubBuilder.GetItems(target, nodeId, maxItems, id), ct);
+        var answer   = await SendIqAsync(id, PubSubBuilder.GetItems(target, nodeId, maxItems, id), ct,
+                                         expectedFrom: target);
 
         if (answer is null || answer.Attr("type") != "result")
         {
