@@ -87,7 +87,7 @@ jobs:
       # where the setups that produce those far sides have always lived. So a
       # hosted runner can execute all of it.
       #
-      # Expect 1110 passed, 1 skipped. The one is a test for a property that
+      # Expect 1119 passed, 1 skipped. The one is a test for a property that
       # exists only in STARTTLS operation; it is the only environment-dependent
       # test left here. Read anything above that as a question, not as noise:
       # the number of skipped tests is the only thing that tells a run which

@@ -400,9 +400,13 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it: 1110 passed, 1 skipped, and that one checks a property which exists
+all of it: 1119 passed, 1 skipped, and that one checks a property which exists
 only in STARTTLS operation. **How many were skipped tells you afterwards what was
 measured** — here that number should stay at one.
+
+The passing count moves with the suite and is worth keeping current rather than
+round: it stood at 1110 until XEP-0454 arrived, and a figure nobody updates
+stops being a check and becomes decoration.
 
 Three tables in the source are **generated, not transcribed**:
 `tools/unicode/` and `tools/stringprep/` fetch the Unicode file resp. the RFC
