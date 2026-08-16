@@ -65,6 +65,20 @@ off. Anyone who knows what their server can do should therefore also set
 `MinimumSaslMechanism`. What it does fend off unaided is the attack that pays:
 the client comes back on its own after every drop, and a drop can be provoked.
 
+Both of those are guesses about what a server ought to be able to do. Where the
+far side cooperates there is a measurement instead — **XEP-0474**: the server
+hashes the mechanism list it announced into its server-first-message, and since
+RFC 5802 puts that message into the `AuthMessage` verbatim, the hash is already
+covered by the client proof and the server signature. An attacker who strikes
+`SCRAM-SHA-256` from the features can recompute the hash — it is unkeyed — but
+then the proof no longer matches, and he does not know the password. He may have
+the hash or the proof, not both.
+
+Both sides are implemented, and `XMPPConnection.DowngradeProtection` says which
+of three things happened: `Verified`, `Mismatch` (the login is refused), or
+`NotOffered` — which is every server that has not implemented an experimental
+XEP, and is why the two floors above stay. They need nothing from the far side.
+
 ## XEP support
 
 Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but off by default · ⛔ deliberately not implemented
@@ -89,6 +103,7 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0384 | OMEMO Encryption | ✅ | Complete, `urn:xmpp:omemo:2` — see the "End-to-end encryption" section further down. Verified against the reference implementation python-omemo, in both directions (D69) |
 | XEP-0420 | Stanza Content Encryption | ✅ | The envelope that OMEMO encrypts: `<content/>` with the sender inside it and padding of random length |
 | XEP-0454 | OMEMO Media Sharing | ⚠️ | The receiving half, and nothing that touches the network: `AesGcmUrl` reads `aesgcm://host/path#[iv][key]`, hands out the `https` address the file lies at — without the fragment, which is the key — and decrypts the payload, tag checked. What is deliberately **not** here is the fetching: whether an incoming message may cause a request at all, how large a file may be, which addresses are refused. A library that downloads on its own gives that decision to whoever sent the message. The upload side (encrypting and offering a file) is missing entirely. IV of 12 bytes only — the older 16 byte form is refused with a reason rather than silently, since `AesGcm` takes no other nonce length |
+| XEP-0474 | SASL SCRAM Downgrade Protection | ✅ | Both sides, version 0.5.0. The server hashes the list it announced into the `h` attribute of its server-first-message; the client hashes the list that reached it and compares. Checked against the one vector the XEP publishes, which pins the octet sort order, both separators and the choice of hash in a single comparison — an implementation that only agrees with itself passes every test written from its own behaviour. The channel-binding section is read from XEP-0440 although nothing here can *use* a channel binding: it is the second half of the hashed string, and a client that ignores it computes a different hash and refuses a login that was never under attack. Absence of `h` is not a failure — almost nothing implements this yet, including the ejabberd this was first pointed at — but it is reported rather than silently passed as success |
 | XEP-0352 | Client State Indication | ✅ | Both sides. The server announces `<csi/>` after login (§4.1) and does not answer `<active/>`/`<inactive/>` (§4.2). Only what will still be true later is held back: presence waits and **the latest per full JID supersedes the earlier ones** (§3); a message with a body, an `iq`, an error and every nonza go out at once; a chat state (XEP-0085) is dropped — delivered late it would not be delayed but wrong. What was held goes out **before** the stanza that flushes the buffer (RFC 6120 §10.1), and at the end of the connection into the buffer of unacked stanzas. Ceiling `MaxHeldWhileInactive` (default 100); on overflow the buffer goes out rather than anything being discarded. After a resumption "active" applies again (§5.2) — which is why the client re-declares itself after every handshake. In the console `/csi active|inactive` (D61) |
 
 ## RFC conformance
@@ -411,12 +426,12 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it — 1166 tests, of which the platform decides how many get an answer:
+all of it — 1174 tests, of which the platform decides how many get an answer:
 
 | Platform | passed | skipped |
 |----------|-------:|--------:|
-| Windows | 1163 | 3 |
-| Debian 13 | 1165 | 1 |
+| Windows | 1171 | 3 |
+| Debian 13 | 1173 | 1 |
 
 The skip both share checks a property which exists only in STARTTLS operation,
 and the fixture is parameterised over the TLS modes, so in the other one the
@@ -429,9 +444,9 @@ pretending.
 number to hold the run to is the one for the platform it ran on. CI runs both.
 
 The counts move with the suite and are worth keeping current rather than round:
-the passing figure stood at 1110 until XEP-0454 arrived and at 1119 until the
-security review was worked through, and a figure nobody updates stops being a
-check and becomes decoration.
+the passing figure stood at 1110 until XEP-0454 arrived, at 1119 until the
+security review was worked through and at 1163 until XEP-0474 came in, and a
+figure nobody updates stops being a check and becomes decoration.
 
 Three tables in the source are **generated, not transcribed**:
 `tools/unicode/` and `tools/stringprep/` fetch the Unicode file resp. the RFC

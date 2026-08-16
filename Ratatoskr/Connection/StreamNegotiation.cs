@@ -104,6 +104,44 @@ internal static class StreamNegotiation
                   ?.Name.LocalName;
 
     /// <summary>
+    /// The channel-binding types offered (XEP-0440).
+    /// </summary>
+    /// <remarks>
+    /// Read although nothing here can use one: this list is the second half of
+    /// the string XEP-0474 hashes, so a client that ignores it computes a
+    /// different hash than the server did and refuses a login that was never
+    /// under attack. Reading the announcement is therefore not the same as
+    /// implementing channel binding, and only the first is needed to check the
+    /// downgrade protection.
+    ///
+    /// Channel binding itself is still open - it is finding 8 of the review,
+    /// where <c>tls-server-end-point</c> is reachable and <c>tls-exporter</c>
+    /// is not through SslStream.
+    /// </remarks>
+    public static List<string> SaslChannelBindingTypes(XElement features)
+    {
+
+        var types      = new List<string>();
+        var container  = features.Child("urn:xmpp:sasl-cb:0", "sasl-channel-binding");
+
+        if (container is null)
+            return types;
+
+        foreach (var binding in container.Elements().Where(e => e.Name.LocalName == "channel-binding"))
+        {
+
+            var type = binding.Attribute("type")?.Value.Trim();
+
+            if (type is not null && type.Length > 0)
+                types.Add(type);
+
+        }
+
+        return types;
+
+    }
+
+    /// <summary>
     /// The SASL mechanisms offered.
     ///
     /// The earlier pattern <c>&lt;mechanism&gt;([^&lt;]+)&lt;/mechanism&gt;</c>

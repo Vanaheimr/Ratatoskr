@@ -114,10 +114,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// default value: whoever uses this exchange shall have to decide on
         /// the countermeasure and not slip past it.
         /// </param>
+        /// <param name="announcedMechanisms">
+        /// What this server put into <c>&lt;mechanisms/&gt;</c>. Given, it is
+        /// hashed into the server-first-message as the attribute <c>h</c>
+        /// (XEP-0474), which the client compares against the list that reached
+        /// it. Omitted, the exchange is plain RFC 5802 and a client learns
+        /// nothing about whether the announcement was tampered with.
+        /// </param>
         public static SCRAMExchange? Begin(String                          clientFirstBase64,
                                            SCRAMMechanism                  mechanism,
                                            Func<String, XMPPAccount?>      lookup,
-                                           Func<String, XMPPCredentials>   decoy)
+                                           Func<String, XMPPCredentials>   decoy,
+                                           IEnumerable<String>?            announcedMechanisms   = null)
         {
 
             String clientFirst;
@@ -156,6 +164,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             var serverFirst = $"r={combinedNonce}," +
                               $"s={Convert.ToBase64String(credentials.Salt)}," +
                               $"i={credentials.IterationCount}";
+
+            // XEP-0474. Appended last and needing nothing else: RFC 5802 puts
+            // the server-first-message into the AuthMessage verbatim, so this
+            // attribute is already covered by the client proof and the server
+            // signature. A man in the middle can shorten the announcement or he
+            // can produce a proof, and he cannot do both without the password.
+            //
+            // No channel-binding types passed, because this server announces
+            // none - and the section is written only when there is something to
+            // write, so an empty list and no list hash alike.
+            if (announcedMechanisms is not null)
+                serverFirst += $",h={SaslDowngradeProtection.Expected(mechanism, announcedMechanisms)}";
 
             return new SCRAMExchange(account,
                                      credentials,

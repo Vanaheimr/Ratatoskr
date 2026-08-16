@@ -169,6 +169,26 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </summary>
     private readonly SaslMechanismPolicy _saslPolicy = new();
 
+    /// <summary>
+    /// What the last <c>&lt;features/&gt;</c> announced, kept for XEP-0474.
+    /// Per connection attempt rather than per connection: a reconnect gets a
+    /// new announcement, and checking a new server-first-message against an old
+    /// list would refuse a login for no reason.
+    /// </summary>
+    private List<string>? _offeredMechanisms;
+    private List<string>? _offeredChannelBindings;
+
+    /// <summary>
+    /// Whether the last SCRAM login had its announcement verified per XEP-0474.
+    /// </summary>
+    /// <remarks>
+    /// Readable rather than merely logged, because "verified" and "the server
+    /// does not do it" are the same colour to anyone who only asks whether the
+    /// login worked. A mismatch never arrives here - it throws.
+    /// </remarks>
+    public SaslDowngradeProtectionResult DowngradeProtection { get; private set; }
+        = SaslDowngradeProtectionResult.NotOffered;
+
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
@@ -722,6 +742,12 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             var features   = await ReceiveFeaturesAsync(ct);
             var mechanisms = StreamNegotiation.SaslMechanisms(features);
+
+            // Both lists are kept, not just the chosen mechanism: XEP-0474
+            // hashes the whole announcement, and the channel bindings are the
+            // second half of that string even though nothing here can use one.
+            _offeredMechanisms      = mechanisms;
+            _offeredChannelBindings = StreamNegotiation.SaslChannelBindingTypes(features);
 
             if (mechanisms.Count > 0)
             {
@@ -2456,7 +2482,11 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private async Task PerformScramAsync(SCRAMMechanism mechanism, CancellationToken ct)
     {
-        var scram = new SCRAMAuthenticator(_username, _password, mechanism);
+        var scram = new SCRAMAuthenticator(_username,
+                                           _password,
+                                           mechanism,
+                                           _offeredMechanisms,
+                                           _offeredChannelBindings);
 
         // Step 1: client-first-message
         var clientFirst = scram.CreateClientFirstMessage();
@@ -2482,8 +2512,14 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (serverFirst.Length == 0)
             throw new AuthenticationException("The SASL challenge of the server is empty.");
 
-        // Step 3: client-final-message
+        // Step 3: client-final-message. This is also where XEP-0474 is checked,
+        // inside ProcessServerFirstMessage - a mismatch throws instead of
+        // returning, so nothing goes back out to a server that signed a
+        // different announcement than the one that arrived.
         var clientFinal = scram.ProcessServerFirstMessage(serverFirst);
+
+        DowngradeProtection = scram.DowngradeProtection;
+
         await SendAsync($"<response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{clientFinal}</response>");
 
         // Step 4: server-final-message (success or failure)
@@ -2507,7 +2543,19 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (!scram.VerifyServerFinalMessage(serverFinal))
                 throw new AuthenticationException("Server signature invalid - possible MITM attack!");
 
-            _logger.LogInformation("Authentication successful ({Mechanism})", scram.MechanismName);
+            // The mechanism alone does not say whether the announcement that
+            // led to it was checked, and those are different facts: one server
+            // proved its list, the other was simply believed.
+            if (DowngradeProtection == SaslDowngradeProtectionResult.Verified)
+                _logger.LogInformation(
+                    "Authentication successful ({Mechanism}, announcement verified per XEP-0474)",
+                    scram.MechanismName);
+
+            else
+                _logger.LogInformation(
+                    "Authentication successful ({Mechanism}; the server sent no XEP-0474 " +
+                    "downgrade protection, so its announcement rests on the configured minimum alone)",
+                    scram.MechanismName);
 
         }
 

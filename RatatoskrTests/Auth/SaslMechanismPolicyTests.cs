@@ -142,8 +142,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(() => policy.EnsureAcceptable("SCRAM-SHA-1"),   Throws.Nothing);
                 Assert.That(() => policy.EnsureAcceptable("SCRAM-SHA-256"), Throws.Nothing);
 
+                // The type narrowed when SaslDowngradeException came in, and
+                // Throws.TypeOf demands the exact one - which is why this had
+                // to be touched at all. Narrowed further rather than loosened
+                // to InstanceOf: which of the three causes refused it is the
+                // thing an application acts on, and only one of them may be
+                // answered by lowering the demand. This is not that one.
                 Assert.That(() => policy.EnsureAcceptable("PLAIN"),
-                            Throws.TypeOf<AuthenticationException>());
+                            Throws.TypeOf<SaslDowngradeException>().
+                                   With.Property("Cause").
+                                   EqualTo(SaslDowngradeCause.BelowPinnedMechanism));
 
             });
 
@@ -173,11 +181,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(() => policy.EnsureAcceptable("SCRAM-SHA-256"), Throws.Nothing);
 
+                // BelowConfiguredMinimum and not BelowPinnedMechanism, and the
+                // distinction is the whole point of naming the cause: nothing
+                // is pinned here, so this is a demand that may simply be wrong
+                // for the server - the one case an application is entitled to
+                // answer with "say what your server really offers".
                 Assert.That(() => policy.EnsureAcceptable("SCRAM-SHA-1"),
-                            Throws.TypeOf<AuthenticationException>());
+                            Throws.TypeOf<SaslDowngradeException>().
+                                   With.Property("Cause").
+                                   EqualTo(SaslDowngradeCause.BelowConfiguredMinimum));
 
                 Assert.That(() => policy.EnsureAcceptable("PLAIN"),
-                            Throws.TypeOf<AuthenticationException>());
+                            Throws.TypeOf<SaslDowngradeException>().
+                                   With.Property("Cause").
+                                   EqualTo(SaslDowngradeCause.BelowConfiguredMinimum));
 
             });
 

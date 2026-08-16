@@ -285,6 +285,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         public Boolean CorruptScramSignature { get; set; } = false;
 
         /// <summary>
+        /// Does the server hash a different list of mechanisms into the
+        /// server-first-message than the one it announced (XEP-0474)?
+        /// </summary>
+        /// <remarks>
+        /// For the counter-check on the downgrade protection, and it stands in
+        /// for the attacker rather than imitating him exactly. What a man in
+        /// the middle really does is take a mechanism out of
+        /// <c>&lt;features/&gt;</c> on the way to the client; he cannot be
+        /// arranged inside a test that owns both ends, and he does not need to
+        /// be - either way the client sees an <c>h</c> that describes an
+        /// announcement other than the one that reached it, which is the whole
+        /// of what it can detect.
+        ///
+        /// Worth knowing why he gains nothing by recomputing <c>h</c> himself,
+        /// which he can, since the hash is unkeyed: the attribute sits inside
+        /// the server-first-message, and RFC 5802 puts that into the
+        /// AuthMessage verbatim. Change it and the client's proof no longer
+        /// matches what the server computes. He may have the hash or the proof.
+        /// </remarks>
+        public Boolean SignAnotherSaslAnnouncement { get; set; } = false;
+
+        /// <summary>
         /// Does the server leave the server signature out of the
         /// <c>&lt;success/&gt;</c> entirely?
         /// </summary>
@@ -1872,10 +1894,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                            SCRAMMechanism  mechanism)
         {
 
+            // The announced list travels into the exchange, where it becomes
+            // the attribute h of the server-first-message (XEP-0474). It is
+            // OfferedSaslMechanisms and not the mechanism just chosen: what the
+            // client checks is the offer it was given, not the one it took.
+            var announced = SignAnotherSaslAnnouncement
+                                ? OfferedSaslMechanisms.Concat(["SCRAM-SHA-512"])
+                                : OfferedSaslMechanisms;
+
             var exchange = SCRAMExchange.Begin(payload,
                                                mechanism,
                                                user => GetAccount($"{user}@{Domain}"),
-                                               user => XMPPCredentials.Decoy(user, _decoySecret));
+                                               user => XMPPCredentials.Decoy(user, _decoySecret),
+                                               announced);
 
             if (exchange is null)
             {

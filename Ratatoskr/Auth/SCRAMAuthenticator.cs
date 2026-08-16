@@ -71,11 +71,56 @@ public sealed class SCRAMAuthenticator
     private string? _serverFirstMessage;
     private byte[]? _saltedPassword;
 
+    /// <summary>
+    /// The announcement this client received, for XEP-0474. Null when the
+    /// caller did not record it, in which case an <c>h</c> from the server
+    /// cannot be checked against anything.
+    /// </summary>
+    private readonly string[]? _offeredMechanisms;
+    private readonly string[]? _offeredChannelBindings;
+
+    /// <summary>
+    /// What became of the downgrade protection - readable once
+    /// <see cref="ProcessServerFirstMessage"/> has run.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SaslDowngradeProtectionResult.Mismatch"/> never survives to
+    /// be read here: it throws. The property exists for the other two, and
+    /// telling them apart is the point - a login that verified the announcement
+    /// and one that never asked look identical from the outside.
+    /// </remarks>
+    public SaslDowngradeProtectionResult DowngradeProtection { get; private set; }
+        = SaslDowngradeProtectionResult.NotOffered;
+
     public SCRAMAuthenticator(string username, string password, SCRAMMechanism mechanism = SCRAMMechanism.ScramSha1)
+
+        : this(username, password, mechanism, null, null)
+
+    { }
+
+    /// <summary>
+    /// As above, and told what the server announced, so that XEP-0474 can be
+    /// checked.
+    /// </summary>
+    /// <param name="offeredMechanisms">
+    /// Every mechanism out of <c>&lt;mechanisms/&gt;</c>, including the ones
+    /// this implementation cannot use - the hash covers the offer, not the
+    /// choice.
+    /// </param>
+    /// <param name="offeredChannelBindings">
+    /// The types out of XEP-0440, or null when the server announced none.
+    /// </param>
+    public SCRAMAuthenticator(string                username,
+                              string                password,
+                              SCRAMMechanism        mechanism,
+                              IEnumerable<string>?  offeredMechanisms,
+                              IEnumerable<string>?  offeredChannelBindings)
     {
-        _username = SaslPrep(username);
-        _password = SaslPrep(password);
-        _mechanism = mechanism;
+        _username                = SaslPrep(username);
+        _password                = SaslPrep(password);
+        _mechanism               = mechanism;
+        _offeredMechanisms       = offeredMechanisms?.     ToArray();
+        _offeredChannelBindings  = offeredChannelBindings?.ToArray();
     }
 
     /// <summary>
@@ -128,6 +173,18 @@ public sealed class SCRAMAuthenticator
         // Verify nonce starts with client nonce
         if (!serverNonce.StartsWith(_clientNonce!))
             throw new AuthenticationException("The server nonce does not contain the client nonce - possible MITM attack!");
+
+        // XEP-0474, and before the key derivation rather than after it: a
+        // forged announcement is refused for the price of one hash, where
+        // PBKDF2 over the iteration count the same server just named is the
+        // most expensive thing in this exchange.
+        //
+        // No constant-time comparison, deliberately. Both sides of it are
+        // public - the announcement arrived in the clear and the hash is
+        // unkeyed - so there is no secret for a timing difference to leak, and
+        // FixedTimeEquals here would only suggest to the next reader that there
+        // is one.
+        VerifyDowngradeProtection(ExtractValue(_serverFirstMessage, "h"));
 
         var salt = Convert.FromBase64String(saltBase64);
         var iterations = ReadIterationCount(iterationsStr);
@@ -309,6 +366,63 @@ public sealed class SCRAMAuthenticator
         var bytes = new byte[24];
         RandomNumberGenerator.Fill(bytes);
         return Convert.ToBase64String(bytes);
+    }
+
+    /// <summary>
+    /// XEP-0474: does the <c>h</c> the server sent describe the announcement
+    /// that arrived here?
+    /// </summary>
+    /// <param name="offered">
+    /// The value of <c>h</c>, or null when the server sent none.
+    /// </param>
+    /// <exception cref="SaslDowngradeException">
+    /// When it describes a different announcement.
+    /// </exception>
+    /// <remarks>
+    /// Two ways to end up unverified, and neither is an error:
+    ///
+    /// The server sent no <c>h</c> - which is every server that has not
+    /// implemented an experimental XEP. Refusing those would be refusing almost
+    /// all of them, so the lower bounds in <c>SaslMechanismPolicy</c> remain
+    /// what covers this case; they need nothing from the far side.
+    ///
+    /// Or nobody told this authenticator what was announced. That is a caller
+    /// which did not record the offer, not a server which did anything wrong,
+    /// and inventing a list here to compare against would turn a missing input
+    /// into a fabricated verdict.
+    /// </remarks>
+    private void VerifyDowngradeProtection(string? offered)
+    {
+
+        if (offered is null || _offeredMechanisms is null)
+        {
+            DowngradeProtection = SaslDowngradeProtectionResult.NotOffered;
+            return;
+        }
+
+        var expected = SaslDowngradeProtection.Expected(_mechanism,
+                                                        _offeredMechanisms,
+                                                        _offeredChannelBindings);
+
+        if (!String.Equals(offered, expected, StringComparison.Ordinal))
+        {
+
+            DowngradeProtection = SaslDowngradeProtectionResult.Mismatch;
+
+            throw new SaslDowngradeException(
+                      "SASL downgrade fended off (XEP-0474): the server signed a different " +
+                      "list of mechanisms than the one that arrived here. What was announced " +
+                      "to this client was " +
+                      $"'{String.Join(", ", _offeredMechanisms)}' - somebody in between has " +
+                      "taken something out of it.",
+                      Offered:   String.Join(", ", _offeredMechanisms),
+                      Demanded:  MechanismName,
+                      Cause:     SaslDowngradeCause.ForgedAnnouncement);
+
+        }
+
+        DowngradeProtection = SaslDowngradeProtectionResult.Verified;
+
     }
 
     private static string? ExtractValue(string message, string key)

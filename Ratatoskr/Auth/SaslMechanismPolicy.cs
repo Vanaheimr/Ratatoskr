@@ -176,14 +176,20 @@ internal sealed class SaslMechanismPolicy
         var strength = Strength(Mechanism);
 
         if (strength < Strength(minimum))
-            throw new AuthenticationException(
+            throw new SaslDowngradeException(
                       $"SASL downgrade fended off: The server offers at most {Mechanism}, " +
-                      $"but at least {minimum} is demanded.");
+                      $"but at least {minimum} is demanded.",
+                      Offered:   Mechanism,
+                      Demanded:  minimum!,
+                      Cause:     SaslDowngradeCause.BelowConfiguredMinimum);
 
         if (strength < Strength(Pinned))
-            throw new AuthenticationException(
+            throw new SaslDowngradeException(
                       $"SASL downgrade fended off: The server offers at most {Mechanism}, " +
-                      $"but the last login went through {Pinned}.");
+                      $"but the last login went through {Pinned}.",
+                      Offered:   Mechanism,
+                      Demanded:  Pinned!,
+                      Cause:     SaslDowngradeCause.BelowPinnedMechanism);
 
     }
 
