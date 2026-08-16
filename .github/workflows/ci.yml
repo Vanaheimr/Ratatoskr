@@ -15,8 +15,8 @@ on:
   pull_request:
     branches: [master]
   # Manual runs from the Actions tab ("Run workflow"), as in the conformance
-  # suites. It is also the cheapest way to see a change to this file take
-  # effect without pushing a commit to find out.
+  # suites and in nightly.yml. It is also the cheapest way to see a change to
+  # this file take effect without pushing a commit to find out.
   workflow_dispatch:
 
 concurrency:
@@ -38,13 +38,77 @@ concurrency:
 
 jobs:
   build-and-test:
-    # windows-latest, like Hermod and Styx. Here the reason is inherited rather
-    # than our own: Ratatoskr itself looks platform-neutral, but it builds
-    # Hermod, and that one pulls in System.Diagnostics.PerformanceCounter,
-    # System.IO.Ports and System.Drawing.Common. Linux would be cheaper and is
-    # worth a second matrix entry - but not before someone has seen it pass.
-    runs-on: windows-latest
+    # Two legs now. This ran on windows-latest alone, with the note that Linux
+    # "would be cheaper and is worth a second matrix entry - but not before
+    # someone has seen it pass". Somebody has now seen it, on Debian 13
+    # (trixie) with .NET 10.0.302, and the numbers below are that measurement
+    # rather than a hope.
+    #
+    # It did not pass the first time, which is the shortest argument for the
+    # leg that exists. AMarkerFromTheRecipient_IsBelieved waited for one chat
+    # marker and then asserted a second one had arrived as well. Nothing orders
+    # those two - and on Windows the second had come first every time the suite
+    # had ever run, for as long as the test had existed. The library was not
+    # involved: the test had been measuring one operating system's scheduler,
+    # and no amount of reading it would have shown that.
+    #
+    # The two are not the same run in different colours, and that is the reason
+    # to pay for both:
+    #
+    #  * Windows is where this library has been developed and is the platform
+    #    the suite has been read on the longest. Underneath, Hermod's TLS goes
+    #    through Schannel and CryptoAPI here, which builds certificate chains
+    #    differently from OpenSSL.
+    #  * Debian 13, because that is what an XMPP server actually runs on, and
+    #    because a handful of these tests can only be answered there at all:
+    #    the account store and the OMEMO store write files that must not be
+    #    readable by anyone else, and `UnixFileMode` is a question Windows has
+    #    no answer to. Those tests skip on the Windows leg by design - so
+    #    without this leg the 0600 they check for was never once checked.
+    #
+    # A bare debian:13 container rather than ubuntu-latest, and rather than the
+    # official .NET SDK image, for the same reason Hermod gives: the SDK image
+    # is still Debian-12-based, and running on the distribution the software is
+    # deployed on is the point of the leg.
+    #
+    # fail-fast is off on purpose: "red on exactly one platform" is the most
+    # valuable signal this matrix produces, so one leg must not cancel the
+    # other.
+    #
+    # `leg` exists so the two runs can be told apart by name rather than by
+    # runner image: the Linux leg runs on ubuntu-latest but IS Debian 13, and
+    # an artifact called "test-results-ubuntu-latest" would say the opposite of
+    # what it contains.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            leg: windows-latest
+          - os: ubuntu-latest
+            container: debian:13
+            leg: debian-13-container
+    name: ${{ matrix.leg }}
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     steps:
+
+      # What a bare debian:13 needs before setup-dotnet can install the SDK:
+      # curl for the install script, ICU and tzdata for globalization,
+      # libssl3t64 for crypto, ca-certificates for NuGet over HTTPS. Package
+      # names verified on trixie.
+      #
+      # git is in the list and is the reason this step stands before the
+      # checkouts rather than after them: without a git binary,
+      # actions/checkout quietly falls back to downloading a source tarball
+      # over the REST API. Nothing here needs the resulting .git - there are no
+      # submodules to fetch, unlike in XMPPConsole and XMPPConformanceTests
+      # where that fallback is fatal - so this is for the four workflows to have
+      # one shape rather than to fix anything.
+      - name: Install git and the .NET prerequisites (Debian container)
+        if: runner.os == 'Linux'
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git libicu76 libssl3t64 libstdc++6 tzdata
+
       # Three checkouts side by side, because this repository cannot be built
       # on its own. Ratatoskr.csproj and RatatoskrTests.csproj reference
       # ..\..\Hermod\Hermod\Hermod.csproj - a SIBLING directory - and Hermod in
@@ -59,21 +123,21 @@ jobs:
       # without anything in Ratatoskr having moved. That is the honest signal,
       # but it is a choice - the superproject (XMPPConformanceTests) pins all
       # three submodules and is where a reproducible build lives.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: Ratatoskr
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: Vanaheimr/Hermod
           path: Hermod
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: Vanaheimr/Styx
           path: Styx
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -87,13 +151,46 @@ jobs:
       # where the setups that produce those far sides have always lived. So a
       # hosted runner can execute all of it.
       #
-      # Expect 1119 passed, 1 skipped. The one is a test for a property that
-      # exists only in STARTTLS operation; it is the only environment-dependent
-      # test left here. Read anything above that as a question, not as noise:
-      # the number of skipped tests is the only thing that tells a run which
-      # measured something from one which measured nothing, and this project
-      # has been caught by that twice (D54, D97).
+      # Expect 1166 tests, and the two legs owe different numbers, which is the
+      # one thing worth reading carefully here:
+      #
+      #   windows-latest       1163 passed, 3 skipped
+      #   debian-13-container  1165 passed, 1 skipped
+      #
+      # The one skip both legs share is a property that exists only in STARTTLS
+      # operation, and the fixture is parameterised over the TLS modes, so it
+      # cannot be answered in the other. The two extra on Windows are the file
+      # modes: `UnixFileMode` is a question that platform has no answer to, and
+      # they announce that instead of pretending. Anything above those numbers
+      # is a question rather than noise - the number of skipped tests is the
+      # only thing that tells a run which measured something from one which
+      # measured nothing, and this project has been caught by that twice (D54,
+      # D97).
       - name: Test
-        timeout-minutes: 30
+        timeout-minutes: 45
         working-directory: Ratatoskr
-        run: dotnet test RatatoskrTests/RatatoskrTests.csproj --configuration Release --no-build --logger "console;verbosity=normal"
+        run: >
+          dotnet test RatatoskrTests/RatatoskrTests.csproj --configuration Release --no-build
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=${{ matrix.leg }}.trx"
+          --results-directory artifacts
+
+      # The console log answers "did it pass" and almost nothing else, and it
+      # ages out with the run. In a suite of this size that is not enough to
+      # act on: finding the single red test means pulling a very large step log
+      # and grepping it, and a skip reason never reaches the console at normal
+      # verbosity at all - which is exactly the thing the expected counts above
+      # ask the reader to check. TRX keeps both per test, and `gh run download`
+      # gets it without a signed-in browser session.
+      #
+      # !cancelled() rather than success(): a red run is when these files matter
+      # most, so uploading only on green would discard the evidence in exactly
+      # that case. A build that fails before the test step leaves no .trx, which
+      # upload-artifact reports as a warning rather than a second failure — the
+      # compile error is the finding there.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.leg }}
+          path: Ratatoskr/artifacts/*.trx

@@ -3,6 +3,17 @@
 # Ratatoskr — XMPP for .NET 10
 
 [![CI](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/ci.yml/badge.svg)](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/ci.yml)
+[![Nightly](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/nightly.yml/badge.svg)](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/nightly.yml)
+
+Two badges over the same suite on the same two platforms, Windows and Debian
+13 — this repository pins nothing, so there is no second set of revisions for
+a nightly to reach for. What it adds is the calendar. **CI** only fires on a
+push here, and a push to Hermod or Styx is not one: build against their master,
+as both workflows do, and a break made over there waits for the next commit in
+this repository and then arrives looking like that commit's fault. **Nightly**
+asks the same question every night and writes the three revisions it asked it
+of into the run summary. It also simply runs a thousand asynchronous checks
+again, which is how a test that fails one time in twenty is found.
 
 An XMPP library: client, server, and the extensions in between. WebSocket
 transport per RFC 7395, TCP for server-to-server, SCRAM authentication,
@@ -400,13 +411,27 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it: 1119 passed, 1 skipped, and that one checks a property which exists
-only in STARTTLS operation. **How many were skipped tells you afterwards what was
-measured** — here that number should stay at one.
+all of it — 1166 tests, of which the platform decides how many get an answer:
 
-The passing count moves with the suite and is worth keeping current rather than
-round: it stood at 1110 until XEP-0454 arrived, and a figure nobody updates
-stops being a check and becomes decoration.
+| Platform | passed | skipped |
+|----------|-------:|--------:|
+| Windows | 1163 | 3 |
+| Debian 13 | 1165 | 1 |
+
+The skip both share checks a property which exists only in STARTTLS operation,
+and the fixture is parameterised over the TLS modes, so in the other one the
+question does not arise. The two extra on Windows are the file modes: the
+account store and the OMEMO store are written `0600`, and `UnixFileMode` is a
+question that platform has no answer to, so those two say so instead of
+pretending.
+
+**How many were skipped tells you afterwards what was measured** — so the
+number to hold the run to is the one for the platform it ran on. CI runs both.
+
+The counts move with the suite and are worth keeping current rather than round:
+the passing figure stood at 1110 until XEP-0454 arrived and at 1119 until the
+security review was worked through, and a figure nobody updates stops being a
+check and becomes decoration.
 
 Three tables in the source are **generated, not transcribed**:
 `tools/unicode/` and `tools/stringprep/` fetch the Unicode file resp. the RFC

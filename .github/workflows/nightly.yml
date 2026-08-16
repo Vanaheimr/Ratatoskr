@@ -1,0 +1,155 @@
+name: Nightly
+
+# The counterpart to ci.yml — and unlike in Hermod or XMPPConformanceTests, it
+# is not a wider net. It runs the same suite on the same two legs. Say plainly
+# what it adds, because "same commands, different schedule" is the kind of file
+# that quietly stops being read:
+#
+#  * It runs on a day nobody pushed. The gate builds against Hermod master and
+#    Styx master and pins neither, which is the honest signal — but a push to
+#    Hermod does not touch this repository, so nothing here fires when the
+#    breaking change is made. Without this workflow that break waits for the
+#    next commit to Ratatoskr and then arrives looking like that commit's
+#    fault. The three revisions go into the step summary below for exactly that
+#    moment.
+#  * It repeats a suite of over a thousand mostly asynchronous checks. Tests
+#    that fail one run in twenty are found by running them, not by reading
+#    them, and this project has had to lengthen a timeout more than once after
+#    a test turned out to be measuring a machine's speed.
+#
+# So there are no pins here to move to master, which is what the equivalent job
+# does in XMPPConsole and XMPPConformanceTests: this repository has none. The
+# gate already asks the master question; this workflow asks it on the calendar
+# rather than on a push.
+#
+# Two things worth knowing about scheduled workflows: they only ever run on the
+# default branch, and GitHub disables them after 60 days without any repository
+# activity. If this stops reporting, that is the first thing to check.
+on:
+  schedule:
+    # 02:43 UTC. Off the hour on purpose — GitHub's scheduler is busiest then
+    # and delays runs by tens of minutes — and placed inside the chain the
+    # dependency order suggests: Hermod at 02:17, this at 02:43, XMPPConsole at
+    # 03:11, XMPPConformanceTests at 03:41. Nothing enforces that ordering and
+    # a delayed run breaks it, so it is a convenience for reading four badges
+    # in the morning, not a mechanism.
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-suite:
+    # The same two-leg matrix as ci.yml. See there for why it is exactly these
+    # two — in short: Schannel/CryptoAPI against OpenSSL underneath Hermod's
+    # TLS, and the file-mode checks that only Linux can answer at all.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            leg: windows-latest
+          - os: ubuntu-latest
+            container: debian:13
+            leg: debian-13-container
+    name: ${{ matrix.leg }}
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+
+      # What a bare debian:13 needs before setup-dotnet can install the SDK.
+      # The longer note stands in ci.yml; package names verified on trixie.
+      - name: Install git and the .NET prerequisites (Debian container)
+        if: runner.os == 'Linux'
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git libicu76 libssl3t64 libstdc++6 tzdata
+
+      # Same side-by-side checkout as ci.yml: Ratatoskr.csproj and
+      # RatatoskrTests.csproj reference ..\..\Hermod\... — a SIBLING directory —
+      # and Hermod in turn reaches for ..\..\Styx the same way. Neither is
+      # pinned; both come as their default branch has them, which is master.
+      - uses: actions/checkout@v7
+        with:
+          path: Ratatoskr
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Vanaheimr/Hermod
+          path: Hermod
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Vanaheimr/Styx
+          path: Styx
+
+      # The premise of the run, written down. On a night that goes red without
+      # a commit here, the first question is which of the two libraries
+      # underneath moved, and the answer is otherwise a `git log` against two
+      # repositories at a guessed time of day. `shell: bash` so one script
+      # serves both legs — the Windows default is PowerShell, where
+      # `>> "$GITHUB_STEP_SUMMARY"` is a parse error rather than a redirection.
+      #
+      # safe.directory because in the container the checkout can be owned by a
+      # different uid than the one the job runs as, and git then refuses to
+      # read the repository at all — which would turn an informational step
+      # into a failed night. Harmless on Windows.
+      - name: Record the revisions under test
+        shell: bash
+        run: |
+          git config --global --add safe.directory '*'
+          {
+            echo "### Revisions under test (${{ matrix.leg }})"
+            echo '```'
+            for r in Ratatoskr Hermod Styx; do
+              printf '%-10s %s\n' "$r" "$(git -C "$r" log -1 --format='%H  %ci  %s')"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        working-directory: Ratatoskr
+        run: dotnet build RatatoskrTests/RatatoskrTests.csproj --configuration Release
+
+      # The same set the gate runs, and the same numbers it owes:
+      #
+      #   windows-latest       1166 tests, 1163 passed, 3 skipped
+      #   debian-13-container  1166 tests, 1165 passed, 1 skipped
+      #
+      # The shared skip is a property that only exists in STARTTLS operation;
+      # the two extra on Windows are the file modes, which that platform cannot
+      # answer. Fatal: a red here is a real regression, whether it came from
+      # this repository or from one of the two underneath it.
+      #
+      # A longer timeout than the gate's on purpose. The gate is a merge
+      # waiting, so a suite that hangs should be cut off early; a night is not
+      # waiting for anybody, and a run killed at the same limit throws away the
+      # evidence for the intermittent failure this workflow exists to catch.
+      - name: Test
+        timeout-minutes: 90
+        working-directory: Ratatoskr
+        run: >
+          dotnet test RatatoskrTests/RatatoskrTests.csproj --configuration Release --no-build
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=${{ matrix.leg }}.trx"
+          --results-directory artifacts
+
+      # TRX keeps per test what the console log does not — the skip reason, the
+      # error message, the stack trace and the duration — and it survives the
+      # run ageing out. For the flaky-test half of this workflow's purpose the
+      # durations are the record: a test that is slowly approaching its timeout
+      # is only visible across nights.
+      #
+      # !cancelled() rather than success(): a red night is when these files
+      # matter most, and uploading only on green would throw away the evidence
+      # in exactly that case.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.leg }}
+          path: Ratatoskr/artifacts/*.trx

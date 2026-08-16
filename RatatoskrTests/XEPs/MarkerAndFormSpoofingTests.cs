@@ -71,18 +71,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Collected rather than caught one at a time: Bob's client answers
             // a markable message with a Received of its own accord, so two
-            // markers come for the same message and the automatic one is first.
-            // That both arrive is the stronger statement anyway.
-            await WaitFor(() => { lock (seen) return seen.Any(m => m.Type == ChatMarkerType.Displayed); },
-                          "the displayed marker from Bob");
+            // markers come for the same message. That both arrive is the
+            // stronger statement anyway.
+            //
+            // Waited for as a pair, and that is the correction the Debian leg
+            // of CI paid for. This waited for the Displayed alone and then
+            // asserted the Received was there too - which held on Windows,
+            // where the automatic answer happened always to come first, and
+            // failed on Linux the first time the suite ran there: "Expected:
+            // some item equal to Received. But was: < Displayed >". Nothing
+            // orders the two. They are separate stanzas from separate
+            // decisions, one made by Bob's client and one by this test, and an
+            // assertion is only entitled to wait for what it goes on to check.
+            await WaitFor(() => { lock (seen) return seen.Any(m => m.Type == ChatMarkerType.Displayed) &&
+                                                       seen.Any(m => m.Type == ChatMarkerType.Received); },
+                          "both markers from Bob - his client's automatic Received and the Displayed");
 
+            // That both got through is the wait above, which is where it
+            // belongs - naming which of the two is missing is something the
+            // timeout message does and an assertion afterwards cannot. What is
+            // left to check here is what they are about.
             lock (seen)
-                Assert.Multiple(() =>
-                {
-                    Assert.That(seen.Select(m => m.MessageId), Is.All.EqualTo(id));
-                    Assert.That(seen.Select(m => m.Type),      Does.Contain(ChatMarkerType.Received),
-                                "The automatic answer belongs through as well.");
-                });
+                Assert.That(seen.Select(m => m.MessageId), Is.All.EqualTo(id),
+                            "Every marker that got through is about the message that was sent.");
 
         }
 
