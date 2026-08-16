@@ -55,6 +55,12 @@ public sealed class OmemoIdentity
     private readonly Dictionary<UInt32, Curve25519KeyPair> _preKeys = [];
     private readonly Lock _lock = new();
 
+    /// <summary>
+    /// The largest prekey identifier ever handed out - which is not the same as
+    /// the largest one in stock, and the difference is the whole point.
+    /// </summary>
+    private UInt32 _highestPreKeyId;
+
     /// <summary>How many prekeys a fresh device publishes.</summary>
     public const Int32 PreKeyCount = 100;
 
@@ -194,6 +200,18 @@ public sealed class OmemoIdentity
     /// longer be an ordinal but a confusion: a message that was left lying under
     /// way and names the old prekey would find, on arriving, a new one under the
     /// same number and would yield a session that never existed.
+    ///
+    /// <b>Which is why the high-water mark is kept and not read off the
+    /// stock.</b> Deriving the next identifier from the largest one in stock
+    /// held as long as something was in stock - and fell over precisely when the
+    /// stock ran empty, where it began again at 1 and handed the used-up numbers
+    /// out a second time. That was the one case the sentence above forbids, and
+    /// it was the one case this method was written for.
+    ///
+    /// One gap is left, and it cannot be closed from here: a device whose stock
+    /// was already empty when it was stored has nothing to remember, because the
+    /// mark lives in the identifiers themselves. Refilling on every use, the way
+    /// <see cref="OmemoManager"/> now does, is what keeps it from arising.
     /// </remarks>
     public IReadOnlyList<OmemoPreKey> ReplenishPreKeys()
     {
@@ -201,10 +219,11 @@ public sealed class OmemoIdentity
         lock (_lock)
         {
 
-            var next = _preKeys.Count == 0 ? 1u : _preKeys.Keys.Max() + 1;
+            if (_preKeys.Count > 0)
+                _highestPreKeyId = Math.Max(_highestPreKeyId, _preKeys.Keys.Max());
 
             while (_preKeys.Count < PreKeyCount)
-                _preKeys[next++] = Curve25519.GenerateKeyPair();
+                _preKeys[++_highestPreKeyId] = Curve25519.GenerateKeyPair();
 
             return PublicPreKeys();
 
@@ -345,6 +364,13 @@ public sealed class OmemoIdentity
 
         foreach (var pk in state.PreKeys)
             own._preKeys[pk.Id] = Curve25519.KeyPairFromPrivate(pk.PrivateKey);
+
+        // The stock is all there is to read the mark off. What was handed out
+        // and used up before is not written down anywhere - see
+        // ReplenishPreKeys for what that leaves open and why refilling on every
+        // use is what keeps it shut.
+        if (state.PreKeys.Count > 0)
+            own._highestPreKeyId = state.PreKeys.Max(pk => pk.Id);
 
         return own;
 

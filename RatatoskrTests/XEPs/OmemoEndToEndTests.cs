@@ -551,6 +551,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// first message could be played in a second time. The restart is no
         /// special case in this; it is the opportunity, because it happens by
         /// itself.
+        ///
+        /// <b>Which identifier is gone is asked, not how many are left.</b>
+        /// Counting was the measure until the stock began being filled back up
+        /// in the same step - since then the number is the same before and
+        /// after, and only the identity of the missing key still says anything.
+        /// Both halves are asserted, because they fail in opposite directions:
+        /// a spent key left in the store is replayable, and a stock that is not
+        /// refilled leaves the published bundle advertising keys that are gone.
         /// </remarks>
         [Test]
         public async Task AConsumedPreKey_IsPersistedImmediately()
@@ -566,7 +574,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.EnableOmemoAsync();
             await bob.EnableOmemoAsync(bobsStore);
 
-            var before = bobsStore.LoadIdentity()!.PreKeys.Count;
+            var before = bobsStore.LoadIdentity()!.PreKeys.Select(pk => pk.Id).ToHashSet();
 
             var arrived = false;
             bob.OnEncryptedMessage += (_, _) => arrived = true;
@@ -574,9 +582,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
             await WaitFor(() => arrived, "the message at Bob");
 
-            Assert.That(bobsStore.LoadIdentity()!.PreKeys.Count, Is.EqualTo(before - 1),
-                        "The used PreKey is still in the store - after a restart " +
-                        "the message would be acceptable a second time.");
+            var after = bobsStore.LoadIdentity()!.PreKeys.Select(pk => pk.Id).ToHashSet();
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(before.Except(after).Count(), Is.EqualTo(1),
+                            "Exactly the PreKey used up has to be gone from the store - " +
+                            "after a restart the message would otherwise be acceptable a " +
+                            "second time.");
+
+                Assert.That(after, Has.Count.EqualTo(before.Count),
+                            "And one has to have taken its place, or the published bundle " +
+                            "goes on advertising a key that is no longer there.");
+
+            });
 
         }
 

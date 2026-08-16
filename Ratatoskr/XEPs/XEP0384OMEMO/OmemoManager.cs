@@ -93,6 +93,29 @@ public sealed class OmemoManager
     private readonly ILogger?                                   _logger;
     private readonly Lock                                       _lock = new();
 
+    /// <summary>
+    /// One gate per session, so that a ratchet step is never begun twice at
+    /// once. Keyed by bare JID and device, because that is the granularity a
+    /// ratchet has - a single gate for everything would let one unreachable
+    /// bundle hold up the messages to everybody else for ten seconds.
+    /// </summary>
+    private readonly Dictionary<String, SemaphoreSlim>          _sessionGates
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    #endregion
+
+    #region Events
+
+    /// <summary>
+    /// One's own bundle has changed and belongs published anew.
+    /// </summary>
+    /// <remarks>
+    /// Raised when an incoming key exchange has used up a prekey and the stock
+    /// has been filled back up. Whoever listens has the connection and can
+    /// publish; this class has a store and no server.
+    /// </remarks>
+    public event Action? OnBundleChanged;
+
     #endregion
 
     #region Properties
@@ -141,6 +164,38 @@ public sealed class OmemoManager
         _logger           = logger;
 
         Identity          = store.LoadOrCreateIdentity();
+
+    }
+
+    #endregion
+
+    #region SessionGate(jid, deviceId)
+
+    /// <summary>
+    /// The gate of one session - created on first use and kept.
+    /// </summary>
+    /// <remarks>
+    /// Kept and not thrown away when it becomes free, because throwing it away
+    /// is the one thing that cannot be done safely here: whoever removed it
+    /// while somebody was waiting on it would hand the next caller a second
+    /// gate for the same session, and the two would pass each other. One
+    /// semaphore per device one has ever written to is a handful of objects,
+    /// and they last as long as the connection.
+    /// </remarks>
+    private SemaphoreSlim SessionGate(String jid, UInt32 deviceId)
+    {
+
+        var key = $"{JidUtilities.Bare(jid)}/{deviceId}";
+
+        lock (_lock)
+        {
+
+            if (!_sessionGates.TryGetValue(key, out var gate))
+                _sessionGates[key] = gate = new SemaphoreSlim(1, 1);
+
+            return gate;
+
+        }
 
     }
 
@@ -217,6 +272,23 @@ public sealed class OmemoManager
     /// Encrypts the 48 bytes for a single device - and builds the session when
     /// there is none yet.
     /// </summary>
+    /// <remarks>
+    /// Under the gate of that session from the load to the save, and that is not
+    /// tidiness. A ratchet step is a read-modify-write: the state is loaded,
+    /// imported, advanced, written back. Two messages to the same device at the
+    /// same time both read the same state and both produce the message with the
+    /// same number - one of the two overwrites the other's saved state, and the
+    /// recipient can read exactly one of them. The other is lost with a checksum
+    /// error, and nothing on this side notices.
+    ///
+    /// The lock inside <see cref="DoubleRatchet"/> does not help against it. It
+    /// guards one instance, and each of the two calls imports an instance of its
+    /// own out of the same stored state.
+    ///
+    /// The bundle fetch lies inside the gate deliberately, although it may take
+    /// seconds. Two first messages to the same device would otherwise both begin
+    /// a session, and the second would throw away the first one's.
+    /// </remarks>
     private async Task<(OmemoKey? Key, String? Reason)> EncryptForAsync(String  jid,
                                                                                 UInt32  deviceId,
                                                                                 Byte[]  keyAndHmac)
@@ -230,51 +302,63 @@ public sealed class OmemoManager
         if (trust == OmemoTrust.Undecided && !TrustNewDevicesBlindly)
             return (null, "not confirmed");
 
-        var stored = _store.LoadSession(jid, deviceId);
+        var gate = SessionGate(jid, deviceId);
+        await gate.WaitAsync();
 
-        // An existing session.
-        if (stored is not null)
+        try
         {
 
-            var ratchet   = DoubleRatchet.Import(stored.Ratchet);
-            var message = ratchet.Encrypt(keyAndHmac, stored.AssociatedData);
+            var stored = _store.LoadSession(jid, deviceId);
 
-            _store.SaveSession(jid, deviceId,
-                               new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
+            // An existing session.
+            if (stored is not null)
+            {
 
-            return (new OmemoKey(deviceId, OmemoWireFormat.Encode(message), false), null);
+                var ratchet   = DoubleRatchet.Import(stored.Ratchet);
+                var message = ratchet.Encrypt(keyAndHmac, stored.AssociatedData);
+
+                _store.SaveSession(jid, deviceId,
+                                   new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
+
+                return (new OmemoKey(deviceId, OmemoWireFormat.Encode(message), false), null);
+
+            }
+
+            // No session - so begin one.
+            var bundle = await _fetchBundle(jid, deviceId);
+
+            if (bundle is null)
+                return (null, "no fetchable bundle");
+
+            // The identity key from the bundle is noted down before anything is
+            // computed with it: a change belongs reported, not used silently.
+            var check = _store.RecordIdentity(jid, deviceId, bundle.IdentityKey);
+
+            if (check == OmemoIdentityCheck.Changed)
+                return (null, "the identity key has changed");
+
+            if (!TrustNewDevicesBlindly && _store.TrustOf(jid, deviceId) != OmemoTrust.Trusted)
+                return (null, "not confirmed");
+
+            var x3dh    = X3DH.Initiate(Identity, bundle);
+            var fresh     = DoubleRatchet.InitiateAsSender(x3dh.SharedSecret, bundle.SignedPreKey);
+            var content  = fresh.Encrypt(keyAndHmac, x3dh.AssociatedData);
+
+            _store.SaveSession(jid, deviceId, new OmemoSessionState(fresh.Export(), x3dh.AssociatedData));
+
+            var exchange = new OmemoKeyExchange(x3dh.UsedPreKeyId ?? 0,
+                                                 bundle.SignedPreKeyId,
+                                                 Identity.PublicIdentityKey,
+                                                 x3dh.EphemeralKey!,
+                                                 OmemoWireFormat.Encode(content));
+
+            return (new OmemoKey(deviceId, exchange.Encode(), true), null);
 
         }
-
-        // No session - so begin one.
-        var bundle = await _fetchBundle(jid, deviceId);
-
-        if (bundle is null)
-            return (null, "no fetchable bundle");
-
-        // The identity key from the bundle is noted down before anything is
-        // computed with it: a change belongs reported, not used silently.
-        var check = _store.RecordIdentity(jid, deviceId, bundle.IdentityKey);
-
-        if (check == OmemoIdentityCheck.Changed)
-            return (null, "the identity key has changed");
-
-        if (!TrustNewDevicesBlindly && _store.TrustOf(jid, deviceId) != OmemoTrust.Trusted)
-            return (null, "not confirmed");
-
-        var x3dh    = X3DH.Initiate(Identity, bundle);
-        var fresh     = DoubleRatchet.InitiateAsSender(x3dh.SharedSecret, bundle.SignedPreKey);
-        var content  = fresh.Encrypt(keyAndHmac, x3dh.AssociatedData);
-
-        _store.SaveSession(jid, deviceId, new OmemoSessionState(fresh.Export(), x3dh.AssociatedData));
-
-        var exchange = new OmemoKeyExchange(x3dh.UsedPreKeyId ?? 0,
-                                             bundle.SignedPreKeyId,
-                                             Identity.PublicIdentityKey,
-                                             x3dh.EphemeralKey!,
-                                             OmemoWireFormat.Encode(content));
-
-        return (new OmemoKey(deviceId, exchange.Encode(), true), null);
+        finally
+        {
+            gate.Release();
+        }
 
     }
 
@@ -357,73 +441,126 @@ public sealed class OmemoManager
         String jid, UInt32 deviceId, OmemoKey entry)
     {
 
+        // Takes the gate itself - and must, because a semaphore is not
+        // reentrant: taking it here as well would be this method waiting for
+        // itself.
         if (entry.IsKeyExchange)
             return await BuildSessionAsync(jid, deviceId, entry);
 
-        var stored = _store.LoadSession(jid, deviceId);
+        var gate = SessionGate(jid, deviceId);
+        await gate.WaitAsync();
 
-        if (stored is null)
+        try
         {
-            _logger?.LogWarning("OMEMO: no session with {Jid}/{Device}, and the message brings " +
-                                "no key exchange along", jid, deviceId);
-            return (null, OmemoIdentityCheck.New);
+
+            var stored = _store.LoadSession(jid, deviceId);
+
+            if (stored is null)
+            {
+                _logger?.LogWarning("OMEMO: no session with {Jid}/{Device}, and the message brings " +
+                                    "no key exchange along", jid, deviceId);
+                return (null, OmemoIdentityCheck.New);
+            }
+
+            var ratchet   = DoubleRatchet.Import(stored.Ratchet);
+            var plaintext  = ratchet.Decrypt(OmemoWireFormat.Decode(entry.Data), stored.AssociatedData);
+
+            _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
+
+            return (plaintext, OmemoIdentityCheck.Known);
+
         }
-
-        var ratchet   = DoubleRatchet.Import(stored.Ratchet);
-        var plaintext  = ratchet.Decrypt(OmemoWireFormat.Decode(entry.Data), stored.AssociatedData);
-
-        _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
-
-        return (plaintext, OmemoIdentityCheck.Known);
+        finally
+        {
+            gate.Release();
+        }
 
     }
 
     /// <summary>
     /// Accepts a key exchange and creates the session.
     /// </summary>
+    /// <remarks>
+    /// This is where a prekey is used up, and where the stock is filled back
+    /// up. Both belong together, and until now only the first half happened.
+    ///
+    /// <b>What was published stayed as it was.</b> The bundle in the PEP node
+    /// went on advertising the prekey that had just been spent, and nothing new
+    /// was ever added to it. That is not only the replenishment XEP-0384 asks
+    /// for going missing; it fails in operation, and loudly: a second stranger
+    /// takes the same prekey out of the old bundle, <see cref="X3DH.Accept"/>
+    /// finds it used up and throws, and their first message cannot be read.
+    /// After a hundred first contacts the bundle consists of nothing but spent
+    /// keys, and every further one runs into it - until somebody switches OMEMO
+    /// off and on again, which was the only thing that published a bundle.
+    /// </remarks>
     private async Task<(Byte[]? KeyAndHmac, OmemoIdentityCheck Check)> BuildSessionAsync(
         String jid, UInt32 deviceId, OmemoKey entry)
     {
 
-        await Task.CompletedTask;
-
         var exchange = OmemoKeyExchange.Decode(entry.Data);
 
-        // First note down the identity key, then compute. A change is reported
-        // and the message is not accepted - from outside a newly set-up device
-        // cannot be told apart from an attacker, and that is not a decision a
-        // program can make.
-        var check = _store.RecordIdentity(jid, deviceId, exchange.IdentityKey);
+        var gate = SessionGate(jid, deviceId);
+        await gate.WaitAsync();
 
-        if (check == OmemoIdentityCheck.Changed)
-        {
-            _logger?.LogWarning("OMEMO: {Jid}/{Device} reports with a different identity key",
-                                jid, deviceId);
-            return (null, check);
-        }
-
-        var x3dh = X3DH.Accept(Identity,
-                               exchange.IdentityKey,
-                               exchange.EphemeralKey,
-                               exchange.SignedPreKeyId,
-                               exchange.PreKeyId == 0 ? null : exchange.PreKeyId);
-
-        var ratchet   = DoubleRatchet.InitiateAsReceiver(x3dh.SharedSecret, Identity.SignedPreKey);
-        var plaintext  = ratchet.Decrypt(OmemoWireFormat.Decode(exchange.Message), x3dh.AssociatedData);
-
-        lock (_lock)
+        try
         {
 
-            _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), x3dh.AssociatedData));
+            // First note down the identity key, then compute. A change is reported
+            // and the message is not accepted - from outside a newly set-up device
+            // cannot be told apart from an attacker, and that is not a decision a
+            // program can make.
+            var check = _store.RecordIdentity(jid, deviceId, exchange.IdentityKey);
 
-            // The prekey used up is gone - that belongs stored at once,
-            // otherwise it would be back after a restart and the message
-            // acceptable a second time.
-            _store.SaveIdentity(Identity.Export());
+            if (check == OmemoIdentityCheck.Changed)
+            {
+                _logger?.LogWarning("OMEMO: {Jid}/{Device} reports with a different identity key",
+                                    jid, deviceId);
+                return (null, check);
+            }
+
+            var x3dh = X3DH.Accept(Identity,
+                                   exchange.IdentityKey,
+                                   exchange.EphemeralKey,
+                                   exchange.SignedPreKeyId,
+                                   exchange.PreKeyId == 0 ? null : exchange.PreKeyId);
+
+            var ratchet   = DoubleRatchet.InitiateAsReceiver(x3dh.SharedSecret, Identity.SignedPreKey);
+            var plaintext  = ratchet.Decrypt(OmemoWireFormat.Decode(exchange.Message), x3dh.AssociatedData);
+
+            var spent = x3dh.UsedPreKeyId is not null;
+
+            if (spent)
+                Identity.ReplenishPreKeys();
+
+            lock (_lock)
+            {
+
+                _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), x3dh.AssociatedData));
+
+                // The prekey used up is gone - that belongs stored at once,
+                // otherwise it would be back after a restart and the message
+                // acceptable a second time. The refilled stock goes with it, and
+                // for the mirror-image reason: a key that has been handed out
+                // but not written down would be gone after a restart, and the
+                // message naming it unreadable.
+                _store.SaveIdentity(Identity.Export());
+
+            }
+
+            // Outside the lock and not awaited: publishing is a round trip to
+            // the server, and a message being decrypted is not going to wait on
+            // it. Whoever listens decides what it costs.
+            if (spent)
+                OnBundleChanged?.Invoke();
+
+            return (plaintext, check);
 
         }
-
-        return (plaintext, check);
+        finally
+        {
+            gate.Release();
+        }
 
     }
 

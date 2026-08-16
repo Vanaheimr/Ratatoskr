@@ -2715,6 +2715,42 @@ public sealed class XMPPConnection : IAsyncDisposable
                                  (jid, device) => FetchOmemoBundleAsync(jid, device, ct),
                                  _logger);
 
+        // A prekey used up by an incoming key exchange has been replaced, and
+        // what is published has to say so. Without this the bundle in the PEP
+        // node kept advertising spent keys: the next stranger takes one out of
+        // it, X3DH finds it gone, and their first message is unreadable.
+        //
+        // Not awaited, and it must not be - the event is raised in the middle
+        // of decrypting a message, and this is a round trip to the server. What
+        // goes wrong is logged and nothing more: the message that has just been
+        // read is not the place to report a failed publication, and the next
+        // exchange raises it again anyway.
+        //
+        // Deliberately not on the token of this call. Switching OMEMO on is one
+        // operation; publishing the refilled bundle happens hours later, set
+        // off by somebody else's first message, and is over as soon as it is
+        // done. Hanging it on the token that belongs to the switching-on would
+        // mean a caller who scopes that token stops the refills without ever
+        // being told - and this is the one failure that has no symptom on this
+        // side. A lost connection needs no token here: the send throws or the
+        // IQ times out, and both land in the catch below.
+        Omemo.OnBundleChanged += () => _ = Task.Run(async () =>
+        {
+
+            try
+            {
+
+                if (!await PublishOmemoBundleAsync(Omemo.Identity.DeviceId, Omemo.Identity.Bundle()))
+                    _logger.LogWarning("OMEMO: the refilled bundle was not accepted by the server");
+
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning("OMEMO: the refilled bundle could not be published: {Reason}", e.Message);
+            }
+
+        });
+
         OmemoDeviceId = Omemo.Identity.DeviceId;
 
         var existing = await FetchOmemoDeviceListAsync(BareJid, ct)
