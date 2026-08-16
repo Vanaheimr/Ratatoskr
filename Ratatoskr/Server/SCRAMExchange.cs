@@ -54,6 +54,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private readonly String _combinedNonce;
         private readonly String _serverFirst;
 
+        /// <summary>
+        /// The <c>tls-server-end-point</c> data this server binds to, or null
+        /// when it offers no channel binding. Only used when the client asked
+        /// for the binding; kept regardless, because "the server could have
+        /// bound" is what makes a <c>y</c> header a refusal rather than a
+        /// shrug.
+        /// </summary>
+        private readonly Byte[]? _channelBinding;
+
         #endregion
 
         #region Properties
@@ -79,7 +88,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                               String           gs2Header,
                               String           clientFirstBare,
                               String           combinedNonce,
-                              String           serverFirst)
+                              String           serverFirst,
+                              Byte[]?          channelBinding)
         {
             _account          = account;
             _credentials      = credentials;
@@ -88,10 +98,42 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             _clientFirstBare  = clientFirstBare;
             _combinedNonce    = combinedNonce;
             _serverFirst      = serverFirst;
+            _channelBinding   = channelBinding;
         }
 
         #endregion
 
+
+        #region (private) ExpectedChannelBindingInput()
+
+        /// <summary>
+        /// What <c>c=</c> has to contain: base64 of the GS2 header, followed by
+        /// the binding data when the client bound (RFC 5802, section 6).
+        /// </summary>
+        /// <remarks>
+        /// Only the <c>p=</c> header carries data after it. For <c>n</c> and
+        /// <c>y</c> this is the header alone, which is what the literal
+        /// comparison here did before channel binding existed.
+        /// </remarks>
+        private String ExpectedChannelBindingInput()
+        {
+
+            var header = Encoding.UTF8.GetBytes(_gs2Header);
+
+            if (_channelBinding is null ||
+                !_gs2Header.StartsWith("p=", StringComparison.Ordinal))
+                return Convert.ToBase64String(header);
+
+            var buffer = new Byte[header.Length + _channelBinding.Length];
+
+            header.          CopyTo(buffer, 0);
+            _channelBinding. CopyTo(buffer, header.Length);
+
+            return Convert.ToBase64String(buffer);
+
+        }
+
+        #endregion
 
         #region Begin(clientFirstBase64, mechanism, lookup)
 
@@ -125,7 +167,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                            SCRAMMechanism                  mechanism,
                                            Func<String, XMPPAccount?>      lookup,
                                            Func<String, XMPPCredentials>   decoy,
-                                           IEnumerable<String>?            announcedMechanisms   = null)
+                                           IEnumerable<String>?            announcedMechanisms   = null,
+                                           Byte[]?                         channelBinding        = null)
         {
 
             String clientFirst;
@@ -150,6 +193,39 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             var gs2Header        = clientFirst[..(headerEnd + 1)];
             var clientFirstBare  = clientFirst[(headerEnd + 1)..];
 
+            // RFC 5802, section 6: the first character of the GS2 header says
+            // what the client did about channel binding, and each of the three
+            // answers has a condition attached.
+            //
+            //   p=<type>  it bound. The server has to be able to bind too, and
+            //             to the same type - anything else and the proof cannot
+            //             agree, so refusing here is only saying so earlier.
+            //
+            //   y         it *can* bind and saw nothing offered. If this server
+            //             does offer channel binding, that announcement was
+            //             removed on the way: the client is describing a
+            //             different <features/> than the one that was sent.
+            //             This is the same downgrade XEP-0474 catches, caught a
+            //             layer lower and without either end implementing an
+            //             experimental XEP.
+            //
+            //   n         it cannot bind. Nothing to check; the exchange is
+            //             plain SCRAM.
+            if (gs2Header.StartsWith("p=", StringComparison.Ordinal))
+            {
+
+                var type = gs2Header[2..gs2Header.IndexOf(',')];
+
+                if (channelBinding is null ||
+                    !String.Equals(type, TlsServerEndPoint.Name, StringComparison.Ordinal))
+                    return null;
+
+            }
+
+            else if (gs2Header.StartsWith("y,", StringComparison.Ordinal) &&
+                     channelBinding is not null)
+                return null;
+
             var user   = Attribute(clientFirstBare, "n");
             var nonce  = Attribute(clientFirstBare, "r");
 
@@ -171,11 +247,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // signature. A man in the middle can shorten the announcement or he
             // can produce a proof, and he cannot do both without the password.
             //
-            // No channel-binding types passed, because this server announces
-            // none - and the section is written only when there is something to
-            // write, so an empty list and no list hash alike.
+            // The channel-binding types go in whenever this server has a
+            // binding, because that is exactly when it announced one under
+            // XEP-0440 - and the client hashes what it was announced. Leave
+            // them out here and the two sides hash different strings, so every
+            // channel-bound login fails looking like a forged announcement.
             if (announcedMechanisms is not null)
-                serverFirst += $",h={SaslDowngradeProtection.Expected(mechanism, announcedMechanisms)}";
+                serverFirst += ",h=" + SaslDowngradeProtection.Expected(
+                                           mechanism,
+                                           announcedMechanisms,
+                                           channelBinding is not null
+                                               ? [TlsServerEndPoint.Name]
+                                               : null);
 
             return new SCRAMExchange(account,
                                      credentials,
@@ -183,7 +266,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                      gs2Header,
                                      clientFirstBare,
                                      combinedNonce,
-                                     serverFirst);
+                                     serverFirst,
+                                     channelBinding);
 
         }
 
@@ -234,10 +318,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (!String.Equals(nonce, _combinedNonce, StringComparison.Ordinal))
                 return null;
 
-            // And it has to report the same GS2 header it sent.
-            if (!String.Equals(binding,
-                               Convert.ToBase64String(Encoding.UTF8.GetBytes(_gs2Header)),
-                               StringComparison.Ordinal))
+            // And it has to report the same GS2 header it sent - together with
+            // the binding data, when it bound. This is where channel binding
+            // actually bites: a man in the middle relaying the exchange
+            // presented his own certificate to the client, so the client hashed
+            // *his* into this value, and it cannot equal what the real server
+            // computes from its own. He has no way to correct it either - the
+            // proof below covers this string.
+            if (!String.Equals(binding, ExpectedChannelBindingInput(), StringComparison.Ordinal))
                 return null;
 
             Byte[] proof;

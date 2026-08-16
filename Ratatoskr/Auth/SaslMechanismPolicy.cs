@@ -71,11 +71,35 @@ internal sealed class SaslMechanismPolicy
     /// <summary>SCRAM-SHA-256 (RFC 7677).</summary>
     public const String ScramSha256   = "SCRAM-SHA-256";
 
+    /// <summary>SCRAM-SHA-1 bound to the TLS channel (RFC 5802, section 6).</summary>
+    public const String ScramSha1Plus     = "SCRAM-SHA-1-PLUS";
+
+    /// <summary>SCRAM-SHA-256 bound to the TLS channel.</summary>
+    public const String ScramSha256Plus   = "SCRAM-SHA-256-PLUS";
+
     /// <summary>
     /// The supported mechanisms, from the weakest to the strongest. The order
     /// is the ranking; the index is the strength.
     /// </summary>
-    private static readonly String[] byStrength = [Plain, ScramSha1, ScramSha256];
+    /// <remarks>
+    /// A bound mechanism outranks the same hash unbound, and outranks a
+    /// stronger hash that is not bound: SCRAM-SHA-1-PLUS above SCRAM-SHA-256.
+    /// That ordering is deliberate and is the one point in this ranking worth
+    /// arguing about.
+    ///
+    /// The hashes are not the axis on which these differ in practice. SHA-1
+    /// inside SCRAM is not broken - the construction rests on HMAC and PBKDF2,
+    /// where collision attacks do not reach - so the step from SHA-1 to SHA-256
+    /// buys hygiene. Channel binding buys something else entirely: it is the
+    /// only thing here that notices a man in the middle holding a certificate
+    /// some trusted CA issued him, who otherwise relays the whole exchange
+    /// untouched and reads everything afterwards. Hygiene loses to that.
+    /// </remarks>
+    private static readonly String[] byStrength = [Plain,
+                                                   ScramSha1,
+                                                   ScramSha256,
+                                                   ScramSha1Plus,
+                                                   ScramSha256Plus];
 
     private String? minimum;
 

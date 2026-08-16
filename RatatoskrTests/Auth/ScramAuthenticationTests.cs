@@ -43,6 +43,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     public class ScramAuthenticationTests : AXMPPTests
     {
 
+        #region Setup
+
+        /// <summary>
+        /// Channel binding off for this whole fixture: what is checked here is
+        /// which SCRAM the client picks and how it computes the proof, not
+        /// whether it binds. With binding on, every one of these logins becomes
+        /// a -PLUS one and the assertions would be naming a mechanism the test
+        /// was never written about. ChannelBindingExchangeTests covers the
+        /// bound case.
+        /// </summary>
+        [SetUp]
+        public void TurnChannelBindingOff()
+        {
+            Server.OfferChannelBinding = false;
+        }
+
+        #endregion
+
         #region Helper functions
 
         /// <summary>

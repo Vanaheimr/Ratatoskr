@@ -47,6 +47,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     public class SaslDowngradeTests : AXMPPTests
     {
 
+        #region Setup
+
+        /// <summary>
+        /// Channel binding off for this whole fixture.
+        /// </summary>
+        /// <remarks>
+        /// What is measured here is the ranking and the pin - "does a client
+        /// notice when the offer gets weaker" - and every test says so by
+        /// naming mechanisms: SCRAM-SHA-256, SCRAM-SHA-1, PLAIN. Over TLS the
+        /// server derives a -PLUS variant of each, and the client then quite
+        /// correctly takes one that nobody in this file wrote down, which turns
+        /// clear assertions into a puzzle about a feature they are not about.
+        ///
+        /// The -PLUS ranking has a fixture of its own,
+        /// ChannelBindingExchangeTests, and that is where a lost binding is
+        /// measured against the pin.
+        /// </remarks>
+        [SetUp]
+        public void TurnChannelBindingOff()
+        {
+            Server.OfferChannelBinding = false;
+        }
+
+        #endregion
+
         #region Helper functions
 
         /// <summary>

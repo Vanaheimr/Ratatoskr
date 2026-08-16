@@ -118,6 +118,48 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ATolerantClient_LogsInButIsNotToldItWasVerified()
+
+        /// <summary>
+        /// The escape hatch, and what it deliberately does not do.
+        /// </summary>
+        /// <remarks>
+        /// XEP-0474 is Experimental at 0.5.0 and this check is fail-closed
+        /// against it. Change the construction of the hashed string in a later
+        /// revision and a server on that revision is, from here,
+        /// indistinguishable from an attacker - the login would be refused,
+        /// correctly by this code's lights and wrongly in fact. So there is a
+        /// way through.
+        ///
+        /// What is measured here is the half that matters: it lets the login
+        /// happen and it still reports Mismatch. A switch that also reported
+        /// Verified would be worse than no check at all, because it would
+        /// answer "was the announcement confirmed" with yes on the strength of
+        /// a configuration flag.
+        /// </remarks>
+        [Test]
+        public async Task ATolerantClient_LogsInButIsNotToldItWasVerified()
+        {
+
+            Server.SignAnotherSaslAnnouncement = true;
+            Server.AddAccount("alice");
+
+            // CreateClient rather than ConnectClientAsync: the switch has to be
+            // set before the handshake, and the base fixture hands out an
+            // unconnected client for exactly this.
+            var alice = CreateClient("alice");
+            alice.Connection.RefuseOnAnnouncementMismatch = false;
+
+            await alice.ConnectAsync();
+
+            Assert.That(alice.Connection.DowngradeProtection,
+                        Is.EqualTo(SaslDowngradeProtectionResult.Mismatch),
+                        "Tolerated is not verified, and must never read as it.");
+
+        }
+
+        #endregion
+
         #region WithoutTheAttribute_TheLoginStillWorks()
 
         /// <summary>

@@ -44,7 +44,7 @@ foreign servers, together with the setups that produce them, live in
 | SCRAM-SHA-256 | ✅ Preferred |
 | SCRAM-SHA-1 | ✅ Fallback |
 | SASL PLAIN | ⚠️ Last resort |
-| SCRAM-*-PLUS (channel binding) | ❌ Not implemented |
+| SCRAM-SHA-256-PLUS / SCRAM-SHA-1-PLUS | ✅ Preferred over anything unbound, `tls-server-end-point` only |
 
 The strongest offered mechanism is chosen — by rank, not by the order in which
 the server announces them. Two floors guard against downgrade, both on
@@ -103,7 +103,8 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0384 | OMEMO Encryption | ✅ | Complete, `urn:xmpp:omemo:2` — see the "End-to-end encryption" section further down. Verified against the reference implementation python-omemo, in both directions (D69) |
 | XEP-0420 | Stanza Content Encryption | ✅ | The envelope that OMEMO encrypts: `<content/>` with the sender inside it and padding of random length |
 | XEP-0454 | OMEMO Media Sharing | ⚠️ | The receiving half, and nothing that touches the network: `AesGcmUrl` reads `aesgcm://host/path#[iv][key]`, hands out the `https` address the file lies at — without the fragment, which is the key — and decrypts the payload, tag checked. What is deliberately **not** here is the fetching: whether an incoming message may cause a request at all, how large a file may be, which addresses are refused. A library that downloads on its own gives that decision to whoever sent the message. The upload side (encrypting and offering a file) is missing entirely. IV of 12 bytes only — the older 16 byte form is refused with a reason rather than silently, since `AesGcm` takes no other nonce length |
-| XEP-0474 | SASL SCRAM Downgrade Protection | ✅ | Both sides, version 0.5.0. The server hashes the list it announced into the `h` attribute of its server-first-message; the client hashes the list that reached it and compares. Checked against the one vector the XEP publishes, which pins the octet sort order, both separators and the choice of hash in a single comparison — an implementation that only agrees with itself passes every test written from its own behaviour. The channel-binding section is read from XEP-0440 although nothing here can *use* a channel binding: it is the second half of the hashed string, and a client that ignores it computes a different hash and refuses a login that was never under attack. Absence of `h` is not a failure — almost nothing implements this yet, including the ejabberd this was first pointed at — but it is reported rather than silently passed as success |
+| XEP-0440 | SASL Channel-Binding Type Capability | ✅ | Both sides. The server announces `tls-server-end-point` — and only when it has one, since an empty `<sasl-channel-binding/>` tells a client nothing it can act on; the client reads the list to decide whether to bind and to compute the XEP-0474 hash. `tls-exporter` is absent because .NET exposes no TLS exporter, not because the announcement cannot carry it |
+| XEP-0474 | SASL SCRAM Downgrade Protection | ✅ | Both sides, version 0.5.0. The server hashes the list it announced into the `h` attribute of its server-first-message; the client hashes the list that reached it and compares. Checked against the one vector the XEP publishes, which pins the octet sort order, both separators and the choice of hash in a single comparison — an implementation that only agrees with itself passes every test written from its own behaviour. The channel-binding types announced under XEP-0440 form the second half of the hashed string, so both ends have to agree about them too — leave them out and every channel-bound login fails looking like a forged announcement. Absence of `h` is not a failure — almost nothing implements this yet, including the ejabberd this was first pointed at — but it is reported rather than silently passed as success |
 | XEP-0352 | Client State Indication | ✅ | Both sides. The server announces `<csi/>` after login (§4.1) and does not answer `<active/>`/`<inactive/>` (§4.2). Only what will still be true later is held back: presence waits and **the latest per full JID supersedes the earlier ones** (§3); a message with a body, an `iq`, an error and every nonza go out at once; a chat state (XEP-0085) is dropped — delivered late it would not be delayed but wrong. What was held goes out **before** the stanza that flushes the buffer (RFC 6120 §10.1), and at the end of the connection into the buffer of unacked stanzas. Ceiling `MaxHeldWhileInactive` (default 100); on overflow the buffer goes out rather than anything being discarded. After a resumption "active" applies again (§5.2) — which is why the client re-declares itself after every handshake. In the console `/csi active|inactive` (D61) |
 
 ## RFC conformance
@@ -169,7 +170,8 @@ no `host-meta`. Whoever does not want it gives the URL, e.g. for Prosody:
 | Nonce check against MITM | ✅ |
 | Server signature verification (constant time) | ✅ Mandatory — a `<success/>` without a server-final-message aborts the handshake |
 | SASLprep (RFC 4013) | ✅ Complete: mapping, NFKC, prohibited tables, unassigned code points and the bidi rules; checked against the example table from §3 |
-| Channel binding (RFC 9266 `tls-exporter`) | ❌ |
+| Channel binding — `tls-server-end-point` (RFC 5929 §4.1) | ✅ Both sides, announced per XEP-0440. MD5 and SHA-1 signatures promoted to SHA-256; a certificate whose signature carries no readable hash (Ed25519, Ed448, RSASSA-PSS) gets no binding rather than a guessed one |
+| Channel binding — `tls-exporter` (RFC 9266) | ❌ Blocked on the platform: .NET 10 exposes no `ExportKeyingMaterial` on `SslStream` (checked against the reference assembly, 10.0.11) |
 
 ### RFC 7622 — JID handling
 
@@ -426,12 +428,12 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it — 1174 tests, of which the platform decides how many get an answer:
+all of it — 1184 tests, of which the platform decides how many get an answer:
 
 | Platform | passed | skipped |
 |----------|-------:|--------:|
-| Windows | 1171 | 3 |
-| Debian 13 | 1173 | 1 |
+| Windows | 1181 | 3 |
+| Debian 13 | 1183 | 1 |
 
 The skip both share checks a property which exists only in STARTTLS operation,
 and the fixture is parameterised over the TLS modes, so in the other one the
@@ -445,8 +447,9 @@ number to hold the run to is the one for the platform it ran on. CI runs both.
 
 The counts move with the suite and are worth keeping current rather than round:
 the passing figure stood at 1110 until XEP-0454 arrived, at 1119 until the
-security review was worked through and at 1163 until XEP-0474 came in, and a
-figure nobody updates stops being a check and becomes decoration.
+security review was worked through, at 1163 until XEP-0474 came in and at 1171
+until channel binding did, and a figure nobody updates stops being a check and
+becomes decoration.
 
 Three tables in the source are **generated, not transcribed**:
 `tools/unicode/` and `tools/stringprep/` fetch the Unicode file resp. the RFC
@@ -738,8 +741,14 @@ server implementation:
   missing: STARTTLS (§5.4), a way to supply a certificate of your own, and the
   ability to forbid `ws://` — `new XMPPServer(useTLS: false)` still yields
   plaintext.
-- **SCRAM without channel binding.** SCRAM-SHA-256, SCRAM-SHA-1 and PLAIN are
-  offered; the `-PLUS` variants are missing. ~~An unknown account is rejected
+- **SCRAM with channel binding, over one binding type.** SCRAM-SHA-256,
+  SCRAM-SHA-1 and PLAIN are offered, and over TLS the `-PLUS` variants of the
+  two SCRAMs beside them, bound with `tls-server-end-point`. `tls-exporter`
+  (RFC 9266) is the better binding — it survives a certificate being replaced —
+  and is not reachable: .NET exposes no TLS exporter. What is bound here is
+  therefore the certificate, not the session, so a man in the middle holding
+  the server's own key is not caught by it, and a fleet sharing one certificate
+  binds to a value that is not unique to the connection. ~~An unknown account is rejected
   before the exchange begins.~~ Fixed: the exchange runs to the end for an
   unknown name too and fails at the proof (RFC 6120 §13.11, see D50). The
   server key from which the invented salts arise lives in the process, though —

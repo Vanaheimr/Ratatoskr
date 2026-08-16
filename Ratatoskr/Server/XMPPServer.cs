@@ -274,6 +274,64 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             ["SCRAM-SHA-256", "SCRAM-SHA-1", "PLAIN"];
 
         /// <summary>
+        /// The <c>tls-server-end-point</c> data this server binds to (RFC
+        /// 5929), or null when it has no certificate or one this binding is not
+        /// defined for.
+        /// </summary>
+        /// <remarks>
+        /// Computed once from the certificate rather than per login: the
+        /// certificate does not change while the server runs, and hashing it on
+        /// every handshake would be work done to reach the same answer.
+        /// </remarks>
+        public Byte[]? ChannelBindingData => OfferChannelBinding ? _channelBindingData : null;
+
+        private readonly Byte[]? _channelBindingData;
+
+        /// <summary>
+        /// Whether this server offers channel binding at all. Default true.
+        /// </summary>
+        /// <remarks>
+        /// A switch and not a constant, for the tests that measure how a client
+        /// ranks mechanisms rather than whether it binds. With binding on, every
+        /// SCRAM login over TLS becomes a <c>-PLUS</c> one, and a fixture asking
+        /// "does it prefer SHA-256 to SHA-1" would be answered in terms of
+        /// mechanisms it never named. Turning it off there keeps each fixture
+        /// measuring one thing.
+        ///
+        /// It also stands in for the deployment that cannot bind - TLS
+        /// terminated by something in front of the server, which is the common
+        /// case behind a reverse proxy.
+        /// </remarks>
+        public Boolean OfferChannelBinding { get; set; } = true;
+
+        /// <summary>
+        /// What actually goes into <c>&lt;mechanisms/&gt;</c>: the offered list,
+        /// with the <c>-PLUS</c> variants added when there is a channel binding
+        /// to back them.
+        /// </summary>
+        /// <remarks>
+        /// Derived rather than stored, and that is the point. Announcing
+        /// <c>SCRAM-SHA-256-PLUS</c> without a binding invites a client to bind
+        /// to nothing: the exchange then fails at the proof with no reason a
+        /// human could read. Whether the server has a certificate is decided at
+        /// construction and cannot change afterwards, so the two can never drift
+        /// apart.
+        ///
+        /// The <c>-PLUS</c> entries come first only for readability; a client
+        /// choosing by announcement order rather than by its own ranking is
+        /// doing something the RFC warns against, and this server is not the
+        /// place to reward it.
+        /// </remarks>
+        public IEnumerable<String> AnnouncedSaslMechanisms
+
+            => ChannelBindingData is null
+                   ? OfferedSaslMechanisms
+                   : OfferedSaslMechanisms.
+                         Where (m => m.StartsWith("SCRAM-", StringComparison.Ordinal)).
+                         Select(m => m + "-PLUS").
+                         Concat(OfferedSaslMechanisms);
+
+        /// <summary>
         /// Does the server send a wrong server signature in the
         /// <c>&lt;success/&gt;</c>?
         /// </summary>
@@ -616,6 +674,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             Certificate  = useTLS
                                ? certificate ?? CreateSelfSignedCertificate(domain)
                                : null;
+
+            // Over plaintext this stays null and no -PLUS is announced, which
+            // is not a limitation but the definition: there is no channel to
+            // bind to.
+            _channelBindingData = TlsServerEndPoint.For(Certificate);
 
             _accountStore = accountStore ?? new InMemoryAccountStore();
 
@@ -1689,8 +1752,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 await session.SendAsync(
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                     "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
-                    String.Concat(OfferedSaslMechanisms.Select(m => $"<mechanism>{m}</mechanism>")) +
-                    "</mechanisms></stream:features>");
+                    String.Concat(AnnouncedSaslMechanisms.Select(m => $"<mechanism>{m}</mechanism>")) +
+                    "</mechanisms>" +
+                    // XEP-0440. Announced only when there is a binding to
+                    // announce, which means only over TLS and only for a
+                    // certificate RFC 5929 defines a hash for. An empty
+                    // <sasl-channel-binding/> would be a claim that the server
+                    // supports the extension and offers nothing - true, and
+                    // useless to a client deciding whether to bind.
+                    (ChannelBindingData is not null
+                         ? "<sasl-channel-binding xmlns='urn:xmpp:sasl-cb:0'>" +
+                           $"<channel-binding type='{TlsServerEndPoint.Name}'/>" +
+                           "</sasl-channel-binding>"
+                         : "") +
+                    "</stream:features>");
             else
                 await session.SendAsync(
                     "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
@@ -1836,8 +1911,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             var mechanism  = auth.Attribute("mechanism")?.Value ?? "PLAIN";
 
             // A mechanism the server has not offered at all is to be refused -
-            // otherwise the negotiation could be circumvented.
-            if (!OfferedSaslMechanisms.Contains(mechanism, StringComparer.Ordinal))
+            // otherwise the negotiation could be circumvented. Against the
+            // *announced* list, which is the one the client saw: the -PLUS
+            // variants exist only there, and checking against the bare list
+            // would refuse exactly the channel-bound logins this server just
+            // invited.
+            if (!AnnouncedSaslMechanisms.Contains(mechanism, StringComparer.Ordinal))
             {
                 await RefuseAuthenticationAsync(session, "invalid-mechanism");
                 return;
@@ -1895,18 +1974,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         {
 
             // The announced list travels into the exchange, where it becomes
-            // the attribute h of the server-first-message (XEP-0474). It is
-            // OfferedSaslMechanisms and not the mechanism just chosen: what the
-            // client checks is the offer it was given, not the one it took.
+            // the attribute h of the server-first-message (XEP-0474). It is the
+            // announcement and not the mechanism just chosen: what the client
+            // checks is the offer it was given, not the one it took - and it
+            // has to be the same list the client saw, -PLUS entries and all, or
+            // the two hash different strings and every channel-bound login
+            // fails as a forged announcement.
             var announced = SignAnotherSaslAnnouncement
-                                ? OfferedSaslMechanisms.Concat(["SCRAM-SHA-512"])
-                                : OfferedSaslMechanisms;
+                                ? AnnouncedSaslMechanisms.Concat(["SCRAM-SHA-512"])
+                                : AnnouncedSaslMechanisms;
 
             var exchange = SCRAMExchange.Begin(payload,
                                                mechanism,
                                                user => GetAccount($"{user}@{Domain}"),
                                                user => XMPPCredentials.Decoy(user, _decoySecret),
-                                               announced);
+                                               announced,
+                                               ChannelBindingData);
 
             if (exchange is null)
             {
@@ -2023,9 +2106,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         internal static SCRAMMechanism? ScramMechanismOf(String mechanism)
             => mechanism switch {
-                   "SCRAM-SHA-1"    => SCRAMMechanism.ScramSha1,
-                   "SCRAM-SHA-256"  => SCRAMMechanism.ScramSha256,
-                   _                => null
+                   "SCRAM-SHA-1"         => SCRAMMechanism.ScramSha1,
+                   "SCRAM-SHA-256"       => SCRAMMechanism.ScramSha256,
+
+                   // The suffix says how the exchange is bound, not which hash
+                   // it uses - SCRAM-SHA-256-PLUS is SHA-256 throughout. Whether
+                   // a binding is actually required follows from the GS2 header
+                   // the client sends, which SCRAMExchange checks; mapping it
+                   // here would only duplicate that decision in a second place.
+                   "SCRAM-SHA-1-PLUS"    => SCRAMMechanism.ScramSha1,
+                   "SCRAM-SHA-256-PLUS"  => SCRAMMechanism.ScramSha256,
+
+                   _                     => null
                };
 
         private async Task HandleIqAsync(XMPPSession session, String frame)

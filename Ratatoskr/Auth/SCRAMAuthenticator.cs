@@ -92,6 +92,30 @@ public sealed class SCRAMAuthenticator
     public SaslDowngradeProtectionResult DowngradeProtection { get; private set; }
         = SaslDowngradeProtectionResult.NotOffered;
 
+    /// <summary>
+    /// Whether a mismatching <c>h</c> breaks the exchange off. Default true.
+    /// </summary>
+    /// <remarks>
+    /// Fail-closed is the right default: the alternative to refusing is
+    /// ignoring a downgrade, which is the whole thing this check exists to
+    /// catch.
+    ///
+    /// It is settable because XEP-0474 is <b>Experimental</b>, at version 0.5.0
+    /// - and the failure is fail-closed against a specification that can still
+    /// move. Change the construction of the hashed string in a later revision,
+    /// and a server implementing that revision sends an <c>h</c> this client
+    /// computes differently; the login is then refused, correctly by this
+    /// code's own lights and wrongly in fact. From here a man in the middle and
+    /// a version skew look identical, and no amount of care in this method can
+    /// tell them apart.
+    ///
+    /// So there is a way through for whoever has diagnosed which of the two it
+    /// is. What there is not is a way to make it look verified: with this off,
+    /// a mismatch still ends as
+    /// <see cref="SaslDowngradeProtectionResult.Mismatch"/>.
+    /// </remarks>
+    public Boolean RefuseOnMismatch { get; set; } = true;
+
     public SCRAMAuthenticator(string username, string password, SCRAMMechanism mechanism = SCRAMMechanism.ScramSha1)
 
         : this(username, password, mechanism, null, null)
@@ -131,12 +155,65 @@ public sealed class SCRAMAuthenticator
     /// </summary>
     internal string? FixedClientNonce { get; set; }
 
-    public string MechanismName => _mechanism switch
+    /// <summary>
+    /// The <c>tls-server-end-point</c> binding data (RFC 5929), or null to
+    /// authenticate without channel binding.
+    /// </summary>
+    /// <remarks>
+    /// Set, this authenticator speaks the <c>-PLUS</c> variant of its
+    /// mechanism: the GS2 header becomes <c>p=tls-server-end-point,,</c> and
+    /// the binding travels inside <c>c=</c>, where RFC 5802 already covers it
+    /// with the client proof. Nothing is sent in the clear and nothing new is
+    /// negotiated.
+    /// </remarks>
+    public Byte[]? ChannelBinding { get; init; }
+
+    /// <summary>
+    /// Whether this client could do channel binding if the server offered it.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="ChannelBinding"/> being set, and the
+    /// distinction is the whole content of the GS2 header's <c>y</c> case: "I
+    /// can, and you did not offer it". A server that *does* support channel
+    /// binding and receives <c>y</c> knows its announcement was stripped on the
+    /// way and refuses - which is the same downgrade XEP-0474 catches, caught
+    /// one layer down and without either side implementing an experimental
+    /// XEP.
+    /// </remarks>
+    public Boolean CanDoChannelBinding { get; init; }
+
+    /// <summary>
+    /// The GS2 header, which is also the first three characters of the
+    /// client-first-message and the front of <c>c=</c>.
+    /// </summary>
+    internal String Gs2Header
+
+        => ChannelBinding is not null
+               ? $"p={TlsServerEndPoint.Name},,"
+               : CanDoChannelBinding
+                     ? "y,,"
+                     : "n,,";
+
+    public string MechanismName
     {
-        SCRAMMechanism.ScramSha1 => "SCRAM-SHA-1",
-        SCRAMMechanism.ScramSha256 => "SCRAM-SHA-256",
-        _ => "SCRAM-SHA-1"
-    };
+        get
+        {
+
+            var name = _mechanism switch {
+                           SCRAMMechanism.ScramSha1    => "SCRAM-SHA-1",
+                           SCRAMMechanism.ScramSha256  => "SCRAM-SHA-256",
+                           _                           => "SCRAM-SHA-1"
+                       };
+
+            // The suffix follows the binding and not a separate setting: the
+            // two must never disagree, because the mechanism name is what the
+            // server uses to decide whether to expect a binding at all.
+            return ChannelBinding is not null
+                       ? name + "-PLUS"
+                       : name;
+
+        }
+    }
 
     /// <summary>
     /// Step 1: Generates the client-first-message
@@ -148,9 +225,10 @@ public sealed class SCRAMAuthenticator
         // n=username,r=nonce
         _clientFirstMessageBare = $"n={EscapeUsername(_username)},r={_clientNonce}";
 
-        // GS2 header: n,, (no channel binding, no authzid)
-        // Complete message: n,,n=user,r=nonce
-        var clientFirstMessage = $"n,,{_clientFirstMessageBare}";
+        // GS2 header, then the bare message. Without channel binding this is
+        // "n,," as before; with it, "p=tls-server-end-point,,"; and "y,," when
+        // this client could bind but the server announced nothing to bind to.
+        var clientFirstMessage = $"{Gs2Header}{_clientFirstMessageBare}";
 
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(clientFirstMessage));
     }
@@ -198,11 +276,8 @@ public sealed class SCRAMAuthenticator
         // StoredKey = H(ClientKey)
         var storedKey = HashCompute(clientKey);
 
-        // channel-binding-data = base64("n,,")
-        var channelBinding = Convert.ToBase64String(Encoding.UTF8.GetBytes("n,,"));
-
-        // client-final-message-without-proof = c=channelBinding,r=serverNonce
-        var clientFinalWithoutProof = $"c={channelBinding},r={serverNonce}";
+        // client-final-message-without-proof = c=<cbind-input>,r=serverNonce
+        var clientFinalWithoutProof = $"c={ChannelBindingInput()},r={serverNonce}";
 
         // AuthMessage = client-first-message-bare + "," + server-first-message + "," + client-final-without-proof
         var authMessage = $"{_clientFirstMessageBare},{_serverFirstMessage},{clientFinalWithoutProof}";
@@ -245,9 +320,8 @@ public sealed class SCRAMAuthenticator
         var serverKey = HmacCompute(_saltedPassword!, "Server Key");
 
         // Reconstruct the AuthMessage
-        var channelBinding = Convert.ToBase64String(Encoding.UTF8.GetBytes("n,,"));
         var serverNonce = ExtractValue(_serverFirstMessage!, "r");
-        var clientFinalWithoutProof = $"c={channelBinding},r={serverNonce}";
+        var clientFinalWithoutProof = $"c={ChannelBindingInput()},r={serverNonce}";
         var authMessage = $"{_clientFirstMessageBare},{_serverFirstMessage},{clientFinalWithoutProof}";
 
         // ServerSignature = HMAC(ServerKey, AuthMessage)
@@ -369,6 +443,39 @@ public sealed class SCRAMAuthenticator
     }
 
     /// <summary>
+    /// The value of <c>c=</c>: base64 of the GS2 header followed by the
+    /// channel-binding data (RFC 5802, section 6).
+    /// </summary>
+    /// <remarks>
+    /// The bytes are concatenated before the base64 and not base64'd
+    /// separately - <c>cbind-input = gs2-header [ cbind-data ]</c> - so with no
+    /// binding this is base64 of the header alone, which is exactly the
+    /// <c>biws</c> ("n,,") that stood here as a literal before.
+    ///
+    /// The header goes in even when there is no binding, and that is what makes
+    /// the <c>y</c> case work: a server which supports channel binding sees a
+    /// client that claimed it could not be offered one, compares against its own
+    /// announcement, and refuses. The client never has to detect the downgrade
+    /// itself.
+    /// </remarks>
+    private String ChannelBindingInput()
+    {
+
+        var header = Encoding.UTF8.GetBytes(Gs2Header);
+
+        if (ChannelBinding is null)
+            return Convert.ToBase64String(header);
+
+        var buffer = new Byte[header.Length + ChannelBinding.Length];
+
+        header.        CopyTo(buffer, 0);
+        ChannelBinding.CopyTo(buffer, header.Length);
+
+        return Convert.ToBase64String(buffer);
+
+    }
+
+    /// <summary>
     /// XEP-0474: does the <c>h</c> the server sent describe the announcement
     /// that arrived here?
     /// </summary>
@@ -409,12 +516,20 @@ public sealed class SCRAMAuthenticator
 
             DowngradeProtection = SaslDowngradeProtectionResult.Mismatch;
 
+            // Recorded before the decision to throw, so that a caller which
+            // tolerates the mismatch still learns that the announcement was not
+            // confirmed. Tolerating is not the same as verifying and must not
+            // read as it.
+            if (!RefuseOnMismatch)
+                return;
+
             throw new SaslDowngradeException(
-                      "SASL downgrade fended off (XEP-0474): the server signed a different " +
-                      "list of mechanisms than the one that arrived here. What was announced " +
-                      "to this client was " +
-                      $"'{String.Join(", ", _offeredMechanisms)}' - somebody in between has " +
-                      "taken something out of it.",
+                      "The server signed a different list of mechanisms than the one that " +
+                      "arrived here (XEP-0474). What was announced to this client was " +
+                      $"'{String.Join(", ", _offeredMechanisms)}'. Either something in " +
+                      "between changed it in flight, or this server implements a later " +
+                      "revision of an experimental XEP than this client does - and from " +
+                      "here the two look alike.",
                       Offered:   String.Join(", ", _offeredMechanisms),
                       Demanded:  MechanismName,
                       Cause:     SaslDowngradeCause.ForgedAnnouncement);

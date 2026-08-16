@@ -19,6 +19,7 @@
 
 using System.Net.Security;
 using System.Net.WebSockets;
+using System.Security.Cryptography.X509Certificates;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Xml;
@@ -179,6 +180,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     private List<string>? _offeredChannelBindings;
 
     /// <summary>
+    /// The certificate the server presented, caught in the TLS validation
+    /// callback. Null over plaintext.
+    /// </summary>
+    private X509Certificate2? _serverCertificate;
+
+    /// <summary>
+    /// The <c>tls-server-end-point</c> data for this connection, or null when
+    /// there is nothing to bind to - no TLS, or a certificate RFC 5929 defines
+    /// no hash for.
+    /// </summary>
+    private Byte[]? ChannelBindingData => TlsServerEndPoint.For(_serverCertificate);
+
+    /// <summary>
     /// Whether the last SCRAM login had its announcement verified per XEP-0474.
     /// </summary>
     /// <remarks>
@@ -188,6 +202,36 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public SaslDowngradeProtectionResult DowngradeProtection { get; private set; }
         = SaslDowngradeProtectionResult.NotOffered;
+
+    /// <summary>
+    /// Whether an announcement the server signed differently than it arrived
+    /// breaks the login off (XEP-0474). Default true.
+    /// </summary>
+    /// <remarks>
+    /// The escape hatch for a version skew rather than for an attack. XEP-0474
+    /// is Experimental at 0.5.0; if a later revision changes how the hashed
+    /// string is built, a server on that revision and a man in the middle are
+    /// indistinguishable from here - both produce an <c>h</c> this client does
+    /// not expect. Fail-closed stays the default, because the alternative is
+    /// ignoring the downgrade this exists to catch; whoever has established
+    /// which of the two they are looking at can set this to false and still
+    /// sees <see cref="DowngradeProtection"/> report
+    /// <see cref="SaslDowngradeProtectionResult.Mismatch"/> afterwards.
+    /// </remarks>
+    public Boolean RefuseOnAnnouncementMismatch { get; set; } = true;
+
+    /// <summary>
+    /// The SASL mechanism the last successful login used, exactly as it was
+    /// named on the wire - <c>SCRAM-SHA-256-PLUS</c> and <c>SCRAM-SHA-256</c>
+    /// are different answers.
+    /// </summary>
+    /// <remarks>
+    /// Readable because everything about channel binding is invisible when it
+    /// works: the login succeeds either way, and the only difference between a
+    /// bound exchange and an unbound one is which name went across. Without
+    /// this, "did we bind" is not a question anybody can ask afterwards.
+    /// </remarks>
+    public String? NegotiatedSaslMechanism { get; private set; }
 
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
@@ -698,8 +742,28 @@ public sealed class XMPPConnection : IAsyncDisposable
             var webSocket = new ClientWebSocket();
             webSocket.Options.AddSubProtocol("xmpp");  // RFC 7395
 
-            if (ServerCertificateValidator is not null)
-                webSocket.Options.RemoteCertificateValidationCallback = ServerCertificateValidator;
+            // Always installed now, and not only when the caller has an opinion
+            // about the certificate. This callback is the only place .NET hands
+            // a ClientWebSocket's server certificate to anybody - there is no
+            // SslStream to ask afterwards and no TransportContext - and
+            // tls-server-end-point (RFC 5929) is a hash of exactly that
+            // certificate.
+            //
+            // The verdict is unchanged when no validator was set: the callback
+            // receives the platform's own aggregate judgement in
+            // sslPolicyErrors, so returning "None means yes" is the same policy
+            // that applied when no callback was installed at all.
+            webSocket.Options.RemoteCertificateValidationCallback =
+
+                (sender, certificate, chain, sslPolicyErrors) => {
+
+                    _serverCertificate = certificate as X509Certificate2;
+
+                    return ServerCertificateValidator is not null
+                               ? ServerCertificateValidator(sender, certificate, chain, sslPolicyErrors)
+                               : sslPolicyErrors == SslPolicyErrors.None;
+
+                };
 
             _webSocket = webSocket;
 
@@ -744,8 +808,8 @@ public sealed class XMPPConnection : IAsyncDisposable
             var mechanisms = StreamNegotiation.SaslMechanisms(features);
 
             // Both lists are kept, not just the chosen mechanism: XEP-0474
-            // hashes the whole announcement, and the channel bindings are the
-            // second half of that string even though nothing here can use one.
+            // hashes the whole announcement, and the channel-binding types are
+            // the second half of that string.
             _offeredMechanisms      = mechanisms;
             _offeredChannelBindings = StreamNegotiation.SaslChannelBindingTypes(features);
 
@@ -754,8 +818,21 @@ public sealed class XMPPConnection : IAsyncDisposable
                 _logger.LogDebug("Available SASL mechanisms: {Mechanisms}", string.Join(", ", mechanisms));
             }
 
-            // SASL auth - preference: SCRAM-SHA-256 > SCRAM-SHA-1 > PLAIN
-            var chosen = SaslMechanismPolicy.Strongest(mechanisms);
+            // SASL auth - preference: the -PLUS variants, then
+            // SCRAM-SHA-256 > SCRAM-SHA-1 > PLAIN.
+            //
+            // A -PLUS mechanism is only a candidate when there is something to
+            // bind to. Choosing one without it would send a GS2 header
+            // promising a binding that is not there, and the exchange would die
+            // at the proof with nothing a reader could act on. Note that the
+            // *full* announcement stays in _offeredMechanisms regardless: what
+            // XEP-0474 hashes is what the server offered, not what this client
+            // was able to use.
+            var candidates = ChannelBindingData is not null
+                                 ? mechanisms
+                                 : mechanisms.Where(m => !m.EndsWith("-PLUS", StringComparison.Ordinal));
+
+            var chosen = SaslMechanismPolicy.Strongest(candidates);
 
             if (chosen is null)
                 throw new AuthenticationException(
@@ -770,10 +847,20 @@ public sealed class XMPPConnection : IAsyncDisposable
             // already given it to the man in the middle.
             _saslPolicy.EnsureAcceptable(chosen);
 
+            NegotiatedSaslMechanism = chosen;
+
             _logger.LogInformation("{Mechanism} authentication ...", chosen);
 
             switch (chosen)
             {
+
+                case SaslMechanismPolicy.ScramSha256Plus:
+                    await PerformScramAsync(SCRAMMechanism.ScramSha256, ct, bind: true);
+                    break;
+
+                case SaslMechanismPolicy.ScramSha1Plus:
+                    await PerformScramAsync(SCRAMMechanism.ScramSha1, ct, bind: true);
+                    break;
 
                 case SaslMechanismPolicy.ScramSha256:
                     await PerformScramAsync(SCRAMMechanism.ScramSha256, ct);
@@ -2480,13 +2567,32 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
-    private async Task PerformScramAsync(SCRAMMechanism mechanism, CancellationToken ct)
+    private async Task PerformScramAsync(SCRAMMechanism     mechanism,
+                                         CancellationToken  ct,
+                                         Boolean            bind   = false)
     {
+
+        var binding = ChannelBindingData;
+
         var scram = new SCRAMAuthenticator(_username,
                                            _password,
                                            mechanism,
                                            _offeredMechanisms,
-                                           _offeredChannelBindings);
+                                           _offeredChannelBindings)
+                    {
+                        RefuseOnMismatch     = RefuseOnAnnouncementMismatch,
+
+                        ChannelBinding       = bind ? binding : null,
+
+                        // Set even when not binding, and that is the whole
+                        // content of the GS2 "y" case: this client could have
+                        // bound and was offered nothing to bind to. A server
+                        // that does support channel binding reads that as its
+                        // announcement having been stripped in flight, and
+                        // refuses - a downgrade caught without either side
+                        // implementing anything experimental.
+                        CanDoChannelBinding  = binding is not null
+                    };
 
         // Step 1: client-first-message
         var clientFirst = scram.CreateClientFirstMessage();
@@ -2549,6 +2655,19 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (DowngradeProtection == SaslDowngradeProtectionResult.Verified)
                 _logger.LogInformation(
                     "Authentication successful ({Mechanism}, announcement verified per XEP-0474)",
+                    scram.MechanismName);
+
+            // Only reachable with RefuseOnAnnouncementMismatch turned off, and
+            // it must not pass quietly: somebody decided this was a version
+            // skew rather than an attack, and that decision deserves to be
+            // visible on every login it lets through rather than only in the
+            // configuration that made it.
+            else if (DowngradeProtection == SaslDowngradeProtectionResult.Mismatch)
+                _logger.LogWarning(
+                    "Authentication successful ({Mechanism}), but the server signed a " +
+                    "different announcement than the one that arrived and the mismatch is " +
+                    "configured to be tolerated. Nothing here distinguishes a later revision " +
+                    "of XEP-0474 from a man in the middle.",
                     scram.MechanismName);
 
             else
