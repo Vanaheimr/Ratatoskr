@@ -49,8 +49,50 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Data
 
+        /// <summary>
+        /// The largest single frame this splitter will assemble, in characters.
+        /// </summary>
+        /// <remarks>
+        /// <c>rest</c> is what has arrived and does not yet form a complete
+        /// element, and it grew without any bound at all. A peer that opens a
+        /// tag and then simply keeps sending - never closing it - made this
+        /// buffer grow until the machine gave out, and it costs them nothing
+        /// but the sending. RFC 6120, section 13.12 asks for a limit for
+        /// exactly this reason.
+        ///
+        /// The value matches <c>XMPPConnection.MaxStanzaBytes</c>, in
+        /// characters rather than bytes - the splitter has already been handed
+        /// decoded text and can no longer count what it cost on the wire. For a
+        /// limit against growth that is the right side to err on: a character
+        /// is at most as many bytes again, never fewer.
+        /// </remarks>
+        public const Int32 MaxFrameLength = 4 * 1024 * 1024;
+
         private String   rest      = "";
         private Boolean  rootSeen;
+
+        #endregion
+
+        #region OverlongFrameException
+
+        /// <summary>
+        /// Thrown when a peer announces an element and does not end it within
+        /// <see cref="MaxFrameLength"/>.
+        /// </summary>
+        /// <remarks>
+        /// An exception and not a silent discard. Discarding would leave the
+        /// stream standing in the middle of an element nobody can place, and
+        /// everything after it would be read as the tail of something that was
+        /// thrown away. Whoever sends this is broken or hostile, and either way
+        /// the connection is over.
+        /// </remarks>
+        public sealed class OverlongFrameException : Exception
+        {
+            public OverlongFrameException(Int32 Length)
+                : base($"The peer has sent {Length} characters without completing an element; " +
+                       $"at most {MaxFrameLength} are assembled.")
+            { }
+        }
 
         #endregion
 
@@ -88,9 +130,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 if (end < 0)
                 {
+
                     // Still incomplete - what was already skipped may go.
                     rest = rest[start..];
+
+                    // And what is left has to stay within bounds. Checked here
+                    // and not at the top: only an element that will not end is
+                    // a problem, and up here it is known that this one has not
+                    // ended.
+                    if (rest.Length > MaxFrameLength)
+                        throw new OverlongFrameException(rest.Length);
+
                     break;
+
                 }
 
                 frames.Add(rest[start..end]);

@@ -50,23 +50,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region AForgedAnswer_IsNeitherBelievedNorAllowedToConsumeTheRequest()
 
         /// <summary>
-        /// The whole finding in one sequence: a stranger answers a request that
-        /// was addressed to somebody else, and afterwards the entity actually
-        /// asked answers as well.
+        /// A stranger answers a request that was addressed to somebody else -
+        /// and the request goes on waiting for the one it asked.
         /// </summary>
         /// <remarks>
+        /// <b>The forgery is played in from inside the send</b>, on the very
+        /// thread that is sending, and that is what makes the test a
+        /// measurement rather than a coin toss. By then the waiting entry
+        /// exists, and no real answer can have arrived. The first version of
+        /// this test waited for the stanza to go out and injected afterwards -
+        /// whereupon the server's own refusal of the unreachable domain won the
+        /// race, and what got measured was whichever arrived first.
+        ///
         /// <b>Both halves are checked, and the second is the one easy to get
         /// wrong.</b> An implementation that recognises the forgery but takes
-        /// the pending entry out along the way has only exchanged one damage for
-        /// another: the genuine answer arrives afterwards and belongs to nobody,
-        /// so whoever cannot be believed can at least make sure that nobody else
-        /// is either. That is why the genuine answer is played in afterwards and
-        /// has to arrive.
+        /// the pending entry out along the way has only exchanged one damage
+        /// for another: the genuine answer then belongs to nobody, so whoever
+        /// cannot be believed could at least see to it that nobody else is. The
+        /// three-second window is what asks after that - the server refuses an
+        /// unreachable domain within milliseconds, so an answer that never
+        /// arrives means the entry was taken, and the call would sit out its
+        /// full ten-second timeout.
         ///
         /// The identifier is <c>pep-1</c> because it really is the first one -
-        /// the counter sits on the connection and this client is fresh. That the
-        /// test can know it is not a convenience here; it is the precondition of
-        /// the attack, written down.
+        /// the counter sits on the connection and this client is fresh. That
+        /// the test can know it is no convenience here; it is the precondition
+        /// of the attack, written down.
         /// </remarks>
         [Test]
         public async Task AForgedAnswer_IsNeitherBelievedNorAllowedToConsumeTheRequest()
@@ -77,46 +86,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             String? spoofing = null;
             client.Connection.OnSpoofingAttempt += message => spoofing = message;
 
-            // The request goes to a domain this server does not federate with,
-            // so nothing real can answer and the sequence stays ours.
-            var asked   = $"bob@far.example";
-            var wentOut = false;
+            var asked = "bob@far.example";
 
             client.Connection.OnRawXml += line => {
                 if (line.StartsWith(">>>") && line.Contains("id='pep-1'"))
-                    wentOut = true;
+                    client.Connection.ProcessStanza(
+                        $"<iq type='result' id='pep-1' from='mallory@{Server.Domain}' " +
+                        $"to='{client.FullJid}'/>");
             };
 
-            var fetch = client.Connection.FetchOmemoBundleAsync(asked, 4711);
-
-            await WaitFor(() => wentOut, "the bundle request to go out");
-
-            // 1. The stranger. Right identifier, right recipient, wrong sender.
-            client.Connection.ProcessStanza(
-                $"<iq type='result' id='pep-1' from='mallory@{Server.Domain}' " +
-                $"to='{client.FullJid}'/>");
-
-            await WaitFor(() => spoofing is not null, "the forgery to be reported");
-
-            Assert.That(fetch.IsCompleted, Is.False,
-                        "A forged answer must not finish the request - neither with its " +
-                        "content nor by taking the waiting party's place away.");
-
-            // 2. The entity that was actually asked. It carries no bundle, so
-            //    the result is null - what is being measured is that it arrives
-            //    at all.
-            client.Connection.ProcessStanza(
-                $"<iq type='result' id='pep-1' from='{asked}' to='{client.FullJid}'/>");
-
-            await WaitFor(() => fetch.IsCompleted,
-                          "the genuine answer to reach the request",
-                          TimeSpan.FromSeconds(3));
+            var fetched = await client.Connection.FetchOmemoBundleAsync(asked, 4711)
+                                      .WaitAsync(TimeSpan.FromSeconds(3));
 
             Assert.Multiple(() =>
             {
-                Assert.That(spoofing,        Is.Not.Null);
-                Assert.That(spoofing,        Does.Contain("mallory"));
-                Assert.That(fetch.Result,    Is.Null, "There was no bundle in it.");
+
+                Assert.That(spoofing, Is.Not.Null,
+                            "A forged answer has to be reported, not believed.");
+
+                Assert.That(spoofing, Does.Contain("mallory"));
+
+                Assert.That(fetched,  Is.Null,
+                            "And nothing a stranger sent may come back as a bundle.");
+
             });
 
         }

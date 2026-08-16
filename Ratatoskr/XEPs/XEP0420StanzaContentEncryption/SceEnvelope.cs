@@ -155,10 +155,20 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
         var from = xml.Child(Namespace, "from")?.Attr("jid");
         var to   = xml.Child(Namespace, "to")?.Attr("jid");
 
+        // A missing sender is refused and not waved through. Skipping the
+        // comparison when there is nothing to compare turned the affix into
+        // something the sender decides on: whoever wanted it checked wrote it
+        // in, whoever did not, did not - and an attacker passing a ciphertext
+        // on under their own name is exactly the second sort. The check was
+        // there and it could be switched off from outside.
+        //
+        // This implementation has always written the sender in; python-omemo,
+        // which the interop suite measures against, leaves the envelope to the
+        // application entirely and therefore has no say here either.
         if (expectedFrom is not null &&
-            from is not null &&
-            !String.Equals(JidUtilities.Bare(from), JidUtilities.Bare(expectedFrom),
-                           StringComparison.OrdinalIgnoreCase))
+            (from is null ||
+             !String.Equals(JidUtilities.Bare(from), JidUtilities.Bare(expectedFrom),
+                            StringComparison.OrdinalIgnoreCase)))
             return false;
 
         DateTimeOffset? time = null;

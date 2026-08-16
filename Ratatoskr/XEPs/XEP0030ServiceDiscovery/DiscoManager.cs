@@ -41,8 +41,20 @@ public sealed class DiscoManager
     private const string DataFormNamespace = "jabber:x:data";
 
     private readonly Func<string, Task> _sendStanza;
-    private readonly Dictionary<string, TaskCompletionSource<DiscoInfo?>> _infoQueries = new();
-    private readonly Dictionary<string, TaskCompletionSource<DiscoItems?>> _itemsQueries = new();
+    private readonly string? _ownBareJid;
+
+    /// <summary>
+    /// The open queries, each with the entity it was addressed to.
+    /// </summary>
+    /// <remarks>
+    /// <b>The address is kept because the identifier alone assigns nothing.</b>
+    /// <c>disco-info-2</c> is countable and stands openly in the stanza, so
+    /// anybody who may write here can answer a question that was put to
+    /// somebody else - and the answer used to be stored under the sender it
+    /// carried, without anyone comparing it against the sender that was asked.
+    /// </remarks>
+    private readonly Dictionary<string, (TaskCompletionSource<DiscoInfo?> Tcs, string Target)> _infoQueries = new();
+    private readonly Dictionary<string, (TaskCompletionSource<DiscoItems?> Tcs, string Target)> _itemsQueries = new();
     private readonly object _lock = new();
     private int _counter;
 
@@ -107,9 +119,51 @@ public sealed class DiscoManager
     /// </remarks>
     public List<DiscoItem> LocalItems { get; } = [];
 
-    public DiscoManager(Func<string, Task> sendStanza)
+    /// <param name="ownBareJid">
+    /// One's own account. Only needed so that an answer from one's own server
+    /// is recognised as such; without it the comparison is narrower, never
+    /// wider.
+    /// </param>
+    public DiscoManager(Func<string, Task> sendStanza, string? ownBareJid = null)
     {
-        _sendStanza = sendStanza;
+        _sendStanza  = sendStanza;
+        _ownBareJid  = ownBareJid;
+    }
+
+    /// <summary>
+    /// May this answer belong to the query with that identifier? Takes it out
+    /// of the open queries when it may.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not taken out on a mismatch</b>, and that is deliberate. Removing it
+    /// either way would hand the forgery a second prize: the genuine answer
+    /// would arrive afterwards and belong to nobody, so whoever cannot be
+    /// believed could at least see to it that nobody else is.
+    /// </remarks>
+    private bool TryClaim<T>(Dictionary<string, (TaskCompletionSource<T> Tcs, string Target)> open,
+                             string                                                          id,
+                             string?                                                         from,
+                             out TaskCompletionSource<T>?                                    tcs)
+    {
+
+        tcs = null;
+
+        lock (_lock)
+        {
+
+            if (!open.TryGetValue(id, out var entry))
+                return false;
+
+            if (!IqAnswerOrigin.MayBelongTo(entry.Target, from, _ownBareJid))
+                return false;
+
+            open.Remove(id);
+            tcs = entry.Tcs;
+
+            return true;
+
+        }
+
     }
 
     /// <summary>
@@ -121,7 +175,7 @@ public sealed class DiscoManager
         var id = $"disco-info-{Interlocked.Increment(ref _counter)}";
         var tcs = new TaskCompletionSource<DiscoInfo?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        lock (_lock) _infoQueries[id] = tcs;
+        lock (_lock) _infoQueries[id] = (tcs, jid);
 
         var nodeAttr = node != null ? $" node='{XmlEscaping.Escape(node)}'" : "";
         await _sendStanza(
@@ -150,7 +204,7 @@ public sealed class DiscoManager
         var id = $"disco-items-{Interlocked.Increment(ref _counter)}";
         var tcs = new TaskCompletionSource<DiscoItems?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        lock (_lock) _itemsQueries[id] = tcs;
+        lock (_lock) _itemsQueries[id] = (tcs, jid);
 
         var nodeAttr = node != null ? $" node='{XmlEscaping.Escape(node)}'" : "";
         await _sendStanza(
@@ -178,20 +232,11 @@ public sealed class DiscoManager
     /// finds nothing and delivered an empty but successful result - a declined
     /// query was not to be told apart from an entity without features.
     /// </summary>
-    public bool ProcessError(string id, StanzaError error)
+    public bool ProcessError(string id, StanzaError error, string? from = null)
     {
 
-        TaskCompletionSource<DiscoInfo?>?   infoTcs   = null;
-        TaskCompletionSource<DiscoItems?>?  itemsTcs  = null;
-
-        lock (_lock)
-        {
-            if (_infoQueries.TryGetValue(id, out infoTcs))
-                _infoQueries.Remove(id);
-
-            else if (_itemsQueries.TryGetValue(id, out itemsTcs))
-                _itemsQueries.Remove(id);
-        }
+        TryClaim(_infoQueries,  id, from, out var infoTcs);
+        TryClaim(_itemsQueries, id, from, out var itemsTcs);
 
         if (infoTcs is null && itemsTcs is null)
             return false;
@@ -217,13 +262,9 @@ public sealed class DiscoManager
     /// </summary>
     public bool ProcessInfoResult(string id, XElement iq, string from)
     {
-        TaskCompletionSource<DiscoInfo?>? tcs;
-        lock (_lock)
-        {
-            if (!_infoQueries.TryGetValue(id, out tcs))
-                return false;
-            _infoQueries.Remove(id);
-        }
+
+        if (!TryClaim(_infoQueries, id, from, out var tcs))
+            return false;
 
         var info  = new DiscoInfo { From = from };
         var query = iq.Child(InfoNamespace, "query");
@@ -288,13 +329,9 @@ public sealed class DiscoManager
     /// </summary>
     public bool ProcessItemsResult(string id, XElement iq, string from)
     {
-        TaskCompletionSource<DiscoItems?>? tcs;
-        lock (_lock)
-        {
-            if (!_itemsQueries.TryGetValue(id, out tcs))
-                return false;
-            _itemsQueries.Remove(id);
-        }
+
+        if (!TryClaim(_itemsQueries, id, from, out var tcs))
+            return false;
 
         var items = new DiscoItems { From = from };
         var query = iq.Child(ItemsNamespace, "query");

@@ -109,6 +109,28 @@ public sealed class XMPPConnection : IAsyncDisposable
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
+    /// The largest stanza that is read off the socket, in bytes.
+    /// </summary>
+    /// <remarks>
+    /// RFC 6120, section 13.12 asks for a limit, and until now there was none:
+    /// both receive loops appended into a StringBuilder for as long as frames
+    /// kept coming. A single WebSocket message can be announced in as many
+    /// continuation frames as the sender likes, so the far side could grow this
+    /// process until the machine gave out - and it costs the sender nothing but
+    /// the sending.
+    ///
+    /// Four mebibytes because a stanza is not a file. What legitimately gets
+    /// large here is a roster with tens of thousands of entries or a bundle
+    /// with many devices, and both stay far below it; anything that shares a
+    /// file goes over HTTP (XEP-0363) and not through this stream.
+    ///
+    /// <b>The connection is given up, not the stanza.</b> Reading a frame to
+    /// its end in order to discard it is doing the work the attacker asked
+    /// for, and a peer that sends one of these is either broken or hostile.
+    /// </remarks>
+    public const Int64 MaxStanzaBytes = 4 * 1024 * 1024;
+
+    /// <summary>
     /// IQs whose answer someone is waiting for right now, by their id.
     ///
     /// Replaces the earlier approach of the setup phase, which read up to ten
@@ -958,11 +980,11 @@ public sealed class XMPPConnection : IAsyncDisposable
         PubSub.OnEvent += e => OnPubSubEvent?.Invoke(e);
 
         // XEP-0199: Ping Manager
-        Ping = new PingManager(xml => SendAsync(xml));
+        Ping = new PingManager(xml => SendAsync(xml), BareJid);
         Ping.OnPingTimeout += target => OnError?.Invoke($"Ping timeout: {target}");
 
         // XEP-0030: Service Discovery
-        Disco = new DiscoManager(xml => SendAsync(xml));
+        Disco = new DiscoManager(xml => SendAsync(xml), BareJid);
 
         // XEP-0115: Entity Capabilities
         EntityCaps = new EntityCapsManager(Disco);
@@ -1242,46 +1264,8 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// May an answer from this sender belong to a request addressed there?
     /// </summary>
     internal Boolean AnswerBelongsHere(String? ExpectedFrom, String? From)
-    {
 
-        // No 'from' is one's own server, and it can be nothing else. RFC 6120,
-        // section 8.1.2.1 obliges the server to write the sender's full JID
-        // onto every stanza it accepts from a client, overriding whatever
-        // stood there. A peer therefore cannot produce this: what they send
-        // arrives carrying their own address, which is exactly what the
-        // comparison below then catches.
-        //
-        // So the permission costs nothing here. Against the server itself this
-        // comparison never protected and never could - it routes everything
-        // and may put any address it likes on top; that is the party OMEMO
-        // fends off with fingerprints, one layer up, not with a from-check.
-        //
-        // Demanding one is also simply wrong. A server may answer an addressed
-        // request without naming itself, and the one in this repository does
-        // precisely that on several of its paths. Requiring it pushed ten tests
-        // into the ten-second timeout, and only three of them asserted strictly
-        // enough to fail. The other seven kept passing while measuring a
-        // timeout instead of an answer, which is the more unpleasant half of
-        // it: a defence that quietly stops conversations looks from the outside
-        // exactly like one that works.
-        if (From is null)
-            return true;
-
-        // Nobody was addressed, so the request went to one's own server. Then
-        // it reports under the account's own bare JID, or under the domain.
-        if (ExpectedFrom is null)
-            return SameEntity(From, _jid) ||
-                   String.Equals(From, _domain, StringComparison.OrdinalIgnoreCase);
-
-        // Somebody was addressed, and only they may answer.
-        return SameEntity(From, ExpectedFrom);
-
-    }
-
-    private static Boolean SameEntity(String? One, String? Other)
-
-        => One is not null && Other is not null &&
-           JidUtilities.Bare(One) == JidUtilities.Bare(Other);
+        => IqAnswerOrigin.MayBelongTo(ExpectedFrom, From, _jid);
 
     /// <summary>
     /// Cancels all open IQ requests. Without that a reconnect would first wait
@@ -1306,8 +1290,9 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private async Task<string> ReceiveStanzaAsync(CancellationToken ct, string expected = "the negotiation")
     {
-        var buffer = new byte[8192];
-        var sb = new StringBuilder();
+        var buffer    = new byte[8192];
+        var sb        = new StringBuilder();
+        var received  = 0L;
 
         // One deadline for the step, not for the individual read: a frame that
         // arrives in pieces must not take longer altogether than one in a
@@ -1344,6 +1329,13 @@ public sealed class XMPPConnection : IAsyncDisposable
                 throw new IOException("WebSocket closed");
             }
 
+            received += result.Count;
+
+            if (received > MaxStanzaBytes)
+                throw new XMPPProtocolException(
+                          $"The far side sends a frame beyond {MaxStanzaBytes} bytes " +
+                          $"during {expected}.");
+
             sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
         }
         while (!result.EndOfMessage);
@@ -1378,7 +1370,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         {
             while (!ct.IsCancellationRequested && webSocket.State == WebSocketState.Open)
             {
-                var sb = new StringBuilder();
+                var sb        = new StringBuilder();
+                var received  = 0L;
                 WebSocketReceiveResult result;
 
                 do
@@ -1390,6 +1383,16 @@ public sealed class XMPPConnection : IAsyncDisposable
                         _logger.LogWarning("The server has closed the connection");
                         break;
                     }
+
+                    received += result.Count;
+
+                    // Counted, not measured on the StringBuilder: what has to
+                    // stay bounded is what was read off the socket, and a
+                    // character is not a byte.
+                    if (received > MaxStanzaBytes)
+                        throw new XMPPProtocolException(
+                                  $"A stanza beyond {MaxStanzaBytes} bytes was announced; " +
+                                  "the connection is given up rather than read to the end.");
 
                     sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
                 }
@@ -1716,14 +1719,22 @@ public sealed class XMPPConnection : IAsyncDisposable
         // Without this branch one's own second device does not see what the
         // first one wrote: the key entry is there, the message arrives - and
         // nobody looks at it, because it sits in the <forwarded/>.
+        //
+        // <b>Through UnwrapVerified, and that is the whole repair.</b> This
+        // branch used to unwrap on its own: the carbons namespace looked for
+        // anywhere in the stanza, the <forwarded/> looked for among all
+        // descendants, and no question at all about where the stanza came from.
+        // It stands before the carbon check below, so the one path that
+        // decrypted a wrapped message was the one path with no sender check on
+        // it - XEP-0280 has exactly one rule, and it was missing precisely
+        // where it mattered.
+        //
+        // Whatever this refuses is not swallowed: it falls through to the
+        // carbon check below, and a forged one is reported there as spoofing,
+        // in the one place that does the reporting.
         if (Omemo is not null &&
-            element.HasNamespace(CarbonManager.Namespace) &&
-            element.Descendants()
-                   .FirstOrDefault(e => e.Name.LocalName     == "forwarded" &&
-                                        e.Name.NamespaceName == "urn:xmpp:forward:0")
-                  ?.Elements()
-                   .FirstOrDefault(e => e.Name.LocalName == "message") is XElement wrapped &&
-            (wrapped.Attr("from") ?? wrapped.Attr("to")) is String innerSender &&
+            Carbons?.UnwrapVerified(element, from) is XElement wrapped &&
+            wrapped.Attr("from") is String innerSender &&
             TryProcessEncrypted(wrapped, innerSender))
         {
             return;
@@ -1962,10 +1973,10 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (id != null)
             {
                 if (id.StartsWith("ping-"))
-                    claimed = Ping?.ProcessError(id, parsed) == true;
+                    claimed = Ping?.ProcessError(id, parsed, from) == true;
 
                 else if (id.StartsWith("disco-info-") || id.StartsWith("disco-items-"))
-                    claimed = Disco?.ProcessError(id, parsed) == true;
+                    claimed = Disco?.ProcessError(id, parsed, from) == true;
             }
 
             if (!claimed)
@@ -1983,7 +1994,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                 // XEP-0199: ping answer
                 if (id.StartsWith("ping-"))
                 {
-                    Ping?.ProcessPong(id);
+                    Ping?.ProcessPong(id, from);
                     return;
                 }
 

@@ -34,7 +34,20 @@ public sealed class PingManager
     public const string Namespace = "urn:xmpp:ping";
 
     private readonly Func<string, Task> _sendStanza;
-    private readonly Dictionary<string, (TaskCompletionSource<TimeSpan?> Tcs, DateTime Sent)> _pending = new();
+    private readonly string? _ownBareJid;
+
+    /// <summary>
+    /// The pings under way, each with whom it was sent to - null for one's own
+    /// server, which is what a ping without a 'to' addresses.
+    /// </summary>
+    /// <remarks>
+    /// The target is kept for the same reason as everywhere else here: the
+    /// identifier assigns nothing. <c>ping-1</c> is countable, and an answer to
+    /// it used to be believed whoever sent it. What that buys an attacker is
+    /// admittedly small - a wrong round-trip time - but the keepalive runs on
+    /// this, and a measurement that anybody may write is not a measurement.
+    /// </remarks>
+    private readonly Dictionary<string, (TaskCompletionSource<TimeSpan?> Tcs, DateTime Sent, string? Target)> _pending = new();
     private readonly object _lock = new();
     private int _counter;
 
@@ -51,9 +64,41 @@ public sealed class PingManager
     /// </summary>
     public event Action<string, StanzaError>? OnPingError;
 
-    public PingManager(Func<string, Task> sendStanza)
+    /// <param name="ownBareJid">
+    /// One's own account, so that an answer from one's own server is recognised
+    /// as such. Without it the comparison is narrower, never wider.
+    /// </param>
+    public PingManager(Func<string, Task> sendStanza, string? ownBareJid = null)
     {
-        _sendStanza = sendStanza;
+        _sendStanza  = sendStanza;
+        _ownBareJid  = ownBareJid;
+    }
+
+    /// <summary>
+    /// May this answer belong to the ping with that identifier? Takes it out of
+    /// the pending ones when it may - and leaves it there when it may not, so
+    /// that a forgery cannot take the genuine answer's place away.
+    /// </summary>
+    private bool TryClaim(string                                                             id,
+                          string?                                                            from,
+                          out (TaskCompletionSource<TimeSpan?> Tcs, DateTime Sent, string? Target) entry)
+    {
+
+        lock (_lock)
+        {
+
+            if (!_pending.TryGetValue(id, out entry))
+                return false;
+
+            if (!IqAnswerOrigin.MayBelongTo(entry.Target, from, _ownBareJid))
+                return false;
+
+            _pending.Remove(id);
+
+            return true;
+
+        }
+
     }
 
     /// <summary>
@@ -71,7 +116,7 @@ public sealed class PingManager
 
         lock (_lock)
         {
-            _pending[id] = (tcs, sent);
+            _pending[id] = (tcs, sent, to);
         }
 
         var toAttr = to != null ? $" to='{XmlEscaping.Escape(to)}'" : "";
@@ -95,19 +140,19 @@ public sealed class PingManager
     /// <summary>
     /// Processes a ping answer
     /// </summary>
-    public bool ProcessPong(string id)
+    public bool ProcessPong(string id, string? from = null)
     {
-        lock (_lock)
-        {
-            if (!_pending.TryGetValue(id, out var entry))
-                return false;
 
-            _pending.Remove(id);
-            var rtt = DateTime.UtcNow - entry.Sent;
-            entry.Tcs.TrySetResult(rtt);
-            OnPong?.Invoke(id, rtt);
-            return true;
-        }
+        if (!TryClaim(id, from, out var entry))
+            return false;
+
+        var rtt = DateTime.UtcNow - entry.Sent;
+
+        entry.Tcs.TrySetResult(rtt);
+        OnPong?.Invoke(id, rtt);
+
+        return true;
+
     }
 
     /// <summary>
@@ -117,18 +162,11 @@ public sealed class PingManager
     /// was counted as a valid answer - a declined request thereby looked like a
     /// measured round-trip time.
     /// </summary>
-    public bool ProcessError(string id, StanzaError error)
+    public bool ProcessError(string id, StanzaError error, string? from = null)
     {
 
-        (TaskCompletionSource<TimeSpan?> Tcs, DateTime Sent) entry;
-
-        lock (_lock)
-        {
-            if (!_pending.TryGetValue(id, out entry))
-                return false;
-
-            _pending.Remove(id);
-        }
+        if (!TryClaim(id, from, out var entry))
+            return false;
 
         entry.Tcs.TrySetResult(null);
         OnPingError?.Invoke(id, error);

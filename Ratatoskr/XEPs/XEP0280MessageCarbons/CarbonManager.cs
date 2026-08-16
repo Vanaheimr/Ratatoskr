@@ -61,28 +61,19 @@ public sealed class CarbonManager
     public CarbonResult ProcessCarbon(XElement message, string from)
     {
 
-        var bareFrom = JidUtilities.Bare(from);
-
         // CRITICAL SPOOFING PROTECTION:
         // carbons may come ONLY from one's own bare JID (= from the server)!
-        if (!string.Equals(bareFrom, _myBareJid, StringComparison.OrdinalIgnoreCase))
+        if (!IsFromOwnAccount(from))
             return CarbonResult.SpoofingDetected;
 
-        var carbonElement = message.Elements()
-                                   .FirstOrDefault(child => child.Name.NamespaceName == Namespace &&
-                                                            (child.Name.LocalName == "sent" ||
-                                                             child.Name.LocalName == "received"));
+        var carbonElement = CarbonElement(message);
 
         if (carbonElement is null)
             return CarbonResult.NotACarbon;
 
         var isSent = carbonElement.Name.LocalName == "sent";
 
-        var inner = carbonElement.Elements()
-                                 .FirstOrDefault(child => child.Name.NamespaceName == ForwardNamespace &&
-                                                          child.Name.LocalName     == "forwarded")
-                                ?.Elements()
-                                 .FirstOrDefault(child => child.Name.LocalName == "message");
+        var inner = InnerMessage(carbonElement);
 
         if (inner is null)
         {
@@ -108,6 +99,63 @@ public sealed class CarbonManager
         return CarbonResult.Success;
 
     }
+
+    /// <summary>
+    /// Did this stanza come from one's own account - which for a carbon means:
+    /// from one's own server?
+    /// </summary>
+    private bool IsFromOwnAccount(string from)
+
+        => string.Equals(JidUtilities.Bare(from), _myBareJid, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The <c>&lt;sent/&gt;</c> or <c>&lt;received/&gt;</c> of a carbon, or null
+    /// when this message is none.
+    /// </summary>
+    private static XElement? CarbonElement(XElement message)
+
+        => message.Elements()
+                  .FirstOrDefault(child => child.Name.NamespaceName == Namespace &&
+                                           (child.Name.LocalName == "sent" ||
+                                            child.Name.LocalName == "received"));
+
+    /// <summary>
+    /// The message wrapped in a carbon element.
+    /// </summary>
+    /// <remarks>
+    /// Direct children at every step, and that is the point of walking it here
+    /// rather than searching. A search through all descendants finds a
+    /// <c>&lt;forwarded/&gt;</c> that somebody hung anywhere inside an ordinary
+    /// message - and whatever is found that way gets treated as something one's
+    /// own server vouched for.
+    /// </remarks>
+    private static XElement? InnerMessage(XElement carbonElement)
+
+        => carbonElement.Elements()
+                        .FirstOrDefault(child => child.Name.NamespaceName == ForwardNamespace &&
+                                                 child.Name.LocalName     == "forwarded")
+                       ?.Elements()
+                        .FirstOrDefault(child => child.Name.LocalName == "message");
+
+    /// <summary>
+    /// The message a carbon carries - <b>only</b> when the carbon may be
+    /// believed.
+    /// </summary>
+    /// <remarks>
+    /// It exists so that the check and the unwrapping cannot come apart. The
+    /// OMEMO branch in <c>ProcessMessage</c> used to do its own unwrapping, and
+    /// with it its own reading of what a carbon is: it looked for the carbons
+    /// namespace anywhere in the stanza and for a <c>&lt;forwarded/&gt;</c>
+    /// among all descendants, and it did all that <i>before</i> anybody had
+    /// asked where the stanza came from. So the one path on which a wrapped
+    /// message got decrypted was the one path with no sender check on it at
+    /// all - XEP-0280's only real rule, missing exactly where it was needed.
+    /// </remarks>
+    public XElement? UnwrapVerified(XElement message, string from)
+
+        => IsFromOwnAccount(from) && CarbonElement(message) is XElement carbon
+               ? InnerMessage(carbon)
+               : null;
 
     /// <summary>
     /// Creates the IQ for enabling carbons
