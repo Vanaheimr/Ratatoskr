@@ -74,6 +74,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         internal SCRAMExchange? Scram { get; set; }
 
+        /// <summary>
+        /// How many authentication attempts on this stream have failed.
+        /// </summary>
+        /// <remarks>
+        /// Counted per stream and not per account, and that difference is the
+        /// whole of it. A counter on the account is a lock somebody else can
+        /// turn: whoever wants Alice shut out fails at her name often enough
+        /// and the server does the rest. A counter on the stream costs the
+        /// guesser a fresh connection for every handful of tries and costs
+        /// nobody else anything - which is the measure RFC 6120, section 13.12
+        /// names as limiting the number of authentication attempts per
+        /// connection.
+        ///
+        /// <b>What it does not do</b> is bound the attempts per unit of time:
+        /// whoever reconnects begins at zero. Bounding that means counting per
+        /// remote address, and no address reaches this far - the sessions are
+        /// built by the WebSocket and the TCP links and neither hands one down.
+        /// That is a further step and not this one.
+        /// </remarks>
+        internal Int32 FailedAuthentications { get; set; }
+
         /// <summary>The resource assigned, as soon as the binding has taken place.</summary>
         public String? Resource { get; internal set; }
 

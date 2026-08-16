@@ -50,6 +50,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         void Delete(String bareJid);
 
+        /// <summary>
+        /// The key the invented credentials of unknown accounts are derived
+        /// from - or null when this store keeps none.
+        /// </summary>
+        /// <remarks>
+        /// <b>Not about an account, and here all the same</b>, because it has
+        /// to outlive the process for the same reason the accounts do. The
+        /// decoy salt of a name without an account is derived from this key so
+        /// that an unknown name looks exactly like a known one (RFC 6120,
+        /// section 13.11). A key drawn afresh at every start makes the invented
+        /// salts change across a restart while the real ones stand - and
+        /// whoever asks for the same name before and after reads the
+        /// difference, which is the one question the decoy exists to leave
+        /// unanswered.
+        ///
+        /// Defaulted, so that a store which keeps nothing has to say nothing:
+        /// an in-memory store has no restart to survive, and null leaves the
+        /// server drawing a fresh key, which is right there.
+        /// </remarks>
+        Byte[]? LoadDecoySecret() => null;
+
+        /// <summary>
+        /// Keeps the key from <see cref="LoadDecoySecret"/>. Called once, when
+        /// there was none yet.
+        /// </summary>
+        void SaveDecoySecret(Byte[] Secret) { }
+
     }
 
 }

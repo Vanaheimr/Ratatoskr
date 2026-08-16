@@ -134,25 +134,83 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #endregion
 
+        #region LoadDecoySecret() / SaveDecoySecret(Secret)
+
+        public Byte[]? LoadDecoySecret()
+        {
+
+            lock (_lock)
+            {
+
+                var stored = ReadFileWithoutLock().DecoySecret;
+
+                if (String.IsNullOrEmpty(stored))
+                    return null;
+
+                try
+                {
+                    return Convert.FromBase64String(stored);
+                }
+
+                // An unreadable key is no key. Drawing a fresh one costs the
+                // decoy salts of the names nobody has asked for yet, and that
+                // is cheaper than refusing to start.
+                catch (FormatException)
+                {
+                    return null;
+                }
+
+            }
+
+        }
+
+        public void SaveDecoySecret(Byte[] Secret)
+        {
+
+            lock (_lock)
+                WriteWithoutLock(ReadWithoutLock(), Convert.ToBase64String(Secret));
+
+        }
+
+        #endregion
+
 
         #region (private) Reading and writing the file
 
-        private List<StoredAccount> ReadWithoutLock()
+        /// <summary>
+        /// The whole file, or an empty one when there is none yet.
+        /// </summary>
+        /// <remarks>
+        /// Split off from <see cref="ReadWithoutLock"/> because the file now
+        /// holds something besides the accounts. Every write has to carry that
+        /// along - a save that built the file out of the accounts alone would
+        /// silently drop the decoy key, and the account enumeration it prevents
+        /// would be back at the next roster change.
+        /// </remarks>
+        private StoredAccounts ReadFileWithoutLock()
         {
 
             if (!File.Exists(_path))
-                return [];
+                return new StoredAccounts(1, []);
 
             var json = File.ReadAllText(_path);
 
             if (json.Length == 0)
-                return [];
+                return new StoredAccounts(1, []);
 
-            return JsonSerializer.Deserialize<StoredAccounts>(json, _options)?.Accounts ?? [];
+            return JsonSerializer.Deserialize<StoredAccounts>(json, _options)
+                       ?? new StoredAccounts(1, []);
 
         }
 
+        private List<StoredAccount> ReadWithoutLock()
+
+            => ReadFileWithoutLock().Accounts ?? [];
+
         private void WriteWithoutLock(List<StoredAccount> accounts)
+            => WriteWithoutLock(accounts, ReadFileWithoutLock().DecoySecret);
+
+        private void WriteWithoutLock(List<StoredAccount> accounts, String? decoySecret)
         {
 
             var directory = System.IO.Path.GetDirectoryName(_path);
@@ -160,13 +218,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (!String.IsNullOrEmpty(directory))
                 Directory.CreateDirectory(directory);
 
-            var json    = JsonSerializer.Serialize(new StoredAccounts(1, accounts), _options);
+            var json    = JsonSerializer.Serialize(new StoredAccounts(1, accounts, decoySecret), _options);
             var beside  = _path + ".new";
 
-            File.WriteAllText(beside, json);
+            OwnerOnlyFile.Write(beside, json);
+
+            // The move keeps the mode of the file being moved, so the
+            // replacement arrives as restricted as it was written.
             File.Move(beside, _path, overwrite: true);
 
         }
+
 
         #endregion
 
@@ -253,8 +315,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// <param name="Version">
         /// So that a later format can recognise what it has in front of it.
         /// </param>
+        /// <param name="DecoySecret">
+        /// Base64 of the key the invented credentials of unknown accounts are
+        /// derived from. Missing in older files and then null - the server then
+        /// draws one and it is written on the next save.
+        /// </param>
         private sealed record StoredAccounts(Int32                Version,
-                                             List<StoredAccount>  Accounts);
+                                             List<StoredAccount>  Accounts,
+                                             String?              DecoySecret = null);
 
         /// <param name="PendingSubscriptions">
         /// Subscription requests kept, by sender (RFC 6121, section 3.1.3).

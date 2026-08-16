@@ -142,6 +142,25 @@ public sealed class OmemoManager
     /// </remarks>
     public Boolean TrustNewDevicesBlindly { get; set; } = true;
 
+    /// <summary>
+    /// How old the signed prekey may become before it is replaced.
+    /// </summary>
+    /// <remarks>
+    /// A week. XEP-0384 asks for a periodic rotation without naming a period,
+    /// and the trade-off is plain in both directions: a shorter one costs a
+    /// publication and buys a narrower window, a longer one the reverse.
+    ///
+    /// <b>What the rotation is for is narrower than it sounds.</b> It does not
+    /// protect what has already been sent - that hangs on the ratchet, which
+    /// moves on by itself. It bounds how far back a stolen signed prekey opens
+    /// <i>new</i> sessions: without a rotation that is the whole life of the
+    /// device, with one it is an interval.
+    ///
+    /// <see cref="TimeSpan.Zero"/> or less rotates at every start, which is for
+    /// tests and for whoever means it.
+    /// </remarks>
+    public TimeSpan SignedPreKeyMaxAge { get; set; } = TimeSpan.FromDays(7);
+
     #endregion
 
     #region Constructor(s)
@@ -164,6 +183,27 @@ public sealed class OmemoManager
         _logger           = logger;
 
         Identity          = store.LoadOrCreateIdentity();
+
+        // The rotation was buildable all along - RotateSignedPreKey with its
+        // superseded key has been there - and never happened, because nothing
+        // asked how old the current one was. This is that question, and it is
+        // asked where the identity comes off the store.
+        //
+        // <b>At the switching-on and not on a clock.</b> Whoever leaves this
+        // running for a month rotates once, when they start it again. That is
+        // less than a timer would give and much more than never; a timer inside
+        // a manager that has no thread of its own would be the wrong place for
+        // it, and the caller who wants one can ask again.
+        //
+        // Nothing is published from here. Whoever switches OMEMO on publishes
+        // the bundle right afterwards anyway, and that carries the new key.
+        if (Identity.RotateSignedPreKeyIfDue(SignedPreKeyMaxAge))
+        {
+            _logger?.LogInformation("OMEMO: the signed prekey has been rotated; it is now {Id}",
+                                    Identity.SignedPreKeyId);
+
+            _store.SaveIdentity(Identity.Export());
+        }
 
     }
 

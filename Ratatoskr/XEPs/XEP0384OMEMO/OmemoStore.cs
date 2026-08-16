@@ -85,6 +85,11 @@ public sealed record OmemoDeviceRecord(String          BareJid,
 /// <param name="PreviousSignedPreKeyId">The identifier of the superseded one, or null.</param>
 /// <param name="PreviousSignedPreKeyPrivateKey">Its secret part, or null.</param>
 /// <param name="PreKeys">The prekeys in stock with their secret parts.</param>
+/// <param name="SignedPreKeyCreatedAt">
+/// When the current signed prekey came into being. Missing in files written
+/// before the rotation had a schedule, and then null - which counts as due,
+/// because an age nobody knows is not a young one.
+/// </param>
 public sealed record OmemoIdentityState(UInt32                                  DeviceId,
                                         Byte[]                                  IdentityPrivateKey,
                                         UInt32                                  SignedPreKeyId,
@@ -92,7 +97,8 @@ public sealed record OmemoIdentityState(UInt32                                  
                                         Byte[]                                  SignedPreKeySignature,
                                         UInt32?                                 PreviousSignedPreKeyId,
                                         Byte[]?                                 PreviousSignedPreKeyPrivateKey,
-                                        IReadOnlyList<OmemoStoredPreKey>        PreKeys);
+                                        IReadOnlyList<OmemoStoredPreKey>        PreKeys,
+                                        DateTimeOffset?                         SignedPreKeyCreatedAt = null);
 
 /// <summary>A prekey with its secret part.</summary>
 public sealed record OmemoStoredPreKey(UInt32 Id, Byte[] PrivateKey);

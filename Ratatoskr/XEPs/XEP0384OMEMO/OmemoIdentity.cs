@@ -105,6 +105,17 @@ public sealed class OmemoIdentity
     /// <summary>The identifier of the superseded signed prekey, or null.</summary>
     public UInt32? PreviousSignedPreKeyId { get; private set; }
 
+    /// <summary>
+    /// When the current signed prekey came into being - or null for a device
+    /// stored before this was written down.
+    /// </summary>
+    /// <remarks>
+    /// The rotation was buildable all along and never happened, because nothing
+    /// knew how old the key was. That is what this is for and it is all it is
+    /// for.
+    /// </remarks>
+    public DateTimeOffset? SignedPreKeyCreatedAt { get; private set; }
+
     /// <summary>How many prekeys are still in stock.</summary>
     public Int32 AvailablePreKeys
     {
@@ -170,6 +181,8 @@ public sealed class OmemoIdentity
                                       1,
                                       signedPreKey,
                                       Curve25519.Sign(identity.PrivateKey, signedPreKey.PublicKey));
+
+        own.SignedPreKeyCreatedAt = DateTimeOffset.UtcNow;
 
         own.ReplenishPreKeys();
 
@@ -292,8 +305,49 @@ public sealed class OmemoIdentity
             SignedPreKeyId++;
             SignedPreKey           = fresh;
             SignedPreKeySignature  = Curve25519.Sign(IdentityKey.PrivateKey, fresh.PublicKey);
+            SignedPreKeyCreatedAt  = DateTimeOffset.UtcNow;
 
         }
+
+    }
+
+    #endregion
+
+    #region RotateSignedPreKeyIfDue(MaxAge)
+
+    /// <summary>
+    /// Rotates the signed prekey when the current one has reached its age.
+    /// </summary>
+    /// <returns>true when it was rotated - the caller then has to store.</returns>
+    /// <remarks>
+    /// <b>A key of unknown age counts as due.</b> A device stored before the
+    /// timestamp existed has no answer to the question, and the honest reading
+    /// of "I do not know how old this is" is not "young enough". Rotating costs
+    /// little: the superseded key stays reachable, so messages already under
+    /// way naming it are still readable.
+    ///
+    /// What the rotation buys is bounded and worth naming precisely. It does
+    /// not protect the messages already sent - those hang on the ratchet, which
+    /// moves on by itself. It bounds how far back a stolen signed prekey opens
+    /// <i>new</i> sessions: without rotation that is "as far as the device has
+    /// existed", with it, one interval.
+    /// </remarks>
+    public Boolean RotateSignedPreKeyIfDue(TimeSpan MaxAge)
+    {
+
+        lock (_lock)
+        {
+            if (SignedPreKeyCreatedAt is DateTimeOffset created &&
+                DateTimeOffset.UtcNow - created < MaxAge)
+            {
+                return false;
+            }
+        }
+
+        // Outside the lock: RotateSignedPreKey takes it itself.
+        RotateSignedPreKey();
+
+        return true;
 
     }
 
@@ -332,7 +386,8 @@ public sealed class OmemoIdentity
                                           PreviousSignedPreKey?.PrivateKey,
                                           [.. _preKeys.OrderBy(e => e.Key)
                                                       .Select(e => new OmemoStoredPreKey(e.Key,
-                                                                                          e.Value.PrivateKey))]);
+                                                                                          e.Value.PrivateKey))],
+                                          SignedPreKeyCreatedAt);
 
     }
 
@@ -359,7 +414,12 @@ public sealed class OmemoIdentity
             PreviousSignedPreKeyId  = state.PreviousSignedPreKeyId,
             PreviousSignedPreKey    = state.PreviousSignedPreKeyPrivateKey is not null
                                           ? Curve25519.KeyPairFromPrivate(state.PreviousSignedPreKeyPrivateKey)
-                                          : null
+                                          : null,
+
+            // Null for a device stored before this was written down, and left
+            // null on purpose: RotateSignedPreKeyIfDue reads that as "due", and
+            // an unknown age is not a young one.
+            SignedPreKeyCreatedAt   = state.SignedPreKeyCreatedAt
         };
 
         foreach (var pk in state.PreKeys)

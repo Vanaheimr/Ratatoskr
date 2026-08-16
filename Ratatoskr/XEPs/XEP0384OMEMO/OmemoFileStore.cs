@@ -259,7 +259,20 @@ public sealed class OmemoFileStore : IOmemoStore
 
         var sideFile = _path + ".new";
 
-        File.WriteAllText(sideFile, JsonSerializer.Serialize(_content, _options));
+        // Owner only. What stands in here is the identity key and every chain
+        // key of every session - whoever reads the file reads the
+        // conversations, past ones included. The console says as much when it
+        // switches OMEMO on ("The file is NOT encrypted"), and that sentence
+        // was the whole of the protection.
+        //
+        // It is not encryption and does not pretend to be. Against another
+        // account on the same machine it is the difference between "may read"
+        // and "may not"; against whoever runs as this user, or takes the disk,
+        // it is nothing. That one wants ProtectedData or a passphrase, and it
+        // is a decision about where the key comes from rather than a line here.
+        OwnerOnlyFile.Write(sideFile, JsonSerializer.Serialize(_content, _options));
+
+        // The move keeps the mode of the file being moved.
         File.Move(sideFile, _path, overwrite: true);
 
     }

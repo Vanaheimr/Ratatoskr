@@ -102,8 +102,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// whoever knows it can recompute every invented salt and tell again
         /// which account exists.
         /// </remarks>
-        private readonly Byte[] _decoySecret =
-            System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        /// <remarks>
+        /// Kept in the account store now and no longer drawn afresh at every
+        /// start. A key that changes with the process makes the invented salts
+        /// change across a restart while the real ones stand - so whoever asks
+        /// for the same name before and after the restart sees which of the two
+        /// it was, and that is the very question the decoy exists to leave
+        /// unanswered. A store that keeps nothing, such as the in-memory one,
+        /// still gets a fresh key: it has no restart to survive.
+        /// </remarks>
+        private readonly Byte[] _decoySecret;
 
         private Int32 _connectionCounter;
 
@@ -588,6 +596,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                : null;
 
             _accountStore = accountStore ?? new InMemoryAccountStore();
+
+            // Read before anything else touches the store, and written back
+            // only when there was none: the first start of a server settles
+            // this key, every later one inherits it.
+            _decoySecret  = _accountStore.LoadDecoySecret() ?? NewDecoySecret();
 
             foreach (var account in _accountStore.Load())
             {
@@ -1695,18 +1708,116 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
+        /// <summary>
+        /// How many authentication attempts may fail on one stream before it is
+        /// ended. Zero means: as many as the peer likes.
+        /// </summary>
+        /// <remarks>
+        /// RFC 6120, section 13.12 lists this among the measures against denial
+        /// of service, and there was none at all: a stream could carry
+        /// <c>&lt;auth/&gt;</c> after <c>&lt;auth/&gt;</c> without limit, so a
+        /// password could be guessed at the speed of the network on a single
+        /// connection.
+        ///
+        /// <b>Per stream, deliberately, and not per account.</b> A counter on
+        /// the account is a lock that a stranger can turn - fail often enough
+        /// at Alice's name and the server shuts Alice out. This one costs the
+        /// guesser a new connection for every handful of tries and costs nobody
+        /// else anything.
+        ///
+        /// Five, because nobody mistypes a password five times inside one
+        /// connection: a client that got it wrong sends one <c>&lt;auth/&gt;</c>
+        /// and asks the human being again.
+        /// </remarks>
+        public Int32 MaxAuthenticationFailuresPerStream { get; set; } = 5;
+
+        /// <summary>
+        /// Refuses an authentication attempt - and ends the stream once there
+        /// have been too many.
+        /// </summary>
+        /// <remarks>
+        /// One door for every refusal, so that none of them can be counted
+        /// past. Every <c>&lt;failure/&gt;</c> of the SASL negotiation goes
+        /// through here; a new one that did not would be a way of guessing that
+        /// costs nothing.
+        /// </remarks>
+        private async Task RefuseAuthenticationAsync(XMPPSession session, String condition)
+        {
+
+            await session.SendAsync(
+                $"<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><{condition}/></failure>");
+
+            session.FailedAuthentications++;
+
+            if (MaxAuthenticationFailuresPerStream > 0 &&
+                session.FailedAuthentications >= MaxAuthenticationFailuresPerStream)
+            {
+                await session.SendStreamErrorAsync(
+                          "policy-violation",
+                          $"More than {MaxAuthenticationFailuresPerStream} failed authentication " +
+                          "attempts on one stream.");
+            }
+
+        }
+
+        /// <summary>
+        /// Draws a decoy key and hands it to the store to keep.
+        /// </summary>
+        /// <remarks>
+        /// It must not be guessable: whoever knows it can recompute every
+        /// invented salt and tell again which account exists.
+        /// </remarks>
+        private Byte[] NewDecoySecret()
+        {
+
+            var secret = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+
+            // A store that keeps nothing ignores this - and is right to. What
+            // must not happen is that the key is drawn here and the storing
+            // forgotten, because then every start has a new one and nothing has
+            // changed.
+            _accountStore.SaveDecoySecret(secret);
+
+            return secret;
+
+        }
+
         private async Task HandleAuthAsync(XMPPSession session, String frame)
         {
 
-            var payload    = Regex.Match(frame, @"<auth[^>]*>([^<]*)</auth>").Groups[1].Value;
-            var mechanism  = Attr(frame, "mechanism") ?? "PLAIN";
+            // Read with the XML parser and no longer with a pattern. The
+            // pattern was <auth[^>]*>([^<]*)</auth>, and the [^>]* is where it
+            // goes wrong: an attribute value may contain a '>' - XML only
+            // requires '<' and '&' to be escaped - so a frame carrying one ends
+            // the match in the middle of the attribute list and the rest of it
+            // is read as the payload. That the base64 itself contains nothing
+            // interesting is not the point; the point is that the frame decides
+            // where the payload begins.
+            //
+            // The <auth/> element declares its own namespace (RFC 6120,
+            // section 6.4.2), so unlike the dialback frames of S2SStream it is
+            // well-formed on its own and there is nothing here that would force
+            // a pattern.
+            XElement auth;
+
+            try
+            {
+                auth = XElement.Parse(frame);
+            }
+            catch (System.Xml.XmlException)
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            var payload    = auth.Value;
+            var mechanism  = auth.Attribute("mechanism")?.Value ?? "PLAIN";
 
             // A mechanism the server has not offered at all is to be refused -
             // otherwise the negotiation could be circumvented.
             if (!OfferedSaslMechanisms.Contains(mechanism, StringComparer.Ordinal))
             {
-                await session.SendAsync(
-                    "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><invalid-mechanism/></failure>");
+                await RefuseAuthenticationAsync(session, "invalid-mechanism");
                 return;
             }
 
@@ -1743,8 +1854,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (account is null || !account.Credentials.Verify(password))
             {
-                await session.SendAsync(
-                    "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized/></failure>");
+                await RefuseAuthenticationAsync(session, "not-authorized");
                 return;
             }
 
@@ -1770,8 +1880,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (exchange is null)
             {
                 session.Scram = null;
-                await session.SendAsync(
-                    "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized/></failure>");
+                await RefuseAuthenticationAsync(session, "not-authorized");
                 return;
             }
 
@@ -1808,6 +1917,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             session.Scram = null;
 
+            // Not counted against the stream's failures, and that is not an
+            // oversight. An abort tests no password - whoever wants to guess
+            // one has to send a proof, and that goes through the refusal above.
+            // Counting it would only end streams of clients that changed their
+            // minds.
             await session.SendAsync(
                 "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><aborted/></failure>");
 
@@ -1825,20 +1939,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // A <response/> without a preceding <auth/> belongs to no exchange.
             if (exchange is null)
             {
-                await session.SendAsync(
-                    "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized/></failure>");
+                await RefuseAuthenticationAsync(session, "not-authorized");
                 return;
             }
 
             session.Scram = null;
 
-            var payload      = Regex.Match(frame, @"<response[^>]*>([^<]*)</response>").Groups[1].Value;
-            var serverFinal  = exchange.Complete(payload);
+            // Read with the parser, for the same reason as the <auth/> above:
+            // an attribute value may carry a '>', and [^>]* ends the match
+            // there.
+            String payload;
+
+            try
+            {
+                payload = XElement.Parse(frame).Value;
+            }
+            catch (System.Xml.XmlException)
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            var serverFinal = exchange.Complete(payload);
 
             if (serverFinal is null)
             {
-                await session.SendAsync(
-                    "<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized/></failure>");
+                await RefuseAuthenticationAsync(session, "not-authorized");
                 return;
             }
 
