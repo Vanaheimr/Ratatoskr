@@ -46,17 +46,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Setup
 
         /// <summary>
-        /// Channel binding off for this whole fixture: what is checked here is
-        /// which SCRAM the client picks and how it computes the proof, not
-        /// whether it binds. With binding on, every one of these logins becomes
-        /// a -PLUS one and the assertions would be naming a mechanism the test
-        /// was never written about. ChannelBindingExchangeTests covers the
-        /// bound case.
+        /// Channel binding and SASL2 both off for this whole fixture.
         /// </summary>
+        /// <remarks>
+        /// What is checked here is which SCRAM the client picks and how it
+        /// computes the proof - and, in one test, the literal shape of the
+        /// <c>&lt;success/&gt;</c> frame. Both switches would change what these
+        /// tests are looking at without changing what they are about: channel
+        /// binding turns every login into a -PLUS one, and SASL2 moves the
+        /// server-final-message out of the element's text into
+        /// <c>&lt;additional-data/&gt;</c>.
+        ///
+        /// Turning them off here is also what keeps the RFC 6120 profile
+        /// measured at all. It is still what most of the world speaks, and with
+        /// SASL2 preferred everywhere else in the suite this fixture is the
+        /// place the older path is exercised. Sasl2ExchangeTests pins the newer
+        /// one.
+        /// </remarks>
         [SetUp]
-        public void TurnChannelBindingOff()
+        public void UseThePlainOldProfile()
         {
-            Server.OfferChannelBinding = false;
+            Server.OfferChannelBinding  = false;
+            Server.OfferSasl2           = false;
         }
 
         #endregion

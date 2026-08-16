@@ -305,6 +305,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         public Boolean OfferChannelBinding { get; set; } = true;
 
         /// <summary>
+        /// Whether this server offers the SASL2 profile (XEP-0388) beside the
+        /// one from RFC 6120. Default true.
+        /// </summary>
+        /// <remarks>
+        /// Both are announced, which the XEP provides for: it is a replacement
+        /// profile and expects a transition in which a client speaks whichever
+        /// it knows. A switch rather than a constant, so that the RFC 6120 path
+        /// stays measurable - with SASL2 on, a client that prefers it would
+        /// never take the old route again, and the older half of the
+        /// negotiation would quietly stop being tested.
+        /// </remarks>
+        public Boolean OfferSasl2 { get; set; } = true;
+
+        /// <summary>
         /// What actually goes into <c>&lt;mechanisms/&gt;</c>: the offered list,
         /// with the <c>-PLUS</c> variants added when there is a channel binding
         /// to back them.
@@ -1431,6 +1445,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     await HandleAuthAsync(session, frame);
                     return;
 
+                // XEP-0388's opening element. A different name from <auth/>,
+                // which is what lets the two profiles share one stream without
+                // anything having to guess which is meant.
+                case "authenticate":
+                    await HandleSasl2AuthenticateAsync(session, frame);
+                    return;
+
+                // <response/> and <abort/> carry the same names in both
+                // profiles and are told apart by their namespace. The session
+                // remembers which profile the exchange began in, so the answer
+                // goes back in the namespace it was asked in - a <success/> in
+                // the wrong one is a frame the client will not recognise.
                 case "response":
                     await HandleSaslResponseAsync(session, frame);
                     return;
@@ -1749,26 +1775,71 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 $"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' from='{Domain}' id='stream-{session.ConnectionNumber}' version='1.0'/>");
 
             if (openCount == 1)
-                await session.SendAsync(
-                    "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
-                    "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
-                    String.Concat(AnnouncedSaslMechanisms.Select(m => $"<mechanism>{m}</mechanism>")) +
-                    "</mechanisms>" +
-                    // XEP-0440. Announced only when there is a binding to
-                    // announce, which means only over TLS and only for a
-                    // certificate RFC 5929 defines a hash for. An empty
-                    // <sasl-channel-binding/> would be a claim that the server
-                    // supports the extension and offers nothing - true, and
-                    // useless to a client deciding whether to bind.
-                    (ChannelBindingData is not null
-                         ? "<sasl-channel-binding xmlns='urn:xmpp:sasl-cb:0'>" +
-                           $"<channel-binding type='{TlsServerEndPoint.Name}'/>" +
-                           "</sasl-channel-binding>"
-                         : "") +
-                    "</stream:features>");
+                await session.SendAsync(BeforeLoginFeatures());
             else
-                await session.SendAsync(
-                    "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
+                await session.SendAsync(AfterLoginFeatures());
+
+        }
+
+        /// <summary>
+        /// The features before the login: which SASL mechanisms, in both
+        /// profiles.
+        /// </summary>
+        /// <remarks>
+        /// RFC 6120's <c>&lt;mechanisms/&gt;</c> and XEP-0388's
+        /// <c>&lt;authentication/&gt;</c> stand side by side, which the XEP
+        /// provides for: it is a replacement profile, and during the transition
+        /// a server advertises both so that a client which knows only one of
+        /// them still gets in. Both list the same mechanisms - the profile
+        /// decides how they are spoken, not which exist.
+        /// </remarks>
+        private String BeforeLoginFeatures()
+
+            => "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
+
+               "<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>" +
+               String.Concat(AnnouncedSaslMechanisms.Select(m => $"<mechanism>{m}</mechanism>")) +
+               "</mechanisms>" +
+
+               // XEP-0388. No <inline/>: this server negotiates nothing along
+               // with the authentication yet, and an empty <inline/> would
+               // announce a capability with nothing in it. Bind 2 (XEP-0386) is
+               // what belongs there, and it is not written.
+               (OfferSasl2
+                    ? "<authentication xmlns='urn:xmpp:sasl:2'>" +
+                      String.Concat(AnnouncedSaslMechanisms.Select(m => $"<mechanism>{m}</mechanism>")) +
+                      "</authentication>"
+                    : "") +
+
+               // XEP-0440. Announced only when there is a binding to
+               // announce, which means only over TLS and only for a
+               // certificate RFC 5929 defines a hash for. An empty
+               // <sasl-channel-binding/> would be a claim that the server
+               // supports the extension and offers nothing - true, and
+               // useless to a client deciding whether to bind.
+               (ChannelBindingData is not null
+                    ? "<sasl-channel-binding xmlns='urn:xmpp:sasl-cb:0'>" +
+                      $"<channel-binding type='{TlsServerEndPoint.Name}'/>" +
+                      "</sasl-channel-binding>"
+                    : "") +
+
+               "</stream:features>";
+
+        /// <summary>
+        /// The features after the login: binding, session, stream management
+        /// and what else this server offers an authenticated stream.
+        /// </summary>
+        /// <remarks>
+        /// Its own method because two paths now send it. RFC 6120, section
+        /// 6.4.6 has the client open a new stream after SASL and the server
+        /// answers that with these; XEP-0388, section 3.6 has no restart at all
+        /// and the server sends them straight after <c>&lt;success/&gt;</c>.
+        /// The content is the same either way, and it must stay so - a client
+        /// that chose the newer profile is not owed a smaller stream.
+        /// </remarks>
+        private String AfterLoginFeatures()
+
+            => "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +
                     "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/>" +
                     (SessionRequired
                          ? "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
@@ -1798,12 +1869,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     // authenticated." Hence only here and not in the first
                     // features - before the login there is nobody whose state
                     // would be worth sparing.
-                    (OfferClientStateIndication
-                         ? ClientStateIndication.FeatureXml
-                         : "") +
-                    "</stream:features>");
-
-        }
+               (OfferClientStateIndication
+                    ? ClientStateIndication.FeatureXml
+                    : "") +
+               "</stream:features>";
 
         /// <summary>
         /// How many authentication attempts may fail on one stream before it is
@@ -1841,8 +1910,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         private async Task RefuseAuthenticationAsync(XMPPSession session, String condition)
         {
 
+            // XEP-0388, section 3.5: the failure element moves to the SASL2
+            // namespace, but the condition inside it stays an RFC 6120 one -
+            // the profile changed, not the vocabulary of what can go wrong.
             await session.SendAsync(
-                $"<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><{condition}/></failure>");
+                session.UsesSasl2
+                    ? $"<failure xmlns='urn:xmpp:sasl:2'>" +
+                      $"<{condition} xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>" +
+                      $"</failure>"
+                    : $"<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><{condition}/></failure>");
 
             session.FailedAuthentications++;
 
@@ -1876,6 +1952,69 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             _accountStore.SaveDecoySecret(secret);
 
             return secret;
+
+        }
+
+        /// <summary>
+        /// XEP-0388, section 3.2: <c>&lt;authenticate/&gt;</c> opens the newer
+        /// profile.
+        /// </summary>
+        /// <remarks>
+        /// Only the wrapping differs from <c>&lt;auth/&gt;</c>: the mechanism
+        /// is an attribute in both, and the initial response moves from the
+        /// element's own text into a child <c>&lt;initial-response/&gt;</c>.
+        /// Once those two are read, the exchange from here on is the same
+        /// SCRAM or PLAIN as ever - which is the point of the profile split and
+        /// the reason this method ends by calling the same code.
+        ///
+        /// The <c>&lt;user-agent/&gt;</c> a client may send is read and
+        /// discarded. It exists so a server can show somebody the list of their
+        /// own logins, and this server keeps no such list; parsing it to throw
+        /// it away would only look like a feature.
+        /// </remarks>
+        private async Task HandleSasl2AuthenticateAsync(XMPPSession session, String frame)
+        {
+
+            if (!OfferSasl2)
+            {
+                await RefuseAuthenticationAsync(session, "invalid-mechanism");
+                return;
+            }
+
+            XElement authenticate;
+
+            try
+            {
+                authenticate = XElement.Parse(frame);
+            }
+            catch (System.Xml.XmlException)
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            // Set before anything can fail: from here every answer to this
+            // session belongs in the SASL2 namespace, including the refusals
+            // below. A failure sent in the older one would reach a client that
+            // is not listening for it.
+            session.UsesSasl2 = true;
+
+            var mechanism  = authenticate.Attribute("mechanism")?.Value ?? "";
+            var payload    = authenticate.Child("initial-response")?.Value.Trim() ?? "";
+
+            if (!AnnouncedSaslMechanisms.Contains(mechanism, StringComparer.Ordinal))
+            {
+                await RefuseAuthenticationAsync(session, "invalid-mechanism");
+                return;
+            }
+
+            if (ScramMechanismOf(mechanism) is SCRAMMechanism scram)
+            {
+                await BeginScramAsync(session, payload, scram);
+                return;
+            }
+
+            await HandlePlainAsync(session, payload);
 
         }
 
@@ -1960,7 +2099,64 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
 
             session.Account = account;
-            await session.SendAsync("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>");
+            await SendSaslSuccessAsync(session, null);
+
+        }
+
+        /// <summary>
+        /// The successful end of a SASL exchange, in whichever profile it was
+        /// begun.
+        /// </summary>
+        /// <param name="additionalData">
+        /// The mechanism's final data - SCRAM's server-final-message - or null
+        /// where the mechanism has none, as PLAIN does not.
+        /// </param>
+        /// <remarks>
+        /// One method for both profiles, because the two differ in more than
+        /// the namespace and the difference is easy to get half right.
+        ///
+        /// <list type="bullet">
+        ///   <item>
+        ///     The mechanism's data is the element's text in RFC 6120 and a
+        ///     child <c>&lt;additional-data/&gt;</c> in XEP-0388.
+        ///   </item>
+        ///   <item>
+        ///     SASL2 names the identity it just settled in
+        ///     <c>&lt;authorization-identifier/&gt;</c>. The bare JID here: this
+        ///     server binds no resource inline, so there is no full JID to name
+        ///     yet, and claiming one would be a promise about a resource nobody
+        ///     has asked for.
+        ///   </item>
+        ///   <item>
+        ///     <b>And no stream restart.</b> RFC 6120, section 6.4.6 has the
+        ///     client open a new stream and the server answer with fresh
+        ///     features; XEP-0388, section 3.6 drops that round trip and has the
+        ///     server send the features immediately. Forgetting this leaves both
+        ///     ends waiting for the other.
+        ///   </item>
+        /// </list>
+        /// </remarks>
+        private async Task SendSaslSuccessAsync(XMPPSession session, String? additionalData)
+        {
+
+            if (!session.UsesSasl2)
+            {
+                await session.SendAsync(
+                    additionalData is null
+                        ? "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>"
+                        : $"<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{additionalData}</success>");
+                return;
+            }
+
+            await session.SendAsync(
+                "<success xmlns='urn:xmpp:sasl:2'>" +
+                (additionalData is not null
+                     ? $"<additional-data>{additionalData}</additional-data>"
+                     : "") +
+                $"<authorization-identifier>{session.Account?.BareJid}</authorization-identifier>" +
+                "</success>");
+
+            await session.SendAsync(AfterLoginFeatures());
 
         }
 
@@ -2001,7 +2197,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             session.Scram = exchange;
 
             await session.SendAsync(
-                $"<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{exchange.Challenge}</challenge>");
+                session.UsesSasl2
+                    ? $"<challenge xmlns='urn:xmpp:sasl:2'>{exchange.Challenge}</challenge>"
+                    : $"<challenge xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{exchange.Challenge}</challenge>");
 
         }
 
@@ -2095,8 +2293,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // RFC 5802, section 3: the server signature belongs with it.
             // Without it the client cannot check that the peer knows the
             // password as well.
-            await session.SendAsync(
-                $"<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{serverFinal}</success>");
+            await SendSaslSuccessAsync(session,
+                                       // An empty string is what OmitScramSignature
+                                       // produces, and it has to stay an empty
+                                       // element rather than become no element:
+                                       // the test that asks what a client does
+                                       // with a missing signature depends on the
+                                       // difference.
+                                       serverFinal);
 
         }
 

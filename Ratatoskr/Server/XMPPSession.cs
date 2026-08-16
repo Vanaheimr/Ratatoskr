@@ -464,6 +464,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         internal Int32 OpenCount { get; set; }
 
+        /// <summary>
+        /// Whether the SASL exchange on this stream was begun in the SASL2
+        /// profile (XEP-0388) rather than the one from RFC 6120.
+        /// </summary>
+        /// <remarks>
+        /// Per session and not per server, because the choice is the client's:
+        /// both profiles are announced and one stream may take either. Every
+        /// frame the server sends back - challenge, success, failure - has to
+        /// go out in the namespace the exchange was opened in, or it reaches a
+        /// client that is not listening for it.
+        /// </remarks>
+        internal Boolean UsesSasl2 { get; set; }
+
         /// <summary>All frames received from the client, in the order they arrived.</summary>
         public IReadOnlyList<String> Received
         {

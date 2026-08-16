@@ -39,6 +39,12 @@ foreign servers, together with the setups that produce them, live in
 
 ## Authentication
 
+Two SASL profiles, both spoken and both announced: the one from RFC 6120 and
+**SASL2** (XEP-0388, Stable), which is preferred wherever a server offers it.
+The mechanisms below are the same in either — the profile decides how they are
+wrapped, not which exist. What SASL2 changes is that the stream is not
+restarted after the login, which saves a round trip.
+
 | Method | Status |
 |--------|--------|
 | SCRAM-SHA-256 | ✅ Preferred |
@@ -103,6 +109,7 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0384 | OMEMO Encryption | ✅ | Complete, `urn:xmpp:omemo:2` — see the "End-to-end encryption" section further down. Verified against the reference implementation python-omemo, in both directions (D69) |
 | XEP-0420 | Stanza Content Encryption | ✅ | The envelope that OMEMO encrypts: `<content/>` with the sender inside it and padding of random length |
 | XEP-0454 | OMEMO Media Sharing | ⚠️ | The receiving half, and nothing that touches the network: `AesGcmUrl` reads `aesgcm://host/path#[iv][key]`, hands out the `https` address the file lies at — without the fragment, which is the key — and decrypts the payload, tag checked. What is deliberately **not** here is the fetching: whether an incoming message may cause a request at all, how large a file may be, which addresses are refused. A library that downloads on its own gives that decision to whoever sent the message. The upload side (encrypting and offering a file) is missing entirely. IV of 12 bytes only — the older 16 byte form is refused with a reason rather than silently, since `AesGcm` takes no other nonce length |
+| XEP-0388 | Extensible SASL Profile (SASL2) | ⚠️ | Both sides, and preferred over the RFC 6120 profile wherever a server offers it — the two are announced side by side, which is what the XEP asks for during the transition. `<authenticate/>` with the initial response as a child, `<challenge/>`/`<response/>`, `<success/>` with `<additional-data/>` and `<authorization-identifier/>`, `<failure/>` carrying an RFC 6120 condition inside the newer wrapper. **No stream restart** after success (§3.6), which is the round trip the profile saves and the one thing that deadlocks if either end gets it wrong. What is **not** here: `<inline/>`, and with it Bind 2 (XEP-0386) — so binding is still the separate step afterwards — and the `<continue/>`/`<next/>` task flow, which is what XEP-0480 would need. `UseSasl2` on the connection and `OfferSasl2` on the server turn it off, so the older profile stays exercised rather than rotting |
 | XEP-0440 | SASL Channel-Binding Type Capability | ✅ | Both sides. The server announces `tls-server-end-point` — and only when it has one, since an empty `<sasl-channel-binding/>` tells a client nothing it can act on; the client reads the list to decide whether to bind and to compute the XEP-0474 hash. `tls-exporter` is absent because .NET exposes no TLS exporter, not because the announcement cannot carry it |
 | XEP-0474 | SASL SCRAM Downgrade Protection | ✅ | Both sides, version 0.5.0. The server hashes the list it announced into the `h` attribute of its server-first-message; the client hashes the list that reached it and compares. Checked against the one vector the XEP publishes, which pins the octet sort order, both separators and the choice of hash in a single comparison — an implementation that only agrees with itself passes every test written from its own behaviour. The channel-binding types announced under XEP-0440 form the second half of the hashed string, so both ends have to agree about them too — leave them out and every channel-bound login fails looking like a forged announcement. Absence of `h` is not a failure — almost nothing implements this yet, including the ejabberd this was first pointed at — but it is reported rather than silently passed as success |
 | XEP-0352 | Client State Indication | ✅ | Both sides. The server announces `<csi/>` after login (§4.1) and does not answer `<active/>`/`<inactive/>` (§4.2). Only what will still be true later is held back: presence waits and **the latest per full JID supersedes the earlier ones** (§3); a message with a body, an `iq`, an error and every nonza go out at once; a chat state (XEP-0085) is dropped — delivered late it would not be delayed but wrong. What was held goes out **before** the stanza that flushes the buffer (RFC 6120 §10.1), and at the end of the connection into the buffer of unacked stanzas. Ceiling `MaxHeldWhileInactive` (default 100); on overflow the buffer goes out rather than anything being discarded. After a resumption "active" applies again (§5.2) — which is why the client re-declares itself after every handshake. In the console `/csi active|inactive` (D61) |
@@ -428,12 +435,12 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it — 1184 tests, of which the platform decides how many get an answer:
+all of it — 1191 tests, of which the platform decides how many get an answer:
 
 | Platform | passed | skipped |
 |----------|-------:|--------:|
-| Windows | 1181 | 3 |
-| Debian 13 | 1183 | 1 |
+| Windows | 1188 | 3 |
+| Debian 13 | 1190 | 1 |
 
 The skip both share checks a property which exists only in STARTTLS operation,
 and the fixture is parameterised over the TLS modes, so in the other one the
@@ -447,9 +454,9 @@ number to hold the run to is the one for the platform it ran on. CI runs both.
 
 The counts move with the suite and are worth keeping current rather than round:
 the passing figure stood at 1110 until XEP-0454 arrived, at 1119 until the
-security review was worked through, at 1163 until XEP-0474 came in and at 1171
-until channel binding did, and a figure nobody updates stops being a check and
-becomes decoration.
+security review was worked through, at 1163 until XEP-0474 came in, at 1171
+until channel binding did and at 1181 until SASL2, and a figure nobody updates
+stops being a check and becomes decoration.
 
 Three tables in the source are **generated, not transcribed**:
 `tools/unicode/` and `tools/stringprep/` fetch the Unicode file resp. the RFC

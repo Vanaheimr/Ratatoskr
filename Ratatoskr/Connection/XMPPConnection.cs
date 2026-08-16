@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2010-2026 GraphDefined GmbH <achim.friedland@graphdefined.com>
  * This file is part of Ratatoskr <https://www.github.com/Vanaheimr/Ratatoskr>
  *
@@ -232,6 +232,25 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// this, "did we bind" is not a question anybody can ask afterwards.
     /// </remarks>
     public String? NegotiatedSaslMechanism { get; private set; }
+
+    /// <summary>
+    /// Whether to use the SASL2 profile (XEP-0388) when the server offers it.
+    /// Default true.
+    /// </summary>
+    /// <remarks>
+    /// A switch and not a constant so the older profile stays measurable. With
+    /// this always on, a client would never take the RFC 6120 route against a
+    /// server that offers both, and that half of the negotiation would quietly
+    /// stop being tested - which is how a path rots without anybody being told.
+    /// </remarks>
+    public Boolean UseSasl2 { get; set; } = true;
+
+    /// <summary>
+    /// Whether the login that is running, or the last one, went through SASL2.
+    /// </summary>
+    public Boolean UsedSasl2 => _usingSasl2;
+
+    private Boolean _usingSasl2;
 
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
@@ -805,7 +824,24 @@ public sealed class XMPPConnection : IAsyncDisposable
             await SendAsync(OpenStream());
 
             var features   = await ReceiveFeaturesAsync(ct);
-            var mechanisms = StreamNegotiation.SaslMechanisms(features);
+
+            // XEP-0388 is a replacement profile for the SASL of RFC 6120, and a
+            // server in transition announces both. Taking the newer one when it
+            // is there is not only tidiness: it saves the stream restart after
+            // the login, and it is what XEP-0480 will need underneath it.
+            //
+            // Its own mechanism list, not the one from <mechanisms/>. A server
+            // may deliberately offer different sets - PLAIN in the old profile
+            // for clients that know nothing else, and not in the new one - and
+            // taking a name from one offer into the other would be a downgrade
+            // performed by this client on itself.
+            var sasl2Mechanisms = StreamNegotiation.Sasl2Mechanisms(features);
+
+            _usingSasl2 = UseSasl2 && sasl2Mechanisms.Count > 0;
+
+            var mechanisms = _usingSasl2
+                                 ? sasl2Mechanisms
+                                 : StreamNegotiation.SaslMechanisms(features);
 
             // Both lists are kept, not just the chosen mechanism: XEP-0474
             // hashes the whole announcement, and the channel-binding types are
@@ -889,8 +925,18 @@ public sealed class XMPPConnection : IAsyncDisposable
             // Only now, after the successful login.
             _saslPolicy.Remember(chosen);
 
-            // Open a new stream after auth (RFC 6120, section 6.4.6)
-            await SendAsync(OpenStream());
+            // RFC 6120, section 6.4.6 has the client begin the stream anew after
+            // a successful SASL, and the server answers that with fresh
+            // features. XEP-0388, section 3.6 drops the restart: the server
+            // sends the features straight after <success/>, and a client that
+            // opened a stream anyway would be starting a second negotiation
+            // over one that has already moved on.
+            //
+            // The features are read either way, which is what keeps every line
+            // below this one the same in both profiles.
+            if (!_usingSasl2)
+                await SendAsync(OpenStream());
+
             features = await ReceiveFeaturesAsync(ct);
 
             ServerFeatures.Clear();
@@ -2542,6 +2588,98 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     // ===== AUTH & SETUP =====
 
+    #region The two SASL profiles, side by side
+
+    /// <summary>
+    /// The software name sent as XEP-0388's <c>&lt;user-agent/&gt;</c>. Null
+    /// sends none.
+    /// </summary>
+    public String? UserAgentSoftware { get; set; } = "Ratatoskr";
+
+    /// <summary>
+    /// A stable identifier for this installation, sent as the <c>id</c> of the
+    /// user agent. Null omits the attribute.
+    /// </summary>
+    /// <remarks>
+    /// Null by default, and deliberately not a fresh GUID per connection. The
+    /// XEP wants a UUIDv4 that stays the same across logins so a server can
+    /// show somebody a list of their own devices; one invented per connection
+    /// would fill that list with strangers who are all this client. Whoever has
+    /// somewhere to keep it can set it, and until then the attribute is absent,
+    /// which is what "we cannot tell you" looks like in XML.
+    /// </remarks>
+    public String? UserAgentId { get; set; }
+
+    /// <summary>
+    /// The frame that opens the exchange, in whichever profile is in use.
+    /// </summary>
+    /// <remarks>
+    /// The mechanism is an attribute in both. What moves is the initial
+    /// response: RFC 6120 puts it in the element's own text, XEP-0388 in a
+    /// child <c>&lt;initial-response/&gt;</c>.
+    /// </remarks>
+    private String SaslOpenFrame(String mechanism, String initialResponse)
+    {
+
+        if (!_usingSasl2)
+            return $"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='{mechanism}'>" +
+                   $"{initialResponse}</auth>";
+
+        var userAgent = UserAgentSoftware is null
+                            ? ""
+                            : $"<user-agent{(UserAgentId is not null ? $" id='{UserAgentId}'" : "")}>" +
+                              $"<software>{UserAgentSoftware}</software>" +
+                              "</user-agent>";
+
+        return $"<authenticate xmlns='urn:xmpp:sasl:2' mechanism='{mechanism}'>" +
+               $"<initial-response>{initialResponse}</initial-response>" +
+               userAgent +
+               "</authenticate>";
+
+    }
+
+    /// <summary>The continuation frame - same name, different namespace.</summary>
+    private String SaslResponseFrame(String payload)
+
+        => _usingSasl2
+               ? $"<response xmlns='urn:xmpp:sasl:2'>{payload}</response>"
+               : $"<response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{payload}</response>";
+
+    /// <summary>
+    /// Is this the named SASL element of the profile currently in use?
+    /// </summary>
+    /// <remarks>
+    /// Asked against the profile this client chose, not against both. A
+    /// <c>&lt;success/&gt;</c> arriving in the other namespace is not a variant
+    /// of the answer - it is a server contradicting the offer it just made, and
+    /// it falls through to the "unexpected element" branch, which is where it
+    /// belongs.
+    /// </remarks>
+    private Boolean IsSaslElement(XElement element, String localName)
+
+        => _usingSasl2
+               ? StreamNegotiation.IsSasl2(element, localName)
+               : StreamNegotiation.IsSasl (element, localName);
+
+    /// <summary>
+    /// The mechanism data out of a <c>&lt;success/&gt;</c> - for SCRAM the
+    /// server-final-message.
+    /// </summary>
+    /// <remarks>
+    /// RFC 6120 carries it as the element's text; XEP-0388 moves it into
+    /// <c>&lt;additional-data/&gt;</c>. Reading the text in the SASL2 case
+    /// would return the concatenation of every child's text instead, and the
+    /// server signature check would fail against a server that had done nothing
+    /// wrong.
+    /// </remarks>
+    private String SaslSuccessPayload(XElement success)
+
+        => _usingSasl2
+               ? success.Child("additional-data")?.Value.Trim() ?? ""
+               : StreamNegotiation.SaslPayload(success);
+
+    #endregion
+
     private async Task PerformSaslPlainAsync(CancellationToken ct)
     {
         // RFC 4616, section 2: PLAIN, too, sends user name and password in the
@@ -2550,14 +2688,14 @@ public sealed class XMPPConnection : IAsyncDisposable
         var authData = $"\0{SaslPrep.Prepare(_username)}\0{SaslPrep.Prepare(_password)}";
         var authBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(authData));
 
-        await SendAsync($"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>{authBase64}</auth>");
+        await SendAsync(SaslOpenFrame("PLAIN", authBase64));
 
         var response = await ReceiveElementAsync(ct, "the answer to SASL PLAIN");
 
-        if (StreamNegotiation.IsSasl(response, "success"))
+        if (IsSaslElement(response, "success"))
             _logger.LogInformation("Authentication successful (PLAIN)");
 
-        else if (StreamNegotiation.IsSasl(response, "failure"))
+        else if (IsSaslElement(response, "failure"))
             throw new AuthenticationException(
                       $"SASL PLAIN refused: {StreamNegotiation.SaslFailureCondition(response) ?? "without a reason given"}");
 
@@ -2596,15 +2734,15 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         // Step 1: client-first-message
         var clientFirst = scram.CreateClientFirstMessage();
-        await SendAsync($"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='{scram.MechanismName}'>{clientFirst}</auth>");
+        await SendAsync(SaslOpenFrame(scram.MechanismName, clientFirst));
 
         // Step 2: server-first-message (challenge)
         var challenge = await ReceiveElementAsync(ct, "the SCRAM challenge");
 
-        if (!StreamNegotiation.IsSasl(challenge, "challenge"))
+        if (!IsSaslElement(challenge, "challenge"))
         {
 
-            if (StreamNegotiation.IsSasl(challenge, "failure"))
+            if (IsSaslElement(challenge, "failure"))
                 throw new AuthenticationException(
                           $"SCRAM refused: {StreamNegotiation.SaslFailureCondition(challenge) ?? "without a reason given"}");
 
@@ -2626,15 +2764,15 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         DowngradeProtection = scram.DowngradeProtection;
 
-        await SendAsync($"<response xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{clientFinal}</response>");
+        await SendAsync(SaslResponseFrame(clientFinal));
 
         // Step 4: server-final-message (success or failure)
         var final = await ReceiveElementAsync(ct, "the SCRAM server signature");
 
-        if (StreamNegotiation.IsSasl(final, "success"))
+        if (IsSaslElement(final, "success"))
         {
 
-            var serverFinal = StreamNegotiation.SaslPayload(final);
+            var serverFinal = SaslSuccessPayload(final);
 
             // RFC 5802, section 5: Checking the server signature is the second
             // half of SCRAM - it proves that the peer knows the password as
@@ -2678,7 +2816,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         }
 
-        else if (StreamNegotiation.IsSasl(final, "failure"))
+        else if (IsSaslElement(final, "failure"))
             throw new AuthenticationException(
                       $"SCRAM failed: {StreamNegotiation.SaslFailureCondition(final) ?? "without a reason given"}");
 

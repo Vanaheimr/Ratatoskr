@@ -47,6 +47,9 @@ internal static class StreamNegotiation
     /// <summary>Namespace of SASL (RFC 6120, section 6).</summary>
     public const string SaslNamespace     = "urn:ietf:params:xml:ns:xmpp-sasl";
 
+    /// <summary>Namespace of the SASL2 profile (XEP-0388).</summary>
+    public const string Sasl2Namespace    = "urn:xmpp:sasl:2";
+
     /// <summary>Namespace of the resource binding (RFC 6120, section 7).</summary>
     public const string BindNamespace     = "urn:ietf:params:xml:ns:xmpp-bind";
 
@@ -85,6 +88,19 @@ internal static class StreamNegotiation
            element.Name.NamespaceName == SaslNamespace;
 
     /// <summary>
+    /// The same question for the SASL2 profile (XEP-0388).
+    /// </summary>
+    /// <remarks>
+    /// A separate method rather than a namespace parameter on the one above,
+    /// because the caller always knows which profile its exchange is in - it
+    /// chose - and a frame that arrives in the other one is not a variant of
+    /// the answer but a server contradicting itself.
+    /// </remarks>
+    public static bool IsSasl2(XElement element, string localName)
+        => element.Name.LocalName     == localName &&
+           element.Name.NamespaceName == Sasl2Namespace;
+
+    /// <summary>
     /// The base64 content of a <c>&lt;challenge/&gt;</c> or
     /// <c>&lt;success/&gt;</c>. Empty when the element carries none - with
     /// SCRAM that is an error and not a triviality, because without the
@@ -102,6 +118,41 @@ internal static class StreamNegotiation
         => failure.Elements()
                   .FirstOrDefault(child => child.Name.LocalName != "text")
                   ?.Name.LocalName;
+
+    /// <summary>
+    /// The mechanisms offered under the SASL2 profile (XEP-0388), empty when
+    /// the server announces no <c>&lt;authentication/&gt;</c> at all.
+    /// </summary>
+    /// <remarks>
+    /// Read separately from <see cref="SaslMechanisms"/> and not merged with
+    /// it, although a server will normally list the same names in both. They
+    /// are two offers, and a server is entitled to make them differ - to keep
+    /// PLAIN out of the newer profile, say. Merging them would let a mechanism
+    /// announced under one profile be attempted under the other, which is a
+    /// downgrade this client would have performed on itself.
+    /// </remarks>
+    public static List<string> Sasl2Mechanisms(XElement features)
+    {
+
+        var mechanisms = new List<string>();
+        var container  = features.Child(Sasl2Namespace, "authentication");
+
+        if (container is null)
+            return mechanisms;
+
+        foreach (var mechanism in container.Elements().Where(e => e.Name.LocalName == "mechanism"))
+        {
+
+            var name = mechanism.Value.Trim();
+
+            if (name.Length > 0)
+                mechanisms.Add(name);
+
+        }
+
+        return mechanisms;
+
+    }
 
     /// <summary>
     /// The channel-binding types offered (XEP-0440).
