@@ -283,6 +283,39 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </summary>
     public SCRAMMechanism? UpgradedTo { get; private set; }
 
+    /// <summary>
+    /// Whether to bind the resource inline during SASL2 (XEP-0386) when the
+    /// server offers it. Default true.
+    /// </summary>
+    public Boolean UseInlineBind { get; set; } = true;
+
+    /// <summary>
+    /// The <c>&lt;tag/&gt;</c> offered for the generated resource, or null to
+    /// send none.
+    /// </summary>
+    /// <remarks>
+    /// A hint about the software, and the only influence a client has: the
+    /// server generates the resource and XEP-0386 gives no way to propose one.
+    /// So <see cref="Resource"/> is *not* honoured on this path, and a caller
+    /// who set it and got something else has not been ignored - they have been
+    /// bound by a server that decides. The tag defaults to that wish anyway,
+    /// which is as close as the extension allows.
+    ///
+    /// It travels to everybody the account talks to, as part of the full JID.
+    /// XEP-0386 therefore says a client MUST NOT put anything private in it -
+    /// a host name, a user name - and the default here is the software name for
+    /// exactly that reason.
+    /// </remarks>
+    public String? BindTag { get; set; }
+
+    /// <summary>
+    /// Whether the last login bound its resource inline rather than with an
+    /// <c>&lt;iq/&gt;</c>.
+    /// </summary>
+    public Boolean BoundInline { get; private set; }
+
+    private Boolean _bind2Offered;
+
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
@@ -880,6 +913,36 @@ public sealed class XMPPConnection : IAsyncDisposable
                                    ? StreamNegotiation.Sasl2UpgradeTasks(features)
                                    : [];
 
+            // XEP-0386, offered inside the SASL2 <inline/>. The tag falls back
+            // to the resource the caller wished for, which is as much of that
+            // wish as the extension can carry - the server generates the rest -
+            // and to the software name when there is none.
+            //
+            // Not when a resumption is about to be attempted, and that
+            // condition is load-bearing rather than cautious. The inline
+            // binding happens inside the <success/>, several frames before
+            // TryResumeAsync gets a chance to run: ask for one here and the
+            // server hands out a *new* resource, and the resumption that
+            // follows then tries to restore the old stream onto a session that
+            // has already been given a different address. XEP-0198's whole
+            // promise is that the full JID survives the drop.
+            //
+            // The XEP's own answer to this is to negotiate the resumption
+            // inline as well, in the same <authenticate/>. That is a piece of
+            // work of its own - the counters and the <resumed/> handling move
+            // into the SASL exchange - and until it exists, declining the
+            // inline binding is what keeps the two extensions from
+            // contradicting each other.
+            var mayResume = StreamManagementEnabled && StreamManagement?.CanResume == true;
+
+            _bind2Offered = _usingSasl2 &&
+                            UseInlineBind &&
+                            !mayResume &&
+                            StreamNegotiation.OffersInlineBind(features);
+
+            BoundInline   = false;
+            BindTag     ??= Resource ?? UserAgentSoftware;
+
             var mechanisms = _usingSasl2
                                  ? sasl2Mechanisms
                                  : StreamNegotiation.SaslMechanisms(features);
@@ -992,7 +1055,13 @@ public sealed class XMPPConnection : IAsyncDisposable
             // comes after.
             var resumed = await TryResumeAsync(features, ct);
 
-            if (!resumed && StreamNegotiation.OffersBind(features))
+            // BoundInline is the third way to already have a resource, beside a
+            // resumption. XEP-0386 bound it inside the <success/> several lines
+            // ago, so the server offering <bind/> in these features is not an
+            // instruction - it is an offer to a client that did not take the
+            // inline route, and taking it now would bind a second resource to
+            // the same stream.
+            if (!resumed && !BoundInline && StreamNegotiation.OffersBind(features))
             {
                 _logger.LogDebug("Resource binding ...");
                 FullJid = await PerformBindAsync(ct);
@@ -2679,10 +2748,21 @@ public sealed class XMPPConnection : IAsyncDisposable
                            _offeredUpgrades.Select(
                                t => $"<upgrade xmlns='{ScramUpgrade.Namespace}'>{t}</upgrade>"));
 
+        // XEP-0386: bind the resource inside the login rather than with an
+        // <iq/> afterwards. The tag is a hint and nothing more - the server
+        // generates the resource and this client has no way to propose one,
+        // which is the extension's design and not a limitation of this code.
+        var bind = _bind2Offered
+                       ? "<bind xmlns='urn:xmpp:bind:0'>" +
+                         (BindTag is not null ? $"<tag>{BindTag}</tag>" : "") +
+                         "</bind>"
+                       : "";
+
         return $"<authenticate xmlns='urn:xmpp:sasl:2' mechanism='{mechanism}'>" +
                $"<initial-response>{initialResponse}</initial-response>" +
                userAgent +
                upgrades +
+               bind +
                "</authenticate>";
 
     }
@@ -2726,6 +2806,43 @@ public sealed class XMPPConnection : IAsyncDisposable
         => _usingSasl2
                ? success.Child("additional-data")?.Value.Trim() ?? ""
                : StreamNegotiation.SaslPayload(success);
+
+    /// <summary>
+    /// XEP-0386: takes the bound full JID out of a SASL2
+    /// <c>&lt;success/&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>&lt;bound/&gt;</c> is the signal, not the identifier: the
+    /// <c>&lt;authorization-identifier/&gt;</c> carries a bare JID when nothing
+    /// was bound and a full one when something was, and reading the resource
+    /// out of it without checking for <c>&lt;bound/&gt;</c> would mistake the
+    /// one for the other on any server that decided not to bind.
+    ///
+    /// The resource may itself contain a slash - XEP-0386 recommends
+    /// <c>tag/server-generated</c> - which is why the JID is split at the first
+    /// one and not the last.
+    /// </remarks>
+    private void ReadInlineBinding(XElement success)
+    {
+
+        if (!_usingSasl2 ||
+            success.Child("urn:xmpp:bind:0", "bound") is null)
+            return;
+
+        var identifier = success.Child("authorization-identifier")?.Value.Trim();
+
+        if (identifier is null || !identifier.Contains('/'))
+            throw new XMPPProtocolException(
+                      "The server reported an inline binding but named no full JID for it: " +
+                      $"'{identifier}'.");
+
+        FullJid      = identifier;
+        Resource     = JidUtilities.Parse(identifier).Resourcepart;
+        BoundInline  = true;
+
+        _logger.LogInformation("Bound inline as {FullJid} (XEP-0386)", FullJid);
+
+    }
 
     /// <summary>
     /// The server-final-message taken out of a <c>&lt;continue/&gt;</c>, held
@@ -2966,6 +3083,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                     "Authentication successful ({Mechanism}; the server sent no XEP-0474 " +
                     "downgrade protection, so its announcement rests on the configured minimum alone)",
                     scram.MechanismName);
+
+            ReadInlineBinding(final);
 
         }
 

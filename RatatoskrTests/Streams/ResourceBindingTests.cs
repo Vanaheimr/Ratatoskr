@@ -38,6 +38,34 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     public class ResourceBindingTests : AXMPPTests
     {
 
+        #region Setup
+
+        /// <summary>
+        /// The RFC 6120 binding for this whole fixture, which is what it is
+        /// about.
+        /// </summary>
+        /// <remarks>
+        /// XEP-0386 does not extend that binding, it replaces it - and takes
+        /// the client's say in the matter along with it. There a client cannot
+        /// ask for a resource at all: it offers a tag and the server generates
+        /// <c>tag/something</c> around it. So "the configured resource is
+        /// requested" and "a rejected binding is not retried" are not questions
+        /// that can be put on the inline path - there is no request to make and
+        /// no <c>&lt;iq/&gt;</c> to reject.
+        ///
+        /// Which is exactly why it stays measured here. Nearly every server in
+        /// the world still speaks only the older binding, and with Bind 2
+        /// preferred everywhere else this fixture is where their route is
+        /// exercised. InlineBindTests covers the newer one.
+        /// </remarks>
+        [SetUp]
+        public void UseTheIqBinding()
+        {
+            Server.OfferBind2 = false;
+        }
+
+        #endregion
+
         #region Helper functions
 
         /// <summary>

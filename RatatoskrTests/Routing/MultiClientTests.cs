@@ -93,6 +93,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TwoResourcesDifferingOnlyInCase_AreTwoDevices()
         {
 
+            // The RFC 6120 binding, because this test needs to *choose* two
+            // resources that differ only in case, and XEP-0386 gives a client
+            // no way to choose one at all - the server generates
+            // 'Mobile/kZ8p…' around the tag and the pair would then differ in
+            // far more than their spelling. What is measured is the routing,
+            // not the binding, and this is the only route that lets the case be
+            // set up. Routing over an inline binding is covered by
+            // InlineBindTests.
+            Server.OfferBind2 = false;
+
             var bob = await ConnectClientAsync("bob");
 
             Server.AddAccount("alice");

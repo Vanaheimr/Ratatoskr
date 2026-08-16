@@ -120,7 +120,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Properties
 
         /// <summary>The port served.</summary>
-        public Int32 Port { get; }
+        /// <remarks>
+        /// The port that was actually bound. Constructed with 0 - "whichever is
+        /// free" - it stays 0 until <see cref="Start"/> has run, because until
+        /// then nobody has chosen. <see cref="Uri"/> is therefore only
+        /// meaningful after the start, which is the order everything here uses
+        /// anyway.
+        /// </remarks>
+        public Int32 Port { get; private set; }
 
         /// <summary>The domain the server is responsible for.</summary>
         public String Domain { get; }
@@ -323,6 +330,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// true; needs <see cref="OfferSasl2"/>, which carries them.
         /// </summary>
         public Boolean OfferScramUpgrades { get; set; } = true;
+
+        /// <summary>
+        /// Whether this server binds a resource inline during SASL2
+        /// (XEP-0386). Default true; needs <see cref="OfferSasl2"/>.
+        /// </summary>
+        /// <remarks>
+        /// A switch for the same reason the others are: with it on, no client
+        /// that speaks SASL2 ever takes the <c>&lt;iq/&gt;</c> route again, and
+        /// the RFC 6120 binding - which every server in the world still speaks
+        /// - would stop being tested here.
+        /// </remarks>
+        public Boolean OfferBind2 { get; set; } = true;
 
         /// <summary>
         /// The upgrade tasks this server can run.
@@ -707,7 +726,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         {
 
             Domain       = domain;
-            Port         = port > 0 ? port : FreeTcpPort();
+            // 0 is passed straight through to the transport, which binds it and
+            // reports back what the operating system gave it - see Start().
+            //
+            // It used to be resolved here, by binding a throwaway listener on
+            // 0, reading the number and closing it again. That leaves the port
+            // free for anybody between the closing and the real bind, and
+            // whoever loses that race fails to start with AddressAlreadyInUse.
+            // It happened rarely and on Linux, where the ephemeral range cycles
+            // faster - which made it a test that went red for reasons that had
+            // nothing to do with the change under test.
+            Port         = port;
 
             // A self-signed certificate cannot be checked by a foreign peer -
             // it would have to know this one certificate, and it comes into
@@ -966,6 +995,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         {
 
             _webSocketServer.Start().GetAwaiter().GetResult();
+
+            // The port is only settled by the bind, and only now: constructed
+            // with 0, this is where the operating system's choice becomes
+            // knowable. Read back rather than guessed at, so that Uri names the
+            // socket that is actually listening.
+            Port = _webSocketServer.TCPPort.ToUInt16();
 
             // XEP-0198, section 5: the deadline of the preserved streams
             // expires in real time, not at the next access - otherwise a
@@ -1875,6 +1910,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                      t => $"<upgrade xmlns='{ScramUpgrade.Namespace}'>{t}</upgrade>"))
                            : "") +
 
+                      // XEP-0386. Inside <inline/>, which is what that element
+                      // is for: features negotiable as part of the
+                      // authentication rather than after it.
+                      //
+                      // The <bind/> carries no nested <inline/> of its own,
+                      // because this server enables nothing along with the
+                      // binding - carbons and stream management are still
+                      // asked for afterwards. An empty one would advertise a
+                      // list of features that is empty, which is a slower way
+                      // of saying nothing.
+                      (OfferBind2
+                           ? "<inline><bind xmlns='urn:xmpp:bind:0'/></inline>"
+                           : "") +
+
                       "</authentication>"
                     : "") +
 
@@ -2214,6 +2263,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             var mechanism  = authenticate.Attribute("mechanism")?.Value ?? "";
             var payload    = authenticate.Child("initial-response")?.Value.Trim() ?? "";
 
+            // XEP-0386: an inline binding, if the client asked for one and this
+            // server offers it. Recorded rather than acted on - XEP-0386 is
+            // explicit that a bind request MUST NOT be processed when the
+            // authentication fails, and at this point it has not even started.
+            var bind = authenticate.Child("urn:xmpp:bind:0", "bind");
+
+            session.WantsInlineBind  = OfferBind2 && bind is not null;
+            session.InlineBindTag    = bind?.Child("tag")?.Value.Trim() is String tag && tag.Length > 0
+                                           ? tag
+                                           : null;
+
             // XEP-0480: which upgrades the client is willing to perform. Only
             // recorded here - whether any of them is needed cannot be known
             // until there is an account, which is after the exchange.
@@ -2398,15 +2458,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
+            // XEP-0386, and only now: the binding happens after the exchange
+            // has succeeded, never before. The identity in the success is then
+            // the *full* JID rather than the bare one, which is the whole
+            // saving - the client is bound and knows its resource without a
+            // further round trip.
+            var bound = session.WantsInlineBind;
+
+            if (bound)
+                BindResourceInline(session, session.InlineBindTag);
+
             await session.SendAsync(
                 "<success xmlns='urn:xmpp:sasl:2'>" +
                 (additionalData is not null
                      ? $"<additional-data>{additionalData}</additional-data>"
                      : "") +
-                $"<authorization-identifier>{session.Account?.BareJid}</authorization-identifier>" +
+                "<authorization-identifier>" +
+                (bound ? session.FullJid : session.Account?.BareJid) +
+                "</authorization-identifier>" +
+
+                // Empty, and it has to be present all the same: XEP-0386 makes
+                // <bound/> the signal that the binding happened. Its optional
+                // content is the archive metadata of XEP-0313, which this
+                // server does not keep.
+                (bound ? "<bound xmlns='urn:xmpp:bind:0'/>" : "") +
+
                 "</success>");
 
             await session.SendAsync(AfterLoginFeatures());
+
+            // The same two things the <iq/> route does once a resource exists.
+            // Skipping them would leave an inline-bound session invisible to
+            // everything that waits for a binding.
+            if (bound)
+            {
+
+                OnSessionBound?.Invoke(session);
+
+                foreach (var frameToDeliver in DeliverAfterBind.ToArray())
+                    await session.SendAsync(frameToDeliver.Replace("{jid}", session.FullJid));
+
+            }
 
         }
 
@@ -4364,6 +4456,62 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             => recipient.Account?.IsPresenceSubscriber(BareOf(requester)) == true ||
                recipient.HasDirectedPresenceTo(BareOf(requester));
+
+        /// <summary>
+        /// XEP-0386: binds a resource without an <c>&lt;iq/&gt;</c>, during the
+        /// SASL2 exchange.
+        /// </summary>
+        /// <param name="tag">
+        /// The client's <c>&lt;tag/&gt;</c>, or null when it sent none.
+        /// </param>
+        /// <remarks>
+        /// The client cannot choose its resource here, and that is the
+        /// substance of the extension rather than an omission: XEP-0386 gives
+        /// it no way to propose one. It may offer a tag, which the server
+        /// SHOULD carry into the result as a prefix - the recommended form is
+        /// <c>tag/server-generated</c>, and yes, that puts a '/' inside the
+        /// resourcepart. RFC 7622 permits it: a JID is split at the *first*
+        /// slash, so everything after it, slashes included, is the resource.
+        ///
+        /// The random tail is what makes two clients with the same tag
+        /// distinguishable, so it is drawn rather than counted up: a counter
+        /// would tell every client how many others of its kind are connected.
+        ///
+        /// The SASL2 user-agent id is deliberately not used here. XEP-0386
+        /// forbids exposing it, and for a good reason - it is meant to be
+        /// stable across logins, so putting it in the resource would publish a
+        /// device identifier to everybody the account talks to.
+        /// </remarks>
+        private void BindResourceInline(XMPPSession session, String? tag)
+        {
+
+            lock (_lock)
+            {
+
+                Boolean Occupied(String candidate)
+                    => _sessions.Any(s => s.IsOpen &&
+                                          String.Equals(s.BareJid, session.BareJid, StringComparison.OrdinalIgnoreCase) &&
+                                          String.Equals(s.Resource, candidate, StringComparison.Ordinal));
+
+                String Generated()
+                    => Convert.ToBase64String(RandomNumberGenerator.GetBytes(9)).
+                               Replace('+', '-').
+                               Replace('/', '_');
+
+                var resource = tag is not null
+                                   ? $"{tag}/{Generated()}"
+                                   : Generated();
+
+                while (Occupied(resource))
+                    resource = tag is not null
+                                   ? $"{tag}/{Generated()}"
+                                   : Generated();
+
+                session.Resource = resource;
+
+            }
+
+        }
 
         private async Task HandleBindAsync(XMPPSession session, String frame, String? id)
         {
@@ -6522,17 +6670,6 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                              Certificate.GetCertHashString(HashAlgorithmName.SHA256),
                              StringComparison.OrdinalIgnoreCase);
 
-        private static Int32 FreeTcpPort()
-        {
-
-            var l = new TcpListener(IPAddress.Loopback, 0);
-            l.Start();
-            var port = ((IPEndPoint) l.LocalEndpoint).Port;
-            l.Stop();
-
-            return port;
-
-        }
 
         #endregion
 

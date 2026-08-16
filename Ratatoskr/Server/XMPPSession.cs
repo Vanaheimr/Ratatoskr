@@ -496,6 +496,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         internal SCRAMMechanism? PendingUpgrade { get; set; }
 
+        /// <summary>
+        /// Whether the client asked for an inline resource binding in its
+        /// <c>&lt;authenticate/&gt;</c> (XEP-0386).
+        /// </summary>
+        internal Boolean WantsInlineBind { get; set; }
+
+        /// <summary>
+        /// The <c>&lt;tag/&gt;</c> the client offered for its resource, or null
+        /// for none.
+        /// </summary>
+        internal String? InlineBindTag { get; set; }
+
         /// <summary>All frames received from the client, in the order they arrived.</summary>
         public IReadOnlyList<String> Received
         {

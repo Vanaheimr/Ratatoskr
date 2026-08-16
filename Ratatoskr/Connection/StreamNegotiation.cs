@@ -155,6 +155,21 @@ internal static class StreamNegotiation
     }
 
     /// <summary>
+    /// Does the server offer an inline resource binding (XEP-0386)?
+    /// </summary>
+    /// <remarks>
+    /// Inside the <c>&lt;inline/&gt;</c> of the SASL2 feature, which is what
+    /// distinguishes it from the RFC 6120 <c>&lt;bind/&gt;</c> that appears in
+    /// the features *after* the login. The two look alike at a glance and are
+    /// different namespaces for different moments.
+    /// </remarks>
+    public static bool OffersInlineBind(XElement features)
+
+        => features.Child(Sasl2Namespace, "authentication")?.
+                    Child("inline")?.
+                    Child("urn:xmpp:bind:0", "bind") is not null;
+
+    /// <summary>
     /// The SASL upgrade tasks the server offers (XEP-0480), as task names.
     /// </summary>
     /// <remarks>

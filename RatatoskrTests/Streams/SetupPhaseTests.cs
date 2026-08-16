@@ -245,7 +245,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task RejectedBind_IsNotReportedAsSuccess()
         {
 
-            Server.FailBind = true;
+            // FailBind refuses the RFC 6120 <iq/>, and there is no <iq/> on the
+            // inline path to refuse - XEP-0386 binds inside the <success/> or
+            // not at all. The defect this test was written for lives in reading
+            // that <iq/> result, so it stays on the route where the result
+            // exists.
+            Server.OfferBind2 = false;
+            Server.FailBind   = true;
 
             var client  = PreparedClient();
             var errors  = new List<String>();
