@@ -360,7 +360,15 @@ public sealed class SCRAMAuthenticator
     /// <exception cref="AuthenticationException">
     /// When the count is no number, or lies outside the window.
     /// </exception>
-    private static Int32 ReadIterationCount(String Value)
+    /// <remarks>
+    /// Reachable from the connection because XEP-0480 has a second place where
+    /// a server names an iteration count - the salt of an upgrade task - and it
+    /// is the same PBKDF2 afterwards, run on the same thread, for the same
+    /// attacker's price of writing a large number down. One reader, one bound;
+    /// a second implementation over there would be a second chance to forget
+    /// the ceiling.
+    /// </remarks>
+    internal static Int32 ReadIterationCount(String Value)
     {
 
         // NumberStyles.None: no sign, no space, no thousands separator. All

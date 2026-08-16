@@ -339,6 +339,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return null;
             }
 
+            // An account can lack the mechanism entirely: credentials read back
+            // from a store hold whatever was stored, and a server that only
+            // ever computed SHA-1 material has no SHA-256 keys to compare
+            // against. KeysOf threw a KeyNotFoundException for that until now -
+            // out of a frame a stranger sends, which made it an unhandled
+            // exception on the login path rather than a refusal.
+            //
+            // It is a refusal, and deliberately the same one a wrong password
+            // gets: which mechanisms an account has key material for is not
+            // something to tell whoever asks.
+            if (!_credentials.Has(_mechanism))
+                return null;
+
             var keys = _credentials.KeysOf(_mechanism);
 
             if (proof.Length != keys.StoredKey.Length)

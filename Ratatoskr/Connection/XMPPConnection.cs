@@ -252,6 +252,37 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private Boolean _usingSasl2;
 
+    /// <summary>
+    /// Whether to accept a server's invitation to upgrade this account's stored
+    /// key material (XEP-0480). Default true.
+    /// </summary>
+    /// <remarks>
+    /// What the upgrade sends is a SaltedPassword, and for the mechanism it
+    /// belongs to that is password-equivalent: whoever reads it can answer any
+    /// challenge for this account from then on. It travels only inside a
+    /// completed, authenticated exchange over TLS - never on the first frame,
+    /// never before the server has proved with its own signature that it knows
+    /// the existing material.
+    ///
+    /// Off means the account simply keeps the mechanisms it has. That costs
+    /// nothing today and is the right setting for anyone who would rather their
+    /// client never derived new key material at a server's asking.
+    /// </remarks>
+    public Boolean PerformScramUpgrades { get; set; } = true;
+
+    /// <summary>
+    /// The upgrade tasks the last <c>&lt;features/&gt;</c> offered and this
+    /// client is prepared to run.
+    /// </summary>
+    private String[] _offeredUpgrades = [];
+
+    /// <summary>
+    /// The mechanism the last login upgraded this account to, or null when
+    /// none did. For the tests, and for anybody wanting to know whether it
+    /// happened.
+    /// </summary>
+    public SCRAMMechanism? UpgradedTo { get; private set; }
+
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
@@ -838,6 +869,16 @@ public sealed class XMPPConnection : IAsyncDisposable
             var sasl2Mechanisms = StreamNegotiation.Sasl2Mechanisms(features);
 
             _usingSasl2 = UseSasl2 && sasl2Mechanisms.Count > 0;
+            UpgradedTo  = null;
+
+            // XEP-0480, and only over TLS. What the upgrade computes is
+            // password-equivalent for the mechanism it creates, so on a
+            // plaintext stream this client does not offer to compute it at all
+            // - refusing later would be refusing after the server has already
+            // been told it could ask.
+            _offeredUpgrades = _usingSasl2 && PerformScramUpgrades && _serverCertificate is not null
+                                   ? StreamNegotiation.Sasl2UpgradeTasks(features)
+                                   : [];
 
             var mechanisms = _usingSasl2
                                  ? sasl2Mechanisms
@@ -2631,9 +2672,17 @@ public sealed class XMPPConnection : IAsyncDisposable
                               $"<software>{UserAgentSoftware}</software>" +
                               "</user-agent>";
 
+        // XEP-0480: which upgrades this client is willing to perform. Offering
+        // is not doing - the server answers with a task only if the account
+        // actually lacks the material, and only then does anything travel.
+        var upgrades = String.Concat(
+                           _offeredUpgrades.Select(
+                               t => $"<upgrade xmlns='{ScramUpgrade.Namespace}'>{t}</upgrade>"));
+
         return $"<authenticate xmlns='urn:xmpp:sasl:2' mechanism='{mechanism}'>" +
                $"<initial-response>{initialResponse}</initial-response>" +
                userAgent +
+               upgrades +
                "</authenticate>";
 
     }
@@ -2677,6 +2726,98 @@ public sealed class XMPPConnection : IAsyncDisposable
         => _usingSasl2
                ? success.Child("additional-data")?.Value.Trim() ?? ""
                : StreamNegotiation.SaslPayload(success);
+
+    /// <summary>
+    /// The server-final-message taken out of a <c>&lt;continue/&gt;</c>, held
+    /// until the <c>&lt;success/&gt;</c> that ends the task.
+    /// </summary>
+    /// <remarks>
+    /// The final <c>&lt;success/&gt;</c> of a task exchange carries no
+    /// additional data - the mechanism finished several frames earlier. Without
+    /// keeping it, the signature check below would find nothing and refuse a
+    /// login that was correct in every respect.
+    /// </remarks>
+    private String? _completedTaskSignature;
+
+    /// <summary>
+    /// XEP-0388's task flow, and the one task this client knows: the SCRAM
+    /// upgrade of XEP-0480.
+    /// </summary>
+    /// <returns>
+    /// The frame that ends the exchange - a <c>&lt;success/&gt;</c> when all
+    /// went well.
+    /// </returns>
+    /// <remarks>
+    /// The order is the security of it. The server has already sent its
+    /// signature, which this method verifies before anything is computed: only
+    /// a server that knows the account's existing key material may ask for new
+    /// material to be derived. A <c>&lt;continue/&gt;</c> from a peer that
+    /// cannot produce the signature ends here with nothing sent.
+    /// </remarks>
+    private async Task<XElement> RunSaslTasksAsync(SCRAMAuthenticator  scram,
+                                                   XElement            continueElement,
+                                                   CancellationToken   ct)
+    {
+
+        var serverFinal = SaslSuccessPayload(continueElement);
+
+        if (serverFinal.Length == 0)
+            throw new AuthenticationException(
+                      "The server asked for a further step without a server-final-message - " +
+                      "its signature is thereby not checkable, and nothing may be computed for it.");
+
+        if (!scram.VerifyServerFinalMessage(serverFinal))
+            throw new AuthenticationException("Server signature invalid - possible MITM attack!");
+
+        _completedTaskSignature = serverFinal;
+
+        var offered = continueElement.Child("tasks")?.
+                          Elements().
+                          Where (e => e.Name.LocalName == "task").
+                          Select(e => e.Value.Trim()).
+                          ToArray() ?? [];
+
+        // Only a task this client asked for in its <authenticate/>. A server
+        // naming something else is not offering a choice, it is proposing work
+        // nobody agreed to.
+        var task = offered.FirstOrDefault(t => _offeredUpgrades.Contains(t, StringComparer.Ordinal));
+
+        if (task is null || ScramUpgrade.MechanismOf(task) is not SCRAMMechanism target)
+            throw new AuthenticationException(
+                      "The server asks for a task this client did not offer: " +
+                      $"{String.Join(", ", offered)}");
+
+        await SendAsync($"<next xmlns='urn:xmpp:sasl:2' task='{task}'/>");
+
+        var taskData = await ReceiveElementAsync(ct, "the salt for the SCRAM upgrade");
+
+        if (!IsSaslElement(taskData, "task-data"))
+            throw new AuthenticationException(
+                      $"Unexpected answer to <next/>: <{taskData.Name.LocalName}/>");
+
+        var salt = taskData.Child(ScramUpgrade.DataNamespace, "salt")
+                       ?? throw new AuthenticationException("The upgrade task brought no salt.");
+
+        var iterations = SCRAMAuthenticator.ReadIterationCount(salt.Attr("iterations") ?? "");
+
+        var saltedPassword = ScramUpgrade.SaltedPassword(target,
+                                                         _password,
+                                                         Convert.FromBase64String(salt.Value.Trim()),
+                                                         iterations);
+
+        await SendAsync("<task-data xmlns='urn:xmpp:sasl:2'>" +
+                        $"<hash xmlns='{ScramUpgrade.DataNamespace}'>" +
+                        Convert.ToBase64String(saltedPassword) +
+                        "</hash></task-data>");
+
+        UpgradedTo = target;
+
+        _logger.LogInformation(
+            "Stored key material for {Mechanism} derived for this account (XEP-0480)", target);
+
+        return await ReceiveElementAsync(ct, "the confirmation of the SCRAM upgrade");
+
+    }
 
     #endregion
 
@@ -2766,13 +2907,25 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         await SendAsync(SaslResponseFrame(clientFinal));
 
-        // Step 4: server-final-message (success or failure)
+        // Step 4: server-final-message (success, a task to run first, or
+        // failure).
         var final = await ReceiveElementAsync(ct, "the SCRAM server signature");
+
+        // XEP-0388, section 3.4: instead of confirming, the server may ask for
+        // one more step. The server-final-message rides along in it, so the
+        // signature is checked here exactly as it would have been - which
+        // matters more than it looks: everything the task does afterwards
+        // happens on the strength of this server having proved it knows the
+        // existing key material.
+        if (IsSaslElement(final, "continue"))
+        {
+            final = await RunSaslTasksAsync(scram, final, ct);
+        }
 
         if (IsSaslElement(final, "success"))
         {
 
-            var serverFinal = SaslSuccessPayload(final);
+            var serverFinal = _completedTaskSignature ?? SaslSuccessPayload(final);
 
             // RFC 5802, section 5: Checking the server signature is the second
             // half of SCRAM - it proves that the peer knows the password as

@@ -151,11 +151,11 @@ jobs:
       # where the setups that produce those far sides have always lived. So a
       # hosted runner can execute all of it.
       #
-      # Expect 1191 tests, and the two legs owe different numbers, which is the
+      # Expect 1197 tests, and the two legs owe different numbers, which is the
       # one thing worth reading carefully here:
       #
-      #   windows-latest       1188 passed, 3 skipped
-      #   debian-13-container  1190 passed, 1 skipped
+      #   windows-latest       1194 passed, 3 skipped
+      #   debian-13-container  1196 passed, 1 skipped
       #
       # The one skip both legs share is a property that exists only in STARTTLS
       # operation, and the fixture is parameterised over the TLS modes, so it

@@ -117,8 +117,8 @@ jobs:
 
       # The same set the gate runs, and the same numbers it owes:
       #
-      #   windows-latest       1191 tests, 1188 passed, 3 skipped
-      #   debian-13-container  1191 tests, 1190 passed, 1 skipped
+      #   windows-latest       1197 tests, 1194 passed, 3 skipped
+      #   debian-13-container  1197 tests, 1196 passed, 1 skipped
       #
       # The shared skip is a property that only exists in STARTTLS operation;
       # the two extra on Windows are the file modes, which that platform cannot

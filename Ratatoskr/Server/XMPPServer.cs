@@ -319,6 +319,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         public Boolean OfferSasl2 { get; set; } = true;
 
         /// <summary>
+        /// Whether this server offers SASL upgrade tasks (XEP-0480). Default
+        /// true; needs <see cref="OfferSasl2"/>, which carries them.
+        /// </summary>
+        public Boolean OfferScramUpgrades { get; set; } = true;
+
+        /// <summary>
+        /// The upgrade tasks this server can run.
+        /// </summary>
+        /// <remarks>
+        /// Every SCRAM mechanism this server implements - deliberately not just
+        /// the ones it currently offers.
+        ///
+        /// Tying it to <see cref="OfferedSaslMechanisms"/> was the first
+        /// instinct and it is wrong, because it forbids the case the extension
+        /// is for. An operator moving from SCRAM-SHA-1 to SCRAM-SHA-256 has
+        /// accounts with no SHA-256 material: announce SHA-256 before the
+        /// material exists and every login with it fails, which is the outage
+        /// the upgrade is meant to avoid. What they want is to collect the
+        /// material first, while still offering only what works, and to switch
+        /// the offer once enough accounts have been through. That is only
+        /// possible if an upgrade may name a mechanism that is not on offer
+        /// yet.
+        /// </remarks>
+        public IEnumerable<String> SupportedUpgradeTasks
+
+            => Enum.GetValues<SCRAMMechanism>().
+                    Select(ScramUpgrade.TaskNameOf).
+                    Distinct();
+
+        /// <summary>
         /// What actually goes into <c>&lt;mechanisms/&gt;</c>: the offered list,
         /// with the <c>-PLUS</c> variants added when there is a channel binding
         /// to back them.
@@ -751,9 +781,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// Creates an account a client may log in at.
         /// </summary>
         public XMPPAccount AddAccount(String localPart, String password = "pw")
+
+            => AddAccount(localPart, XMPPCredentials.FromPassword(password));
+
+        /// <summary>
+        /// Adds an account from credentials that already exist.
+        /// </summary>
+        /// <remarks>
+        /// The way an account arrives from somewhere else, and the only way to
+        /// produce one that holds key material for some mechanisms and not
+        /// others: <see cref="XMPPCredentials.FromPassword"/> derives every
+        /// mechanism at once, so an account made from a password never needs an
+        /// upgrade. A server that stored only SHA-1 material - which is what
+        /// ejabberd and Prosody do by default - looks like this instead, and it
+        /// is the situation XEP-0480 exists for.
+        /// </remarks>
+        public XMPPAccount AddAccount(String localPart, XMPPCredentials credentials)
         {
 
-            var account = new XMPPAccount($"{localPart}@{Domain}", password) {
+            var account = new XMPPAccount($"{localPart}@{Domain}", credentials) {
                               OnChanged = _accountStore.Save
                           };
 
@@ -1461,6 +1507,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     await HandleSaslResponseAsync(session, frame);
                     return;
 
+                // XEP-0388's task flow, which XEP-0480 rides on.
+                case "next":
+                    await HandleSasl2NextAsync(session, frame);
+                    return;
+
+                case "task-data":
+                    await HandleSasl2TaskDataAsync(session, frame);
+                    return;
+
                 case "abort":
                     await HandleSaslAbortAsync(session);
                     return;
@@ -1808,6 +1863,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                (OfferSasl2
                     ? "<authentication xmlns='urn:xmpp:sasl:2'>" +
                       String.Concat(AnnouncedSaslMechanisms.Select(m => $"<mechanism>{m}</mechanism>")) +
+
+                      // XEP-0480. What this server can teach itself, not what
+                      // any particular account needs - there is no account yet.
+                      // A client that wants one asks for it in <authenticate/>,
+                      // and only after the login is there anything to ask
+                      // whether the material is missing.
+                      (OfferScramUpgrades
+                           ? String.Concat(
+                                 SupportedUpgradeTasks.Select(
+                                     t => $"<upgrade xmlns='{ScramUpgrade.Namespace}'>{t}</upgrade>"))
+                           : "") +
+
                       "</authentication>"
                     : "") +
 
@@ -1972,6 +2039,151 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// own logins, and this server keeps no such list; parsing it to throw
         /// it away would only look like a feature.
         /// </remarks>
+        /// <summary>
+        /// Which upgrade this session should run now, or null for none.
+        /// </summary>
+        /// <remarks>
+        /// Three conditions, and the middle one is the whole point. The client
+        /// has to have asked - key material is not something to collect
+        /// uninvited. The account has to actually lack the mechanism, or the
+        /// exchange would cost a round trip to overwrite what is already there.
+        /// And the server has to be willing, which is the switch above.
+        ///
+        /// Only one at a time: XEP-0388 allows a sequence of tasks, and running
+        /// them one per login is enough for something that happens once in an
+        /// account's life.
+        /// </remarks>
+        private SCRAMMechanism? UpgradeWantedBy(XMPPSession session)
+        {
+
+            if (!OfferScramUpgrades || session.Account is null)
+                return null;
+
+            foreach (var task in session.RequestedUpgrades)
+            {
+
+                if (ScramUpgrade.MechanismOf(task) is not SCRAMMechanism mechanism)
+                    continue;
+
+                if (!SupportedUpgradeTasks.Contains(task, StringComparer.Ordinal))
+                    continue;
+
+                if (!session.Account.Credentials.Has(mechanism))
+                    return mechanism;
+
+            }
+
+            return null;
+
+        }
+
+        /// <summary>
+        /// XEP-0388, section 3.4: the client picks a task out of the
+        /// <c>&lt;continue/&gt;</c>.
+        /// </summary>
+        private async Task HandleSasl2NextAsync(XMPPSession session, String frame)
+        {
+
+            XElement next;
+
+            try
+            {
+                next = XElement.Parse(frame);
+            }
+            catch (System.Xml.XmlException)
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            var task = next.Attribute("task")?.Value;
+
+            // Against what this session was actually offered, not against what
+            // the server can do in general: a client that names a task it was
+            // not given is not choosing, it is guessing.
+            if (session.PendingUpgrade is not SCRAMMechanism pending ||
+                !String.Equals(task, ScramUpgrade.TaskNameOf(pending), StringComparison.Ordinal))
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            var credentials = session.Account!.Credentials;
+
+            await session.SendAsync(
+                "<task-data xmlns='urn:xmpp:sasl:2'>" +
+                $"<salt xmlns='{ScramUpgrade.DataNamespace}' iterations='{credentials.IterationCount}'>" +
+                Convert.ToBase64String(credentials.Salt) +
+                "</salt>" +
+                "</task-data>");
+
+        }
+
+        /// <summary>
+        /// The client's answer to the salt: the SaltedPassword for the new
+        /// mechanism (XEP-0480).
+        /// </summary>
+        /// <remarks>
+        /// From it the server derives the two keys RFC 5802 stores and keeps
+        /// them beside the ones it already had. The account gains a mechanism
+        /// and loses none - the login that is running used one of the old ones,
+        /// and taking it away underneath would end the session that just
+        /// upgraded it.
+        /// </remarks>
+        private async Task HandleSasl2TaskDataAsync(XMPPSession session, String frame)
+        {
+
+            if (session.PendingUpgrade is not SCRAMMechanism pending || session.Account is null)
+            {
+                await RefuseAuthenticationAsync(session, "not-authorized");
+                return;
+            }
+
+            XElement taskData;
+
+            try
+            {
+                taskData = XElement.Parse(frame);
+            }
+            catch (System.Xml.XmlException)
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            var hash = taskData.Child(ScramUpgrade.DataNamespace, "hash")?.Value.Trim();
+
+            Byte[] saltedPassword;
+
+            try
+            {
+                saltedPassword = Convert.FromBase64String(hash ?? "");
+            }
+            catch (FormatException)
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            // A SaltedPassword has the length of the mechanism's hash. Anything
+            // else is not short key material, it is a client that computed
+            // something other than what was asked for, and storing it would
+            // produce an account nobody can log into.
+            var expected = pending == SCRAMMechanism.ScramSha256 ? 32 : 20;
+
+            if (saltedPassword.Length != expected)
+            {
+                await RefuseAuthenticationAsync(session, "malformed-request");
+                return;
+            }
+
+            session.Account.UpgradeCredentials(pending, saltedPassword);
+            session.PendingUpgrade = null;
+
+            await SendSaslSuccessAsync(session, null);
+
+        }
+
         private async Task HandleSasl2AuthenticateAsync(XMPPSession session, String frame)
         {
 
@@ -2001,6 +2213,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var mechanism  = authenticate.Attribute("mechanism")?.Value ?? "";
             var payload    = authenticate.Child("initial-response")?.Value.Trim() ?? "";
+
+            // XEP-0480: which upgrades the client is willing to perform. Only
+            // recorded here - whether any of them is needed cannot be known
+            // until there is an account, which is after the exchange.
+            session.RequestedUpgrades.Clear();
+            session.RequestedUpgrades.AddRange(
+                authenticate.Elements().
+                             Where (e => e.Name.LocalName     == "upgrade" &&
+                                         e.Name.NamespaceName == ScramUpgrade.Namespace).
+                             Select(e => e.Value.Trim()).
+                             Where (t => t.Length > 0));
 
             if (!AnnouncedSaslMechanisms.Contains(mechanism, StringComparer.Ordinal))
             {
@@ -2146,6 +2369,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         ? "<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>"
                         : $"<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'>{additionalData}</success>");
                 return;
+            }
+
+            // XEP-0480: the login worked, and before it is confirmed there may
+            // be a task to run. Decided here rather than earlier because it
+            // needs the account, and there was no account until a moment ago.
+            //
+            // The mechanism's final data goes into the <continue/> instead of
+            // the <success/>, and that is not cosmetic: for SCRAM it is the
+            // server-final-message, and a client that never receives it cannot
+            // check the server signature. Withholding it until after the
+            // upgrade would mean computing new key material for a peer that has
+            // not yet proved it knows the old.
+            if (UpgradeWantedBy(session) is SCRAMMechanism wanted)
+            {
+
+                session.PendingUpgrade = wanted;
+
+                await session.SendAsync(
+                    "<continue xmlns='urn:xmpp:sasl:2'>" +
+                    (additionalData is not null
+                         ? $"<additional-data>{additionalData}</additional-data>"
+                         : "") +
+                    $"<tasks><task>{ScramUpgrade.TaskNameOf(wanted)}</task></tasks>" +
+                    "</continue>");
+
+                return;
+
             }
 
             await session.SendAsync(

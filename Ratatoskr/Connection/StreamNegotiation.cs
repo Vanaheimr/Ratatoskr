@@ -155,6 +155,31 @@ internal static class StreamNegotiation
     }
 
     /// <summary>
+    /// The SASL upgrade tasks the server offers (XEP-0480), as task names.
+    /// </summary>
+    /// <remarks>
+    /// Inside <c>&lt;authentication/&gt;</c>, because an upgrade is something
+    /// that happens during a SASL2 exchange and nowhere else. A server that
+    /// announces none - which is nearly all of them - yields an empty array,
+    /// and the client then asks for nothing.
+    /// </remarks>
+    public static string[] Sasl2UpgradeTasks(XElement features)
+    {
+
+        var container = features.Child(Sasl2Namespace, "authentication");
+
+        if (container is null)
+            return [];
+
+        return [.. container.Elements().
+                             Where (e => e.Name.LocalName     == "upgrade" &&
+                                         e.Name.NamespaceName == "urn:xmpp:sasl:upgrade:0").
+                             Select(e => e.Value.Trim()).
+                             Where (t => t.Length > 0)];
+
+    }
+
+    /// <summary>
     /// The channel-binding types offered (XEP-0440).
     /// </summary>
     /// <remarks>

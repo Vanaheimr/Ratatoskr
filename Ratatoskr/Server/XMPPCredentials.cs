@@ -227,6 +227,87 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #endregion
 
+        #region Has(mechanism) / Strongest()
+
+        /// <summary>
+        /// Are there keys for this mechanism?
+        /// </summary>
+        /// <remarks>
+        /// The question XEP-0480 exists for. Credentials from a password hold
+        /// every mechanism, so this is always true for them; credentials from a
+        /// store hold whatever was stored, and an account carried over from a
+        /// server that computed only SHA-1 material cannot answer a SHA-256
+        /// challenge no matter how willing both ends are.
+        /// </remarks>
+        public Boolean Has(SCRAMMechanism mechanism)
+            => _keys.ContainsKey(mechanism);
+
+        /// <summary>
+        /// The strongest mechanism there are keys for.
+        /// </summary>
+        private SCRAMMechanism Strongest()
+            => _keys.ContainsKey(SCRAMMechanism.ScramSha256)
+                   ? SCRAMMechanism.ScramSha256
+                   : _keys.Keys.First();
+
+        #endregion
+
+        #region WithUpgrade(mechanism, saltedPassword)
+
+        /// <summary>
+        /// These credentials plus keys for one further mechanism, derived from
+        /// a SaltedPassword the client computed (XEP-0480).
+        /// </summary>
+        /// <param name="saltedPassword">
+        /// <c>Hi(Normalize(password), Salt, IterationCount)</c> under the new
+        /// mechanism's hash - the value the client sends as
+        /// <c>&lt;hash/&gt;</c>.
+        /// </param>
+        /// <remarks>
+        /// <b>The salt is this account's existing one, not a fresh one.</b>
+        /// XEP-0480 has the server choose the salt and the iteration count for
+        /// the upgrade, and choosing the ones already on file is within that -
+        /// it also keeps the model honest, because these credentials carry a
+        /// single salt for all their mechanisms, exactly as
+        /// <see cref="FromPassword"/> produces them. A per-mechanism salt would
+        /// be a change to what an account *is* and to every store that holds
+        /// one, for no gain: the two derivations run through different hashes,
+        /// so sharing a salt between them leaks nothing that would not leak
+        /// anyway.
+        ///
+        /// A new object rather than a mutation, because credentials are handed
+        /// out by reference and an account being upgraded on one connection
+        /// must not change under another that is mid-exchange.
+        /// </remarks>
+        public XMPPCredentials WithUpgrade(SCRAMMechanism mechanism, Byte[] saltedPassword)
+        {
+
+            var keys = new Dictionary<SCRAMMechanism, SCRAMKeys>(_keys)
+                       {
+                           [mechanism] = KeysFromSaltedPassword(mechanism, saltedPassword)
+                       };
+
+            return new XMPPCredentials([.. _salt], IterationCount, keys);
+
+        }
+
+        /// <summary>
+        /// The two keys RFC 5802 derives from a SaltedPassword - everything
+        /// after the PBKDF2, which is the half the client did.
+        /// </summary>
+        public static SCRAMKeys KeysFromSaltedPassword(SCRAMMechanism  mechanism,
+                                                       Byte[]          saltedPassword)
+        {
+
+            var clientKey = Hmac(mechanism, saltedPassword, "Client Key"u8.ToArray());
+
+            return new SCRAMKeys(StoredKey: Hash(mechanism, clientKey),
+                                 ServerKey: Hmac(mechanism, saltedPassword, "Server Key"u8.ToArray()));
+
+        }
+
+        #endregion
+
         #region Verify(password)
 
         /// <summary>
@@ -242,7 +323,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         public Boolean Verify(String password)
         {
 
-            var mechanism = SCRAMMechanism.ScramSha256;
+            // The strongest mechanism there are keys for, and not
+            // SCRAM-SHA-256 outright as this said until now. Credentials built
+            // by FromPassword hold every mechanism, so the difference never
+            // showed - but FromStored may hold a subset, which is exactly what
+            // an account imported from a server that only ever had SHA-1
+            // material looks like. Against one of those the old line threw a
+            // KeyNotFoundException out of a PLAIN login: not a refusal, a
+            // crash, and on a path a stranger can reach.
+            var mechanism = Strongest();
 
             SCRAMKeys candidate;
 

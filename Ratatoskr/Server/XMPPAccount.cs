@@ -105,7 +105,32 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// The credentials for the SASL authentication - derived, not in the
         /// clear.
         /// </summary>
-        public XMPPCredentials Credentials { get; }
+        public XMPPCredentials Credentials { get; private set; }
+
+        /// <summary>
+        /// Adds key material for a further SCRAM mechanism, derived from a
+        /// SaltedPassword the client computed (XEP-0480).
+        /// </summary>
+        /// <remarks>
+        /// Adds, and takes nothing away. The login that just ran used one of
+        /// the mechanisms already on file, and removing those underneath it
+        /// would end the very session doing the upgrading - and lock out every
+        /// other client of this account that has not been through it yet, which
+        /// is the outage the whole extension exists to avoid.
+        ///
+        /// <c>OnChanged</c> is what makes it worth doing at all: an upgrade
+        /// that lives only in this process is repeated at every login and
+        /// survives no restart.
+        /// </remarks>
+        public void UpgradeCredentials(SCRAMMechanism Mechanism, Byte[] SaltedPassword)
+        {
+
+            lock (_lock)
+                Credentials = Credentials.WithUpgrade(Mechanism, SaltedPassword);
+
+            OnChanged?.Invoke(this);
+
+        }
 
         /// <summary>A snapshot of the server-side roster.</summary>
         public IReadOnlyList<RosterEntry> Roster

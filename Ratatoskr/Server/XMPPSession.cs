@@ -477,6 +477,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         internal Boolean UsesSasl2 { get; set; }
 
+        /// <summary>
+        /// The upgrade tasks the client asked for in its
+        /// <c>&lt;authenticate/&gt;</c> (XEP-0480).
+        /// </summary>
+        /// <remarks>
+        /// Asked for, not granted. Whether any of them actually runs is decided
+        /// after the login, when there is an account to ask whether it lacks
+        /// the material - before that the server does not know whose account it
+        /// is, and answering the question earlier would be answering it about a
+        /// name a stranger typed.
+        /// </remarks>
+        internal List<String> RequestedUpgrades { get; } = [];
+
+        /// <summary>
+        /// The mechanism an upgrade is running for, between the
+        /// <c>&lt;next/&gt;</c> and the client's hash.
+        /// </summary>
+        internal SCRAMMechanism? PendingUpgrade { get; set; }
+
         /// <summary>All frames received from the client, in the order they arrived.</summary>
         public IReadOnlyList<String> Received
         {
