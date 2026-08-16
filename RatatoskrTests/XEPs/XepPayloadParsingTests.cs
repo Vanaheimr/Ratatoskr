@@ -153,6 +153,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// no attribute order - a server writing them the other way round was
         /// silently ignored.
         /// </summary>
+        /// <remarks>
+        /// A message goes out first, and that is not decoration. A marker is
+        /// only believed from whoever the message it marks was sent to, so
+        /// without one there is nothing for the marker to be about and the
+        /// parsing would never be reached. The identifier therefore comes from
+        /// the sending rather than being made up here; what is measured stays
+        /// the attribute order.
+        /// </remarks>
         [Test]
         public async Task ChatMarker_WithAttributesInAnyOrder_IsRecognised()
         {
@@ -162,16 +170,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             ChatMarker? reported = null;
             client.OnChatMarker += marker => reported = marker;
 
+            var id = await client.Connection.SendMessageAsync(Bob, "markable", markable: true);
+
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat'>" +
-                "<displayed id='abc-123' xmlns='urn:xmpp:chat-markers:0'/></message>");
+                $"<displayed id='{id}' xmlns='urn:xmpp:chat-markers:0'/></message>");
 
             await WaitFor(() => reported is not null, "the reported chat marker");
 
             Assert.Multiple(() =>
             {
                 Assert.That(reported!.Type,       Is.EqualTo(ChatMarkerType.Displayed));
-                Assert.That(reported!.MessageId,  Is.EqualTo("abc-123"));
+                Assert.That(reported!.MessageId,  Is.EqualTo(id));
             });
 
         }

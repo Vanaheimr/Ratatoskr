@@ -1754,6 +1754,36 @@ public sealed class XMPPConnection : IAsyncDisposable
             PubSubSubscribeAuthorization.TryReadRequest(form, out var application))
         {
 
+            // <b>Only from a service.</b> Per XEP-0060, section 8.6 this
+            // request is sent by whoever hosts the node - a PubSub component,
+            // or one's own server for a PEP node on one's own account. It was
+            // taken from anybody at all, so any contact could put a question in
+            // front of the user that reads "somebody applies for access to your
+            // node", with the applicant and the node of their choosing. Whoever
+            // then types /pubsub request grant is granting what the stranger
+            // wrote down.
+            //
+            // Recognised by the missing localpart rather than by comparing
+            // against a configured service: a component is addressed as
+            // "pubsub.example.com" and a user never is - the server stamps a
+            // client's full JID onto everything it sends. That covers accounts
+            // with nodes on several services, which naming one would not.
+            var fromIsAService = !JidUtilities.Bare(from).Contains('@');
+            var fromIsOwnself  = JidUtilities.Bare(from).Equals(BareJid, StringComparison.OrdinalIgnoreCase);
+
+            if (!fromIsAService && !fromIsOwnself)
+            {
+
+                _logger.LogWarning("PubSub: {From} sends a subscription request for {Node} - " +
+                                   "only the service hosting a node asks that",
+                                   from, application!.NodeId);
+
+                OnSpoofingAttempt?.Invoke($"PubSub subscription request from {from}, which hosts no node");
+
+                return;
+
+            }
+
             _logger.LogInformation("PubSub: {Who} applies for {Node}", application!.SubscriberJid, application.NodeId);
 
             OnPubSubSubscriptionRequest?.Invoke(application);
@@ -1827,8 +1857,29 @@ public sealed class XMPPConnection : IAsyncDisposable
         var chatMarker = ChatMarkers.Parse(element, from);
         if (chatMarker != null)
         {
+
+            // The same check XEP-0184 receipts have had all along, and it was
+            // missing here. A marker says "your message X has been read", and
+            // whoever displays that without asking who said so lets a stranger
+            // put a read mark on a message that went to somebody else. The
+            // sender is honestly named - the server stamps it - but the
+            // statement is about the message, not about them, and that is
+            // exactly where the false one lands.
+            if (!Receipts.WasSentTo(chatMarker.MessageId, from))
+            {
+
+                _logger.LogWarning("Chat marker spoofing: {From} marks {Id}, which was not sent there",
+                                   from, chatMarker.MessageId);
+
+                OnSpoofingAttempt?.Invoke($"Chat marker from {from} for a message that was not sent there");
+
+                return;
+
+            }
+
             OnChatMarker?.Invoke(chatMarker);
             return;
+
         }
 
         // XEP-0184: Receipt
@@ -3101,6 +3152,12 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (markable)
         {
             sb.Append(ChatMarkers.Markable);
+
+            // Tracked for the same reason a receipt request is: a marker is an
+            // answer about this message, and an answer is only worth something
+            // when it comes from whoever it was addressed to. Both flags write
+            // into the same memory; TrackMessage bears being called twice.
+            Receipts.TrackMessage(messageId, to);
         }
 
         // XEP-0085: Chat State
