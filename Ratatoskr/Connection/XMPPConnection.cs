@@ -287,7 +287,22 @@ public sealed class XMPPConnection : IAsyncDisposable
     // State
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
     public string FullJid { get; private set; } = string.Empty;
-    public string BareJid => JidUtilities.Bare(FullJid);
+
+    /// <summary>
+    /// The account this connection belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Read off the bound JID once there is one, and otherwise off the address
+    /// this connection was built with. The second half is new and closes a
+    /// small hole: the bare JID is settled at construction - authentication
+    /// decides it, binding only appends a resource - yet before the first
+    /// connect this returned the empty string, because it had nothing but
+    /// <see cref="FullJid"/> to look at.
+    /// </remarks>
+    public string BareJid => FullJid.Length > 0
+                                 ? JidUtilities.Bare(FullJid)
+                                 : _jid;
+
     public string Domain => _domain;
 
     /// <summary>
@@ -414,15 +429,54 @@ public sealed class XMPPConnection : IAsyncDisposable
                           ILoggerFactory?    LoggerFactory   = null)
     {
 
-        _jid       = jid;
         _password  = password;
 
-        var parts  = jid.Split('@');
-        if (parts.Length != 2)
-            throw new ArgumentException("The JID has to be in the format 'user@domain'", nameof(jid));
+        // Parsed per RFC 7622 and no longer split at the '@'. JidUtilities did
+        // this correctly all along and was used everywhere except here - at the
+        // one boundary where the address comes from a human being.
+        //
+        // The split was wrong in both directions. "alice@example.com/phone" has
+        // one '@', so it passed, and the domainpart became "example.com/phone";
+        // the endpoint built out of it reads wss://example.com/phone:5443/ws,
+        // and the failure that follows names none of this. And RFC 7622's own
+        // example 15, "a.example.com/b@example.net", was read as the localpart
+        // "a.example.com/b" - a resourcepart may carry an '@', a localpart may
+        // not, which is why the section splits at the '/' first and only then
+        // at the '@'.
+        //
+        // What the parse adds beyond the splitting is the preparation: PRECIS
+        // for the localpart, IDNA for the domain. "ALICE@Example.COM" reaches
+        // the server as what it is instead of as typed.
+        JidParts parts;
 
-        _username  = parts[0];
-        _domain    = parts[1];
+        try
+        {
+            parts = JidUtilities.Parse(jid);
+        }
+        catch (JidFormatException e)
+        {
+            throw new ArgumentException(e.Message, nameof(jid), e);
+        }
+
+        // A bare domain is a JID and not a login. Said separately, because
+        // "example.com" parses perfectly well and the objection to it is a
+        // different one.
+        if (parts.Localpart is null)
+            throw new ArgumentException(
+                      $"'{jid}' names a domain and no account. A login JID has the form " +
+                      "'user@domain'.",
+                      nameof(jid));
+
+        _jid       = parts.Bare;
+        _username  = parts.Localpart;
+        _domain    = parts.Domainpart;
+
+        // A resource typed along is a wish and not a mistake: whoever writes
+        // "alice@example.com/phone" is saying which device this is. It only
+        // sets the default - <see cref="Resource"/> stays settable, and the
+        // server has the last word at binding anyway.
+        if (parts.Resourcepart is not null)
+            Resource = parts.Resourcepart;
 
         // Kept apart: without one, the host-meta of the domain is asked before
         // the first connect (XEP-0156). Whoever names an endpoint is not asked
