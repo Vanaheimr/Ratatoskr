@@ -1152,13 +1152,26 @@ public sealed class XMPPConnection : IAsyncDisposable
             // SCRAM-SHA-256 > SCRAM-SHA-1 > PLAIN.
             //
             // A -PLUS mechanism is only a candidate when there is something to
-            // bind to. Choosing one without it would send a GS2 header
-            // promising a binding that is not there, and the exchange would die
-            // at the proof with nothing a reader could act on. Note that the
-            // *full* announcement stays in _offeredMechanisms regardless: what
-            // XEP-0474 hashes is what the server offered, not what this client
-            // was able to use.
-            var candidates = ChannelBindingData is not null
+            // bind to AND the server has said it accepts the *type* we can
+            // produce. Having the data is not enough, and that was this
+            // client's mistake: tls-server-end-point is derivable from any
+            // server certificate, so "do we have binding data" is true over
+            // every TLS connection, -PLUS came first in the ranking, and the
+            // GS2 header then promised a binding the far side had never heard
+            // of. Prosody 13 and ejabberd 24.12 answered <failure/> at the
+            // first frame; 14 of 33 conformance tests died at the login, while
+            // 1226 tests against our own server passed, because there both
+            // sides compute the same binding and agree (D108).
+            //
+            // The announcement is XEP-0440's <sasl-channel-binding/>. A server
+            // that sends none - which is every server speaking classic SASL -
+            // leaves the list empty, and then no -PLUS is a candidate. That is
+            // the safe direction: an unbound login works, a wrongly bound one
+            // does not happen at all.
+            var canBind = ChannelBindingData is not null &&
+                          _offeredChannelBindings.Contains(TlsServerEndPoint.Name);
+
+            var candidates = canBind
                                  ? mechanisms
                                  : mechanisms.Where(m => !m.EndsWith("-PLUS", StringComparison.Ordinal));
 
@@ -3237,7 +3250,47 @@ public sealed class XMPPConnection : IAsyncDisposable
                         // announcement having been stripped in flight, and
                         // refuses - a downgrade caught without either side
                         // implementing anything experimental.
-                        CanDoChannelBinding  = binding is not null,
+                        //
+                        // Which is exactly why it is off, and why the search
+                        // for a condition to switch it on again was abandoned
+                        // rather than refined. RFC 5802 section 6 obliges a
+                        // server that supports channel binding to fail on "y":
+                        // from where it stands, "I could bind and you offered
+                        // nothing" is either a lie or an announcement stripped
+                        // in flight. We are the third case the flag has no room
+                        // for - able to compute a binding, and unable to use
+                        // one the far side will take.
+                        //
+                        // Two conditions were tried against the real servers,
+                        // and the second is what settles it:
+                        //
+                        //   "no -PLUS mechanism offered"   fixed Prosody 13,
+                        //       which does offer SCRAM-SHA-1-PLUS. ejabberd
+                        //       24.12 offers none, so this still sent "y" and
+                        //       ejabberd answered "Invalid channel binding".
+                        //
+                        //   "and no XEP-0440 announcement" changed nothing:
+                        //       ejabberd's stream features over this connection
+                        //       carry <mechanisms/> and NOTHING else - no
+                        //       -PLUS, no <sasl-channel-binding/> - and it
+                        //       refuses "y" all the same.
+                        //
+                        // So there is no signal in the announcement from which
+                        // this client could conclude that "y" is safe. It is a
+                        // claim about the server, made by the client, that the
+                        // server alone can check - and getting it wrong costs
+                        // the login outright, because a SASL <failure/> ends
+                        // the exchange.
+                        //
+                        // What it would have bought is downgrade detection, and
+                        // that is worth nothing here for a reason D108 spells
+                        // out: this client can perform no binding any real
+                        // server accepts, so an attacker stripping the -PLUS
+                        // announcement takes away something we were never going
+                        // to use. The day tls-exporter (RFC 9266) becomes
+                        // reachable, "y" becomes worth sending again - and then
+                        // it will be true.
+                        CanDoChannelBinding  = false,
 
                         // What the last authentication derived. The PBKDF2
                         // behind it is the most expensive thing in this
