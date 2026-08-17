@@ -73,7 +73,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.SendRawAsync($"<presence><priority>{priority}</priority></presence>");
 
-            await WaitFor(() => Server.SessionOf(client.FullJid!)?.PresencePriority == priority,
+            await WaitFor(() => Server.SessionOf(client.FullJid!.ToString())?.PresencePriority == priority,
                           $"the priority {priority} for {resource}");
 
             return client;

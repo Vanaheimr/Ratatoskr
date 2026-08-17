@@ -163,7 +163,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync();
 
-            await alice.SendMessageAsync($"alice@{Server.Domain}", "To myself");
+            await alice.SendMessageAsync(JID.Parse($"alice@{Server.Domain}"), "To myself");
 
             await WaitAgainst(() => GlobalErrorWatchAttribute.Errors.Count > 0,
                               "a report although nothing went wrong");

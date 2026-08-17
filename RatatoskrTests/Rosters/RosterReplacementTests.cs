@@ -126,10 +126,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "Precondition: both contacts are there.");
 
             var removed = new List<String>();
-            client.Connection.Roster.OnItemRemoved += (timestamp, sender, jid, ct) => { removed.Add(jid); return Task.CompletedTask; };
+            client.Connection.Roster.OnItemRemoved += (timestamp, sender, jid, ct) => { removed.Add(jid.ToString()); return Task.CompletedTask; };
 
             await ReconnectAround(client,
-                                  () => Server.GetAccount(client.BareJid)!
+                                  () => Server.GetAccount(client.BareJid.ToString())!
                                               .RemoveRosterEntry($"bob@{Server.Domain}"));
 
             await WaitFor(() => client.Connection.Roster.Items.Count == 1,
@@ -138,10 +138,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(client.Connection.Roster.GetItem($"bob@{Server.Domain}"), Is.Null,
+                Assert.That(client.Connection.Roster.GetItem(JID.Parse($"bob@{Server.Domain}")), Is.Null,
                             "The deleted contact must not come back.");
 
-                Assert.That(client.Connection.Roster.GetItem($"carol@{Server.Domain}"), Is.Not.Null,
+                Assert.That(client.Connection.Roster.GetItem(JID.Parse($"carol@{Server.Domain}")), Is.Not.Null,
                             "The remaining one has to stay.");
 
                 Assert.That(removed, Does.Contain($"bob@{Server.Domain}"),
@@ -180,7 +180,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => client.Connection.Roster.Items.Count == 2,
                           "the second contact");
 
-            Assert.That(client.Connection.Roster.GetItem($"bob@{Server.Domain}"), Is.Not.Null,
+            Assert.That(client.Connection.Roster.GetItem(JID.Parse($"bob@{Server.Domain}")), Is.Not.Null,
                         "The unchanged contact must not be lost in the process.");
 
         }
@@ -220,12 +220,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // account triggers no push, and the test would then only check its
             // own patience.
             await client.Connection.SendRawAsync(
-                      RosterStanzaBuilder.SetItem($"bob@{Server.Domain}", "Robert"));
+                      RosterStanzaBuilder.SetItem(JID.Parse($"bob@{Server.Domain}"), "Robert"));
 
-            await WaitFor(() => client.Connection.Roster.GetItem($"bob@{Server.Domain}")?.Name == "Robert",
+            await WaitFor(() => client.Connection.Roster.GetItem(JID.Parse($"bob@{Server.Domain}"))?.Name == "Robert",
                           "the renamed contact");
 
-            Assert.That(client.Connection.Roster.GetItem($"carol@{Server.Domain}"), Is.Not.Null,
+            Assert.That(client.Connection.Roster.GetItem(JID.Parse($"carol@{Server.Domain}")), Is.Not.Null,
                         "A push about Bob must not delete Carol.");
 
         }
@@ -251,9 +251,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var added   = new List<String>();
             var changed  = new List<String>();
 
-            roster.OnItemRemoved += (timestamp, sender, jid, ct)  => { removed.Add(jid); return Task.CompletedTask; };
-            roster.OnItemAdded   += (timestamp, sender, item, ct) => { added.Add(item.Jid); return Task.CompletedTask; };
-            roster.OnItemUpdated += (timestamp, sender, item, ct) => { changed.Add(item.Jid); return Task.CompletedTask; };
+            roster.OnItemRemoved += (timestamp, sender, jid, ct)  => { removed.Add(jid.ToString()); return Task.CompletedTask; };
+            roster.OnItemAdded   += (timestamp, sender, item, ct) => { added.Add(item.Jid.ToString()); return Task.CompletedTask; };
+            roster.OnItemUpdated += (timestamp, sender, item, ct) => { changed.Add(item.Jid.ToString()); return Task.CompletedTask; };
 
             // Bob stays (with a new name), Carol falls away, Dave comes along.
             await roster.ReplaceAllAsync([
@@ -264,9 +264,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(roster.GetItem("bob@example.com")?.Name, Is.EqualTo("Robert"));
-                Assert.That(roster.GetItem("dave@example.com"),      Is.Not.Null);
-                Assert.That(roster.GetItem("carol@example.com"),     Is.Null);
+                Assert.That(roster.GetItem(JID.Parse("bob@example.com"))?.Name, Is.EqualTo("Robert"));
+                Assert.That(roster.GetItem(JID.Parse("dave@example.com")),      Is.Not.Null);
+                Assert.That(roster.GetItem(JID.Parse("carol@example.com")),     Is.Null);
 
                 Assert.That(roster.Items, Has.Count.EqualTo(2));
 

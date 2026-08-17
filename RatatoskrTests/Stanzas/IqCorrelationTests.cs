@@ -95,7 +95,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         $"to='{client.FullJid}'/>", ct);
             };
 
-            var fetched = await client.Connection.FetchOmemoBundleAsync(asked, 4711)
+            var fetched = await client.Connection.FetchOmemoBundleAsync(JID.Parse(asked), 4711)
                                       .WaitAsync(TimeSpan.FromSeconds(3));
 
             Assert.Multiple(() =>
@@ -135,7 +135,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(connection.AnswerBelongsHere(null, null),                Is.True,
                             "No 'from' is one's own server.");
-                Assert.That(connection.AnswerBelongsHere(null, connection.BareJid),  Is.True,
+                Assert.That(connection.AnswerBelongsHere(null, connection.BareJid.ToString()),  Is.True,
                             "One's own bare JID is one's own server.");
                 Assert.That(connection.AnswerBelongsHere(null, Server.Domain),       Is.True,
                             "The domain is one's own server.");
@@ -233,7 +233,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(connection.AnswerBelongsHere(null,                  null), Is.True);
-                Assert.That(connection.AnswerBelongsHere(connection.BareJid,    null), Is.True);
+                Assert.That(connection.AnswerBelongsHere(connection.BareJid.ToString(),    null), Is.True);
                 Assert.That(connection.AnswerBelongsHere("bob@far.example",     null), Is.True);
             });
 

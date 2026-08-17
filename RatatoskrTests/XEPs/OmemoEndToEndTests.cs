@@ -82,7 +82,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             const String secret = "Shall we meet at eight?";
 
-            var skipped = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", secret);
+            var skipped = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), secret);
 
             Assert.That(skipped, Is.Empty,
                         "Not all devices could read along: " +
@@ -152,16 +152,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob = new List<String>();
             bob.OnEncryptedMessage += (timestamp, sender, n, _, ct) => { lock (atBob) atBob.Add(n.Body);  return Task.CompletedTask; };
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the first");
             await WaitFor(() => { lock (atBob) return atBob.Count == 1; }, "the first message");
 
             // Without a reply in between.
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the second");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the second");
             await WaitFor(() => { lock (atBob) return atBob.Count == 2; },
                           "the second message without a reply in between");
 
             // And a third one, so that the step after it sits as well.
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the third");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the third");
             await WaitFor(() => { lock (atBob) return atBob.Count == 3; }, "the third message");
 
             Assert.That(atBob, Is.EqualTo(new[] { "the first", "the second", "the third" }));
@@ -209,7 +209,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = false;
             bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "written to Bob");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "written to Bob");
 
             await WaitFor(() => arrived,          "the message at Bob");
             await WaitFor(() => atTheSecond is not null,
@@ -231,7 +231,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.That(OmemoEncryptedElement.TryRead(element, out var loaded), Is.True);
 
-            Assert.That(loaded!.KeyFor($"alice@{Server.Domain}", alice.Omemo!.Identity.DeviceId),
+            Assert.That(loaded!.KeyFor(JID.Parse($"alice@{Server.Domain}"), alice.Omemo!.Identity.DeviceId),
                         Is.Null,
                         "The sending device got a key entry for itself.");
 
@@ -272,7 +272,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             OmemoDecrypted? info = null;
             bob.OnEncryptedMessage += (timestamp, sender, _, o, ct) => { info = o; return Task.CompletedTask; };
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "signed from the inside");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "signed from the inside");
 
             await WaitFor(() => info is not null, "the message at Bob");
 
@@ -376,11 +376,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             for (var i = 0; i < 3; i++)
             {
 
-                await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", $"from Alice {i}");
+                await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), $"from Alice {i}");
                 await WaitFor(() => { lock (atBob) return atBob.Count == i + 1; },
                               $"message {i} at Bob");
 
-                await bob.SendEncryptedMessageAsync($"alice@{Server.Domain}", $"from Bob {i}");
+                await bob.SendEncryptedMessageAsync(JID.Parse($"alice@{Server.Domain}"), $"from Bob {i}");
                 await WaitFor(() => { lock (atAlice) return atAlice.Count == i + 1; },
                               $"reply {i} at Alice");
 
@@ -424,7 +424,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = false;
             bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "Hello");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Hello");
             await WaitFor(() => arrived, "the message at Bob");
 
             var notedAtBob = bob.Omemo!.KnownDevices()
@@ -442,7 +442,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(notedAtBob.BareJid, Is.EqualTo($"alice@{Server.Domain}"));
 
                 // And the decision can be made.
-                Assert.That(bob.Omemo.SetTrust($"alice@{Server.Domain}",
+                Assert.That(bob.Omemo.SetTrust(JID.Parse($"alice@{Server.Domain}"),
                                                alice.Omemo.Identity.DeviceId,
                                                OmemoTrust.Trusted),
                             Is.True);
@@ -481,17 +481,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
             // The first message makes Bob's device known at Alice.
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the first");
             await WaitFor(() => arrived, "the first message");
 
-            Assert.That(alice.Omemo!.SetTrust($"bob@{Server.Domain}",
+            Assert.That(alice.Omemo!.SetTrust(JID.Parse($"bob@{Server.Domain}"),
                                               bob.Omemo!.Identity.DeviceId,
                                               OmemoTrust.Distrusted),
                         Is.True);
 
             arrived = false;
 
-            var skipped = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the second");
+            var skipped = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the second");
 
             Assert.Multiple(() =>
             {
@@ -526,13 +526,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync("alice");
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
 
             Server.AddAccount("bob");
 
             var before = session.Received.Count;
 
-            Assert.That(async () => await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "secret"),
+            Assert.That(async () => await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "secret"),
                         Throws.TypeOf<InvalidOperationException>());
 
             await WaitAgainst(() => session.Received.Skip(before)
@@ -582,7 +582,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = false;
             bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
-            await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the first");
             await WaitFor(() => arrived, "the message at Bob");
 
             var after = bobsStore.LoadIdentity()!.PreKeys.Select(pk => pk.Id).ToHashSet();
@@ -639,7 +639,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = false;
             bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
-            var skipped = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "secret");
+            var skipped = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "secret");
 
             Assert.Multiple(() =>
             {
@@ -686,7 +686,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.EnableOmemoAsync();
 
-            var list = await alice.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
+            var list = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
 
             Assert.Multiple(() =>
             {
@@ -729,7 +729,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await first.EnableOmemoAsync();
             await second.EnableOmemoAsync();
 
-            var list = await second.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
+            var list = await second.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
 
             Assert.Multiple(() =>
             {

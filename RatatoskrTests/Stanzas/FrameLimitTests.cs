@@ -120,7 +120,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client  = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
-            var session = Server.SessionOf(client.FullJid)!;
+            var session = Server.SessionOf(client.FullJid.ToString())!;
 
             var dropped = false;
             client.Connection.OnStateChanged += (timestamp, sender, _, now, ct) => {

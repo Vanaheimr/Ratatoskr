@@ -113,7 +113,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
             var errors  = ErrorBasket(alice);
 
             await alice.SendRawAsync(frame);
@@ -213,7 +213,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
@@ -247,7 +247,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             var before = session.OpenCount;
             var errors = ErrorBasket(alice);
@@ -290,7 +290,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
             var errors  = ErrorBasket(alice);
 
             await alice.SendRawAsync(frame);
@@ -323,7 +323,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             var acknowledgements = new ConcurrentQueue<String>();
 
@@ -395,7 +395,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await AloneAsync();
             var bob   = await ConnectClientAsync("bob");
 
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             // Something the server sends to Alice and that stays lying about
             // unacknowledged.
@@ -457,7 +457,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
             var errors  = ErrorBasket(alice);
 
             var replies = new ConcurrentQueue<String>();
@@ -515,7 +515,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             var replies = new ConcurrentQueue<String>();
 
@@ -565,7 +565,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await AloneAsync();
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
             var errors  = ErrorBasket(alice);
 
             await alice.SendRawAsync(

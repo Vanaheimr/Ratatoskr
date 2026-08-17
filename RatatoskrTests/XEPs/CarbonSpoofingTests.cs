@@ -49,7 +49,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private const String Mine = "alice@example.org";
 
         private static CarbonManager Manager()
-            => new(Mine);
+            => new(JID.Parse(Mine));
 
         /// <summary>A carbon as XEP-0280 builds one.</summary>
         private static XElement Carbon(String from, String innerFrom, String kind = "received")
@@ -77,7 +77,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void AGenuineCarbon_IsUnwrapped()
         {
 
-            var inner = Manager().UnwrapVerified(Carbon(Mine, "bob@example.com"), Mine);
+            var inner = Manager().UnwrapVerified(Carbon(Mine, "bob@example.com"), JID.Parse(Mine));
 
             Assert.Multiple(() =>
             {
@@ -111,12 +111,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(Manager().UnwrapVerified(Carbon("mallory@example.org", "bob@example.com"),
-                                                     "mallory@example.org"),
+                                                     JID.Parse("mallory@example.org")),
                             Is.Null);
 
                 // The same local part on another domain is a different person.
                 Assert.That(Manager().UnwrapVerified(Carbon("alice@evil.example", "bob@example.com"),
-                                                     "alice@evil.example"),
+                                                     JID.Parse("alice@evil.example")),
                             Is.Null);
 
             });
@@ -156,7 +156,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // From one's own address, so the sender check passes - and it is
             // still not a carbon.
-            Assert.That(Manager().UnwrapVerified(stanza, Mine), Is.Null);
+            Assert.That(Manager().UnwrapVerified(stanza, JID.Parse(Mine)), Is.Null);
 
         }
 
@@ -173,7 +173,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void ASentCarbon_IsUnwrappedToo()
         {
 
-            var inner = Manager().UnwrapVerified(Carbon(Mine, $"{Mine}/phone", "sent"), Mine);
+            var inner = Manager().UnwrapVerified(Carbon(Mine, $"{Mine}/phone", "sent"), JID.Parse(Mine));
 
             Assert.That(inner?.Attr("from"), Is.EqualTo($"{Mine}/phone"));
 
@@ -205,7 +205,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(SceEnvelope.TryRead(withoutSender, out _, "bob@example.com"),
+                Assert.That(SceEnvelope.TryRead(withoutSender, out _, JID.Parse("bob@example.com")),
                             Is.False,
                             "Expected a sender, got none - that is not a match.");
 
@@ -237,9 +237,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(SceEnvelope.TryRead(envelope, out _, "bob@example.com/phone"), Is.True,
+                Assert.That(SceEnvelope.TryRead(envelope, out _, JID.Parse("bob@example.com/phone")), Is.True,
                             "Compared bare - another resource of the same account is the same account.");
-                Assert.That(SceEnvelope.TryRead(envelope, out _, "mallory@example.com"),   Is.False);
+                Assert.That(SceEnvelope.TryRead(envelope, out _, JID.Parse("mallory@example.com")),   Is.False);
             });
 
         }

@@ -106,7 +106,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {
@@ -139,7 +139,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferedSaslMechanisms.Add("SCRAM-SHA-1");
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {
@@ -166,7 +166,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferedSaslMechanisms.Add("PLAIN");
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {
@@ -252,7 +252,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             var success = session.Sent.FirstOrDefault(f => f.StartsWith("<success", StringComparison.Ordinal));
 
@@ -393,7 +393,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // stands on the wire - otherwise the client half would stay
             // uncovered, and a server that does not prepare itself would no
             // longer let us in.
-            var session   = Server.SessionOf(overPlain.FullJid)!;
+            var session   = Server.SessionOf(overPlain.FullJid.ToString())!;
             var expected  = Convert.ToBase64String(
                                 System.Text.Encoding.UTF8.GetBytes($"\0alice\0{composed}"));
 
@@ -467,7 +467,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = CreateClient("alice", password: password);
             await client.ConnectAsync();
 
-            var session = Server.SessionOf(client.FullJid)!;
+            var session = Server.SessionOf(client.FullJid.ToString())!;
 
             var inPlainText = session.Received.Where(f => f.Contains(password, StringComparison.Ordinal)).ToList();
 

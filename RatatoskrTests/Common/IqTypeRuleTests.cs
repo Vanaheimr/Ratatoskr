@@ -323,7 +323,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var atBob = InboxFor(bob, $"type-{type}");
 
-            await alice.SendRawAsync(Stanza(type, bob.FullJid, $"type-{type}"));
+            await alice.SendRawAsync(Stanza(type, bob.FullJid.ToString(), $"type-{type}"));
 
             await WaitFor(() => !atBob.IsEmpty, $"the delivery of an iq '{type}'");
 
@@ -360,7 +360,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob = InboxFor(bob, "type-maybe");
             var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Stanza("maybe", bob.FullJid, "type-maybe"));
+            await alice.SendRawAsync(Stanza("maybe", bob.FullJid.ToString(), "type-maybe"));
 
             await WaitFor(() => !errors.IsEmpty, "the refusal by the server");
 

@@ -321,19 +321,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(Hex(decoded.Payload!), Is.EqualTo(Hex(Pattern(64))));
 
-                var forBob2 = decoded.KeyFor("bob@example.org", 2);
+                var forBob2 = decoded.KeyFor(JID.Parse("bob@example.org"), 2);
                 Assert.That(forBob2,                Is.Not.Null);
                 Assert.That(forBob2!.IsKeyExchange, Is.True);
                 Assert.That(Hex(forBob2.Data),      Is.EqualTo(Hex(Pattern(20, 40))));
 
-                var forBob1 = decoded.KeyFor("bob@example.org", 1);
+                var forBob1 = decoded.KeyFor(JID.Parse("bob@example.org"), 1);
                 Assert.That(forBob1!.IsKeyExchange, Is.False,
                             "Without a kex attribute 'false' holds (section 4.5).");
 
                 // The device id alone is not enough - it belongs to a JID.
                 // Device 1 exists at Bob's, not at Alice's.
-                Assert.That(decoded.KeyFor("alice@example.org", 1), Is.Null);
-                Assert.That(decoded.KeyFor("carol@example.org", 1), Is.Null);
+                Assert.That(decoded.KeyFor(JID.Parse("alice@example.org"), 1), Is.Null);
+                Assert.That(decoded.KeyFor(JID.Parse("carol@example.org"), 1), Is.Null);
 
                 // The default value does not stand in the stanza.
                 //
@@ -391,7 +391,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(decoded!.Payload, Is.Null);
-                Assert.That(decoded.KeyFor("bob@example.org", 1)!.IsKeyExchange, Is.True);
+                Assert.That(decoded.KeyFor(JID.Parse("bob@example.org"), 1)!.IsKeyExchange, Is.True);
             });
 
         }
@@ -523,7 +523,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(xml.Child(SceEnvelope.Namespace, "time")?.Attr("stamp"),
                             Is.EqualTo("2026-08-01T12:00:00Z"));
 
-                Assert.That(SceEnvelope.TryRead(xml, out var decoded, "alice@example.org/mobile"),
+                Assert.That(SceEnvelope.TryRead(xml, out var decoded, JID.Parse("alice@example.org/mobile")),
                             Is.True,
                             "The sender from the stanza belongs to the same human being.");
 
@@ -561,7 +561,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(SceEnvelope.TryRead(envelope, out _, "mallory@example.org/x"), Is.False,
+                Assert.That(SceEnvelope.TryRead(envelope, out _, JID.Parse("mallory@example.org/x")), Is.False,
                             "An envelope passed on was accepted.");
 
                 // Without an expectation no comparison happens - the caller

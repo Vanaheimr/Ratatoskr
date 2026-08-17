@@ -56,7 +56,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         /// <summary>The groups the server keeps for a contact.</summary>
         private IReadOnlyList<String> ServerGroupsOf(XMPPClient client, String contact)
-            => Server.GetAccount(client.BareJid)
+            => Server.GetAccount(client.BareJid.ToString())
                     ?.Roster.FirstOrDefault(e => e.Jid == $"{contact}@{Server.Domain}")
                     ?.Groups ?? [];
 
@@ -79,7 +79,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends"]);
+            await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob", ["Friends"]);
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0,
                           "the group at the server");
@@ -108,7 +108,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends", "Work"]);
+            await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob", ["Friends", "Work"]);
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 1, "both groups");
 
@@ -136,11 +136,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends"]);
+            await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob", ["Friends"]);
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0, "the group");
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob");
+            await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob");
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count == 0 &&
                                 ClientGroupsOf(alice, $"bob@{Server.Domain}").Count == 0,
@@ -169,15 +169,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice = await ConnectClientAsync("alice");
-            var account = Server.GetAccount(alice.BareJid)!;
+            var account = Server.GetAccount(alice.BareJid.ToString())!;
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Friends"]);
+            await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob", ["Friends"]);
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0, "the first group");
 
             var before = account.RosterVersion;
 
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob", ["Work"]);
+            await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob", ["Work"]);
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Contains("Work"), "the second group");
 
@@ -237,7 +237,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // "&lt;" and means it literally. Whoever replaces the ampersand
             // first while unescaping turns it into a "<" - a text that is about
             // a character becomes the character.
-            await alice.AddContactAsync($"bob@{Server.Domain}", "Bob",
+            await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob",
                                         ["Tom & Jerry <old>", "A&lt;B"]);
 
             // Wait for both and not only for the first: the push comes after

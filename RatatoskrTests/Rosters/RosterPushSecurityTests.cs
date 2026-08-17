@@ -49,7 +49,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             client.OnSpoofingAttempt += (timestamp, sender, m, ct) => { lock (alerts) alerts.Add(m);  return Task.CompletedTask; };
 
-            await Server.PushAsync(client.FullJid,
+            await Server.PushAsync(client.FullJid.ToString(),
                 "<iq type='set' id='spoof-1' from='evil@example.com'>" +
                 "<query xmlns='jabber:iq:roster'>" +
                 "<item jid='hacker@evil.com' name='Trojan' subscription='both'/>" +
@@ -59,7 +59,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(client.Roster.GetItem("hacker@evil.com"), Is.Null,
+                Assert.That(client.Roster.GetItem(JID.Parse("hacker@evil.com")), Is.Null,
                             "The forged contact was taken into the roster.");
 
                 Assert.That(alerts, Has.Count.EqualTo(1),
@@ -81,9 +81,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
-            await Server.PushAsync(client.FullJid,
+            await Server.PushAsync(client.FullJid.ToString(),
                 "<iq type='set' id='spoof-2' from='evil@example.com'>" +
                 "<query xmlns='jabber:iq:roster'>" +
                 "<item jid='hacker@evil.com' subscription='both'/>" +
@@ -111,17 +111,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
 
             // A real contact, created by a legitimate push
-            await Server.PushAsync(client.FullJid,
+            await Server.PushAsync(client.FullJid.ToString(),
                 "<iq type='set' id='legit-1'>" +
                 "<query xmlns='jabber:iq:roster'>" +
                 "<item jid='friend@localhost' name='Friend' subscription='both'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.Roster.GetItem("friend@localhost") is not null,
+            await WaitFor(() => client.Roster.GetItem(JID.Parse("friend@localhost")) is not null,
                           "the creation of the real contact");
 
             // The attack: a foreign sender wants to delete them
-            await Server.PushAsync(client.FullJid,
+            await Server.PushAsync(client.FullJid.ToString(),
                 "<iq type='set' id='spoof-3' from='evil@example.com'>" +
                 "<query xmlns='jabber:iq:roster'>" +
                 "<item jid='friend@localhost' subscription='remove'/>" +
@@ -129,7 +129,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await Task.Delay(300);
 
-            Assert.That(client.Roster.GetItem("friend@localhost"), Is.Not.Null,
+            Assert.That(client.Roster.GetItem(JID.Parse("friend@localhost")), Is.Not.Null,
                         "The real contact was deleted by a forged push.");
 
         }
@@ -148,16 +148,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            await Server.PushAsync(client.FullJid,
+            await Server.PushAsync(client.FullJid.ToString(),
                 "<iq type='set' id='legit-2'>" +
                 "<query xmlns='jabber:iq:roster'>" +
                 "<item jid='colleague@localhost' name='Colleague' subscription='to'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.Roster.GetItem("colleague@localhost") is not null,
+            await WaitFor(() => client.Roster.GetItem(JID.Parse("colleague@localhost")) is not null,
                           "the taking over of the push without a from");
 
-            Assert.That(client.Roster.GetItem("colleague@localhost")!.Name, Is.EqualTo("Colleague"));
+            Assert.That(client.Roster.GetItem(JID.Parse("colleague@localhost"))!.Name, Is.EqualTo("Colleague"));
 
         }
 
@@ -174,13 +174,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            await Server.PushAsync(client.FullJid,
+            await Server.PushAsync(client.FullJid.ToString(),
                 $"<iq type='set' id='legit-3' from='{client.BareJid}'>" +
                 "<query xmlns='jabber:iq:roster'>" +
                 "<item jid='boss@localhost' name='Boss' subscription='both'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.Roster.GetItem("boss@localhost") is not null,
+            await WaitFor(() => client.Roster.GetItem(JID.Parse("boss@localhost")) is not null,
                           "the taking over of the push with one's own bare JID");
 
             Assert.Pass();

@@ -244,8 +244,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { lock (errors) errors.Add($"{from}|{e.Condition}");  return Task.CompletedTask; };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}",    "To an account that exists");
-            await alice.SendMessageAsync($"nobody@{Server.Domain}", "To one that does not");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"),    "To an account that exists");
+            await alice.SendMessageAsync(JID.Parse($"nobody@{Server.Domain}"), "To one that does not");
 
             await WaitFor(() => { lock (errors) return errors.Count == 2; },
                           "two refusals at the sender");
@@ -294,8 +294,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { lock (errors) errors.Add(e.Condition);  return Task.CompletedTask; };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}",    "Will be stored");
-            await alice.SendMessageAsync($"nobody@{Server.Domain}", "Will be discarded");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"),    "Will be stored");
+            await alice.SendMessageAsync(JID.Parse($"nobody@{Server.Domain}"), "Will be discarded");
 
             await WaitFor(() => Server.GetAccount($"bob@{Server.Domain}")!.OfflineMessages.Count == 1,
                           "the stored message for the existing account");
@@ -332,8 +332,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { lock (errors) errors.Add(e.Condition);  return Task.CompletedTask; };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}",    "Does not fit any more");
-            await alice.SendMessageAsync($"nobody@{Server.Domain}", "Does not fit either");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"),    "Does not fit any more");
+            await alice.SendMessageAsync(JID.Parse($"nobody@{Server.Domain}"), "Does not fit either");
 
             await WaitFor(() => { lock (errors) return errors.Count == 2; },
                           "two refusals with a full store");

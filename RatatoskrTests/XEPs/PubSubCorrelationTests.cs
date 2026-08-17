@@ -126,7 +126,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -158,7 +158,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync("urn:example:doesnotexist", BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync("urn:example:doesnotexist", JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -195,7 +195,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AnswerPepRequests = false;
 
-            var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -233,7 +233,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             PlayTheService("<subscribe", SubscriptionIq("result", "pending"));
 
-            var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -277,7 +277,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             PlayTheService("<subscribe", SubscriptionIq("error", "subscribed"));
 
-            var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -309,7 +309,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             PlayTheService("<subscribe", "<iq type='result' id='{id}'/>");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Null);
             Assert.That(alice.Connection.PubSub!.IsSubscribed(Node), Is.False);
 
         }
@@ -340,7 +340,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            "<subscription subid='abc123' subscription='subscribed'/>" +
                            "</pubsub></iq>");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Null);
             Assert.That(alice.Connection.PubSub!.IsSubscribed(""), Is.False,
                         "A subscription under the empty name would be worse than none.");
 
@@ -370,7 +370,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(PubSubSubscription.StateOf("maybe"),
                         Is.EqualTo(PubSubSubscriptionState.None));
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Null);
             Assert.That(alice.Connection.PubSub!.IsSubscribed(Node), Is.False);
 
         }
@@ -396,14 +396,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PlayTheService("<unsubscribe",
                            "<iq type='error' id='{id}'><error type='cancel'>" +
                            "<not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
                            "</error></iq>");
 
-            var ended = await alice.PubSubUnsubscribeAsync(Node, BobsJid);
+            var ended = await alice.PubSubUnsubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -434,10 +434,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice   = await ConnectClientAsync("alice");
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
 
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
-            await alice.PubSubSubscribeAsync("urn:example:doesnotexist", BobsJid);
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            await alice.PubSubSubscribeAsync("urn:example:doesnotexist", JID.Parse(BobsJid));
 
             var ids = session.Received
                              .Where (f => f.Contains("<subscribe", StringComparison.Ordinal))
@@ -473,8 +473,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice  = await ConnectClientAsync("alice");
 
-            var first  = await alice.PubSubSubscribeAsync(Node, BobsJid);
-            var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var first  = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            var second = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             var subs   = alice.Connection.PubSub!.SubscriptionsOf(Node);
 
@@ -510,13 +510,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
             var before  = session.Received.Count(f => f.Contains("<unsubscribe", StringComparison.Ordinal));
 
-            var ended = await alice.PubSubUnsubscribeAsync(Node, BobsJid);
+            var ended = await alice.PubSubUnsubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -549,10 +549,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice  = await ConnectClientAsync("alice");
 
-            var first  = await alice.PubSubSubscribeAsync(Node, BobsJid);
-            var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var first  = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            var second = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
-            Assert.That(await alice.PubSubUnsubscribeAsync(Node, BobsJid, first!.SubId), Is.True);
+            Assert.That(await alice.PubSubUnsubscribeAsync(Node, JID.Parse(BobsJid), first!.SubId), Is.True);
 
             var subs = alice.Connection.PubSub!.SubscriptionsOf(Node);
 
@@ -585,8 +585,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob    = await PublishingBobAsync();
             var alice  = await ConnectClientAsync("alice");
 
-            var first  = await alice.PubSubSubscribeAsync(Node, BobsJid);
-            var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var first  = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            var second = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             var reported = new List<PubSubEvent>();
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { lock (reported) reported.Add(e);  return Task.CompletedTask; };
@@ -622,14 +622,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
-            Assert.That(await alice.PubSubUnsubscribeAsync(Node, BobsJid, sub!.SubId), Is.True);
+            Assert.That(await alice.PubSubUnsubscribeAsync(Node, JID.Parse(BobsJid), sub!.SubId), Is.True);
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            await Server.SessionOf(alice.FullJid)!.SendAsync(
+            await Server.SessionOf(alice.FullJid.ToString())!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
                 $"<items node='{Node}'>" +
@@ -660,9 +660,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
-            var options = await alice.PubSubGetOptionsAsync(Node, BobsJid, sub!.SubId);
+            var options = await alice.PubSubGetOptionsAsync(Node, JID.Parse(BobsJid), sub!.SubId);
 
             Assert.Multiple(() =>
             {
@@ -686,11 +686,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.That(await alice.PubSubSetOptionsAsync(Node,
                                                           new PubSubSubscriptionOptions(Deliver: false),
-                                                          BobsJid,
+                                                          JID.Parse(BobsJid),
                                                           sub!.SubId),
                         Is.True);
 
@@ -698,7 +698,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         Is.False,
                         "What the service has confirmed belongs in the own books.");
 
-            Assert.That((await alice.PubSubGetOptionsAsync(Node, BobsJid, sub.SubId))?.Deliver,
+            Assert.That((await alice.PubSubGetOptionsAsync(Node, JID.Parse(BobsJid), sub.SubId))?.Deliver,
                         Is.False,
                         "And on asking again the same has to come out.");
 
@@ -732,14 +732,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var carol   = await ConnectClientAsync("carol");
-            var foreign = await carol.PubSubSubscribeAsync(Node, BobsJid);
+            var foreign = await carol.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.That(await alice.PubSubSetOptionsAsync(Node,
                                                           new PubSubSubscriptionOptions(Deliver: false),
-                                                          BobsJid,
+                                                          JID.Parse(BobsJid),
                                                           foreign!.SubId),
                         Is.False,
                         "The id belongs to Carol's subscription.");
@@ -768,10 +768,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice  = await ConnectClientAsync("alice");
 
-            var first  = await alice.PubSubSubscribeAsync(Node, BobsJid);
-            var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var first  = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            var second = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
-            var fetched = await alice.PubSubGetSubscriptionsAsync(BobsJid);
+            var fetched = await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -814,12 +814,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice", reconnectDelay: TimeSpan.FromMilliseconds(200));
 
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             var before = Server.ConnectionCount;
 
-            Server.KillSessionsOf(alice.BareJid);
+            Server.KillSessionsOf(alice.BareJid.ToString());
 
             await WaitFor(() => Server.ConnectionCount > before && alice.IsConnected,
                           "the rebuilding of the connection",
@@ -828,7 +828,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(alice.Connection.PubSub!.SubscriptionsOf(Node), Is.Empty,
                         "The books do not survive the break - otherwise this test checks nothing.");
 
-            var fetched = await alice.PubSubGetSubscriptionsAsync(BobsJid);
+            var fetched = await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 
             Assert.That(fetched, Has.Count.EqualTo(2));
 
@@ -837,7 +837,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(again, Has.Count.EqualTo(2),
                         "And after the fetching it knows of both again.");
 
-            Assert.That(await alice.PubSubUnsubscribeAsync(Node, BobsJid, again[0].SubId), Is.True,
+            Assert.That(await alice.PubSubUnsubscribeAsync(Node, JID.Parse(BobsJid), again[0].SubId), Is.True,
                         "With the recovered id the unsubscribing has to work.");
 
         }
@@ -863,15 +863,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.That(sub, Is.Not.Null);
 
             // Ended at the service without this client learning of it - the
             // way a second device of the same account would do it.
-            Server.GetAccount(BobsJid)!.RemovePepSubscription(Node, alice.BareJid, sub!.SubId);
+            Server.GetAccount(BobsJid)!.RemovePepSubscription(Node, alice.BareJid.ToString(), sub!.SubId);
 
-            var fetched = await alice.PubSubGetSubscriptionsAsync(BobsJid);
+            var fetched = await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -905,11 +905,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PlayTheService("<subscriptions", "<iq type='result' id='{id}'/>");
 
-            var fetched = await alice.PubSubGetSubscriptionsAsync(BobsJid);
+            var fetched = await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -951,7 +951,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            "' subid='maybe' subscription='pending'/>" +
                            "</subscriptions></pubsub></iq>");
 
-            var fetched = await alice.PubSubGetSubscriptionsAsync(BobsJid);
+            var fetched = await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -986,7 +986,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
             await alice.PubSubSubscribeAsync(Node, carol.BareJid);
 
             // At the one service there is nothing left - at the other there is.
@@ -995,7 +995,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 alice.Connection.PubSub!.SubscriptionsOf(Node)
                      .First(a => a.ServiceJid == BobsJid).SubId);
 
-            await alice.PubSubGetSubscriptionsAsync(BobsJid);
+            await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 
             Assert.That(alice.Connection.PubSub!.SubscriptionsOf(Node).Select(a => a.ServiceJid),
                         Is.EqualTo(new[] { carol.BareJid }),
@@ -1025,10 +1025,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
-            await alice.PubSubSubscribeAsync("urn:example:second", BobsJid);
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            await alice.PubSubSubscribeAsync("urn:example:second", JID.Parse(BobsJid));
 
-            var fetched = await alice.PubSubGetSubscriptionsAsync(BobsJid, "urn:example:second");
+            var fetched = await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid), "urn:example:second");
 
             Assert.Multiple(() =>
             {
@@ -1072,11 +1072,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                              (alice.BareJid, PubSubAffiliation.Publisher)
                          }));
 
-            var alices = await alice.PubSubGetAffiliationsAsync(BobsJid);
+            var alices = await alice.PubSubGetAffiliationsAsync(JID.Parse(BobsJid));
 
             Assert.That(alices, Is.EqualTo(new[] { (Node, PubSubAffiliation.Publisher) }));
 
-            Assert.That(await alice.PubSubPublishAsync(Node, "70", Payload("from Alice"), BobsJid),
+            Assert.That(await alice.PubSubPublishAsync(Node, "70", Payload("from Alice"), JID.Parse(BobsJid)),
                         Is.True,
                         "And the role allows what it promises.");
 
@@ -1101,9 +1101,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // body would run on as async void, and the assertions might fall
             // after the block - that is, nowhere.
             var granted  = await alice.PubSubSetAffiliationAsync(Node, alice.BareJid,
-                                                                 PubSubAffiliation.Publisher, BobsJid);
+                                                                 PubSubAffiliation.Publisher, JID.Parse(BobsJid));
 
-            var inspected = await alice.PubSubGetNodeAffiliationsAsync(Node, BobsJid);
+            var inspected = await alice.PubSubGetNodeAffiliationsAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -1246,7 +1246,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.That(await alice.PubSubConfigureNodeAsync(Node,
                                                              new PubSubNodeConfiguration(PersistItems: false),
-                                                             BobsJid),
+                                                             JID.Parse(BobsJid)),
                         Is.False);
 
             Assert.That(Server.GetAccount(BobsJid)!.PepNodeConfiguration(Node)!.PersistItems,
@@ -1337,11 +1337,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             PlayTheService("<options", "<iq type='result' id='{id}'/>");
 
-            Assert.That(await alice.PubSubGetOptionsAsync(Node, BobsJid, sub!.SubId), Is.Null);
+            Assert.That(await alice.PubSubGetOptionsAsync(Node, JID.Parse(BobsJid), sub!.SubId), Is.Null);
 
         }
 
@@ -1365,12 +1365,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice  = await ConnectClientAsync("alice");
 
-            var first  = await alice.PubSubSubscribeAsync(Node, BobsJid);
-            var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var first  = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            var second = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.That(await alice.PubSubSetOptionsAsync(Node,
                                                           new PubSubSubscriptionOptions(Deliver: false),
-                                                          BobsJid,
+                                                          JID.Parse(BobsJid),
                                                           first!.SubId),
                         Is.True);
 
@@ -1451,13 +1451,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
             var before  = session.Received.Count(f => f.Contains("<options", StringComparison.Ordinal));
 
-            var loaded = await alice.PubSubGetOptionsAsync(Node, BobsJid);
+            var loaded = await alice.PubSubGetOptionsAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -1486,13 +1486,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.That(sub?.SubId, Is.Not.Null);
 
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
 
-            Assert.That(await alice.PubSubUnsubscribeAsync(Node, BobsJid), Is.True);
+            Assert.That(await alice.PubSubUnsubscribeAsync(Node, JID.Parse(BobsJid)), Is.True);
 
             Assert.Multiple(() =>
             {
@@ -1524,7 +1524,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubPublishAsync(Node, "99", Payload("forged"), BobsJid),
+            Assert.That(await alice.PubSubPublishAsync(Node, "99", Payload("forged"), JID.Parse(BobsJid)),
                         Is.False,
                         "A refused publishing must not count as one that succeeded.");
 
@@ -1552,7 +1552,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob    = await PublishingBobAsync();
             var alice  = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
@@ -1586,12 +1586,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            await Server.SessionOf(alice.FullJid)!.SendAsync(
+            await Server.SessionOf(alice.FullJid.ToString())!.SendAsync(
                 $"<message from='carol@{Server.Domain}' type='headline' to='{alice.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
                 $"<items node='{Node}'>" +
@@ -1623,12 +1623,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            await Server.SessionOf(alice.FullJid)!.SendAsync(
+            await Server.SessionOf(alice.FullJid.ToString())!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
                 "<items node='urn:example:notordered'>" +
@@ -1660,10 +1660,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var first  = await alice.PubSubSubscribeAsync(Node, BobsJid);
-            var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var first  = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            var second = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
-            var list = await bob.PubSubGetNodeSubscribersAsync(Node, BobsJid);
+            var list = await bob.PubSubGetNodeSubscribersAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -1698,7 +1698,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubGetNodeSubscribersAsync(Node, BobsJid), Is.Null,
+            Assert.That(await alice.PubSubGetNodeSubscribersAsync(Node, JID.Parse(BobsJid)), Is.Null,
                         "A refusal is no empty list.");
 
         }
@@ -1732,7 +1732,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            $"<subscription jid='carol@{Server.Domain}' subid='c1' subscription='almost'/>" +
                            "</subscriptions></pubsub></iq>");
 
-            Assert.That(await bob.PubSubGetNodeSubscribersAsync(Node, BobsJid), Is.Null,
+            Assert.That(await bob.PubSubGetNodeSubscribersAsync(Node, JID.Parse(BobsJid)), Is.Null,
                         "A list from which lines disappear is worse than none.");
 
         }
@@ -1767,7 +1767,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                            "<forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
                            "</error></iq>");
 
-            Assert.That(await bob.PubSubGetNodeSubscribersAsync(Node, BobsJid), Is.Null);
+            Assert.That(await bob.PubSubGetNodeSubscribersAsync(Node, JID.Parse(BobsJid)), Is.Null);
 
         }
 
@@ -1791,16 +1791,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            var removed = await bob.PubSubRemoveSubscriberAsync(Node, alice.BareJid, service: BobsJid);
+            var removed = await bob.PubSubRemoveSubscriberAsync(Node, alice.BareJid, service: JID.Parse(BobsJid));
 
             await WaitFor(() => reported is not null, "the notice to the removed one");
 
-            var list = await bob.PubSubGetNodeSubscribersAsync(Node, BobsJid);
+            var list = await bob.PubSubGetNodeSubscribersAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -1838,18 +1838,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var first  = await alice.PubSubSubscribeAsync(Node, BobsJid);
-            var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var first  = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
+            var second = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             var removed = await bob.PubSubRemoveSubscriberAsync(Node, alice.BareJid,
-                                                                first!.SubId, BobsJid);
+                                                                first!.SubId, JID.Parse(BobsJid));
 
             await WaitFor(() => reported is not null, "the notice about the one subscription");
 
-            var list = await bob.PubSubGetNodeSubscribersAsync(Node, BobsJid);
+            var list = await bob.PubSubGetNodeSubscribersAsync(Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -1882,7 +1882,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            Assert.That(await bob.PubSubRemoveSubscriberAsync(Node, $"carol@{Server.Domain}", service: BobsJid),
+            Assert.That(await bob.PubSubRemoveSubscriberAsync(Node, JID.Parse($"carol@{Server.Domain}"), service: JID.Parse(BobsJid)),
                         Is.False);
 
         }
@@ -1909,13 +1909,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            await Server.SessionOf(alice.FullJid)!.SendAsync(
+            await Server.SessionOf(alice.FullJid.ToString())!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
                 $"<subscription node='{Node}' jid='{alice.BareJid}' subscription='none'/>" +
@@ -1951,17 +1951,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await bob.PubSubPublishAsync(Node, "2", Payload("stormy"), BobsJid), Is.True);
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await bob.PubSubPublishAsync(Node, "2", Payload("stormy"), JID.Parse(BobsJid)), Is.True);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            var back = await bob.PubSubRetractAsync(Node, "1", BobsJid);
+            var back = await bob.PubSubRetractAsync(Node, "1", JID.Parse(BobsJid));
 
             await WaitFor(() => reported is not null, "the event about the retraction");
 
-            var remaining = await alice.PubSubGetItemsAsync(Node, service: BobsJid);
+            var remaining = await alice.PubSubGetItemsAsync(Node, service: JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -1999,18 +1999,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            Assert.That(await bob.PubSubRetractAsync(Node, "1", BobsJid), Is.True);
+            Assert.That(await bob.PubSubRetractAsync(Node, "1", JID.Parse(BobsJid)), Is.True);
 
             await WaitFor(() => reported is not null, "the event about the retraction");
 
             reported = null;
 
-            Assert.That(await bob.PubSubPublishAsync(Node, "3", Payload("back again"), BobsJid), Is.True);
+            Assert.That(await bob.PubSubPublishAsync(Node, "3", Payload("back again"), JID.Parse(BobsJid)), Is.True);
 
             await WaitFor(() => reported is not null, "the next publication");
 
@@ -2044,8 +2044,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var foreign   = await alice.PubSubRetractAsync(Node, "1", BobsJid);
-            var invented  = await bob.PubSubRetractAsync  (Node, "doesnotexist", BobsJid);
+            var foreign   = await alice.PubSubRetractAsync(Node, "1", JID.Parse(BobsJid));
+            var invented  = await bob.PubSubRetractAsync  (Node, "doesnotexist", JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -2053,7 +2053,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(invented, Is.False, "And what does not exist is not retracted.");
             });
 
-            Assert.That((await bob.PubSubGetItemsAsync(Node, service: BobsJid))?.Select(i => i.Id),
+            Assert.That((await bob.PubSubGetItemsAsync(Node, service: JID.Parse(BobsJid)))?.Select(i => i.Id),
                         Is.EqualTo(new[] { "1" }),
                         "The item stands there untouched.");
 
@@ -2081,7 +2081,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.That(await bob.PubSubConfigureNodeAsync(Node,
                                                            new PubSubNodeConfiguration(PubSubAccessModel.Authorize),
-                                                           BobsJid),
+                                                           JID.Parse(BobsJid)),
                         Is.True);
 
             PubSubSubscribeAuthorization? application = null;
@@ -2094,7 +2094,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var events = new List<PubSubEvent>();
             alice.OnPubSubEvent += (timestamp, sender, pubSubEvent, ct) => { events.Add(pubSubEvent); return Task.CompletedTask; };
 
-            var requested = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var requested = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             await WaitFor(() => application is not null, "the application at the owner");
 
@@ -2111,12 +2111,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             });
 
-            await bob.PubSubAnswerSubscriptionRequestAsync(application!, allow: true, BobsJid);
+            await bob.PubSubAnswerSubscriptionRequestAsync(application!, allow: true, JID.Parse(BobsJid));
 
             await WaitFor(() => events.Any(e => e.Type == PubSubEventType.SubscriptionApproved),
                           "the grant at the applicant");
 
-            Assert.That(await bob.PubSubPublishAsync(Node, "2", Payload("at last"), BobsJid), Is.True);
+            Assert.That(await bob.PubSubPublishAsync(Node, "2", Payload("at last"), JID.Parse(BobsJid)), Is.True);
 
             await WaitFor(() => events.Any(e => e.Type == PubSubEventType.Items),
                           "the first delivery after the grant");
@@ -2156,7 +2156,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.That(await bob.PubSubConfigureNodeAsync(Node,
                                                            new PubSubNodeConfiguration(PubSubAccessModel.Authorize),
-                                                           BobsJid),
+                                                           JID.Parse(BobsJid)),
                         Is.True);
 
             PubSubSubscribeAuthorization? application = null;
@@ -2167,11 +2167,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            await alice.PubSubSubscribeAsync(Node, BobsJid);
+            await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             await WaitFor(() => application is not null, "the application");
 
-            await bob.PubSubAnswerSubscriptionRequestAsync(application!, allow: false, BobsJid);
+            await bob.PubSubAnswerSubscriptionRequestAsync(application!, allow: false, JID.Parse(BobsJid));
 
             await WaitFor(() => reported is not null, "the refusal");
 
@@ -2203,7 +2203,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             Assert.That(sub!.State, Is.EqualTo(PubSubSubscriptionState.Subscribed),
                         "On an open node there is nothing to approve.");
@@ -2212,7 +2212,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             // A grant for an application there never was.
-            await Server.SessionOf(alice.FullJid)!.SendAsync(
+            await Server.SessionOf(alice.FullJid.ToString())!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
                 $"<subscription node='{Node}' jid='{alice.BareJid}'" +
@@ -2225,7 +2225,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // granted.</b> Without this second part the refusing would hang
             // solely on the foreign id - a grant for something that is already
             // granted would get through and report a change that is none.
-            await Server.SessionOf(alice.FullJid)!.SendAsync(
+            await Server.SessionOf(alice.FullJid.ToString())!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
                 $"<subscription node='{Node}' jid='{alice.BareJid}'" +
@@ -2261,12 +2261,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            var deleted = await bob.PubSubDeleteNodeAsync(Node, BobsJid);
+            var deleted = await bob.PubSubDeleteNodeAsync(Node, JID.Parse(BobsJid));
 
             await WaitFor(() => reported is not null, "the event about the deleting");
 
@@ -2304,12 +2304,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
 
-            var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            var purged = await bob.PubSubPurgeNodeAsync(Node, BobsJid);
+            var purged = await bob.PubSubPurgeNodeAsync(Node, JID.Parse(BobsJid));
 
             await WaitFor(() => reported is not null, "the event about the purging");
 
@@ -2346,10 +2346,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob = await PublishingBobAsync();
 
-            Assert.That(await bob.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null,
+            Assert.That(await bob.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null,
                         "The owner may subscribe to their own node.");
 
-            Assert.That(await bob.PubSubDeleteNodeAsync(Node, BobsJid), Is.True);
+            Assert.That(await bob.PubSubDeleteNodeAsync(Node, JID.Parse(BobsJid)), Is.True);
 
             Assert.That(bob.Connection.PubSub!.IsSubscribed(Node), Is.False,
                         "And knows by itself afterwards that the subscription is gone.");
@@ -2382,7 +2382,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         Is.True,
                         "Carol has a node of the same name.");
 
-            var atBob   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var atBob   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
             var atCarol = await alice.PubSubSubscribeAsync(Node, carol.BareJid);
 
             Assert.That(atBob,   Is.Not.Null);
@@ -2391,7 +2391,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            await bob.PubSubDeleteNodeAsync(Node, BobsJid);
+            await bob.PubSubDeleteNodeAsync(Node, JID.Parse(BobsJid));
 
             await WaitFor(() => reported is not null, "the event about Bob's deleted node");
 
@@ -2416,13 +2416,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync("alice");
 
-            Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
+            Assert.That(await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid)), Is.Not.Null);
 
             // Await first, then check: Assert.Multiple takes an Action, and an
             // async lambda in it would run on as async void - the assertions
             // might fall after the block, that is, nowhere.
-            var deleted = await alice.PubSubDeleteNodeAsync(Node, BobsJid);
-            var purged  = await alice.PubSubPurgeNodeAsync (Node, BobsJid);
+            var deleted = await alice.PubSubDeleteNodeAsync(Node, JID.Parse(BobsJid));
+            var purged  = await alice.PubSubPurgeNodeAsync (Node, JID.Parse(BobsJid));
 
             Assert.Multiple(() =>
             {
@@ -2454,12 +2454,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await PublishingBobAsync();
 
             var alice = await ConnectClientAsync("alice");
-            var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
+            var sub   = await alice.PubSubSubscribeAsync(Node, JID.Parse(BobsJid));
 
             PubSubEvent? reported = null;
             alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
-            await Server.SessionOf(alice.FullJid)!.SendAsync(
+            await Server.SessionOf(alice.FullJid.ToString())!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
                 "<event xmlns='http://jabber.org/protocol/pubsub#event'>" +
                 $"<subscription node='{Node}' jid='{alice.BareJid}'" +

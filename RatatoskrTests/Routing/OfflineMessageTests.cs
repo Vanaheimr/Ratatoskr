@@ -113,8 +113,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "First");
-            await alice.SendMessageAsync(Bob, "Second");
+            await alice.SendMessageAsync(JID.Parse(Bob), "First");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Second");
 
             await WaitForTheStore(Bob, 2);
 
@@ -206,7 +206,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // And afterwards one that has to be stored - it is the proof that
             // the store ran at all while the notice fell through.
-            await alice.SendMessageAsync(Bob, "And this one stays lying");
+            await alice.SendMessageAsync(JID.Parse(Bob), "And this one stays lying");
 
             await WaitForTheStore(Bob, 1);
 
@@ -252,7 +252,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Afterwards one that has to be stored - it is the proof that the
             // store ran while the chat state fell through.
-            await alice.SendMessageAsync(Bob, "And this one stays lying");
+            await alice.SendMessageAsync(JID.Parse(Bob), "And this one stays lying");
 
             await WaitForTheStore(Bob, 1);
 
@@ -361,7 +361,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                       "<composing xmlns='http://jabber.org/protocol/chatstates'/>" +
                       "<thread>abcd</thread></message>");
 
-            await alice.SendMessageAsync(Bob, "And this one stays lying");
+            await alice.SendMessageAsync(JID.Parse(Bob), "And this one stays lying");
 
             await WaitForTheStore(Bob, 1);
 
@@ -477,7 +477,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Once");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Once");
             await WaitForTheStore(Bob, 1);
 
             var (first, firstInbox) = PreparedClient("bob");
@@ -524,13 +524,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "For the human being, not for the device");
+            await alice.SendMessageAsync(JID.Parse(Bob), "For the human being, not for the device");
             await WaitForTheStore(Bob, 1);
 
             var (bob, inbox) = PreparedClient("bob", priority: -1);
             await bob.ConnectAsync();
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)?.PresencePriority == -1,
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())?.PresencePriority == -1,
                           "the negative priority at the server");
 
             await WaitAgainst(() => !inbox.IsEmpty,
@@ -575,18 +575,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Stays lying");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Stays lying");
             await WaitForTheStore(Bob, 1);
 
             var (bob, inbox) = PreparedClient("bob", priority: -1);
             await bob.ConnectAsync();
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)?.PresencePriority == -1,
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())?.PresencePriority == -1,
                           "the negative priority at the server");
 
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)?.IsAvailable == false,
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())?.IsAvailable == false,
                           "the sign-off at the server");
 
             await WaitAgainst(() => Server.GetAccount(Bob)!.OfflineMessages.Count == 0,
@@ -620,7 +620,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Nevertheless");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Nevertheless");
             await WaitForTheStore(Bob, 1);
 
             var (bob, inbox) = PreparedClient("bob");
@@ -663,7 +663,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var beforeSending = DateTime.Now.AddSeconds(-1);
 
-            await alice.SendMessageAsync(Bob, "From yesterday");
+            await alice.SendMessageAsync(JID.Parse(Bob), "From yesterday");
 
             await WaitForTheStore(Bob, 1);
 
@@ -723,7 +723,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var before = DateTime.Now.AddSeconds(-1);
 
-            await alice.SendMessageAsync(Bob, "Right now");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Right now");
 
             await WaitFor(() => !inbox.IsEmpty, "the delivered message");
 
@@ -829,7 +829,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var errors = new ConcurrentQueue<StanzaError>();
             alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
-            await alice.SendMessageAsync(Bob, "Does not arrive");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Does not arrive");
 
             await WaitFor(() => !errors.IsEmpty, "the refusal at the sender");
 
@@ -876,10 +876,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var errors = new ConcurrentQueue<StanzaError>();
             alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
-            await alice.SendMessageAsync(Bob, "The first one");
+            await alice.SendMessageAsync(JID.Parse(Bob), "The first one");
             await WaitForTheStore(Bob, 1);
 
-            await alice.SendMessageAsync(Bob, "The second one");
+            await alice.SendMessageAsync(JID.Parse(Bob), "The second one");
             await WaitFor(() => !errors.IsEmpty, "the refusal of the second one");
 
             Assert.Multiple(() =>
@@ -925,13 +925,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("bob");
 
-            await WaitFor(() => Server.SessionsOf(mobile.BareJid).All(s => s.CarbonsEnabled),
+            await WaitFor(() => Server.SessionsOf(mobile.BareJid.ToString()).All(s => s.CarbonsEnabled),
                           "the carbons on both resources");
 
             var carbons = new ConcurrentQueue<CarbonMessage>();
             desktop.OnCarbonMessage += (timestamp, sender, c, ct) => { carbons.Enqueue(c); return Task.CompletedTask; };
 
-            await mobile.SendMessageAsync(Bob, "For later");
+            await mobile.SendMessageAsync(JID.Parse(Bob), "For later");
 
             await WaitForTheStore(Bob, 1);
 

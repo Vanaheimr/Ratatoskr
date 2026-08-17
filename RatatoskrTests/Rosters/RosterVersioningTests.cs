@@ -126,7 +126,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             "The client has to take the version over from the result.");
 
                 Assert.That(client.Connection.Roster.Version,
-                            Is.EqualTo(Server.GetAccount(client.BareJid)!.RosterVersion));
+                            Is.EqualTo(Server.GetAccount(client.BareJid.ToString())!.RosterVersion));
 
                 Assert.That(client.Connection.Roster.Items, Has.Count.EqualTo(1));
 
@@ -234,7 +234,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             "A change has to give a new version.");
 
                 Assert.That(client.Connection.Roster.Version,
-                            Is.EqualTo(Server.GetAccount(client.BareJid)!.RosterVersion));
+                            Is.EqualTo(Server.GetAccount(client.BareJid.ToString())!.RosterVersion));
 
             });
 
@@ -269,7 +269,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var before = client.Connection.Roster.Version;
 
-            await client.Connection.AddContactAsync($"carol@{Server.Domain}", "Carol");
+            await client.Connection.AddContactAsync(JID.Parse($"carol@{Server.Domain}"), "Carol");
 
             // Both conditions together, and that is no ornament: at the start
             // client and server both stand at the empty roster, so they already
@@ -277,7 +277,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // met before anything has happened.
             await WaitFor(() => client.Connection.Roster.Version != before &&
                                 client.Connection.Roster.Version ==
-                                    Server.GetAccount(client.BareJid)!.RosterVersion,
+                                    Server.GetAccount(client.BareJid.ToString())!.RosterVersion,
                           "the version from the pushes");
 
             Assert.Multiple(() =>
@@ -286,7 +286,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(client.Connection.Roster.Version, Is.Not.EqualTo(before),
                             "The new contact has to give a new version.");
 
-                Assert.That(client.Connection.Roster.GetItem($"carol@{Server.Domain}"),
+                Assert.That(client.Connection.Roster.GetItem(JID.Parse($"carol@{Server.Domain}")),
                             Is.Not.Null);
 
             });

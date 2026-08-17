@@ -82,7 +82,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.SendRawAsync(
                       $"<enable xmlns='urn:xmpp:sm:3'{(resume ? " resume='true'" : "")}/>");
 
-            var session = Server.SessionOf(client.FullJid)!;
+            var session = Server.SessionOf(client.FullJid.ToString())!;
 
             await WaitFor(() => session.StreamManagementEnabled,
                           "the negotiated stream management");
@@ -347,7 +347,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -437,7 +437,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob               = await ConnectClientAsync("bob", createAccount: false);
 
             for (var i = 0; i < 3; i++)
-                await bob.SendMessageAsync($"alice@{Server.Domain}", $"Message {i}");
+                await bob.SendMessageAsync(JID.Parse($"alice@{Server.Domain}"), $"Message {i}");
 
             await WaitFor(() => aliceSession.StanzasSentToClient >= 3,
                           "three delivered messages");
@@ -487,7 +487,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice    = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
             var before   = alice.FullJid;
-            var session  = Server.SessionOf(before!)!;
+            var session  = Server.SessionOf(before!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -528,7 +528,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(alice.StreamManagement.ResumeId, Is.EqualTo(resumeId),
                             "The stream was negotiated afresh instead of resumed.");
 
-                Assert.That(Server.SessionOf(before!), Is.Not.Null);
+                Assert.That(Server.SessionOf(before!.ToString()), Is.Not.Null);
 
             });
 
@@ -556,7 +556,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(500));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -568,7 +568,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // sends now goes into the buffer.
             session.Kill();
 
-            await bob.SendMessageAsync($"alice@{Server.Domain}", "Sent in the dark");
+            await bob.SendMessageAsync(JID.Parse($"alice@{Server.Domain}"), "Sent in the dark");
 
             await WaitFor(() => { lock (arrived) return arrived.Contains("Sent in the dark"); },
                           "the message sent on afterwards",
@@ -599,7 +599,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -617,7 +617,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await mallory.SendRawAsync(
                       $"<resume xmlns='urn:xmpp:sm:3' h='0' previd='{aliceResumeId}'/>");
 
-            var mallorySession = Server.SessionOf(mallory.FullJid!)!;
+            var mallorySession = Server.SessionOf(mallory.FullJid!.ToString())!;
 
             await WaitFor(() => mallorySession.Sent.Any(f => f.StartsWith("<failed", StringComparison.Ordinal)),
                           "the refusal");
@@ -668,7 +668,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -676,7 +676,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = new List<String>();
             bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Only once");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Only once");
 
             await WaitFor(() => { lock (arrived) return arrived.Count == 1; },
                           "the message at Bob");
@@ -735,7 +735,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.ResumptionTimeout = TimeSpan.FromMilliseconds(1);
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromSeconds(3));
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -755,7 +755,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "a fresh setup after the deadline ran out",
                           TimeSpan.FromSeconds(30));
 
-            Assert.That(Server.SessionOf(alice.FullJid!), Is.Not.Null,
+            Assert.That(Server.SessionOf(alice.FullJid!.ToString()), Is.Not.Null,
                         "The client holds itself to be connected, the server does not know it.");
 
         }
@@ -794,7 +794,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -807,7 +807,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // From here on the server swallows what Alice sends.
             Server.SwallowClientStanzas = true;
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Lost in flight");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Lost in flight");
 
             await WaitFor(() => alice.StreamManagement.UnackedCount > openBefore,
                           "the message sent off but unacknowledged");
@@ -929,7 +929,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -992,7 +992,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // sweeper to it.
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromSeconds(3));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -1000,7 +1000,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = new List<String>();
             bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Handled");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Handled");
 
             await WaitFor(() => { lock (arrived) return arrived.Count == 1; },
                           "the delivered message");
@@ -1058,7 +1058,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromSeconds(3));
             var bob     = await ConnectClientAsync("bob", createAccount: false);
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => alice.StreamManagement?.CanResume == true,
                           "a promised resumption");
@@ -1071,7 +1071,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = new List<String>();
             bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Handled");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Handled");
 
             await WaitFor(() => { lock (arrived) return arrived.Count == 1; },
                           "the delivered message");

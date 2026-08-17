@@ -60,7 +60,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         private static Boolean Saw(ConcurrentQueue<String> presences, XMPPClient who)
-            => presences.Any(p => p.StartsWith(who.BareJid, StringComparison.OrdinalIgnoreCase));
+            => presences.Any(p => p.StartsWith(who.BareJid.ToString(), StringComparison.OrdinalIgnoreCase));
 
         #endregion
 
@@ -236,7 +236,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => Server.SessionOf(alice.FullJid)?.IsAvailable == false,
+            await WaitFor(() => Server.SessionOf(alice.FullJid.ToString())?.IsAvailable == false,
                           "Alice's sign-off on the server");
 
             var (_, atBobs) = await WatcherAsync("bob");
@@ -363,7 +363,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice          = await ConnectClientAsync("alice");
             var (_, atBobs)    = await WatcherAsync("bob");
 
-            Server.SessionOf(alice.FullJid)!.Kill();
+            Server.SessionOf(alice.FullJid.ToString())!.Kill();
 
             await WaitFor(() => atBobs.Any(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
                           "the unavailable for the torn resource",
@@ -389,7 +389,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice           = await ConnectClientAsync("alice");
             var (_, atCarols)   = await WatcherAsync("carol");
 
-            Server.SessionOf(alice.FullJid)!.Kill();
+            Server.SessionOf(alice.FullJid.ToString())!.Kill();
 
             await WaitAgainst(() => atCarols.Any(p => p.EndsWith("|unavailable", StringComparison.Ordinal)),
                               "the unavailable at the unrelated Carol");

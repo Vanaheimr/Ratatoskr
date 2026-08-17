@@ -187,7 +187,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var ver      = VerOf(Real);
-            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var running  = caps.ProcessCapsAsync(JID.Parse(Mallory), NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
             Answer(Mallory, Reply(Substituted));
@@ -228,7 +228,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var ver      = VerOf(Real);
-            var running  = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var running  = caps.ProcessCapsAsync(JID.Parse(Alice), NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
             Answer(Alice, Reply(Real));
@@ -272,13 +272,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Mallory announces the pair of a widespread client and answers
             // with a list of their choice.
-            var attack = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var attack = caps.ProcessCapsAsync(JID.Parse(Mallory), NodeName, ver, EntityCapsManager.Sha1Algorithm);
             await WaitForQueries(1);
             Answer(Mallory, Reply(Substituted));
             await attack;
 
             // Alice announces the same pair - this time rightly.
-            var honest = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var honest = caps.ProcessCapsAsync(JID.Parse(Alice), NodeName, ver, EntityCapsManager.Sha1Algorithm);
             await WaitForQueries(2);
             Answer(Alice, Reply(Real));
             await honest;
@@ -333,7 +333,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var ver = VerOf(Real);
 
-            await caps.ProcessCapsAsync(Mallory, NodeName, ver, hash: null);
+            await caps.ProcessCapsAsync(JID.Parse(Mallory), NodeName, ver, hash: null);
 
             Assert.Multiple(() =>
             {
@@ -368,7 +368,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var ver      = VerOf(Real);
-            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, "sha-256");
+            var running  = caps.ProcessCapsAsync(JID.Parse(Mallory), NodeName, ver, "sha-256");
 
             await WaitForQueries(1);
             Answer(Mallory, Reply(Real));
@@ -401,7 +401,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var ver      = VerWithForm("Mac");
-            var running  = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var running  = caps.ProcessCapsAsync(JID.Parse(Alice), NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
             Answer(Alice, ReplyWithForm("Mac"));
@@ -448,7 +448,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var ver      = VerWithForm("Mac");
-            var running  = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var running  = caps.ProcessCapsAsync(JID.Parse(Mallory), NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
             Answer(Mallory, ReplyWithForm("Windows"));
@@ -491,7 +491,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 String.Concat(Real.Select(f => $"<feature var='{f}'/>")) +
                 "</query>";
 
-            var running = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var running = caps.ProcessCapsAsync(JID.Parse(Alice), NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             await WaitForQueries(1);
             Answer(Alice, reply);
@@ -581,7 +581,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Setup();
 
-                var running = caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+                var running = caps.ProcessCapsAsync(JID.Parse(Mallory), NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
                 await WaitForQueries(1);
                 Answer(Mallory, reply);
@@ -616,12 +616,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var ver = VerOf(Real);
 
-            var first = caps.ProcessCapsAsync(Alice, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            var first = caps.ProcessCapsAsync(JID.Parse(Alice), NodeName, ver, EntityCapsManager.Sha1Algorithm);
             await WaitForQueries(1);
             Answer(Alice, Reply(Real));
             await first;
 
-            await caps.ProcessCapsAsync(Mallory, NodeName, ver, EntityCapsManager.Sha1Algorithm);
+            await caps.ProcessCapsAsync(JID.Parse(Mallory), NodeName, ver, EntityCapsManager.Sha1Algorithm);
 
             Assert.Multiple(() =>
             {

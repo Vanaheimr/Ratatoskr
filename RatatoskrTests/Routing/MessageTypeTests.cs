@@ -168,7 +168,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice      = await ConnectClientAsync("alice");
             var bob        = await ConnectClientAsync("bob");
-            var bobSession = Server.SessionOf(bob.FullJid!)!;
+            var bobSession = Server.SessionOf(bob.FullJid!.ToString())!;
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
             bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
@@ -222,7 +222,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice      = await ConnectClientAsync("alice");
             var bob        = await ConnectClientAsync("bob");
-            var bobSession = Server.SessionOf(bob.FullJid!)!;
+            var bobSession = Server.SessionOf(bob.FullJid!.ToString())!;
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
             bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
@@ -279,9 +279,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync("alice");
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "Into the room",
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Into the room",
                                          MessageType.GroupChat);
 
             await WaitFor(() => session.Received.Any(f => f.Contains("Into the room",

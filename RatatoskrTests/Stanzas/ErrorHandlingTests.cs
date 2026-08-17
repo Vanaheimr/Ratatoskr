@@ -40,10 +40,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private async Task<XMPPSession> SessionOfAsync(XMPPClient client)
         {
 
-            await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
+            await WaitFor(() => Server.SessionOf(client.FullJid.ToString()) is not null,
                           "the server session for the client");
 
-            return Server.SessionOf(client.FullJid)!;
+            return Server.SessionOf(client.FullJid.ToString())!;
 
         }
 
@@ -142,7 +142,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             client.Connection.Disco!.OnQueryError += (timestamp, sender, _, error, ct) => { reported = error; return Task.CompletedTask; };
             client.OnStanzaError                  += (timestamp, sender, _, error, ct) => { general  = error; return Task.CompletedTask; };
 
-            var info = await client.Connection.Disco!.QueryInfoAsync(Server.Domain,
+            var info = await client.Connection.Disco!.QueryInfoAsync(JID.Parse(Server.Domain),
                                                                      timeout: TimeSpan.FromSeconds(5));
 
             await WaitFor(() => reported is not null, "the reported stanza error");
@@ -272,11 +272,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session  = await SessionOfAsync(client);
             var bob      = $"bob@{Server.Domain}";
 
-            await client.AddContactAsync(bob, "Bob");
+            await client.AddContactAsync(JID.Parse(bob), "Bob");
 
-            await WaitFor(() => client.GetContact(bob) is not null, "the contact in the roster");
+            await WaitFor(() => client.GetContact(JID.Parse(bob)) is not null, "the contact in the roster");
 
-            Assert.That(client.GetContact(bob)!.Presence, Is.EqualTo(PresenceState.Offline),
+            Assert.That(client.GetContact(JID.Parse(bob))!.Presence, Is.EqualTo(PresenceState.Offline),
                         "Precondition: Bob is offline.");
 
             StanzaError? reported = null;
@@ -294,7 +294,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(reported!.Condition, Is.EqualTo("remote-server-not-found"));
 
-                Assert.That(client.GetContact(bob)!.Presence, Is.EqualTo(PresenceState.Offline),
+                Assert.That(client.GetContact(JID.Parse(bob))!.Presence, Is.EqualTo(PresenceState.Offline),
                             "A presence error must not set the contact online.");
             });
 

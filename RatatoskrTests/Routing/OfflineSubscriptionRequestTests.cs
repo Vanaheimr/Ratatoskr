@@ -98,7 +98,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             // Only now does Bob come - the request has been lying for a while.
             var (bob, requests) = PreparedClient("bob");
@@ -132,7 +132,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             var (bob, requests) = PreparedClient("bob");
             await bob.ConnectAsync();
@@ -198,7 +198,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             var (firstLogin, firstRequests) = PreparedClient("bob");
             await firstLogin.ConnectAsync();
@@ -231,13 +231,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             var (firstLogin, firstRequests) = PreparedClient("bob");
             await firstLogin.ConnectAsync();
             await WaitFor(() => firstRequests.Count > 0, "the request at the first login");
 
-            await firstLogin.AcceptSubscriptionAsync(Alice);
+            await firstLogin.AcceptSubscriptionAsync(JID.Parse(Alice));
             await WaitFor(() => Server.GetAccount(Bob)?.SubscriptionOf(Alice) == "from",
                           "the approval");
 
@@ -266,13 +266,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             Server.AddAccount("bob");
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             var (firstLogin, firstRequests) = PreparedClient("bob");
             await firstLogin.ConnectAsync();
             await WaitFor(() => firstRequests.Count > 0, "the request at the first login");
 
-            await firstLogin.DenySubscriptionAsync(Alice);
+            await firstLogin.DenySubscriptionAsync(JID.Parse(Alice));
             await WaitFor(() => Server.GetAccount(Alice)?.SubscriptionOf(Bob) is null or "none",
                           "the denial");
 
@@ -396,7 +396,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
             await bob.ConnectAsync();
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
             await WaitFor(() => requests.Count > 0, "the request");
 
             // The same session, a new presence - the request is still
@@ -434,11 +434,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var carol = await ConnectClientAsync("carol");
             Server.AddAccount("bob");
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
             await WaitFor(() => Server.GetAccount(Bob)!.PendingSubscriptionRequests.Count == 1,
                           "Alice's stored request");
 
-            await carol.AddContactAsync(Bob, "Bob");
+            await carol.AddContactAsync(JID.Parse(Bob), "Bob");
 
             var (bob, requests) = PreparedClient("bob");
             await bob.ConnectAsync();
@@ -479,7 +479,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (first, firstRequests) = PreparedClient("bob");
             await first.ConnectAsync();
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
             await WaitFor(() => firstRequests.Count > 0, "the request at the first resource");
 
             var (second, secondRequests) = PreparedClient("bob");

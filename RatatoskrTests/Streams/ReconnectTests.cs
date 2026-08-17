@@ -136,7 +136,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             }
 
             // Measuring window: count only the current session
-            var session = Server.SessionOf(client.FullJid)!;
+            var session = Server.SessionOf(client.FullJid.ToString())!;
             await Task.Delay(300);
 
             var before2  = KeepaliveCount(session, streamManagement);
@@ -180,7 +180,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client   = await ConnectClientAsync(keepalive: Keepalive,
                                                     streamManagement: streamManagement);
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             await WaitFor(() => KeepaliveCount(session, streamManagement) > 0,
                           "the first keepalive");

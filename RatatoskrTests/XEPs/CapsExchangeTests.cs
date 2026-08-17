@@ -136,7 +136,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // See OwnDataForm_SurvivesTheRoundTrip: only once the new presence
             // stands at the server is the announcement in agreement with the
             // answer again.
-            await WaitFor(() => Server.SessionOf(alice.FullJid)?.LastPresence?
+            await WaitFor(() => Server.SessionOf(alice.FullJid.ToString())?.LastPresence?
                                       .Contains(newVer, StringComparison.Ordinal) == true,
                           "Alice's new presence at the server");
 
@@ -209,7 +209,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // asks within it rightly gets a discrepancy reported. That is no
             // error but the price for capabilities being able to change; only
             // it has no business in this test.
-            await WaitFor(() => Server.SessionOf(alice.FullJid)?.LastPresence?
+            await WaitFor(() => Server.SessionOf(alice.FullJid.ToString())?.LastPresence?
                                       .Contains(newVer, StringComparison.Ordinal) == true,
                           "Alice's new presence at the server");
 

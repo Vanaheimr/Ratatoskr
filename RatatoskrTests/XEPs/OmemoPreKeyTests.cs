@@ -62,7 +62,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             OmemoManager Party(String jid, Func<OmemoManager?> other)
                 => new(new OmemoMemoryStore(),
-                       jid,
+                       JID.Parse(jid),
                        _        => Task.FromResult<OmemoDeviceList?>(
                                        new OmemoDeviceList([new OmemoDevice(other()!.Identity.DeviceId)])),
                        (_, _)   => Task.FromResult<OmemoBundle?>(other()!.Identity.Bundle()));

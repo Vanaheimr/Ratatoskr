@@ -45,10 +45,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
+            await WaitFor(() => Server.SessionOf(client.FullJid.ToString()) is not null,
                           "the server session to the client");
 
-            return (client, Server.SessionOf(client.FullJid)!);
+            return (client, Server.SessionOf(client.FullJid.ToString())!);
 
         }
 
@@ -170,7 +170,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             ChatMarker? reported = null;
             client.OnChatMarker += (timestamp, sender, marker, ct) => { reported = marker; return Task.CompletedTask; };
 
-            var id = await client.Connection.SendMessageAsync(Bob, "markable", markable: true);
+            var id = await client.Connection.SendMessageAsync(JID.Parse(Bob), "markable", markable: true);
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat'>" +

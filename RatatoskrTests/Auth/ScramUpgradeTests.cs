@@ -237,7 +237,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice    = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(alice.FullJid)!;
+            var session  = Server.SessionOf(alice.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {

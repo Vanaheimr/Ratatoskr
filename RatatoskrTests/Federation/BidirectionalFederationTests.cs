@@ -175,8 +175,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectAsync(_left,  "alice");
             var juliet = await ConnectAsync(_right, "juliet");
 
-            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-            _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid.ToString())!.SetRosterEntry(new RosterEntry(juliet.BareJid.ToString(), null, "both"));
+            _right.GetAccount(juliet.BareJid.ToString())!.SetRosterEntry(new RosterEntry(alice.BareJid.ToString(), null, "both"));
 
             var atJuliet = new List<String>();
             var atAlice  = new List<String>();
@@ -223,8 +223,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectAsync(_left,  "alice");
             var juliet = await ConnectAsync(_right, "juliet");
 
-            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-            _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid.ToString())!.SetRosterEntry(new RosterEntry(juliet.BareJid.ToString(), null, "both"));
+            _right.GetAccount(juliet.BareJid.ToString())!.SetRosterEntry(new RosterEntry(alice.BareJid.ToString(), null, "both"));
 
             var atJuliet = new List<String>();
             var atAlice  = new List<String>();
@@ -270,7 +270,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectAsync(_left,  "alice");
             var juliet = await ConnectAsync(_right, "juliet");
 
-            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid.ToString())!.SetRosterEntry(new RosterEntry(juliet.BareJid.ToString(), null, "both"));
 
             var atJuliet = new List<String>();
             juliet.OnMessage += (timestamp, sender, m, ct) => { atJuliet.Add(m.Body ?? ""); return Task.CompletedTask; };
@@ -338,9 +338,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 var juliet = await ConnectAsync(_right, "juliet");
                 var third  = await ConnectAsync(farther,  "third");
 
-                _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-                farther.GetAccount(third.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-                _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+                _left.GetAccount(alice.BareJid.ToString())!.SetRosterEntry(new RosterEntry(juliet.BareJid.ToString(), null, "both"));
+                farther.GetAccount(third.BareJid.ToString())!.SetRosterEntry(new RosterEntry(juliet.BareJid.ToString(), null, "both"));
+                _right.GetAccount(juliet.BareJid.ToString())!.SetRosterEntry(new RosterEntry(alice.BareJid.ToString(), null, "both"));
 
                 var atJuliet = new List<String>();
                 var atAlice  = new List<String>();

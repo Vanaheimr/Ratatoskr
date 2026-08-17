@@ -177,7 +177,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var grant = await AskAsync(client, id,
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                client.BareJid, id));
 
             Assert.That(grant.Attr("type"), Is.EqualTo("result"), $"confirmation for '{id}'");
@@ -515,7 +515,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var reply = await AskAsync(alice, "sub-1",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                Node,
                                                                alice.BareJid,
                                                                "sub-1"));
@@ -556,7 +556,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var reply = await AskAsync(alice, "sub-2",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                "urn:example:doesnotexist",
                                                                alice.BareJid,
                                                                "sub-2"));
@@ -594,9 +594,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var reply = await AskAsync(alice, "sub-3",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                Node,
-                                                               $"carol@{Server.Domain}",
+                                                               JID.Parse($"carol@{Server.Domain}"),
                                                                "sub-3"));
 
             Assert.Multiple(() =>
@@ -632,7 +632,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectClientAsync("alice");
 
             var reply = await AskAsync(alice, "sub-4",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                Node,
                                                                alice.BareJid,
                                                                "sub-4"));
@@ -709,10 +709,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             await AskAsync(alice, "sub-5",
-                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, alice.BareJid, "sub-5"));
+                           PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node, alice.BareJid, "sub-5"));
 
             var unsubscribed = await AskAsync(alice, "unsub-5",
-                                              PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                              PubSubBuilder.Unsubscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                         Node,
                                                                         alice.BareJid,
                                                                         "unsub-5"));
@@ -746,7 +746,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var reply = await AskAsync(alice, "unsub-6",
-                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Unsubscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                  Node,
                                                                  alice.BareJid,
                                                                  "unsub-6"));
@@ -784,7 +784,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             await AskAsync(alice, "sub-7",
-                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, alice.BareJid, "sub-7"));
+                           PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node, alice.BareJid, "sub-7"));
 
             var reply = await AskAsync(alice, "unsub-7",
                                        $"<iq type='set' to='bob@{Server.Domain}' id='unsub-7'>" +
@@ -830,10 +830,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             await AskAsync(carol, "sub-11",
-                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, carol.BareJid, "sub-11"));
+                           PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node, carol.BareJid, "sub-11"));
 
             var reply = await AskAsync(alice, "unsub-11",
-                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Unsubscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                  Node,
                                                                  carol.BareJid,
                                                                  "unsub-11"));
@@ -876,7 +876,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-8",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-8"));
 
             var subId = SubscriptionOf(grant)?.Attr("subid");
@@ -917,7 +917,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectClientAsync("alice");
 
             await AskAsync(alice, "sub-9",
-                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node, alice.BareJid, "sub-9"));
+                           PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node, alice.BareJid, "sub-9"));
 
             var events = CollectEvents(alice);
 
@@ -1000,7 +1000,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await SubscribeAsync(alice, "sub-12b");
 
             var reply = await AskAsync(alice, "unsub-12",
-                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Unsubscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                  Node,
                                                                  alice.BareJid,
                                                                  "unsub-12"));
@@ -1038,7 +1038,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var second = await SubscribeAsync(alice, "sub-13b");
 
             var reply = await AskAsync(alice, "unsub-13",
-                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Unsubscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                  alice.BareJid, "unsub-13", first));
 
             Assert.That(reply.Attr("type"), Is.EqualTo("result"));
@@ -1247,7 +1247,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var reply = await AskAsync(alice, "new-4",
-                                       PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:foreign", "new-4"));
+                                       PubSubBuilder.CreateNode(JID.Parse($"bob@{Server.Domain}"), "urn:example:foreign", "new-4"));
 
             Assert.Multiple(() =>
             {
@@ -1381,14 +1381,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectClientAsync("bob");
 
             var created = await AskAsync(bob, "new-1",
-                                         PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:empty", "new-1"));
+                                         PubSubBuilder.CreateNode(JID.Parse($"bob@{Server.Domain}"), "urn:example:empty", "new-1"));
 
             Assert.That(created.Attr("type"), Is.EqualTo("result"));
 
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-31",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:empty",
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), "urn:example:empty",
                                                                alice.BareJid, "sub-31"));
 
             Assert.That(grant.Attr("type"), Is.EqualTo("result"),
@@ -1415,7 +1415,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await PublishingBobAsync();
 
             var reply = await AskAsync(bob, "new-2",
-                                       PubSubBuilder.CreateNode($"bob@{Server.Domain}", Node, "new-2"));
+                                       PubSubBuilder.CreateNode(JID.Parse($"bob@{Server.Domain}"), Node, "new-2"));
 
             Assert.Multiple(() =>
             {
@@ -1584,7 +1584,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                          $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
             var subscribed = await AskAsync(alice, "sub-40",
-                                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                            PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                     alice.BareJid, "sub-40"));
 
             Assert.Multiple(() =>
@@ -1635,7 +1635,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(fetched.Attr("type"), Is.EqualTo("result"));
 
             var subscribed = await AskAsync(alice, "sub-41",
-                                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                            PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                     alice.BareJid, "sub-41"));
 
             Assert.That(subscribed.Attr("type"), Is.EqualTo("result"));
@@ -1911,13 +1911,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await PublishingBobAsync();
 
             await AskAsync(bob, "new-10",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-10"));
+                           PubSubBuilder.CreateNode(JID.Parse($"bob@{Server.Domain}"), "urn:example:second", "new-10"));
 
             var alice   = await ConnectClientAsync("alice");
             var firstId = await SubscribeAsync(alice, "sub-50");
 
             var second  = await AskAsync(alice, "sub-51",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:second",
+                                         PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), "urn:example:second",
                                                                  alice.BareJid, "sub-51"));
 
             var secondId = SubscriptionOf(second)?.Attr("subid");
@@ -1990,14 +1990,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await PublishingBobAsync();
 
             await AskAsync(bob, "new-11",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-11"));
+                           PubSubBuilder.CreateNode(JID.Parse($"bob@{Server.Domain}"), "urn:example:second", "new-11"));
 
             var alice = await ConnectClientAsync("alice");
 
             await SubscribeAsync(alice, "sub-54");
 
             await AskAsync(alice, "sub-55",
-                           PubSubBuilder.Subscribe($"bob@{Server.Domain}", "urn:example:second",
+                           PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), "urn:example:second",
                                                    alice.BareJid, "sub-55"));
 
             var list = await AskAsync(alice, "list-3", SubscriptionsIq("list-3", "urn:example:second"));
@@ -2315,7 +2315,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             await AskAsync(bob, "new-21",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-21"));
+                           PubSubBuilder.CreateNode(JID.Parse($"bob@{Server.Domain}"), "urn:example:second", "new-21"));
 
             await AskAsync(bob, "aff-7",
                            AffiliationsIq("aff-7", "set",
@@ -2373,7 +2373,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                          $"<pubsub xmlns='{PubSubNamespace}'><items node='{Node}'/></pubsub></iq>");
 
             var subscribed = await AskAsync(alice, "sub-62",
-                                            PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                            PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                     alice.BareJid, "sub-62"));
 
             Assert.Multiple(() =>
@@ -2485,7 +2485,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await PublishingBobAsync();
 
             await AskAsync(bob, "new-20",
-                           PubSubBuilder.CreateNode($"bob@{Server.Domain}", "urn:example:second", "new-20"));
+                           PubSubBuilder.CreateNode(JID.Parse($"bob@{Server.Domain}"), "urn:example:second", "new-20"));
 
             var alice = await ConnectClientAsync("alice");
             var carol = await ConnectClientAsync("carol");
@@ -2610,11 +2610,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                        ConfigForm("<field var='pubsub#access_model'><value>whitelist</value></field>")));
 
             var member   = await AskAsync(alice, "sub-70",
-                                          PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                          PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                   alice.BareJid, "sub-70"));
 
             var stranger = await AskAsync(carol, "sub-71",
-                                          PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                          PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                   carol.BareJid, "sub-71"));
 
             Assert.Multiple(() =>
@@ -2979,7 +2979,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var reply = await AskAsync(alice, "opt-26",
                                        OptionsIq("opt-26", "set",
                                                  form: SubmitForm(DeliverField("0")),
-                                                 jid:  carol.BareJid));
+                                                 jid:  carol.BareJid.ToString()));
 
             Assert.Multiple(() =>
             {
@@ -3287,7 +3287,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var removed = await AskAsync(bob, "subm-5",
                                          NodeSubscriptionsIq("subm-5", "set",
-                                                             SubscriberEntry(alice.BareJid, "none")));
+                                                             SubscriberEntry(alice.BareJid.ToString(), "none")));
 
             var events = CollectEvents(alice);
 
@@ -3339,7 +3339,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-7",
                            NodeSubscriptionsIq("subm-7", "set",
-                                               SubscriberEntry(alice.BareJid, "none")));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none")));
 
             var events = CollectEvents(alice);
 
@@ -3381,7 +3381,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-21",
                            NodeSubscriptionsIq("subm-21", "set",
-                                               SubscriberEntry(alice.BareJid, "none")));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none")));
 
             var atCarol = CollectEvents(carol);
 
@@ -3416,7 +3416,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-9",
                            NodeSubscriptionsIq("subm-9", "set",
-                                               SubscriberEntry(alice.BareJid, "none", first)));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none", first)));
 
             var events = CollectEvents(alice);
 
@@ -3469,7 +3469,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var wrong = await AskAsync(bob, "subm-12",
                                        NodeSubscriptionsIq("subm-12", "set",
-                                                           SubscriberEntry(alice.BareJid, "none", "doesnotexist")));
+                                                           SubscriberEntry(alice.BareJid.ToString(), "none", "doesnotexist")));
 
             var list = await AskAsync(bob, "subm-13", NodeSubscriptionsIq("subm-13", "get"));
 
@@ -3512,7 +3512,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var refused = await AskAsync(bob, "subm-14",
                                          NodeSubscriptionsIq("subm-14", "set",
-                                                             SubscriberEntry(alice.BareJid, "subscribed")));
+                                                             SubscriberEntry(alice.BareJid.ToString(), "subscribed")));
 
             var events = CollectEvents(alice);
 
@@ -3555,7 +3555,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var back = await AskAsync(bob, "subm-15",
                                       NodeSubscriptionsIq("subm-15", "set",
-                                                          SubscriberEntry(alice.BareJid, "subscribed", subId)));
+                                                          SubscriberEntry(alice.BareJid.ToString(), "subscribed", subId)));
 
             await AskAsync(bob, "pub-13",
                            PublishIq("pub-13", Node, "13", "<weather xmlns='urn:example:x'>dew</weather>"));
@@ -3604,11 +3604,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var nonsense = await AskAsync(bob, "subm-16",
                                           NodeSubscriptionsIq("subm-16", "set",
-                                                              SubscriberEntry(alice.BareJid, "nonw")));
+                                                              SubscriberEntry(alice.BareJid.ToString(), "nonw")));
 
             var pending = await AskAsync(bob, "subm-17",
                                          NodeSubscriptionsIq("subm-17", "set",
-                                                             SubscriberEntry(alice.BareJid, "pending", subId)));
+                                                             SubscriberEntry(alice.BareJid.ToString(), "pending", subId)));
 
             var list = await AskAsync(bob, "subm-18", NodeSubscriptionsIq("subm-18", "get"));
 
@@ -3653,8 +3653,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var refused = await AskAsync(bob, "subm-19",
                                          NodeSubscriptionsIq("subm-19", "set",
-                                                             SubscriberEntry(alice.BareJid, "none") +
-                                                             SubscriberEntry(carol.BareJid, "maybe")));
+                                                             SubscriberEntry(alice.BareJid.ToString(), "none") +
+                                                             SubscriberEntry(carol.BareJid.ToString(), "maybe")));
 
             var list = await AskAsync(bob, "subm-20", NodeSubscriptionsIq("subm-20", "get"));
 
@@ -3698,7 +3698,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-23",
                            NodeSubscriptionsIq("subm-23", "set",
-                                               SubscriberEntry(alice.BareJid, "none")));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none")));
 
             await WaitFor(() => EndingsIn(events).Count > 0, "the notice to the removed one");
 
@@ -3742,7 +3742,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-28",
                            NodeSubscriptionsIq("subm-28", "set",
-                                               SubscriberEntry(alice.BareJid, "none")));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none")));
 
             await WaitFor(() => EndingsIn(events).Count > 1, "both notices");
 
@@ -3818,7 +3818,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-24",
                            NodeSubscriptionsIq("subm-24", "set",
-                                               SubscriberEntry(alice.BareJid, "none", first)));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none", first)));
 
             await WaitFor(() => EndingsIn(events).Count > 0, "the notice about the one subscription");
 
@@ -3859,7 +3859,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-26",
                            NodeSubscriptionsIq("subm-26", "set",
-                                               SubscriberEntry(alice.BareJid, "none")));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none")));
 
             await WaitFor(() => EndingsIn(atAlice).Count > 0, "the notice to the removed one");
 
@@ -3893,7 +3893,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var refused = await AskAsync(bob, "subm-27",
                                          NodeSubscriptionsIq("subm-27", "set",
-                                                             SubscriberEntry(alice.BareJid, "none", "doesnotexist")));
+                                                             SubscriberEntry(alice.BareJid.ToString(), "none", "doesnotexist")));
 
             await WaitAgainst(() => EndingsIn(events).Count > 0,
                               "a notice without an ended subscription");
@@ -3927,7 +3927,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var events = CollectEvents(alice);
 
             var reply = await AskAsync(alice, "unsub-20",
-                                       PubSubBuilder.Unsubscribe($"bob@{Server.Domain}",
+                                       PubSubBuilder.Unsubscribe(JID.Parse($"bob@{Server.Domain}"),
                                                                  Node,
                                                                  alice.BareJid,
                                                                  "unsub-20"));
@@ -3967,7 +3967,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-60",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-60"));
 
             var events = CollectEvents(alice);
@@ -3979,7 +3979,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                               "a delivery to an applied-for subscription");
 
             var fetching = await AskAsync(alice, "get-60",
-                                          PubSubBuilder.GetItems($"bob@{Server.Domain}", Node, id: "get-60"));
+                                          PubSubBuilder.GetItems(JID.Parse($"bob@{Server.Domain}"), Node, id: "get-60"));
 
             Assert.Multiple(() =>
             {
@@ -4023,7 +4023,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-61",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-61"));
 
             var subId  = SubscriptionOf(grant)!.Attr("subid")!;
@@ -4034,7 +4034,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var approved = await AskAsync(bob, "subm-61",
                                           NodeSubscriptionsIq("subm-61", "set",
-                                                              SubscriberEntry(alice.BareJid, "subscribed", subId)));
+                                                              SubscriberEntry(alice.BareJid.ToString(), "subscribed", subId)));
 
             await WaitFor(() => Count(atAlice) > 0, "the grant to the one waiting");
 
@@ -4079,12 +4079,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-62",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-62"));
 
             await AskAsync(bob, "subm-63",
                            NodeSubscriptionsIq("subm-63", "set",
-                                               SubscriberEntry(alice.BareJid, "subscribed",
+                                               SubscriberEntry(alice.BareJid.ToString(), "subscribed",
                                                                SubscriptionOf(grant)!.Attr("subid"))));
 
             var events = CollectEvents(alice);
@@ -4095,7 +4095,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => ItemIdsIn(events).Count > 0, "the delivery after the grant");
 
             var fetching = await AskAsync(alice, "get-61",
-                                          PubSubBuilder.GetItems($"bob@{Server.Domain}", Node, id: "get-61"));
+                                          PubSubBuilder.GetItems(JID.Parse($"bob@{Server.Domain}"), Node, id: "get-61"));
 
             Assert.Multiple(() =>
             {
@@ -4131,7 +4131,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-63",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-63"));
 
             var subId  = SubscriptionOf(grant)!.Attr("subid")!;
@@ -4140,7 +4140,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await AskAsync(bob, "subm-64",
                            NodeSubscriptionsIq("subm-64", "set",
-                                               SubscriberEntry(alice.BareJid, "none", subId)));
+                                               SubscriberEntry(alice.BareJid.ToString(), "none", subId)));
 
             await WaitFor(() => EndingsIn(atAlice).Count > 0, "the denial to the one waiting");
 
@@ -4222,7 +4222,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-70",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-70"));
 
             await WaitFor(() => Count(atBob) > 0, "the application at the owner");
@@ -4277,14 +4277,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-71",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-71"));
 
             var subId  = SubscriptionOf(grant)!.Attr("subid")!;
 
             var atAlice = CollectEvents(alice);
 
-            await bob.SendRawAsync(AuthorizationAnswer(alice.BareJid, subId, yes: true));
+            await bob.SendRawAsync(AuthorizationAnswer(alice.BareJid.ToString(), subId, yes: true));
 
             await WaitFor(() => atAlice.Any(e => e.Contains("subscription='subscribed'", StringComparison.Ordinal)),
                           "the grant to the one waiting");
@@ -4316,14 +4316,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-72",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-72"));
 
             var subId  = SubscriptionOf(grant)!.Attr("subid")!;
 
             var atAlice = CollectEvents(alice);
 
-            await bob.SendRawAsync(AuthorizationAnswer(alice.BareJid, subId, yes: false));
+            await bob.SendRawAsync(AuthorizationAnswer(alice.BareJid.ToString(), subId, yes: false));
 
             await WaitFor(() => EndingsIn(atAlice).Count > 0, "the denial to the one waiting");
 
@@ -4362,18 +4362,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var grant = await AskAsync(alice, "sub-73",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-73"));
 
             var subId  = SubscriptionOf(grant)!.Attr("subid")!;
 
             await AskAsync(bob, "subm-72",
                            NodeSubscriptionsIq("subm-72", "set",
-                                               SubscriberEntry(alice.BareJid, "subscribed", subId)));
+                                               SubscriberEntry(alice.BareJid.ToString(), "subscribed", subId)));
 
             var atAlice = CollectEvents(alice);
 
-            await bob.SendRawAsync(AuthorizationAnswer(alice.BareJid, subId, yes: false));
+            await bob.SendRawAsync(AuthorizationAnswer(alice.BareJid.ToString(), subId, yes: false));
 
             await WaitAgainst(() => EndingsIn(atAlice).Count > 0,
                               "a denial after the grant");
@@ -4414,7 +4414,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var carol  = await ConnectClientAsync("carol");
 
             var grant = await AskAsync(alice, "sub-74",
-                                       PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                       PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                alice.BareJid, "sub-74"));
 
             var subId  = SubscriptionOf(grant)!.Attr("subid")!;
@@ -4423,7 +4423,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Alice sends the answer to her own application to Carol - in whose
             // account this node does not exist.
-            await alice.SendRawAsync(AuthorizationAnswer(alice.BareJid, subId, yes: true, to: carol.BareJid));
+            await alice.SendRawAsync(AuthorizationAnswer(alice.BareJid.ToString(), subId, yes: true, to: carol.BareJid.ToString()));
 
             await WaitFor(() => Count(atCarol) > 0,
                           "the message that is no answer");
@@ -4469,11 +4469,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var carol = await ConnectClientAsync("carol");
 
             var inside  = await AskAsync(alice, "sub-50",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                         PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                  alice.BareJid, "sub-50"));
 
             var outside = await AskAsync(carol, "sub-51",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                         PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                  carol.BareJid, "sub-51"));
 
             Assert.Multiple(() =>
@@ -4516,11 +4516,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var carol = await ConnectClientAsync("carol");
 
             var inside  = await AskAsync(alice, "sub-52",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                         PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                  alice.BareJid, "sub-52"));
 
             var outside = await AskAsync(carol, "sub-53",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                         PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                  carol.BareJid, "sub-53"));
 
             Assert.Multiple(() =>
@@ -4564,7 +4564,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var carol = await ConnectClientAsync("carol");
 
             var inside = await AskAsync(carol, "sub-54",
-                                        PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                        PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                 carol.BareJid, "sub-54"));
 
             Assert.Multiple(() =>
@@ -4611,7 +4611,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var inside = await AskAsync(alice, "sub-55",
-                                        PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                        PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                 alice.BareJid, "sub-55"));
 
             Assert.That(inside.Attr("type"), Is.EqualTo("result"),
@@ -4990,7 +4990,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(account.GetPepItems(Node),      Is.Empty);
                 Assert.That(account.PepNodeConfiguration(Node), Is.Null);
 
-                Assert.That(account.PepAffiliationOf(Node, carol.BareJid),
+                Assert.That(account.PepAffiliationOf(Node, carol.BareJid.ToString()),
                             Is.EqualTo(PubSubAffiliation.None),
                             "The lockout has gone with the node as well.");
 
@@ -5015,7 +5015,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await AskAsync(bob, "del-2", OwnerIq("del-2", "set", "delete"));
 
             var refused = await AskAsync(alice, "sub-30",
-                                         PubSubBuilder.Subscribe($"bob@{Server.Domain}", Node,
+                                         PubSubBuilder.Subscribe(JID.Parse($"bob@{Server.Domain}"), Node,
                                                                  alice.BareJid, "sub-30"));
 
             Assert.That(ConditionOf(refused), Is.EqualTo("item-not-found"));
@@ -5373,7 +5373,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 // First a role that ends nothing - at the same subscriber.
                 // Otherwise the empty list would only prove that Carol had
                 // nothing anyway.
-                Assert.That(account.SetPepAffiliation(Node, alice.BareJid,
+                Assert.That(account.SetPepAffiliation(Node, alice.BareJid.ToString(),
                                                       PubSubAffiliation.Member, out var none),
                             Is.True);
 
@@ -5384,7 +5384,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             Is.EqualTo(new[] { subId }),
                             "And leaves the subscription standing.");
 
-                Assert.That(account.SetPepAffiliation(Node, alice.BareJid,
+                Assert.That(account.SetPepAffiliation(Node, alice.BareJid.ToString(),
                                                       PubSubAffiliation.Outcast, out var ended),
                             Is.True);
 
@@ -5421,13 +5421,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(account.RemovePepSubscriptions("urn:example:nothing", alice.BareJid),
+                Assert.That(account.RemovePepSubscriptions("urn:example:nothing", alice.BareJid.ToString()),
                             Is.Empty);
 
                 Assert.That(account.RemovePepSubscriptions(Node, $"carol@{Server.Domain}"),
                             Is.Empty);
 
-                Assert.That(account.RemovePepSubscriptions(Node, alice.BareJid).Select(a => a.Jid),
+                Assert.That(account.RemovePepSubscriptions(Node, alice.BareJid.ToString()).Select(a => a.Jid),
                             Is.EqualTo(new[] { alice.BareJid }));
 
                 Assert.That(account.PepSubscriptions(Node), Is.Empty);

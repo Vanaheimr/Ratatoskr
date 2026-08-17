@@ -59,7 +59,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             Assert.That(await client.SetActiveAsync(false), Is.True,
                         "The server did not announce XEP-0352.");
@@ -339,7 +339,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {
@@ -377,7 +377,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferClientStateIndication = false;
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             var reported = await client.SetActiveAsync(false);
 
@@ -418,7 +418,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             var before = session.Sent.Count;
 
@@ -705,7 +705,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferClientStateIndication = false;
 
             var client   = await ConnectClientAsync(maxReconnectAttempts: 0);
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             await client.SendRawAsync(ClientStateIndication.InactiveXml);
 
@@ -790,7 +790,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.SendRawAsync("<enable xmlns='urn:xmpp:sm:3' resume='true'/>");
 
-            var session = Server.SessionOf(client.FullJid)!;
+            var session = Server.SessionOf(client.FullJid.ToString())!;
 
             await WaitFor(() => session.StreamManagementEnabled, "the negotiated stream management");
 
@@ -841,7 +841,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync(streamManagement: true);
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             await client.SetActiveAsync(false);
 

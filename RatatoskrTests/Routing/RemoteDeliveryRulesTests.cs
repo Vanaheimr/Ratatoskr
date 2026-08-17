@@ -202,7 +202,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectAsync(_left, "alice");
             _right.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "See you later");
+            await alice.SendMessageAsync(JID.Parse(Bob), "See you later");
 
             await WaitFor(() => BobsStore.Count == 1,
                           "the stored message on Bob's server");
@@ -255,7 +255,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectAsync(_left, "alice");
             _right.AddAccount("bob");
 
-            await alice.SendMessageAsync(Bob, "Out of the store");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Out of the store");
 
             await WaitFor(() => BobsStore.Count == 1, "the stored message");
 
@@ -373,7 +373,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var errors = new ConcurrentQueue<StanzaError>();
             alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
-            await alice.SendMessageAsync(Bob, "Does not arrive");
+            await alice.SendMessageAsync(JID.Parse(Bob), "Does not arrive");
 
             await WaitFor(() => !errors.IsEmpty, "the refusal back across the border");
 
@@ -462,7 +462,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await secondDevice.ConnectAsync();
 
-            await WaitFor(() => _right.SessionOf(secondDevice.FullJid!)?.PresencePriority == -1,
+            await WaitFor(() => _right.SessionOf(secondDevice.FullJid!.ToString())?.PresencePriority == -1,
                           "the negative priority on Bob's server");
 
             await alice.SendRawAsync(
@@ -565,7 +565,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Afterwards one that has to be stored - it establishes that the
             // store ran while the notice fell through.
-            await alice.SendMessageAsync(Bob, "And this one stays lying");
+            await alice.SendMessageAsync(JID.Parse(Bob), "And this one stays lying");
 
             await WaitFor(() => BobsStore.Count == 1, "the stored message");
 
@@ -952,7 +952,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // first presence already meets the entry, it goes to Alice over the
             // ordinary distribution - and the test would pass without a probe
             // ever having been answered. That is exactly what it did at first.
-            await WaitFor(() => _right.SessionOf(bob.FullJid!)?.IsAvailable == true,
+            await WaitFor(() => _right.SessionOf(bob.FullJid!.ToString())?.IsAvailable == true,
                           "Bob's first presence on his server");
 
             // Bob lets Alice see his state - without that every probe stays
@@ -1005,7 +1005,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectAsync(_left,  "alice");
             var bob   = await ConnectAsync(_right, "bob");
 
-            await WaitFor(() => _right.SessionOf(bob.FullJid!)?.IsAvailable == true,
+            await WaitFor(() => _right.SessionOf(bob.FullJid!.ToString())?.IsAvailable == true,
                           "Bob's first presence on his server");
 
             // The wrong half: Bob sees Alice, Alice does not see Bob.
@@ -1071,7 +1071,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob        = Create(_right, "bob");
             var presences  = new ConcurrentQueue<String>();
 
-            bob.Connection.OnPresence += (timestamp, sender, from, show, ct) => { presences.Enqueue(from); return Task.CompletedTask; };
+            bob.Connection.OnPresence += (timestamp, sender, from, show, ct) => { presences.Enqueue(from.ToString()); return Task.CompletedTask; };
 
             await bob.ConnectAsync();
             await alice.SetPresenceAsync("dnd", "Please do not disturb");

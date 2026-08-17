@@ -294,7 +294,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts("alice", "bob");
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "to-the-resource"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "to-the-resource"));
 
             await WaitFor(() => !atBob.IsEmpty, "the request at the resource");
 
@@ -333,7 +333,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "from-a-stranger"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "from-a-stranger"));
             await WaitFor(() => !errors.IsEmpty, "the refusal");
 
             errors.TryDequeue(out var toTheExistingOne);
@@ -392,7 +392,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "wrong-half"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "wrong-half"));
 
             await WaitFor(() => !errors.IsEmpty,
                           "the turning away despite the roster entry");
@@ -402,7 +402,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // And now the half that counts.
             SetServerRoster("bob", "alice", "from");
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "right-half"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "right-half"));
 
             await WaitFor(() => !atBob.IsEmpty,
                           "the request after the right roster state");
@@ -447,17 +447,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "before"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "before"));
             await WaitFor(() => !errors.IsEmpty, "the turning away without directed presence");
 
             // Bob shows Alice his presence - to her full JID.
             await bob.SendRawAsync($"<presence to='{alice.FullJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "after"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "after"));
 
             await WaitFor(() => !atBob.IsEmpty,
                           "the request after the directed presence");
@@ -487,23 +487,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (bob, atBob) = await ResourceAsync("bob", "Mobile");
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "during"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "during"));
             await WaitFor(() => !atBob.IsEmpty, "the request at an open door");
 
             // Bob withdraws his presence towards Alice.
             await bob.SendRawAsync($"<presence to='{alice.BareJid}' type='unavailable'/>");
 
-            await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
-                                       .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => !Server.SessionOf(bob.FullJid!.ToString())!
+                                       .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the taking back of the note");
 
             var errors = ErrorBasket(alice);
 
-            await alice.SendRawAsync(Request(bob.FullJid!, "afterwards"));
+            await alice.SendRawAsync(Request(bob.FullJid!.ToString(), "afterwards"));
 
             await WaitFor(() => !errors.IsEmpty,
                           "the turning away after the revocation");
@@ -533,17 +533,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (bob, _) = await ResourceAsync("bob", "Mobile");
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
             // Not directed at Alice, but the sign-off of one's own.
             await bob.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)?.IsAvailable == false,
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())?.IsAvailable == false,
                           "the sign-off at the server");
 
-            Assert.That(Server.SessionOf(bob.FullJid!)!.DirectedPresenceTargets,
+            Assert.That(Server.SessionOf(bob.FullJid!.ToString())!.DirectedPresenceTargets,
                         Is.Empty,
                         "The sign-off takes every directed presence back with it.");
 

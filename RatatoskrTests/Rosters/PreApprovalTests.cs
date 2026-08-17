@@ -100,7 +100,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob = new List<String>();
             bob.OnPresenceChanged += (timestamp, sender, from, type, ct) => { atBob.Add($"{from}/{type}"); return Task.CompletedTask; };
 
-            await alice.PreApproveContactAsync(Bob);
+            await alice.PreApproveContactAsync(JID.Parse(Bob));
 
             await WaitFor(() => IsPreApproved(Alice, Bob), "the pre-approval at Alice");
 
@@ -136,13 +136,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requestsAtAlice = new List<String>();
-            alice.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requestsAtAlice.Add(from); return Task.CompletedTask; };
+            alice.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requestsAtAlice.Add(from.ToString()); return Task.CompletedTask; };
 
-            await alice.PreApproveContactAsync(Bob);
+            await alice.PreApproveContactAsync(JID.Parse(Bob));
             await WaitFor(() => IsPreApproved(Alice, Bob), "the pre-approval");
 
             // Now Bob actually asks.
-            await bob.AddContactAsync(Alice, "Alice");
+            await bob.AddContactAsync(JID.Parse(Alice), "Alice");
 
             await WaitFor(() => SubscriptionOf(Bob, Alice) == "to",
                           "Bob's 'to' half from the automatic consent");
@@ -179,12 +179,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from.ToString()); return Task.CompletedTask; };
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob");
 
-            await bob.AcceptSubscriptionAsync(Alice);
+            await bob.AcceptSubscriptionAsync(JID.Parse(Alice));
 
             await WaitFor(() => SubscriptionOf(Alice, Bob) == "to",
                           "Alice's 'to' half");
@@ -216,12 +216,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from.ToString()); return Task.CompletedTask; };
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob");
 
-            await bob.AcceptSubscriptionAsync(Alice);
+            await bob.AcceptSubscriptionAsync(JID.Parse(Alice));
             await WaitFor(() => SubscriptionOf(Bob, Alice) == "from", "the consent");
 
             // Once more - that must change nothing, and in particular produce
@@ -232,7 +232,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // do nothing here. The test would then have passed without ever
             // having sent the stanza off - and that is exactly how it ran
             // through at first.
-            await bob.Connection.AcceptSubscriptionAsync(Alice);
+            await bob.Connection.AcceptSubscriptionAsync(JID.Parse(Alice));
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 
@@ -259,18 +259,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             var bob   = await ConnectClientAsync("bob");
 
-            await alice.PreApproveContactAsync(Bob);
+            await alice.PreApproveContactAsync(JID.Parse(Bob));
             await WaitFor(() => IsPreApproved(Alice, Bob), "the pre-approval");
 
-            await alice.DenySubscriptionAsync(Bob);
+            await alice.DenySubscriptionAsync(JID.Parse(Bob));
             await WaitFor(() => !IsPreApproved(Alice, Bob), "the taking back");
 
             var requests = new List<String>();
-            alice.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
+            alice.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from.ToString()); return Task.CompletedTask; };
 
             // Without the pre-approval Bob's request has to land at Alice
             // again.
-            await bob.AddContactAsync(Alice, "Alice");
+            await bob.AddContactAsync(JID.Parse(Alice), "Alice");
 
             await WaitFor(() => requests.Count > 0,
                           "the request at Alice after the pre-approval was taken back");
@@ -310,7 +310,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Section 3.4.1: without the announcement the client must not even
             // try - the method refuses of its own accord.
-            Assert.That(await alice.PreApproveContactAsync(Bob), Is.False);
+            Assert.That(await alice.PreApproveContactAsync(JID.Parse(Bob)), Is.False);
 
             await Task.Delay(TimeSpan.FromSeconds(1));
 

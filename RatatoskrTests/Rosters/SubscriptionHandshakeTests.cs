@@ -82,14 +82,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from.ToString()); return Task.CompletedTask; };
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
                           "the contact request at Bob");
 
-            await bob.AcceptSubscriptionAsync(Alice);
+            await bob.AcceptSubscriptionAsync(JID.Parse(Alice));
 
             await WaitFor(() => SubscriptionOf(Bob, Alice) is "from" or "both",
                           "the subscription state after the acceptance");
@@ -115,7 +115,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
             await ConnectClientAsync("bob");
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             await WaitFor(() => AskOf(Alice, Bob) == "subscribe", "the open request in Alice's roster");
 
@@ -141,9 +141,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from.ToString()); return Task.CompletedTask; };
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
 
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
                           "the contact request at Bob");
@@ -224,16 +224,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from.ToString()); return Task.CompletedTask; };
 
             var atAlices = new ConcurrentQueue<String>();
             alice.OnPresenceChanged += (timestamp, sender, from, type, ct) => { atAlices.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
                           "the contact request at Bob");
 
-            await bob.AcceptSubscriptionAsync(Alice);
+            await bob.AcceptSubscriptionAsync(JID.Parse(Alice));
 
             // Bob deliberately sends nothing after: the server has to hand the
             // presence on of its own accord. Insist on 'available': the
@@ -260,13 +260,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from.ToString()); return Task.CompletedTask; };
 
-            await alice.AddContactAsync(Bob, "Bob");
+            await alice.AddContactAsync(JID.Parse(Bob), "Bob");
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
                           "the contact request at Bob");
 
-            await bob.DenySubscriptionAsync(Alice);
+            await bob.DenySubscriptionAsync(JID.Parse(Alice));
 
             await WaitFor(() => AskOf(Alice, Bob) is null, "the request settled at Alice");
 
@@ -329,7 +329,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var (alice, _) = await HandshakeAsync();
 
-            await alice.CancelSubscriptionAsync(Bob);
+            await alice.CancelSubscriptionAsync(JID.Parse(Bob));
 
             // Wait on Bob's side, not on Alice's: the server changes the roster
             // of the sender first and then that of the other side. Whoever

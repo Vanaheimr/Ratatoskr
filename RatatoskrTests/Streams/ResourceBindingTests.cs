@@ -141,7 +141,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await second.ConnectAsync();
 
-            await WaitFor(() => Server.SessionOf(second.FullJid) is not null,
+            await WaitFor(() => Server.SessionOf(second.FullJid.ToString()) is not null,
                           "the server session for the newly handed-out resource");
 
         }

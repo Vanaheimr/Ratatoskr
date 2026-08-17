@@ -140,8 +140,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(atUpper, Is.Empty,
                             "The message to /mobile must not reach /Mobile.");
 
-                Assert.That(Server.SessionOf(upperClient.FullJid)?.Resource, Is.EqualTo("Mobile"));
-                Assert.That(Server.SessionOf(lowerClient.FullJid)?.Resource, Is.EqualTo("mobile"));
+                Assert.That(Server.SessionOf(upperClient.FullJid.ToString())?.Resource, Is.EqualTo("Mobile"));
+                Assert.That(Server.SessionOf(lowerClient.FullJid.ToString())?.Resource, Is.EqualTo("mobile"));
 
             });
 
@@ -239,7 +239,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(first.BareJid, Is.EqualTo(second.BareJid));
                 Assert.That(first.FullJid, Is.Not.EqualTo(second.FullJid),
                             "Both resources were given the same full JID.");
-                Assert.That(Server.SessionsOf(first.BareJid), Has.Count.EqualTo(2));
+                Assert.That(Server.SessionsOf(first.BareJid.ToString()), Has.Count.EqualTo(2));
             });
 
         }
@@ -260,7 +260,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var desktop  = await ConnectClientAsync("alice");
             var bob      = await ConnectClientAsync("bob");
 
-            await WaitFor(() => Server.SessionsOf(phone.BareJid).All(s => s.CarbonsEnabled),
+            await WaitFor(() => Server.SessionsOf(phone.BareJid.ToString()).All(s => s.CarbonsEnabled),
                           "the switching on of carbons for both resources");
 
             var carbons = new ConcurrentQueue<CarbonMessage>();
@@ -276,7 +276,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(carbon!.IsSent,   Is.True, "The carbon was not recognised as 'sent'.");
                 Assert.That(carbon.Body,      Is.EqualTo("Written from the phone"));
-                Assert.That(carbon.OriginalTo, Does.StartWith(bob.BareJid));
+                Assert.That(carbon.OriginalTo, Does.StartWith(bob.BareJid.ToString()));
             });
 
         }
@@ -341,7 +341,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectClientAsync("bob");
             await bob.SetPresenceAsync("away", "Back in a moment");
 
-            await WaitFor(() => presences.Any(p => p.StartsWith(bob.BareJid, StringComparison.OrdinalIgnoreCase)),
+            await WaitFor(() => presences.Any(p => p.StartsWith(bob.BareJid.ToString(), StringComparison.OrdinalIgnoreCase)),
                           "Bob's presence at Alice");
 
             Assert.Pass();

@@ -221,7 +221,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var before = client.StreamManagement!.OutboundCount;
 
-            await client.SendMessageAsync($"bob@{Server.Domain}", "Hello");
+            await client.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Hello");
 
             await WaitFor(() => client.StreamManagement!.OutboundCount == before + 1,
                           "the counted message");
@@ -257,7 +257,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var before = client.StreamManagement!.OutboundCount;
 
             await Task.WhenAll(Enumerable.Range(0, 50)
-                                         .Select(i => client.SendMessageAsync($"bob@{Server.Domain}", $"Message {i}")));
+                                         .Select(i => client.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), $"Message {i}")));
 
             await WaitFor(() => client.StreamManagement!.OutboundCount == before + 50,
                           "50 counted messages");
@@ -285,7 +285,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync(streamManagement: false);
 
-            await client.SendMessageAsync($"bob@{Server.Domain}", "Hello");
+            await client.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Hello");
 
             Assert.Multiple(() =>
             {

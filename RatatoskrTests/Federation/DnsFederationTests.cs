@@ -308,7 +308,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             alice.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
-            await alice.SendMessageAsync("who@nobody.example", "Hello?");
+            await alice.SendMessageAsync(JID.Parse("who@nobody.example"), "Hello?");
 
             await WaitFor(() => errors.Count > 0, "the error for the unknown domain");
 

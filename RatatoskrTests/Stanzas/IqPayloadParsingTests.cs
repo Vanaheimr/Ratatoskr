@@ -44,10 +44,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
+            await WaitFor(() => Server.SessionOf(client.FullJid.ToString()) is not null,
                           "the server session for the client");
 
-            return (client, Server.SessionOf(client.FullJid)!);
+            return (client, Server.SessionOf(client.FullJid.ToString())!);
 
         }
 
@@ -123,7 +123,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 }
             };
 
-            var info = await client.Connection.Disco!.QueryInfoAsync(Server.Domain,
+            var info = await client.Connection.Disco!.QueryInfoAsync(JID.Parse(Server.Domain),
                                                                      timeout: TimeSpan.FromSeconds(5));
 
             Assert.Multiple(() =>
@@ -171,7 +171,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 }
             };
 
-            var info = await client.Connection.Disco!.QueryInfoAsync(Server.Domain,
+            var info = await client.Connection.Disco!.QueryInfoAsync(JID.Parse(Server.Domain),
                                                                      timeout: TimeSpan.FromSeconds(5));
 
             Assert.Multiple(() =>
@@ -292,7 +292,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => session.Received.Any(f => f.Contains("id='fake-push'", StringComparison.Ordinal)),
                           "the answer to the IQ");
 
-            Assert.That(client.GetContact($"intruder@{Server.Domain}"), Is.Null,
+            Assert.That(client.GetContact(JID.Parse($"intruder@{Server.Domain}")), Is.Null,
                         "An embedded roster element is no roster push.");
 
         }

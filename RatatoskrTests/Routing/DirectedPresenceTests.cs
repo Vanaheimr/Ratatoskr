@@ -107,7 +107,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => SignOffs(atAlice) > 0, "the sign-off at Alice");
 
-            Assert.That(Server.SessionOf(bob.FullJid!)!.DirectedPresenceTargets, Is.Empty,
+            Assert.That(Server.SessionOf(bob.FullJid!.ToString())!.DirectedPresenceTargets, Is.Empty,
                         "And the promise is thereby settled (section 4.6.1).");
 
         }
@@ -148,7 +148,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => atAlice.Any(p => p.Type != "unavailable"),
                           "the directed presence at Alice");
 
-            Server.KillSessionsOf(bob.BareJid);
+            Server.KillSessionsOf(bob.BareJid.ToString());
 
             await WaitFor(() => SignOffs(atAlice) > 0,
                           "the sign-off at Alice after the tear");
@@ -194,14 +194,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
             // Bob changes to "away" - the presence session carries on.
             await bob.SetPresenceAsync("away", "Lunch break");
 
-            Assert.That(Server.SessionOf(bob.FullJid!)!.HasDirectedPresenceTo(alice.BareJid),
+            Assert.That(Server.SessionOf(bob.FullJid!.ToString())!.HasDirectedPresenceTo(alice.BareJid.ToString()),
                         Is.True,
                         "A status change does not end the presence session.");
 
@@ -247,8 +247,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // First the directed presence ...
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
             // ... and only afterwards the roster entry: Alice may see Bob's state.
@@ -294,8 +294,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
             // Bob withdraws his presence towards Alice.
@@ -349,15 +349,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // Bob shows Alice his presence - she may ask him now.
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
             // Alice signs off at Bob's.
             await alice.SendRawAsync($"<presence to='{bob.BareJid}' type='unavailable'/>");
 
-            await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
-                                       .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => !Server.SessionOf(bob.FullJid!.ToString())!
+                                       .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the forgetting of the sender");
 
             // And with that her right to ask has expired.
@@ -400,15 +400,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
             // Alice shows Bob her presence - no sign-off.
             await alice.SendRawAsync($"<presence to='{bob.BareJid}'/>");
 
-            await WaitAgainst(() => !Server.SessionOf(bob.FullJid!)!
-                                          .HasDirectedPresenceTo(alice.BareJid),
+            await WaitAgainst(() => !Server.SessionOf(bob.FullJid!.ToString())!
+                                          .HasDirectedPresenceTo(alice.BareJid.ToString()),
                               "the forgetting at an ordinary presence");
 
         }
@@ -443,17 +443,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
             await alice.SendRawAsync($"<presence to='{bob.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid) &&
-                                Server.SessionOf(alice.FullJid!)!
-                                      .HasDirectedPresenceTo(bob.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()) &&
+                                Server.SessionOf(alice.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(bob.BareJid.ToString()),
                           "the notes on both sides");
 
             // Alice signs off entirely - not directed at Bob.
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
-                                       .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => !Server.SessionOf(bob.FullJid!.ToString())!
+                                       .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the forgetting over the path from rule 2");
 
         }
@@ -502,15 +502,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
             // Alice's sign-off goes to Bob over the ordinary distribution.
             await alice.SendRawAsync("<presence type='unavailable'/>");
 
-            await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
-                                       .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => !Server.SessionOf(bob.FullJid!.ToString())!
+                                       .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the forgetting over the broadcast path");
 
         }
@@ -547,14 +547,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await bob.SendRawAsync($"<presence to='{alice.BareJid}'/>");
 
-            await WaitFor(() => Server.SessionOf(bob.FullJid!)!
-                                      .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => Server.SessionOf(bob.FullJid!.ToString())!
+                                      .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the note of the directed presence");
 
-            Server.KillSessionsOf(alice.BareJid);
+            Server.KillSessionsOf(alice.BareJid.ToString());
 
-            await WaitFor(() => !Server.SessionOf(bob.FullJid!)!
-                                       .HasDirectedPresenceTo(alice.BareJid),
+            await WaitFor(() => !Server.SessionOf(bob.FullJid!.ToString())!
+                                       .HasDirectedPresenceTo(alice.BareJid.ToString()),
                           "the forgetting after the tear");
 
         }

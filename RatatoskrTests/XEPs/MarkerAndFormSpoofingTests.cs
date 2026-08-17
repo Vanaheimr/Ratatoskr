@@ -61,11 +61,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var seen = new List<ChatMarker>();
             alice.Connection.OnChatMarker += (timestamp, sender, marker, ct) => { lock (seen) seen.Add(marker);  return Task.CompletedTask; };
 
-            var id = await alice.Connection.SendMessageAsync($"bob@{Server.Domain}",
+            var id = await alice.Connection.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"),
                                                              "have you read this?",
                                                              markable: true);
 
-            await bob.Connection.SendChatMarkerAsync($"alice@{Server.Domain}",
+            await bob.Connection.SendChatMarkerAsync(JID.Parse($"alice@{Server.Domain}"),
                                                      id,
                                                      ChatMarkerType.Displayed);
 
@@ -127,11 +127,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             alice.Connection.OnChatMarker      += (timestamp, sender, marker, ct)  => { seen     = marker; return Task.CompletedTask; };
             alice.Connection.OnSpoofingAttempt += (timestamp, sender, message, ct) => { spoofing = message; return Task.CompletedTask; };
 
-            var id = await alice.Connection.SendMessageAsync($"bob@{Server.Domain}",
+            var id = await alice.Connection.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"),
                                                              "for Bob only",
                                                              markable: true);
 
-            await mallory.Connection.SendChatMarkerAsync($"alice@{Server.Domain}",
+            await mallory.Connection.SendChatMarkerAsync(JID.Parse($"alice@{Server.Domain}"),
                                                          id,
                                                          ChatMarkerType.Displayed);
 

@@ -103,7 +103,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // tests kept the machine busy enough. Two out of four full runs fell
             // over it - **a test that fails half the time measures nothing any
             // more**.
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
 
             var quiet = 0;
             var level = -1;
@@ -193,7 +193,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.ConnectAsync();
 
-            var session = Server.SessionOf(alice.FullJid!)!;
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
 
             Server.FailFrameHandling = true;
 
@@ -431,9 +431,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // a granted resumption is kept and not signed off (XEP-0198,
             // section 5). What is waited for is therefore that the connection is
             // gone, not the session.
-            Server.KillSessionsOf(bob.BareJid);
+            Server.KillSessionsOf(bob.BareJid.ToString());
 
-            await WaitFor(() => Server.SessionsOf(bob.BareJid).All(s => !s.IsOpen),
+            await WaitFor(() => Server.SessionsOf(bob.BareJid.ToString()).All(s => !s.IsOpen),
                           "the end of the connection");
 
             await alice.SendMessageAsync(bob.BareJid, "And another one, into the void");

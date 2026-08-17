@@ -86,7 +86,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var disco = Disco();
-            var query = disco.QueryInfoAsync(Bob);
+            var query = disco.QueryInfoAsync(JID.Parse(Bob));
 
             Assert.Multiple(() =>
             {
@@ -117,7 +117,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var disco = Disco();
-            var query = disco.QueryItemsAsync(Bob);
+            var query = disco.QueryItemsAsync(JID.Parse(Bob));
 
             Assert.That(disco.ProcessItemsResult("disco-items-1", ItemsResult(), "mallory@example.com"),
                         Is.False);
@@ -152,7 +152,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var disco = Disco();
-            var query = disco.QueryInfoAsync("somebody@far.example");
+            var query = disco.QueryInfoAsync(JID.Parse("somebody@far.example"));
 
             Assert.That(await disco.ProcessErrorAsync("disco-info-1",
                                            new StanzaError(StanzaErrorType.Cancel, "remote-server-not-found"),
@@ -176,7 +176,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var ping = Ping();
-            var task = ping.PingAsync(Bob);
+            var task = ping.PingAsync(JID.Parse(Bob));
 
             // Outside the Assert.Multiple, because that one takes a synchronous
             // lambda and the answer now has to be awaited.

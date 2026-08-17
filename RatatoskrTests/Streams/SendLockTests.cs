@@ -60,7 +60,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             var errors = await Task.WhenAll(
                              Enumerable.Range(0, Burst).Select(i => Task.Run(async () =>

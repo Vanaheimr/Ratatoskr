@@ -55,7 +55,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private async Task<String> AnswerToAsync(XMPPClient client, String stanza)
         {
 
-            var session = Server.SessionOf(client.FullJid)!;
+            var session = Server.SessionOf(client.FullJid.ToString())!;
             var before  = session.Sent.Count;
 
             await client.SendRawAsync(stanza);
@@ -200,7 +200,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync();
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
             var before  = session.Sent.Count;
 
             await alice.SendRawAsync(
@@ -277,7 +277,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = new List<String>();
             bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
             var before  = session.Sent.Count;
 
             // First the unusual address: it must not count as impossible. It is
@@ -287,7 +287,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                       $"<message to='bäcker@{Server.Domain}/Büro 1' type='chat'><body>Rolls</body></message>");
 
             // And then an ordinary one, which has to arrive.
-            await alice.SendMessageAsync($"bob@{Server.Domain}", "And coffee");
+            await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "And coffee");
 
             await WaitFor(() => { lock (arrived) return arrived.Contains("And coffee"); },
                           "the ordinary message");

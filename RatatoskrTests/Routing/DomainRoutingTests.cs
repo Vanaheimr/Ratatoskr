@@ -57,7 +57,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             client.OnStanzaError += (timestamp, sender, from, error, ct) => { errors.Add((from, error)); return Task.CompletedTask; };
 
-            await client.SendMessageAsync("bob@elsewhere.example", "Hello?");
+            await client.SendMessageAsync(JID.Parse("bob@elsewhere.example"), "Hello?");
 
             await WaitFor(() => errors.Count > 0, "the error report about the foreign domain");
 
@@ -83,7 +83,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             await client.SendRawAsync(
                 "<iq type='get' id='foreign-1' to='bob@elsewhere.example'>" +
@@ -120,7 +120,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync();
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             var before = session.Sent.Count;
 
@@ -187,7 +187,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             client.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
-            await client.SendMessageAsync($"nobody@{Server.Domain}", "Hello?");
+            await client.SendMessageAsync(JID.Parse($"nobody@{Server.Domain}"), "Hello?");
 
             await WaitAgainst(() => errors.Count > 0, "an error for a local account");
 

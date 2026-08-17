@@ -55,7 +55,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             store.SaveIdentity(state);
 
             return new OmemoManager(store,
-                                    "alice@example.org",
+                                    JID.Parse("alice@example.org"),
                                     _      => Task.FromResult<OmemoDeviceList?>(null),
                                     (_, _) => Task.FromResult<OmemoBundle?>(null));
 
@@ -171,7 +171,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             store.SaveIdentity(Aged(TimeSpan.FromDays(30)));
 
-            var first = new OmemoManager(store, "alice@example.org",
+            var first = new OmemoManager(store, JID.Parse("alice@example.org"),
                                          _      => Task.FromResult<OmemoDeviceList?>(null),
                                          (_, _) => Task.FromResult<OmemoBundle?>(null));
 
@@ -179,7 +179,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // A second manager over the same store: the rotation is done and
             // stays done.
-            var second = new OmemoManager(store, "alice@example.org",
+            var second = new OmemoManager(store, JID.Parse("alice@example.org"),
                                           _      => Task.FromResult<OmemoDeviceList?>(null),
                                           (_, _) => Task.FromResult<OmemoBundle?>(null));
 

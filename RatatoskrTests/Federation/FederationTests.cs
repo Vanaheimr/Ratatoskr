@@ -127,8 +127,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private void MakeContacts(XMPPClient a, XMPPClient b)
         {
 
-            _left.GetAccount(a.BareJid)!.SetRosterEntry(new RosterEntry(b.BareJid, null, "both"));
-            _right.GetAccount(b.BareJid)!.SetRosterEntry(new RosterEntry(a.BareJid, null, "both"));
+            _left.GetAccount(a.BareJid.ToString())!.SetRosterEntry(new RosterEntry(b.BareJid.ToString(), null, "both"));
+            _right.GetAccount(b.BareJid.ToString())!.SetRosterEntry(new RosterEntry(a.BareJid.ToString(), null, "both"));
 
         }
 
@@ -253,7 +253,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // No MakeContacts: the two do not know each other.
 
             var seen = new List<String>();
-            bob.OnPresenceChanged += (timestamp, sender, from, _, ct) => { seen.Add(from); return Task.CompletedTask; };
+            bob.OnPresenceChanged += (timestamp, sender, from, _, ct) => { seen.Add(from.ToString()); return Task.CompletedTask; };
 
             await alice.SetPresenceAsync();
 
@@ -354,7 +354,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             alice.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
-            await alice.SendMessageAsync("who@faraway.example", "Hello?");
+            await alice.SendMessageAsync(JID.Parse("who@faraway.example"), "Hello?");
 
             await WaitFor(() => errors.Count > 0, "the error for the unknown domain");
 
@@ -414,7 +414,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.SendMessageAsync(bob.BareJid, "Across the border");
 
-            var bobsSession = _right.SessionOf(bob.FullJid!)!;
+            var bobsSession = _right.SessionOf(bob.FullJid!.ToString())!;
 
             await WaitFor(() => bobsSession.Sent.Any(f => f.Contains("Across the border",
                                                                     StringComparison.Ordinal)),
@@ -465,7 +465,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectAsync(_left, "alice");
 
-            var session = _left.SessionOf(alice.FullJid!)!;
+            var session = _left.SessionOf(alice.FullJid!.ToString())!;
 
             await WaitFor(() => session.Sent.Any(f => f.StartsWith("<iq", StringComparison.Ordinal)),
                           "any stanza from the server");

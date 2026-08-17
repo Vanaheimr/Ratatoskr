@@ -50,9 +50,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            await WaitFor(() => Server.SessionOf(client.FullJid) is not null, "the server session for the client");
+            await WaitFor(() => Server.SessionOf(client.FullJid.ToString()) is not null, "the server session for the client");
 
-            return (client, Server.SessionOf(client.FullJid)!);
+            return (client, Server.SessionOf(client.FullJid.ToString())!);
 
         }
 
@@ -71,7 +71,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<iq type='set' id='seed-{subscription}'><query xmlns='jabber:iq:roster'>" +
                 $"<item jid='{Bob}' name='Bob' subscription='{subscription}'/></query></iq>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Subscription == expected,
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Subscription == expected,
                           $"a contact with subscription='{subscription}'");
 
         }
@@ -96,10 +96,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='subscribed'/>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.To,
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Subscription == SubscriptionState.To,
                           "the grant taken over");
 
-            Assert.That(client.GetContact(Bob)!.Presence, Is.EqualTo(PresenceState.Offline),
+            Assert.That(client.GetContact(JID.Parse(Bob))!.Presence, Is.EqualTo(PresenceState.Offline),
                         "A grant is no presence announcement.");
 
         }
@@ -121,10 +121,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribed'/>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.None,
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Subscription == SubscriptionState.None,
                           "the subscription withdrawn");
 
-            Assert.That(client.GetContact(Bob)!.Presence, Is.EqualTo(PresenceState.Offline),
+            Assert.That(client.GetContact(JID.Parse(Bob))!.Presence, Is.EqualTo(PresenceState.Offline),
                         "A withdrawal is no presence announcement.");
 
         }
@@ -145,10 +145,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribe'/>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.None,
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Subscription == SubscriptionState.None,
                           "the other direction cancelled");
 
-            Assert.That(client.GetContact(Bob)!.Presence, Is.EqualTo(PresenceState.Offline),
+            Assert.That(client.GetContact(JID.Parse(Bob))!.Presence, Is.EqualTo(PresenceState.Offline),
                         "A cancellation is no presence announcement.");
 
         }
@@ -170,7 +170,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribed'/>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.From,
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Subscription == SubscriptionState.From,
                           "the remaining other direction");
 
         }
@@ -189,7 +189,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribe'/>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Subscription == SubscriptionState.To,
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Subscription == SubscriptionState.To,
                           "the remaining own direction");
 
         }
@@ -215,11 +215,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await SeedContactAsync(client, session, "both", SubscriptionState.Both);
 
             await session.SendAsync($"<presence from='{Bob}/x' to='{client.FullJid}'><show>dnd</show></presence>");
-            await WaitFor(() => client.GetContact(Bob)?.Presence == PresenceState.Dnd, "a visible state");
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Presence == PresenceState.Dnd, "a visible state");
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='unsubscribed'/>");
 
-            await WaitFor(() => client.GetContact(Bob)?.Presence == PresenceState.Offline,
+            await WaitFor(() => client.GetContact(JID.Parse(Bob))?.Presence == PresenceState.Offline,
                           "the state discarded after the withdrawal");
 
         }

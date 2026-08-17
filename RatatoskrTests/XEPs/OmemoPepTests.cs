@@ -320,12 +320,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(bundlePublished, Is.True, "The bundle could not be published.");
             });
 
-            var list = await bob.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
+            var list = await bob.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
 
             Assert.That(list, Is.Not.Null, "Bob does not find Alice's device list.");
             Assert.That(list!.Contains(identity.DeviceId), Is.True);
 
-            var bundle = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}",
+            var bundle = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"),
                                                                      identity.DeviceId);
 
             Assert.That(bundle, Is.Not.Null, "Bob does not get Alice's bundle.");
@@ -379,8 +379,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.Connection.PublishOmemoBundleAsync(phone.DeviceId, phone.Bundle());
             await alice.Connection.PublishOmemoBundleAsync(desktop.DeviceId, desktop.Bundle());
 
-            var forPhone   = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 1000);
-            var forDesktop = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 2000);
+            var forPhone   = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"), 1000);
+            var forDesktop = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"), 2000);
 
             Assert.Multiple(() =>
             {
@@ -416,7 +416,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync("alice");
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
 
             var before = session.Sent.Count;
 
@@ -505,9 +505,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            var withoutList     = await bob.Connection.FetchOmemoDeviceListAsync($"alice@{Server.Domain}");
-            var withoutAccount  = await bob.Connection.FetchOmemoDeviceListAsync($"nobody@{Server.Domain}");
-            var withoutBundle   = await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}", 1);
+            var withoutList     = await bob.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
+            var withoutAccount  = await bob.Connection.FetchOmemoDeviceListAsync(JID.Parse($"nobody@{Server.Domain}"));
+            var withoutBundle   = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"), 1);
 
             Assert.Multiple(() =>
             {
@@ -549,7 +549,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.Connection.PublishOmemoBundleAsync(real.DeviceId, planted);
 
-            Assert.That(await bob.Connection.FetchOmemoBundleAsync($"alice@{Server.Domain}",
+            Assert.That(await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"),
                                                                     real.DeviceId),
                         Is.Null,
                         "A planted bundle reached the caller.");
@@ -575,7 +575,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice   = await ConnectClientAsync("alice");
-            var session = Server.SessionOf(alice.FullJid)!;
+            var session = Server.SessionOf(alice.FullJid.ToString())!;
 
             Server.AddAccount("bob");
 
@@ -703,7 +703,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // stayed clean even when Bob tried. The test passed the mutation
             // that triggers exactly this attempt. What has to be checked is
             // the thing under test, not its neighbour.
-            var bobsSession = Server.SessionOf(bob.FullJid)!;
+            var bobsSession = Server.SessionOf(bob.FullJid.ToString())!;
 
             await WaitAgainst(() => bobsSession.Received.Any(
                                         f => f.Contains(OmemoPep.PubSubNamespace, StringComparison.Ordinal) &&

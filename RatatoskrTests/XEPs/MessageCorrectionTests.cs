@@ -149,12 +149,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var inbox = new ConcurrentQueue<XMPPMessage>();
             bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
-            var first = await alice.SendMessageAsync($"bob@{Server.Domain}", "Until this evening");
+            var first = await alice.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Until this evening");
 
             await WaitFor(() => inbox.Count == 1, "the first message");
 
             var correction = await alice.CorrectLastMessageAsync("Until tomorrow evening",
-                                                                 $"bob@{Server.Domain}");
+                                                                 JID.Parse($"bob@{Server.Domain}"));
 
             await WaitFor(() => inbox.Count == 2, "the correction");
 
@@ -212,15 +212,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob_jid = $"bob@{Server.Domain}";
 
-            await alice.SendMessageAsync(bob_jid, "Until today");
+            await alice.SendMessageAsync(JID.Parse(bob_jid), "Until today");
 
             await WaitFor(() => inbox.Count == 1, "the first message");
 
-            var first = await alice.CorrectLastMessageAsync("Until tomorrow", bob_jid);
+            var first = await alice.CorrectLastMessageAsync("Until tomorrow", JID.Parse(bob_jid));
 
             await WaitFor(() => inbox.Count == 2, "the first correction");
 
-            await alice.CorrectLastMessageAsync("Until the day after tomorrow", bob_jid);
+            await alice.CorrectLastMessageAsync("Until the day after tomorrow", JID.Parse(bob_jid));
 
             await WaitFor(() => inbox.Count == 3, "the second correction");
 
@@ -250,7 +250,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var alice = await ConnectClientAsync();
 
-            Assert.That(await alice.CorrectLastMessageAsync("too late", $"nobody@{Server.Domain}"),
+            Assert.That(await alice.CorrectLastMessageAsync("too late", JID.Parse($"nobody@{Server.Domain}")),
                         Is.Null);
 
         }

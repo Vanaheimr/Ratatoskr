@@ -60,7 +60,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             var features = FrameStartingWith(session.Sent, "<stream:features");
 
@@ -89,7 +89,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {
@@ -128,7 +128,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client       = await ConnectClientAsync("alice");
-            var session      = Server.SessionOf(client.FullJid)!;
+            var session      = Server.SessionOf(client.FullJid.ToString())!;
 
             var authenticate = FrameStartingWith(session.Received, "<authenticate")!;
             var success      = FrameStartingWith(session.Sent,     "<success")!;
@@ -173,7 +173,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client   = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             var opens = session.Received.Count(f => f.StartsWith("<open", StringComparison.Ordinal));
 
@@ -207,7 +207,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferSasl2 = false;
 
             var client   = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(client.FullJid)!;
+            var session  = Server.SessionOf(client.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {

@@ -148,8 +148,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice  = await ConnectAsync(_left,  "alice");
             var juliet = await ConnectAsync(_right, "juliet");
 
-            _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
-            _right.GetAccount(juliet.BareJid)!.SetRosterEntry(new RosterEntry(alice.BareJid, null, "both"));
+            _left.GetAccount(alice.BareJid.ToString())!.SetRosterEntry(new RosterEntry(juliet.BareJid.ToString(), null, "both"));
+            _right.GetAccount(juliet.BareJid.ToString())!.SetRosterEntry(new RosterEntry(alice.BareJid.ToString(), null, "both"));
 
             var atJuliet = new List<String>();
             var atAlice  = new List<String>();

@@ -108,7 +108,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client     = PreparedClient();
             var presences  = new List<String>();
 
-            client.OnPresenceChanged += (timestamp, sender, from, type, ct) => { presences.Add(from); return Task.CompletedTask; };
+            client.OnPresenceChanged += (timestamp, sender, from, type, ct) => { presences.Add(from.ToString()); return Task.CompletedTask; };
 
             await client.ConnectAsync();
 
@@ -157,10 +157,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.ConnectAsync();
 
-            await WaitFor(() => client.Roster.GetItem("carol@localhost") is not null,
+            await WaitFor(() => client.Roster.GetItem(JID.Parse("carol@localhost")) is not null,
                           "the roster push from the setup phase");
 
-            Assert.That(client.Roster.GetItem("carol@localhost")?.Name, Is.EqualTo("Carol"));
+            Assert.That(client.Roster.GetItem(JID.Parse("carol@localhost"))?.Name, Is.EqualTo("Carol"));
 
         }
 
@@ -197,7 +197,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.ConnectAsync();
 
-            await WaitFor(() => client.Roster.GetItem("dave@localhost") is not null,
+            await WaitFor(() => client.Roster.GetItem(JID.Parse("dave@localhost")) is not null,
                           "the roster despite the feigned answer");
 
         }

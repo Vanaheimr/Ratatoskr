@@ -57,7 +57,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice    = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(alice.FullJid)!;
+            var session  = Server.SessionOf(alice.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {
@@ -96,7 +96,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var alice    = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(alice.FullJid)!;
+            var session  = Server.SessionOf(alice.FullJid.ToString())!;
 
             var success  = session.Sent.First(f => f.StartsWith("<success", StringComparison.Ordinal));
 
@@ -208,7 +208,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.OfferBind2 = false;
 
             var alice    = await ConnectClientAsync("alice");
-            var session  = Server.SessionOf(alice.FullJid)!;
+            var session  = Server.SessionOf(alice.FullJid.ToString())!;
 
             Assert.Multiple(() =>
             {
@@ -288,7 +288,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             XMPPMessage? arrived = null;
             bob.OnMessage += (timestamp, sender, m, ct) => { arrived = m; return Task.CompletedTask; };
 
-            await alice.Connection.SendMessageAsync($"bob@{Server.Domain}", "over an inline binding");
+            await alice.Connection.SendMessageAsync(JID.Parse($"bob@{Server.Domain}"), "over an inline binding");
 
             await WaitFor(() => arrived is not null, "the message at Bob");
 

@@ -46,10 +46,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            await WaitFor(() => Server.SessionOf(client.FullJid) is not null,
+            await WaitFor(() => Server.SessionOf(client.FullJid.ToString()) is not null,
                           "the server session for the client");
 
-            return (client, Server.SessionOf(client.FullJid)!);
+            return (client, Server.SessionOf(client.FullJid.ToString())!);
 
         }
 
@@ -221,18 +221,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
             var bob = $"bob@{Server.Domain}";
 
-            await client.AddContactAsync(bob, "Bob");
-            await WaitFor(() => client.GetContact(bob) is not null, "the contact in the roster");
+            await client.AddContactAsync(JID.Parse(bob), "Bob");
+            await WaitFor(() => client.GetContact(JID.Parse(bob)) is not null, "the contact in the roster");
 
             await session.SendAsync(
                 $"<presence from='{bob}/x' to='{client.FullJid}'>" +
                 "<show>away</show>" +
                 "<status xml:lang='de'>Out for lunch</status></presence>");
 
-            await WaitFor(() => client.GetContact(bob)!.Presence == PresenceState.Away,
+            await WaitFor(() => client.GetContact(JID.Parse(bob))!.Presence == PresenceState.Away,
                           "the presence change to away");
 
-            Assert.That(client.GetContact(bob)!.PresenceStatus, Is.EqualTo("Out for lunch"));
+            Assert.That(client.GetContact(JID.Parse(bob))!.PresenceStatus, Is.EqualTo("Out for lunch"));
 
         }
 
@@ -250,17 +250,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
             var bob = $"bob@{Server.Domain}";
 
-            await client.AddContactAsync(bob, "Bob");
-            await WaitFor(() => client.GetContact(bob) is not null, "the contact in the roster");
+            await client.AddContactAsync(JID.Parse(bob), "Bob");
+            await WaitFor(() => client.GetContact(JID.Parse(bob)) is not null, "the contact in the roster");
 
             await session.SendAsync(
                 $"<c:presence xmlns:c='jabber:client' from='{bob}/x' to='{client.FullJid}'>" +
                 "<c:show>dnd</c:show></c:presence>");
 
-            await WaitFor(() => client.GetContact(bob)!.Presence == PresenceState.Dnd,
+            await WaitFor(() => client.GetContact(JID.Parse(bob))!.Presence == PresenceState.Dnd,
                           "the presence change to dnd");
 
-            Assert.That(client.GetContact(bob)!.Presence, Is.EqualTo(PresenceState.Dnd));
+            Assert.That(client.GetContact(JID.Parse(bob))!.Presence, Is.EqualTo(PresenceState.Dnd));
 
         }
 
@@ -287,9 +287,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<item subscription='both' name='Carol' jid='{carol}'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.GetContact(carol) is not null, "the contact from the push");
+            await WaitFor(() => client.GetContact(JID.Parse(carol)) is not null, "the contact from the push");
 
-            Assert.That(client.GetContact(carol)!.Name, Is.EqualTo("Carol"));
+            Assert.That(client.GetContact(JID.Parse(carol))!.Name, Is.EqualTo("Carol"));
 
         }
 
@@ -316,9 +316,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 "<group>Work</group><group>Project X</group>" +
                 "</item></query></iq>");
 
-            await WaitFor(() => client.GetContact(dave) is not null, "the contact from the push");
+            await WaitFor(() => client.GetContact(JID.Parse(dave)) is not null, "the contact from the push");
 
-            Assert.That(client.GetContact(dave)!.Groups,
+            Assert.That(client.GetContact(JID.Parse(dave))!.Groups,
                         Is.EquivalentTo(new[] { "Work", "Project X" }));
 
         }
@@ -344,9 +344,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 $"<item jid='{eve}' name='Eve &amp; Co. &lt;Support&gt;' subscription='both'/>" +
                 "</query></iq>");
 
-            await WaitFor(() => client.GetContact(eve) is not null, "the contact from the push");
+            await WaitFor(() => client.GetContact(JID.Parse(eve)) is not null, "the contact from the push");
 
-            Assert.That(client.GetContact(eve)!.Name, Is.EqualTo("Eve & Co. <Support>"));
+            Assert.That(client.GetContact(JID.Parse(eve))!.Name, Is.EqualTo("Eve & Co. <Support>"));
 
         }
 
