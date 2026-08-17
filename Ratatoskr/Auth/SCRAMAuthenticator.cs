@@ -249,8 +249,15 @@ public sealed class SCRAMAuthenticator
         _clientFirstMessageBare = $"n={EscapeUsername(_username)},r={_clientNonce}";
 
         // GS2 header, then the bare message. Without channel binding this is
-        // "n,," as before; with it, "p=tls-server-end-point,,"; and "y,," when
-        // this client could bind but the server announced nothing to bind to.
+        // "n,,", and with it "p=tls-server-end-point,,".
+        //
+        // The third case the header knows - "y,," - is unreachable today, and
+        // the branch in Gs2Header is kept for the day it is not. XMPPConnection
+        // never sets CanDoChannelBinding: "y" claims this client supports
+        // channel binding, and a client that can perform none a server accepts
+        // does not. Saying it anyway costs the login outright, because a server
+        // that does support binding must refuse "y" (RFC 5802, section 6) and a
+        // SASL <failure/> ends the exchange. See D108.
         var clientFirstMessage = $"{Gs2Header}{_clientFirstMessageBare}";
 
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(clientFirstMessage));

@@ -3251,15 +3251,21 @@ public sealed class XMPPConnection : IAsyncDisposable
                         // refuses - a downgrade caught without either side
                         // implementing anything experimental.
                         //
-                        // Which is exactly why it is off, and why the search
-                        // for a condition to switch it on again was abandoned
-                        // rather than refined. RFC 5802 section 6 obliges a
-                        // server that supports channel binding to fail on "y":
-                        // from where it stands, "I could bind and you offered
-                        // nothing" is either a lie or an announcement stripped
-                        // in flight. We are the third case the flag has no room
-                        // for - able to compute a binding, and unable to use
-                        // one the far side will take.
+                        // Which is exactly why it is off - and the search for
+                        // a condition to switch it on again was not abandoned,
+                        // it was the wrong question. "y" says: I support
+                        // channel binding, and you appear not to. Every
+                        // condition tried below tests the second half. The
+                        // FIRST half is already false: a client that cannot
+                        // perform a binding any server will accept does not
+                        // support channel binding, whatever it can compute for
+                        // itself. So "n" is not a fallback from "y" here, and
+                        // "y" is not a weaker "p=" - it was never ours to send.
+                        //
+                        // RFC 5802 section 6 obliges a server that supports
+                        // channel binding to fail on "y": from where it stands
+                        // the claim is a lie or an announcement stripped in
+                        // flight, and it is right to refuse.
                         //
                         // Two conditions were tried against the real servers,
                         // and the second is what settles it:
