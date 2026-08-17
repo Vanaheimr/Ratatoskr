@@ -35,10 +35,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     /// <c>'@'</c> and took two pieces, which is right for exactly the shape
     /// people usually type and wrong for the rest.
     ///
-    /// Nothing here goes near a network. The constructor decides the username,
-    /// the domain and the fallback endpoint, and those are worth pinning down
-    /// on their own: a mis-parsed domain shows up much later as a connection
-    /// error that names nothing.
+    /// The constructor takes a <c>JID</c> now, so the parse this fixture is
+    /// about happens one frame further out - in <c>Connect</c> below, where a
+    /// caller's <c>JID.Parse</c> would be. What is measured is unchanged: the
+    /// address is still taken apart per RFC 7622 and still prepared, and the
+    /// connection still decides its username, domain and fallback endpoint from
+    /// the result. Only the refusals now come from two places instead of one,
+    /// and which comes from where is the point of the last two tests.
+    ///
+    /// Nothing here goes near a network.
     /// </remarks>
     [TestFixture]
     public class LoginJidTests
@@ -46,8 +51,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
+        /// <summary>
+        /// What a caller writes: parse the text, hand over the address.
+        /// </summary>
         private static XMPPConnection Connect(String jid)
-            => new(jid, "secret");
+            => new(JID.Parse(jid), "secret");
 
         #endregion
 
@@ -151,25 +159,36 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
-        #region SomethingThatIsNoJid_IsRefusedWithTheReason()
+        #region SomethingThatIsNoJid_FailsAtTheText()
 
         /// <summary>
-        /// What is not an address at all comes back as an
-        /// <c>ArgumentException</c> like everything else here - the reason from
-        /// the parser travels along inside it, instead of a
-        /// <c>JidFormatException</c> surfacing from a constructor nobody
-        /// expected one from.
+        /// What is not an address at all no longer reaches the constructor.
         /// </summary>
+        /// <remarks>
+        /// This is the whole reason the parameter became a <c>JID</c>. It used
+        /// to be a String, and the constructor caught the parser's complaint
+        /// and re-threw it as an <c>ArgumentException</c> - so a mistyped
+        /// address surfaced several frames away from the text somebody had
+        /// typed, out of a call that looked like construction. Now it fails at
+        /// <c>JID.Parse</c>, with the parser's own reason, at the line where
+        /// the text is.
+        ///
+        /// Note what is <b>not</b> in this list: <c>example.com</c> and
+        /// <c>a.example.com/b@example.net</c>. Those are addresses, and perfectly
+        /// good ones - they are refused by the constructor above, for the
+        /// entirely different reason that they name no account. Two objections,
+        /// two places, and each one says which it is.
+        /// </remarks>
         [Test]
-        public void SomethingThatIsNoJid_IsRefusedWithTheReason()
+        public void SomethingThatIsNoJid_FailsAtTheText()
         {
 
             Assert.Multiple(() =>
             {
-                Assert.That(() => Connect(""),                  Throws.TypeOf<ArgumentException>());
-                Assert.That(() => Connect("alice@"),            Throws.TypeOf<ArgumentException>());
-                Assert.That(() => Connect("@example.com"),      Throws.TypeOf<ArgumentException>());
-                Assert.That(() => Connect("alice@@example.com"), Throws.TypeOf<ArgumentException>());
+                Assert.That(() => Connect(""),                   Throws.TypeOf<JidFormatException>());
+                Assert.That(() => Connect("alice@"),             Throws.TypeOf<JidFormatException>());
+                Assert.That(() => Connect("@example.com"),       Throws.TypeOf<JidFormatException>());
+                Assert.That(() => Connect("alice@@example.com"), Throws.TypeOf<JidFormatException>());
             });
 
         }

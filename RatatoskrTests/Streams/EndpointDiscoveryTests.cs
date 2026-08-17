@@ -65,7 +65,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AddAccount("alice");
 
-            var connection = new XMPPConnection($"alice@{Server.Domain}", "pw")
+            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw")
             {
                 ServerCertificateValidator  = Server.IsOwnCertificate,
                 EndpointDiscovery           = Answers(
@@ -106,7 +106,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var asked = 0;
 
-            var connection = new XMPPConnection($"alice@{Server.Domain}", "pw")
+            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw")
             {
                 EndpointDiscovery      = new AltConnectionsResolver((uri, ct) =>
                                          {
@@ -169,7 +169,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // Nothing listens on port 1, and reliably so.
             const String Discovered = "wss://127.0.0.1:1/ws";
 
-            var connection = new XMPPConnection($"alice@{Server.Domain}", "pw")
+            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw")
             {
                 EndpointDiscovery      = Answers(
                     "{ \"links\": [ { \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"" +
@@ -210,7 +210,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void ADeliberateCancel_StaysACancel()
         {
 
-            var connection = new XMPPConnection($"alice@{Server.Domain}", "pw", Server.Uri)
+            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw", Server.Uri)
             {
                 ServerCertificateValidator = Server.IsOwnCertificate
             };
@@ -245,7 +245,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var asked = false;
 
-            var connection = new XMPPConnection($"alice@{Server.Domain}", "pw", Server.Uri)
+            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw", Server.Uri)
             {
                 ServerCertificateValidator  = Server.IsOwnCertificate,
                 EndpointDiscovery           = new AltConnectionsResolver((uri, ct) =>

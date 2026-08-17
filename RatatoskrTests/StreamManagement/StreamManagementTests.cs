@@ -322,7 +322,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task StreamManagement_IsNegotiatedByDefault()
         {
 
-            Assert.That(new XMPPConnection("alice@example.com", "pw").StreamManagementEnabled,
+            Assert.That(new XMPPConnection(JID.Parse("alice@example.com"), "pw").StreamManagementEnabled,
                         Is.True,
                         "The default of XMPPConnection.StreamManagementEnabled.");
 

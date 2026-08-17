@@ -244,8 +244,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var roster = new Roster();
 
-            await roster.ProcessRosterItemAsync(new RosterItem("bob@example.com")   { Name = "Bob"   });
-            await roster.ProcessRosterItemAsync(new RosterItem("carol@example.com") { Name = "Carol" });
+            await roster.ProcessRosterItemAsync(new RosterItem(JID.Parse("bob@example.com"))   { Name = "Bob"   });
+            await roster.ProcessRosterItemAsync(new RosterItem(JID.Parse("carol@example.com")) { Name = "Carol" });
 
             var removed   = new List<String>();
             var added   = new List<String>();
@@ -257,8 +257,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // Bob stays (with a new name), Carol falls away, Dave comes along.
             await roster.ReplaceAllAsync([
-                new RosterItem("bob@example.com")  { Name = "Robert" },
-                new RosterItem("dave@example.com") { Name = "Dave"   }
+                new RosterItem(JID.Parse("bob@example.com"))  { Name = "Robert" },
+                new RosterItem(JID.Parse("dave@example.com")) { Name = "Dave"   }
             ]);
 
             Assert.Multiple(() =>
@@ -298,7 +298,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var roster = new Roster();
 
-            await roster.ProcessRosterItemAsync(new RosterItem("bob@example.com"));
+            await roster.ProcessRosterItemAsync(new RosterItem(JID.Parse("bob@example.com")));
 
             await roster.ReplaceAllAsync([]);
 

@@ -31,20 +31,21 @@ public sealed class RosterItem
     public string? PresenceStatus { get; set; }
     public DateTime LastSeen { get; set; }
 
+    /// <summary>
+    /// A roster entry for the given address.
+    /// </summary>
+    /// <remarks>
+    /// There used to be a second constructor beside this one taking a
+    /// <c>String</c> and doing nothing but <c>JID.Parse</c> on it. Nothing in
+    /// the library called it - only tests did, and what they got for the
+    /// convenience was that a malformed address failed inside the constructor
+    /// rather than at the text. It went the same way as the one on
+    /// <see cref="XMPPConnection"/>: whoever has a String parses it.
+    /// </remarks>
     public RosterItem(JID jid)
     {
         Jid = jid;
     }
-
-    /// <summary>
-    /// A roster entry for the given address.
-    /// </summary>
-    /// <exception cref="JidFormatException">If it is not an address.</exception>
-    public RosterItem(String jid)
-
-        : this(JID.Parse(jid))
-
-    { }
 
     public string DisplayName => Name ?? Jid.ToString();
 

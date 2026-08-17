@@ -210,7 +210,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(plain.Uri, Does.StartWith("ws://"));
             Assert.That(plain.Certificate, Is.Null);
 
-            var connection = new XMPPConnection($"alice@{plain.Domain}",
+            var connection = new XMPPConnection(JID.Parse($"alice@{plain.Domain}"),
                                                 "pw",
                                                 plain.Uri)
             {
@@ -258,7 +258,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // And it really does carry the handshake: the check on the client
             // side pins the fingerprint of exactly this certificate.
-            var connection = new XMPPConnection($"alice@{server.Domain}", "pw", server.Uri) {
+            var connection = new XMPPConnection(JID.Parse($"alice@{server.Domain}"), "pw", server.Uri) {
                                  KeepaliveEnabled            = false,
                                  MaxReconnectAttempts        = 0,
                                  ServerCertificateValidator  = (_, c, _, _) =>

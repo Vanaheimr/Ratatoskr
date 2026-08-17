@@ -731,7 +731,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>
     /// Creates a new WebSocket-based XMPP connection
     /// </summary>
-    /// <param name="jid">Bare JID in the format user@domain</param>
+    /// <param name="jid">The account to log in as, in the form user@domain</param>
     /// <param name="password">Password for the SASL authentication</param>
     /// <param name="wsUri">
     /// WebSocket endpoint. Without one the <c>host-meta</c> of the domain is
@@ -739,7 +739,27 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// stays at wss://{domain}:5443/ws (the ejabberd default).
     /// </param>
     /// <param name="LoggerFactory">Optional logger factory; without one nothing is logged</param>
-    public XMPPConnection(string             jid,
+    /// <exception cref="ArgumentException">If the address names a domain and no account.</exception>
+    /// <remarks>
+    /// A <see cref="JID"/> and not a <c>String</c>, although this is the one
+    /// boundary at which the address comes from a human being. It was a String
+    /// until recently, and the first thing done with it was <c>JID.Parse</c> -
+    /// which says the parameter had been a JID all along and was merely spelled
+    /// as a String. What that cost was the error: a mistyped address came back
+    /// as an <c>ArgumentException</c> out of a constructor, several frames away
+    /// from the text somebody typed, and everything in between was already
+    /// written as though the address were sound.
+    ///
+    /// Parsing at the call site puts the failure where the text is, and makes
+    /// the preparation visible instead of hiding it in here: <c>JID.Parse</c>
+    /// is PRECIS for the localpart and IDNA for the domain, so
+    /// "ALICE@Example.COM" reaches the server as what it is rather than as
+    /// typed. It also splits per RFC 7622 §3.2 - at the first '/' and only then
+    /// at the '@' - which is why "a.example.com/b@example.net" is a resource
+    /// and not a localpart, and why "alice@example.com/phone" does not end up
+    /// as the endpoint wss://example.com/phone:5443/ws.
+    /// </remarks>
+    public XMPPConnection(JID                jid,
                           string             password,
                           string?            wsUri           = null,
                           ILoggerFactory?    LoggerFactory   = null)
@@ -747,52 +767,25 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         _password  = password;
 
-        // Parsed per RFC 7622 and no longer split at the '@'. JidUtilities did
-        // this correctly all along and was used everywhere except here - at the
-        // one boundary where the address comes from a human being.
-        //
-        // The split was wrong in both directions. "alice@example.com/phone" has
-        // one '@', so it passed, and the domainpart became "example.com/phone";
-        // the endpoint built out of it reads wss://example.com/phone:5443/ws,
-        // and the failure that follows names none of this. And RFC 7622's own
-        // example 15, "a.example.com/b@example.net", was read as the localpart
-        // "a.example.com/b" - a resourcepart may carry an '@', a localpart may
-        // not, which is why the section splits at the '/' first and only then
-        // at the '@'.
-        //
-        // What the parse adds beyond the splitting is the preparation: PRECIS
-        // for the localpart, IDNA for the domain. "ALICE@Example.COM" reaches
-        // the server as what it is instead of as typed.
-        JID parts;
-
-        try
-        {
-            parts = JID.Parse(jid);
-        }
-        catch (JidFormatException e)
-        {
-            throw new ArgumentException(e.Message, nameof(jid), e);
-        }
-
-        // A bare domain is a JID and not a login. Said separately, because
-        // "example.com" parses perfectly well and the objection to it is a
-        // different one.
-        if (parts.Localpart is null)
+        // A bare domain is a JID and not a login, and it is now the only thing
+        // left here to object to: whatever else the address might have been
+        // wrong about was settled by whoever parsed it.
+        if (jid.Localpart is null)
             throw new ArgumentException(
                       $"'{jid}' names a domain and no account. A login JID has the form " +
                       "'user@domain'.",
                       nameof(jid));
 
-        _jid       = parts.Bare;
-        _username  = parts.Localpart;
-        _domain    = parts.Domainpart;
+        _jid       = jid.Bare;
+        _username  = jid.Localpart;
+        _domain    = jid.Domainpart;
 
         // A resource typed along is a wish and not a mistake: whoever writes
         // "alice@example.com/phone" is saying which device this is. It only
         // sets the default - <see cref="Resource"/> stays settable, and the
         // server has the last word at binding anyway.
-        if (parts.Resourcepart is not null)
-            Resource = parts.Resourcepart;
+        if (jid.Resourcepart is not null)
+            Resource = jid.Resourcepart;
 
         // Kept apart: without one, the host-meta of the domain is asked before
         // the first connect (XEP-0156). Whoever names an endpoint is not asked
@@ -2878,13 +2871,23 @@ public sealed class XMPPConnection : IAsyncDisposable
         foreach (var itemElement in query.Elements().Where(e => e.Name.LocalName == "item"))
         {
 
-            var jid = itemElement.Attr("jid");
+            var jidText = itemElement.Attr("jid");
 
-            if (string.IsNullOrEmpty(jid))
+            if (string.IsNullOrEmpty(jidText))
                 continue;
 
+            // Wire data, so the same gate as everywhere else: this entry is
+            // skipped and the rest of the push still applies. Parsing here and
+            // letting it throw would let one unusable address in a push of
+            // fifty discard the other forty-nine.
+            if (!JID.TryParse(jidText, out var jid))
+            {
+                _logger.LogDebug("A roster entry for '{Jid}' was discarded - that is not an address", jidText);
+                continue;
+            }
+
             if (itemElement.Attr("subscription") == "remove")
-                await Roster.RemoveItemAsync(JID.Parse(jid), CancellationToken);
+                await Roster.RemoveItemAsync(jid, CancellationToken);
             else
                 await Roster.ProcessRosterItemAsync(ToRosterItem(itemElement, jid), CancellationToken);
 
@@ -2903,7 +2906,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// Builds a <see cref="RosterItem"/> out of an <c>&lt;item/&gt;</c> of the
     /// roster - including the groups, which previously got lost.
     /// </summary>
-    private static RosterItem ToRosterItem(XElement itemElement, string jid)
+    private static RosterItem ToRosterItem(XElement itemElement, JID jid)
     {
 
         var item = new RosterItem(jid)
@@ -3882,10 +3885,20 @@ public sealed class XMPPConnection : IAsyncDisposable
         foreach (var itemElement in query.Children(RosterStanzaBuilder.Namespace, "item"))
         {
 
-            var jid = itemElement.Attr("jid");
+            var jidText = itemElement.Attr("jid");
 
-            if (!string.IsNullOrEmpty(jid))
-                state.Add(ToRosterItem(itemElement, jid));
+            if (string.IsNullOrEmpty(jidText))
+                continue;
+
+            // As with the push: one unreadable entry costs that entry and not
+            // the roster.
+            if (!JID.TryParse(jidText, out var jid))
+            {
+                _logger.LogDebug("A roster entry for '{Jid}' was discarded - that is not an address", jidText);
+                continue;
+            }
+
+            state.Add(ToRosterItem(itemElement, jid));
 
         }
 

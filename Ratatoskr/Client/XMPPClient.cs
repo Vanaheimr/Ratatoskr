@@ -419,7 +419,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>
     /// Creates a new XMPP client.
     /// </summary>
-    /// <param name="jid">Bare JID in the format user@domain</param>
+    /// <param name="jid">The account to log in as, in the form user@domain</param>
     /// <param name="password">Password for the SASL authentication</param>
     /// <param name="wsUri">
     /// WebSocket endpoint. Without one the <c>host-meta</c> of the domain is
@@ -427,7 +427,13 @@ public sealed class XMPPClient : IAsyncDisposable
     /// wss://{domain}:5443/ws (the ejabberd default).
     /// </param>
     /// <param name="LoggerFactory">Optional logger factory; without one nothing is logged</param>
-    public XMPPClient(string          jid,
+    /// <exception cref="ArgumentException">If the address names a domain and no account.</exception>
+    /// <remarks>
+    /// <c>JID.Parse("alice@example.com")</c> at the call site - see the
+    /// constructor of <see cref="XMPPConnection"/> for why the address is a
+    /// type here and not a String.
+    /// </remarks>
+    public XMPPClient(JID             jid,
                       string          password,
                       string?         wsUri           = null,
                       ILoggerFactory? LoggerFactory   = null)

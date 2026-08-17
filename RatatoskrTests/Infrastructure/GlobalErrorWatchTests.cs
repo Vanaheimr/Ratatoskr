@@ -70,7 +70,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             forgotten.FailFrameHandling = true;
 
             var client = new XMPPClient(
-                             new XMPPConnection($"alice@{forgotten.Domain}", "pw", forgotten.Uri)
+                             new XMPPConnection(JID.Parse($"alice@{forgotten.Domain}"), "pw", forgotten.Uri)
                              {
                                  MaxReconnectAttempts        = 0,
                                  KeepaliveEnabled            = false,

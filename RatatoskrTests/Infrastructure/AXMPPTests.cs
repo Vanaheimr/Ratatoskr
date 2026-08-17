@@ -163,7 +163,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                           Int32      maxReconnectAttempts  = 20)
         {
 
-            var connection = new XMPPConnection($"{localPart}@{Server.Domain}",
+            var connection = new XMPPConnection(JID.Parse($"{localPart}@{Server.Domain}"),
                                                 password,
                                                 Server.Uri)
             {
