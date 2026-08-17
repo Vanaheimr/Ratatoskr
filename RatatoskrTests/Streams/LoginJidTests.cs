@@ -31,7 +31,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     /// </summary>
     /// <remarks>
     /// The one boundary in this library where a JID comes from a human being -
-    /// and the one place that did not use <c>JidUtilities</c>. It split at the
+    /// and the one place that did not use <c>JID</c>. It split at the
     /// <c>'@'</c> and took two pieces, which is right for exactly the shape
     /// people usually type and wrong for the rest.
     ///
@@ -184,7 +184,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// reaches the server as what it is rather than as it was typed.
         /// </summary>
         /// <remarks>
-        /// This is what <c>JidUtilities</c> was written for and what the
+        /// This is what <c>JID</c> was written for and what the
         /// constructor was missing entirely - it handed the localpart on
         /// exactly as typed, into SASL and into every later comparison.
         /// </remarks>

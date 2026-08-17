@@ -105,8 +105,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var before = bob.Identity.AvailablePreKeys;
 
-            var encrypted = await alice.EncryptAsync(["bob@example.org"], Body("first contact"));
-            var decrypted = await bob.DecryptAsync(encrypted.Element, "alice@example.org");
+            var encrypted = await alice.EncryptAsync([JID.Parse("bob@example.org")], Body("first contact"));
+            var decrypted = await bob.DecryptAsync(encrypted.Element, JID.Parse("alice@example.org"));
 
             Assert.Multiple(() =>
             {
@@ -195,18 +195,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // The session first, so that both of the two below take the ratchet
             // path and race on it rather than on the key exchange.
-            var opening = await alice.EncryptAsync(["bob@example.org"], Body("first contact"));
-            await bob.DecryptAsync(opening.Element, "alice@example.org");
+            var opening = await alice.EncryptAsync([JID.Parse("bob@example.org")], Body("first contact"));
+            await bob.DecryptAsync(opening.Element, JID.Parse("alice@example.org"));
 
             var both = await Task.WhenAll(
-                           Task.Run(() => alice.EncryptAsync(["bob@example.org"], Body("one"))),
-                           Task.Run(() => alice.EncryptAsync(["bob@example.org"], Body("two"))));
+                           Task.Run(() => alice.EncryptAsync([JID.Parse("bob@example.org")], Body("one"))),
+                           Task.Run(() => alice.EncryptAsync([JID.Parse("bob@example.org")], Body("two"))));
 
             var read = new List<String?>();
 
             foreach (var message in both)
             {
-                var plain = await bob.DecryptAsync(message.Element, "alice@example.org");
+                var plain = await bob.DecryptAsync(message.Element, JID.Parse("alice@example.org"));
                 read.Add(plain?.Content.FirstOrDefault(e => e.Name.LocalName == "body")?.Value);
             }
 

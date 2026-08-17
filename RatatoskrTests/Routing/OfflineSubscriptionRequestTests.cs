@@ -62,11 +62,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// a recipient that logs in only afterwards misses it depending on the
         /// timing. A test failing that way looks like an error in the server.
         /// </remarks>
-        private (XMPPClient, List<(String From, String? Status)>) PreparedClient(String localPart)
+        private (XMPPClient, List<(JID From, String? Status)>) PreparedClient(String localPart)
         {
 
             var client  = CreateClient(localPart);
-            var arrived = new List<(String, String?)>();
+            var arrived = new List<(JID, String?)>();
 
             client.OnSubscriptionRequest += (timestamp, sender, from, status, ct) => { arrived.Add((from, status)); return Task.CompletedTask; };
 

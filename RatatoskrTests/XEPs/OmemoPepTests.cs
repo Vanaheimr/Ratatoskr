@@ -633,7 +633,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob",   createAccount: false);
 
             OmemoDeviceList? received = null;
-            String?          fromWhom = null;
+            JID?             fromWhom = null;
 
             bob.Connection.OnOmemoDeviceListChanged += (timestamp, sender, from, list, ct) =>
             {
@@ -651,7 +651,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(fromWhom, Is.EqualTo($"alice@{Server.Domain}"));
+                Assert.That(fromWhom, Is.EqualTo(JID.Parse($"alice@{Server.Domain}")));
                 Assert.That(received!.Contains(4711u), Is.True);
             });
 

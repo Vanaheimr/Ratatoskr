@@ -297,10 +297,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var element = new OmemoEncryptedElement(
                               12345,
-                              new Dictionary<String, IReadOnlyList<OmemoKey>> {
-                                  ["bob@example.org"]    = [new OmemoKey(1, Pattern(20), false),
+                              new Dictionary<JID, IReadOnlyList<OmemoKey>> {
+                                  [JID.Parse("bob@example.org")]    = [new OmemoKey(1, Pattern(20), false),
                                                             new OmemoKey(2, Pattern(20, 40), true)],
-                                  ["alice@example.org"]  = [new OmemoKey(9, Pattern(20, 80), false)]
+                                  [JID.Parse("alice@example.org")]  = [new OmemoKey(9, Pattern(20, 80), false)]
                               },
                               Pattern(64));
 
@@ -378,8 +378,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var element = new OmemoEncryptedElement(
                               7,
-                              new Dictionary<String, IReadOnlyList<OmemoKey>> {
-                                  ["bob@example.org"] = [new OmemoKey(1, Pattern(20), true)]
+                              new Dictionary<JID, IReadOnlyList<OmemoKey>> {
+                                  [JID.Parse("bob@example.org")] = [new OmemoKey(1, Pattern(20), true)]
                               },
                               null);
 
@@ -417,8 +417,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var inner = new OmemoEncryptedElement(
                             7,
-                            new Dictionary<String, IReadOnlyList<OmemoKey>> {
-                                ["bob@example.org"] = [new OmemoKey(1, Pattern(20), false)]
+                            new Dictionary<JID, IReadOnlyList<OmemoKey>> {
+                                [JID.Parse("bob@example.org")] = [new OmemoKey(1, Pattern(20), false)]
                             },
                             Pattern(32)).ToXml();
 

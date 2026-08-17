@@ -57,10 +57,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// <summary>
         /// Collects the presence notices of a client.
         /// </summary>
-        private static ConcurrentQueue<(String From, String? Type)> PresenceBasket(XMPPClient client)
+        private static ConcurrentQueue<(JID From, String? Type)> PresenceBasket(XMPPClient client)
         {
 
-            var basket = new ConcurrentQueue<(String, String?)>();
+            var basket = new ConcurrentQueue<(JID, String?)>();
             client.Connection.OnPresence += (timestamp, sender, from, type, ct) => { basket.Enqueue((from, type)); return Task.CompletedTask; };
 
             return basket;
@@ -68,7 +68,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         }
 
         /// <summary>Only the sign-offs out of it.</summary>
-        private static Int32 SignOffs(ConcurrentQueue<(String From, String? Type)> basket)
+        private static Int32 SignOffs(ConcurrentQueue<(JID From, String? Type)> basket)
             => basket.Count(p => p.Type == "unavailable");
 
         #endregion

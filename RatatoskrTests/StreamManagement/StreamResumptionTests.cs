@@ -237,7 +237,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var signOffs = 0;
             bob.OnPresenceChanged += (timestamp, sender, from, type, ct) =>
             {
-                if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
+                if (type == "unavailable" && from.ToString().StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
                     Interlocked.Increment(ref signOffs);
 
                 return Task.CompletedTask;
@@ -287,7 +287,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var signOffs = 0;
             bob.OnPresenceChanged += (timestamp, sender, from, type, ct) =>
             {
-                if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
+                if (type == "unavailable" && from.ToString().StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
                     Interlocked.Increment(ref signOffs);
 
                 return Task.CompletedTask;
@@ -393,7 +393,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var signOffs = 0;
             bob.OnPresenceChanged += (timestamp, sender, from, type, ct) =>
             {
-                if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
+                if (type == "unavailable" && from.ToString().StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
                     Interlocked.Increment(ref signOffs);
 
                 return Task.CompletedTask;

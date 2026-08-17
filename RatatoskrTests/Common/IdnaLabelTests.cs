@@ -284,17 +284,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(JidUtilities.TryParse("alice@exa_mple.com",   out _), Is.False, "underscore");
-                Assert.That(JidUtilities.TryParse("alice@-example.com",   out _), Is.False, "hyphen at the start");
-                Assert.That(JidUtilities.TryParse("alice@a..example.com", out _), Is.False, "empty label");
-                Assert.That(JidUtilities.TryParse("alice@xn--abc-.com",   out _), Is.False, "A-label over ASCII");
+                Assert.That(JID.TryParse("alice@exa_mple.com",   out _), Is.False, "underscore");
+                Assert.That(JID.TryParse("alice@-example.com",   out _), Is.False, "hyphen at the start");
+                Assert.That(JID.TryParse("alice@a..example.com", out _), Is.False, "empty label");
+                Assert.That(JID.TryParse("alice@xn--abc-.com",   out _), Is.False, "A-label over ASCII");
 
-                Assert.That(JidUtilities.TryParse("alice@bücher.example", out var books), Is.True);
+                Assert.That(JID.TryParse("alice@bücher.example", out var books), Is.True);
                 Assert.That(books.Domainpart, Is.EqualTo("bücher.example"),
                             "A U-label stays a U-label - nothing is rewritten here.");
 
-                Assert.That(JidUtilities.TryParse("alice@[::1]",          out _), Is.True,  "IPv6 literal");
-                Assert.That(JidUtilities.TryParse("alice@127.0.0.1",      out _), Is.True,  "IPv4 literal");
+                Assert.That(JID.TryParse("alice@[::1]",          out _), Is.True,  "IPv6 literal");
+                Assert.That(JID.TryParse("alice@127.0.0.1",      out _), Is.True,  "IPv4 literal");
 
             });
 

@@ -76,10 +76,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private async Task<XMPPSession> SessionAsync(XMPPClient client)
         {
 
-            await WaitFor(() => Server.Sessions.Any(s => s.FullJid == client.Connection.FullJid),
+            await WaitFor(() => Server.Sessions.Any(s => JID.AreEqual(s.FullJid, client.Connection.FullJid.ToString())),
                           "the bound session of the client");
 
-            return Server.Sessions.First(s => s.FullJid == client.Connection.FullJid);
+            return Server.Sessions.First(s => JID.AreEqual(s.FullJid, client.Connection.FullJid.ToString()));
 
         }
 

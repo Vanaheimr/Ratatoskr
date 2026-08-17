@@ -53,7 +53,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var client  = await ConnectClientAsync();
-            var errors  = new List<(String? From, StanzaError Error)>();
+            var errors  = new List<(JID? From, StanzaError Error)>();
 
             client.OnStanzaError += (timestamp, sender, from, error, ct) => { errors.Add((from, error)); return Task.CompletedTask; };
 

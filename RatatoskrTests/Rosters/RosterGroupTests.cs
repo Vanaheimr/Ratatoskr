@@ -61,7 +61,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                     ?.Groups ?? [];
 
         /// <summary>The groups the client keeps for a contact.</summary>
-        private static IReadOnlyList<String> ClientGroupsOf(XMPPClient client, String jid)
+        private static IReadOnlyList<String> ClientGroupsOf(XMPPClient client, JID jid)
             => client.Connection.Roster.Items.FirstOrDefault(i => i.Jid == jid)?.Groups ?? [];
 
         #endregion
@@ -84,13 +84,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 0,
                           "the group at the server");
 
-            await WaitFor(() => ClientGroupsOf(alice, $"bob@{Server.Domain}").Count > 0,
+            await WaitFor(() => ClientGroupsOf(alice, JID.Parse($"bob@{Server.Domain}")).Count > 0,
                           "the group in the push");
 
             Assert.Multiple(() =>
             {
                 Assert.That(ServerGroupsOf(alice, "bob"),                       Is.EqualTo(new[] { "Friends" }));
-                Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"),      Is.EqualTo(new[] { "Friends" }));
+                Assert.That(ClientGroupsOf(alice, JID.Parse($"bob@{Server.Domain}")),      Is.EqualTo(new[] { "Friends" }));
             });
 
         }
@@ -143,10 +143,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.AddContactAsync(JID.Parse($"bob@{Server.Domain}"), "Bob");
 
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count == 0 &&
-                                ClientGroupsOf(alice, $"bob@{Server.Domain}").Count == 0,
+                                ClientGroupsOf(alice, JID.Parse($"bob@{Server.Domain}")).Count == 0,
                           "the emptied group list on both sides");
 
-            Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"), Is.Empty,
+            Assert.That(ClientGroupsOf(alice, JID.Parse($"bob@{Server.Domain}")), Is.Empty,
                         "And the client hears the same.");
 
         }
@@ -210,7 +210,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => alice.Connection.Roster.Items.Count > 0, "the roster");
 
-            Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"), Is.EqualTo(new[] { "Friends" }));
+            Assert.That(ClientGroupsOf(alice, JID.Parse($"bob@{Server.Domain}")), Is.EqualTo(new[] { "Friends" }));
 
         }
 
@@ -244,7 +244,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // the storing, and a test that does not wait for it measures the
             // speed of the machine.
             await WaitFor(() => ServerGroupsOf(alice, "bob").Count > 1 &&
-                                ClientGroupsOf(alice, $"bob@{Server.Domain}").Count > 1,
+                                ClientGroupsOf(alice, JID.Parse($"bob@{Server.Domain}")).Count > 1,
                           "both groups on both sides");
 
             Assert.Multiple(() =>
@@ -253,7 +253,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(ServerGroupsOf(alice, "bob"),
                             Is.EqualTo(new[] { "Tom & Jerry <old>", "A&lt;B" }));
 
-                Assert.That(ClientGroupsOf(alice, $"bob@{Server.Domain}"),
+                Assert.That(ClientGroupsOf(alice, JID.Parse($"bob@{Server.Domain}")),
                             Is.EqualTo(new[] { "Tom & Jerry <old>", "A&lt;B" }),
                             "And the way back unescapes them just the same.");
 

@@ -87,7 +87,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 foreach (var (number, jid, why) in valid)
-                    Assert.That(JidUtilities.TryParse(jid, out _), Is.True,
+                    Assert.That(JID.TryParse(jid, out _), Is.True,
                                 $"Example {number} ({why}) has to be a JID.");
             });
 
@@ -122,7 +122,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 foreach (var (number, jid, why) in invalid)
-                    Assert.That(JidUtilities.TryParse(jid, out _), Is.False,
+                    Assert.That(JID.TryParse(jid, out _), Is.False,
                                 $"Example {number} ({why}) must not be a JID.");
             });
 
@@ -155,7 +155,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void Rfc7622_Example18_LeadingSpaceInResource_IsAccepted()
         {
 
-            Assert.That(JidUtilities.TryParse("juliet@example.com/ foo", out var parts), Is.True);
+            Assert.That(JID.TryParse("juliet@example.com/ foo", out var parts), Is.True);
             Assert.That(parts.Resourcepart, Is.EqualTo(" foo"));
 
         }
@@ -187,17 +187,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(JidUtilities.TryParse(LigatureFi + "le@example.com", out _),
+                Assert.That(JID.TryParse(LigatureFi + "le@example.com", out _),
                             Is.False,
                             "The ligature has a compatibility decomposition.");
 
-                Assert.That(JidUtilities.TryParse("file@example.com", out _),
+                Assert.That(JID.TryParse("file@example.com", out _),
                             Is.True,
                             "The written-out version is of course permitted.");
 
                 // In the resource part it is permitted, by contrast: the
                 // FreeformClass does not exclude HasCompat.
-                Assert.That(JidUtilities.TryParse("juliet@example.com/" + LigatureFi, out _),
+                Assert.That(JID.TryParse("juliet@example.com/" + LigatureFi, out _),
                             Is.True);
 
             });
@@ -224,10 +224,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(JidUtilities.TryParse("juliet@example.com/", out _), Is.False,
+                Assert.That(JID.TryParse("juliet@example.com/", out _), Is.False,
                             "A slash without a resource behind it.");
 
-                Assert.That(JidUtilities.TryParse("@example.com", out _), Is.False,
+                Assert.That(JID.TryParse("@example.com", out _), Is.False,
                             "An at sign without a local part in front of it.");
 
             });
@@ -250,12 +250,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void TheSplitOrderMatters()
         {
 
-            var example15 = JidUtilities.Parse("a.example.com/b@example.net");
+            var example15 = JID.Parse("a.example.com/b@example.net");
 
             // RFC 7622, section 3.4: a second slash belongs to the resource -
             // JIDs are not hierarchical. The split happens at the *first*, not
             // at the last.
-            var twoSlashes = JidUtilities.Parse("juliet@example.com/foo/bar");
+            var twoSlashes = JID.Parse("juliet@example.com/foo/bar");
 
             Assert.Multiple(() =>
             {
@@ -285,7 +285,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void TheResourcepartKeepsItsCase()
         {
 
-            var parts = JidUtilities.Parse("Juliet@Example.COM/Balcony");
+            var parts = JID.Parse("Juliet@Example.COM/Balcony");
 
             Assert.Multiple(() =>
             {
@@ -295,12 +295,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(parts.Resourcepart, Is.EqualTo("Balcony"),
                             "The resource part must not be lower-cased.");
 
-                Assert.That(JidUtilities.AreEqual("juliet@example.com/Balcony",
+                Assert.That(JID.AreEqual("juliet@example.com/Balcony",
                                                   "JULIET@EXAMPLE.COM/Balcony"),
                             Is.True,
                             "Local and domain part without regard for the case.");
 
-                Assert.That(JidUtilities.AreEqual("juliet@example.com/Balcony",
+                Assert.That(JID.AreEqual("juliet@example.com/Balcony",
                                                   "juliet@example.com/balcony"),
                             Is.False,
                             "Two resources that differ only in the case " +
@@ -330,17 +330,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(JidUtilities.AreEqual("fu" + SharpS + "ball@example.com",
+                Assert.That(JID.AreEqual("fu" + SharpS + "ball@example.com",
                                                   "fussball@example.com"),
                             Is.False,
                             "Sharp s and ss are two different local parts.");
 
-                Assert.That(JidUtilities.AreEqual(CapitalSigma + "@example.com",
+                Assert.That(JID.AreEqual(CapitalSigma + "@example.com",
                                                   SmallSigma   + "@example.com"),
                             Is.True,
                             "Capital and small sigma fall together.");
 
-                Assert.That(JidUtilities.AreEqual(FinalSigma + "@example.com",
+                Assert.That(JID.AreEqual(FinalSigma + "@example.com",
                                                   SmallSigma + "@example.com"),
                             Is.False,
                             "The final sigma stays a character of its own.");
@@ -368,15 +368,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(JidUtilities.TryParse(new String('a', 1023) + "@example.com", out _),
+                Assert.That(JID.TryParse(new String('a', 1023) + "@example.com", out _),
                             Is.True,
                             "1023 octets are permitted.");
 
-                Assert.That(JidUtilities.TryParse(new String('a', 1024) + "@example.com", out _),
+                Assert.That(JID.TryParse(new String('a', 1024) + "@example.com", out _),
                             Is.False);
 
                 // 600 characters, but 1200 octets.
-                Assert.That(JidUtilities.TryParse(String.Concat(Enumerable.Repeat(Pi, 600)) +
+                Assert.That(JID.TryParse(String.Concat(Enumerable.Repeat(Pi, 600)) +
                                                   "@example.com", out _),
                             Is.False,
                             "What is measured are octets, not characters.");
@@ -409,7 +409,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 foreach (var input in nonsense)
-                    Assert.That(() => JidUtilities.Bare(input), Throws.Nothing,
+                    Assert.That(() => JID.BareTextOf(input), Throws.Nothing,
                                 $"Stumbled over: '{input}'");
             });
 

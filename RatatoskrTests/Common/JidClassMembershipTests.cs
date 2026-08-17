@@ -53,7 +53,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private const String ChessKing      = "♚";  // BLACK CHESS KING
 
         private static Boolean IsJid(String jid)
-            => JidUtilities.TryParse(jid, out _);
+            => JID.TryParse(jid, out _);
 
         #endregion
 

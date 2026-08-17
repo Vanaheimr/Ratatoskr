@@ -221,12 +221,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             MakeContacts(alice, bob);
 
-            var seen = new List<(String From, String Type)>();
+            var seen = new List<(JID From, String Type)>();
             bob.OnPresenceChanged += (timestamp, sender, from, type, ct) => { seen.Add((from, type)); return Task.CompletedTask; };
 
             await alice.SetPresenceAsync();
 
-            await WaitFor(() => seen.Any(g => g.From.StartsWith("alice@left.example", StringComparison.Ordinal)),
+            await WaitFor(() => seen.Any(g => g.From.ToString().StartsWith("alice@left.example", StringComparison.Ordinal)),
                           "Alice's presence at Bob's");
 
         }

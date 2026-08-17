@@ -991,9 +991,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // At the one service there is nothing left - at the other there is.
             Server.GetAccount(BobsJid)!.RemovePepSubscription(
-                Node, alice.BareJid,
+                Node, alice.BareJid.ToString(),
                 alice.Connection.PubSub!.SubscriptionsOf(Node)
-                     .First(a => a.ServiceJid == BobsJid).SubId);
+                     .First(a => a.ServiceJid == JID.Parse(BobsJid)).SubId);
 
             await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 

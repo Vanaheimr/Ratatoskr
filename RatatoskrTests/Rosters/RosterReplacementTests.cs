@@ -94,7 +94,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // Wait for the end first: otherwise the reconnect can get ahead of
             // the change, and the test would check something other than what it
             // is meant to.
-            await WaitFor(() => !Server.Sessions.Any(s => s.BareJid == client.BareJid),
+            await WaitFor(() => !Server.Sessions.Any(s => JID.AreEqual(s.BareJid, client.BareJid.ToString())),
                           "the end of the first session");
 
             change();

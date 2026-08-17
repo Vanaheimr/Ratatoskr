@@ -218,7 +218,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // occasionally.
             client.KillConnection();
 
-            await WaitFor(() => !Server.Sessions.Any(s => s.BareJid == client.BareJid),
+            await WaitFor(() => !Server.Sessions.Any(s => JID.AreEqual(s.BareJid, client.BareJid.ToString())),
                           "the end of the first session");
 
             SetServerRoster("alice", "carol", "both");

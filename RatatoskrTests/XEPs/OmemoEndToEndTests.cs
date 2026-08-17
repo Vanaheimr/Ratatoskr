@@ -326,7 +326,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             System.Xml.Linq.XNamespace client = "jabber:client";
 
             var result = await alice.Omemo!.EncryptAsync(
-                                   [$"bob@{Server.Domain}", $"mallory@{Server.Domain}"],
+                                   [JID.Parse($"bob@{Server.Domain}"), JID.Parse($"mallory@{Server.Domain}")],
                                    [new System.Xml.Linq.XElement(client + "body", "for the two of you only")]);
 
             Assert.That(result.Skipped, Is.Empty);

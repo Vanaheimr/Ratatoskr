@@ -315,7 +315,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var atBob    = new ConcurrentQueue<XMPPMessage>();
-            var errors   = new ConcurrentQueue<(String? From, StanzaError Error)>();
+            var errors   = new ConcurrentQueue<(JID? From, StanzaError Error)>();
 
             bob.OnMessage                  += (timestamp, sender, m, ct) => { atBob.Enqueue(m); return Task.CompletedTask; };
             alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue((from, e)); return Task.CompletedTask; };
@@ -959,15 +959,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // unanswered, and the test would check the silence only.
             _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "from"));
 
-            var atAlice = new ConcurrentQueue<(String From, String? Type)>();
-            var atBob   = new ConcurrentQueue<(String From, String? Type)>();
+            var atAlice = new ConcurrentQueue<(JID From, String? Type)>();
+            var atBob   = new ConcurrentQueue<(JID From, String? Type)>();
 
             alice.Connection.OnPresence += (timestamp, sender, from, type, ct) => { atAlice.Enqueue((from, type)); return Task.CompletedTask; };
             bob.Connection.OnPresence   += (timestamp, sender, from, type, ct) => { atBob.Enqueue((from, type)); return Task.CompletedTask; };
 
             await alice.SendRawAsync($"<presence to='{Bob}' type='probe'/>");
 
-            await WaitFor(() => atAlice.Any(p => p.From.StartsWith(Bob, StringComparison.Ordinal)),
+            await WaitFor(() => atAlice.Any(p => p.From.ToString().StartsWith(Bob, StringComparison.Ordinal)),
                           "Bob's state as the answer to the probe");
 
             // Give the probe time to turn up at Bob's after all.
@@ -1011,12 +1011,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // The wrong half: Bob sees Alice, Alice does not see Bob.
             _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "to"));
 
-            var atAlice = new ConcurrentQueue<(String From, String? Type)>();
+            var atAlice = new ConcurrentQueue<(JID From, String? Type)>();
             alice.Connection.OnPresence += (timestamp, sender, from, type, ct) => { atAlice.Enqueue((from, type)); return Task.CompletedTask; };
 
             await alice.SendRawAsync($"<presence to='{Bob}' type='probe'/>");
 
-            await WaitAgainst(() => atAlice.Any(p => p.From.StartsWith(Bob, StringComparison.Ordinal)),
+            await WaitAgainst(() => atAlice.Any(p => p.From.ToString().StartsWith(Bob, StringComparison.Ordinal)),
                               "an answer to an unauthorised probe");
 
             // And for an account that does not exist, the same picture.

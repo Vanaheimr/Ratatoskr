@@ -135,7 +135,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.ConnectAsync();
 
-            var parsed = JidUtilities.Parse(alice.FullJid);
+            var parsed = JID.Parse(alice.FullJid.ToString());
 
             Assert.Multiple(() =>
             {

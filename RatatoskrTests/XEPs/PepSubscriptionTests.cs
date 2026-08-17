@@ -3706,7 +3706,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(EndingsIn(events),
-                            Is.EqualTo(new[] { ((String?) Node, (String?) alice.BareJid, (String?) subId) }));
+                            Is.EqualTo(new[] { ((String?) Node, (String?) alice.BareJid.ToString(), (String?) subId) }));
 
                 Assert.That(events[0], Does.Contain($"from='bob@{Server.Domain}'"),
                             "It comes from the account the node belongs to - otherwise the " +
@@ -3786,7 +3786,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
 
                 Assert.That(EndingsIn(events),
-                            Is.EqualTo(new[] { ((String?) Node, (String?) alice.BareJid, (String?) subId) }));
+                            Is.EqualTo(new[] { ((String?) Node, (String?) alice.BareJid.ToString(), (String?) subId) }));
 
                 Assert.That(events.Any(e => e.Contains("outcast", StringComparison.Ordinal)),
                             Is.False,
