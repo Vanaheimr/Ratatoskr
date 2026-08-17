@@ -49,7 +49,7 @@ public delegate Task OnRosterItemUpdatedDelegate         (DateTimeOffset     Tim
 /// </summary>
 public delegate Task OnRosterItemRemovedDelegate         (DateTimeOffset     Timestamp,
                                                           Roster             Sender,
-                                                          String             BareJid,
+                                                          JID                BareJid,
                                                           CancellationToken  CancellationToken);
 
 /// <summary>
@@ -57,7 +57,7 @@ public delegate Task OnRosterItemRemovedDelegate         (DateTimeOffset     Tim
 /// </summary>
 public delegate Task OnRosterSubscriptionRequestDelegate (DateTimeOffset     Timestamp,
                                                           Roster             Sender,
-                                                          String             From,
+                                                          JID                From,
                                                           String             Status,
                                                           CancellationToken  CancellationToken);
 
@@ -72,7 +72,7 @@ public sealed class Roster
 
     #region Data
 
-    private readonly Dictionary<String, RosterItem>  _items  = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<JID, RosterItem>     _items  = new();
     private readonly Lock                            _lock   = new();
     private readonly ILogger                         _logger;
 
@@ -127,10 +127,10 @@ public sealed class Roster
 
     #region GetItem(Jid)
 
-    public RosterItem? GetItem(String Jid)
+    public RosterItem? GetItem(JID Jid)
     {
 
-        var bareJid = JidUtilities.Bare(Jid);
+        var bareJid = Jid.Bare;
 
         lock (_lock)
             return _items.TryGetValue(bareJid, out var item) ? item : null;
@@ -157,7 +157,7 @@ public sealed class Roster
                                              CancellationToken  CancellationToken   = default)
     {
 
-        var         bareJid = JidUtilities.Bare(NewItem.Jid);
+        var         bareJid = NewItem.Jid.Bare;
         RosterItem  item;
         Boolean     isNew;
 
@@ -221,10 +221,13 @@ public sealed class Roster
     {
 
         var fresh  = Items.ToList();
-        var kept   = new HashSet<String>(fresh.Select(item => JidUtilities.Bare(item.Jid)),
-                                         StringComparer.OrdinalIgnoreCase);
 
-        List<String> dropped;
+        // No comparer any more: the JID knows how it compares - local and
+        // domain part without regard to spelling, the resourcepart with it -
+        // and a set that has to be told how is a set that can be told wrong.
+        var kept   = new HashSet<JID>(fresh.Select(item => item.Jid.Bare));
+
+        List<JID> dropped;
 
         lock (_lock)
             dropped = _items.Keys.Where(key => !kept.Contains(key)).ToList();
@@ -260,12 +263,12 @@ public sealed class Roster
     /// <param name="From">Sender of the stanza.</param>
     /// <param name="Type">subscribed, unsubscribed or unsubscribe.</param>
     /// <param name="CancellationToken">An optional token to cancel this request.</param>
-    public async Task ProcessSubscriptionChangeAsync(String             From,
+    public async Task ProcessSubscriptionChangeAsync(JID                From,
                                                      String             Type,
                                                      CancellationToken  CancellationToken   = default)
     {
 
-        var          bareJid = JidUtilities.Bare(From);
+        var          bareJid = From.Bare;
         RosterItem?  item;
 
         lock (_lock)
@@ -301,11 +304,11 @@ public sealed class Roster
 
     #region RemoveItemAsync(Jid, CancellationToken = default)
 
-    public async Task RemoveItemAsync(String             Jid,
+    public async Task RemoveItemAsync(JID                Jid,
                                       CancellationToken  CancellationToken   = default)
     {
 
-        var      bareJid = JidUtilities.Bare(Jid);
+        var      bareJid = Jid.Bare;
         Boolean  removed;
 
         lock (_lock)
@@ -320,7 +323,7 @@ public sealed class Roster
 
     #region RaiseSubscriptionRequestAsync(From, Status, CancellationToken = default)
 
-    public Task RaiseSubscriptionRequestAsync(String             From,
+    public Task RaiseSubscriptionRequestAsync(JID                From,
                                               String             Status,
                                               CancellationToken  CancellationToken   = default)
 
@@ -330,14 +333,14 @@ public sealed class Roster
 
     #region UpdatePresenceAsync(From, Type, Show, Status, CancellationToken = default)
 
-    public async Task UpdatePresenceAsync(String             From,
+    public async Task UpdatePresenceAsync(JID                From,
                                           String             Type,
                                           String?            Show,
                                           String?            Status,
                                           CancellationToken  CancellationToken   = default)
     {
 
-        var          bareJid = JidUtilities.Bare(From);
+        var          bareJid = From.Bare;
         RosterItem?  item;
 
         lock (_lock)

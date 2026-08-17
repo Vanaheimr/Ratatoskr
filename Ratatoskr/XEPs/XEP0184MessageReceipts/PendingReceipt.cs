@@ -25,4 +25,4 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// was lifted to top level for "one type per file" (internal, since it is an
 /// implementation detail of the tracker).
 /// </remarks>
-internal sealed record PendingReceipt(string MessageId, string ExpectedFrom, DateTime SentAt);
+internal sealed record PendingReceipt(string MessageId, JID ExpectedFrom, DateTime SentAt);

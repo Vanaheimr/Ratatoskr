@@ -69,26 +69,26 @@ public sealed class PubSubManager
     private readonly Dictionary<String, List<PubSubSubscription>> _subscriptions =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly string _pubsubService;
+    private readonly JID _pubsubService;
     private readonly Lock _lock = new();
     private readonly ILogger _logger;
 
     public event OnPubSubEventDelegate? OnEvent;
 
-    public PubSubManager(string pubsubService = "pubsub", ILogger? logger = null)
+    public PubSubManager(JID pubsubService, ILogger? logger = null)
     {
         _pubsubService = pubsubService;
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public string PubSubService => _pubsubService;
+    public JID PubSubService => _pubsubService;
 
     /// <summary>
     /// Processes an incoming PubSub event message with spoofing protection
     /// </summary>
     public async Task<bool> ProcessEventAsync(XElement           stanza,
-                                              string             from,
-                                              string             expectedPubSubJid,
+                                              JID                from,
+                                              JID                expectedPubSubJid,
                                               CancellationToken  CancellationToken   = default)
     {
 
@@ -298,20 +298,15 @@ public sealed class PubSubManager
     /// sender</b>: whoever has subscribed to Bob's weather node has not thereby
     /// permitted Bob to send them reports about every node he can think up.
     /// </remarks>
-    private Boolean IsAcceptableSource(String from, String nodeId, String expectedPubSubJid)
+    private Boolean IsAcceptableSource(JID from, String nodeId, JID expectedPubSubJid)
     {
 
-        var bareFrom = JidUtilities.Bare(from);
+        var bareFrom = from.Bare;
 
-        if (String.Equals(bareFrom, JidUtilities.Bare(expectedPubSubJid),
-                          StringComparison.OrdinalIgnoreCase))
-        {
+        if (bareFrom == expectedPubSubJid.Bare)
             return true;
-        }
 
-        return SubscriptionsOf(nodeId).Any(
-                   sub => String.Equals(bareFrom, JidUtilities.Bare(sub.ServiceJid),
-                                        StringComparison.OrdinalIgnoreCase));
+        return SubscriptionsOf(nodeId).Any(sub => bareFrom == sub.ServiceJid.Bare);
 
     }
 
@@ -377,7 +372,7 @@ public sealed class PubSubManager
     /// to somebody else's node of the same name too - and notices it only when
     /// their reports stay away.
     /// </remarks>
-    public void RemoveSubscriptionsOf(String nodeId, String serviceJid)
+    public void RemoveSubscriptionsOf(String nodeId, JID serviceJid)
     {
         lock (_lock)
         {
@@ -385,9 +380,7 @@ public sealed class PubSubManager
             if (!_subscriptions.TryGetValue(nodeId, out var subs))
                 return;
 
-            subs.RemoveAll(a => String.Equals(JidUtilities.Bare(a.ServiceJid),
-                                              JidUtilities.Bare(serviceJid),
-                                              StringComparison.OrdinalIgnoreCase));
+            subs.RemoveAll(a => a.ServiceJid.Bare == serviceJid.Bare);
 
             if (subs.Count == 0)
                 _subscriptions.Remove(nodeId);
@@ -426,7 +419,7 @@ public sealed class PubSubManager
     /// whoever accepted it would let themselves be signed up by a service
     /// unasked.
     /// </returns>
-    public Boolean ApproveSubscription(String nodeId, String? subId, String serviceJid)
+    public Boolean ApproveSubscription(String nodeId, String? subId, JID serviceJid)
     {
         lock (_lock)
         {
@@ -436,9 +429,7 @@ public sealed class PubSubManager
 
             var pending = subs.FindAll(a => a.State == PubSubSubscriptionState.Pending &&
                                           (subId is null || String.Equals(a.SubId, subId, StringComparison.Ordinal)) &&
-                                          String.Equals(JidUtilities.Bare(a.ServiceJid),
-                                                        JidUtilities.Bare(serviceJid),
-                                                        StringComparison.OrdinalIgnoreCase));
+                                          a.ServiceJid.Bare == serviceJid.Bare);
 
             foreach (var one in pending)
                 subs[subs.IndexOf(one)] = one with { State = PubSubSubscriptionState.Subscribed };
@@ -499,7 +490,7 @@ public sealed class PubSubManager
     /// <b>What the service does not name is not touched</b>: subscriptions at
     /// other services are none of its business.
     /// </remarks>
-    public void ReplaceSubscriptionsOf(String serviceJid, IEnumerable<PubSubSubscription> subscriptions)
+    public void ReplaceSubscriptionsOf(JID serviceJid, IEnumerable<PubSubSubscription> subscriptions)
     {
         lock (_lock)
         {
@@ -508,9 +499,7 @@ public sealed class PubSubManager
             {
 
                 _subscriptions[node].RemoveAll(
-                    a => String.Equals(JidUtilities.Bare(a.ServiceJid),
-                                       JidUtilities.Bare(serviceJid),
-                                       StringComparison.OrdinalIgnoreCase));
+                    a => a.ServiceJid.Bare == serviceJid.Bare);
 
                 if (_subscriptions[node].Count == 0)
                     _subscriptions.Remove(node);

@@ -99,12 +99,17 @@ internal static class IqAnswerOrigin
     private static Boolean SameEntity(String? One, String? Other)
 
         => One is not null && Other is not null &&
-           JidUtilities.Bare(One) == JidUtilities.Bare(Other);
+           JID.BareTextOf(One) == JID.BareTextOf(Other);
 
     private static String DomainOf(String Jid)
     {
 
-        var bare = JidUtilities.Bare(Jid);
+        if (JID.TryParse(Jid, out var jid))
+            return jid.Domainpart;
+
+        // Not an address at all. The old split stays for that case, and it is
+        // the safe answer: it matches nothing but itself.
+        var bare = JID.BareTextOf(Jid);
         var at   = bare.IndexOf('@');
 
         return at >= 0 ? bare[(at + 1)..] : bare;

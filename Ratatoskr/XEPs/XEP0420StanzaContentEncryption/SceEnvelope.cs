@@ -139,7 +139,7 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
     /// </remarks>
     public static Boolean TryRead(XElement          xml,
                                   out SceEnvelope?  envelope,
-                                  String?           expectedFrom = null)
+                                  JID?              expectedFrom = null)
     {
 
         envelope = null;
@@ -167,8 +167,8 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
         // application entirely and therefore has no say here either.
         if (expectedFrom is not null &&
             (from is null ||
-             !String.Equals(JidUtilities.Bare(from), JidUtilities.Bare(expectedFrom),
-                            StringComparison.OrdinalIgnoreCase)))
+             JID.TryParse(from) is not JID sender ||
+             sender.Bare != expectedFrom.Value.Bare))
             return false;
 
         DateTimeOffset? time = null;

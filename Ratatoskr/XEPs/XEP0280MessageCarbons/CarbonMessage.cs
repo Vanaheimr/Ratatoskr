@@ -23,13 +23,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public sealed class CarbonMessage
 {
     public bool IsSent { get; }          // true = sent by me, false = received
-    public string OriginalFrom { get; }
-    public string OriginalTo { get; }
+    public JID OriginalFrom { get; }
+    public JID OriginalTo { get; }
     public string? Body { get; }
     public string? MessageId { get; }
     public DateTime ReceivedAt { get; }
 
-    public CarbonMessage(bool isSent, string originalFrom, string originalTo, string? body, string? messageId)
+    public CarbonMessage(bool isSent, JID originalFrom, JID originalTo, string? body, string? messageId)
     {
         IsSent = isSent;
         OriginalFrom = originalFrom;

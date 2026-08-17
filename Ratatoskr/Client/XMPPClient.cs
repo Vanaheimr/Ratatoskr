@@ -53,7 +53,7 @@ public delegate Task OnXMPPClientCarbonMessageDelegate              (DateTimeOff
 /// <summary>XEP-0085: a contact changed their typing state.</summary>
 public delegate Task OnXMPPClientChatStateDelegate                  (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String             From,
+                                                                     JID                From,
                                                                      ChatState          State,
                                                                      CancellationToken  CancellationToken);
 
@@ -66,14 +66,14 @@ public delegate Task OnXMPPClientChatMarkerDelegate                 (DateTimeOff
 /// <summary>XEP-0184: a sent message was delivered.</summary>
 public delegate Task OnXMPPClientReceiptReceivedDelegate            (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String             From,
+                                                                     JID                From,
                                                                      String             MessageId,
                                                                      CancellationToken  CancellationToken);
 
 /// <summary>Presence change of a contact.</summary>
 public delegate Task OnXMPPClientPresenceChangedDelegate            (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String             From,
+                                                                     JID                From,
                                                                      String             Type,
                                                                      CancellationToken  CancellationToken);
 
@@ -92,7 +92,7 @@ public delegate Task OnXMPPClientPubSubSubscriptionRequestDelegate  (DateTimeOff
 /// <summary>A new contact request.</summary>
 public delegate Task OnXMPPClientSubscriptionRequestDelegate        (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String             From,
+                                                                     JID                From,
                                                                      String             Status,
                                                                      CancellationToken  CancellationToken);
 
@@ -105,13 +105,13 @@ public delegate Task OnXMPPClientRosterItemAddedDelegate            (DateTimeOff
 /// <summary>A contact was removed from the roster.</summary>
 public delegate Task OnXMPPClientRosterItemRemovedDelegate          (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String             BareJid,
+                                                                     JID                BareJid,
                                                                      CancellationToken  CancellationToken);
 
 /// <summary>XEP-0115: the capabilities of a peer were determined.</summary>
 public delegate Task OnXMPPClientCapsDiscoveredDelegate             (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String             From,
+                                                                     JID                From,
                                                                      DiscoInfo          Info,
                                                                      CancellationToken  CancellationToken);
 
@@ -140,7 +140,7 @@ public delegate Task OnXMPPClientSpoofingAttemptDelegate            (DateTimeOff
 /// </summary>
 public delegate Task OnXMPPClientStanzaErrorDelegate                (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String?            From,
+                                                                     JID?               From,
                                                                      StanzaError        Error,
                                                                      CancellationToken  CancellationToken);
 
@@ -159,7 +159,7 @@ public delegate Task OnXMPPClientRawXmlDelegate                     (DateTimeOff
 /// <summary>The current chat partner was switched or reset.</summary>
 public delegate Task OnXMPPClientChatPartnerChangedDelegate         (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
-                                                                     String?            ChatPartner,
+                                                                     JID?               ChatPartner,
                                                                      CancellationToken  CancellationToken);
 
 #endregion
@@ -184,7 +184,7 @@ public sealed class XMPPClient : IAsyncDisposable
 
     private readonly XMPPConnection _connection;
     private readonly ILogger _logger;
-    private readonly List<string> _pendingSubscriptions = [];
+    private readonly List<JID> _pendingSubscriptions = [];
     private readonly Lock _pendingLock = new();
 
     /// <summary>
@@ -204,8 +204,8 @@ public sealed class XMPPClient : IAsyncDisposable
 
     public Roster Roster => _connection.Roster;
     public ConnectionState State => _connection.State;
-    public string FullJid => _connection.FullJid;
-    public string BareJid => _connection.BareJid;
+    public JID FullJid => _connection.FullJid;
+    public JID BareJid => _connection.BareJid;
     public string Domain => _connection.Domain;
     public string WebSocketUri => _connection.WebSocketUri;
     public IReadOnlyList<string> ServerFeatures => _connection.ServerFeatures;
@@ -218,7 +218,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>
     /// JID of the current chat partner; null when no chat is active.
     /// </summary>
-    public string? CurrentChatPartner { get; private set; }
+    public JID? CurrentChatPartner { get; private set; }
 
     /// <summary>
     /// ID of the last received message - the point of reference for chat
@@ -236,13 +236,13 @@ public sealed class XMPPClient : IAsyncDisposable
     /// note would be wrong after every change of subject - and wrong in such a
     /// way that the correction ends up with the previous conversation partner.
     /// </remarks>
-    private readonly Dictionary<string, string> _lastSentTo     = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<JID, string> _lastSentTo     = new();
     private readonly Lock                       _lastSentToLock = new();
 
     /// <summary>
     /// Contact requests not answered yet, in order of arrival.
     /// </summary>
-    public IReadOnlyList<string> PendingSubscriptions
+    public IReadOnlyList<JID> PendingSubscriptions
     {
         get { lock (_pendingLock) return _pendingSubscriptions.ToList(); }
     }
@@ -546,7 +546,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>
     /// XEP-0199: Measures the round-trip time to the server or to a JID.
     /// </summary>
-    public Task<TimeSpan?> PingAsync(string? to = null, CancellationToken ct = default)
+    public Task<TimeSpan?> PingAsync(JID? to = null, CancellationToken ct = default)
         => _connection.PingAsync(to, ct);
 
     /// <summary>
@@ -563,7 +563,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// Sets the current chat partner. null ends the chat without sending
     /// &lt;gone/&gt; - use <see cref="LeaveChatAsync"/> for that.
     /// </summary>
-    public async Task SetChatPartnerAsync(string?            jid,
+    public async Task SetChatPartnerAsync(JID?               jid,
                                           CancellationToken  CancellationToken   = default)
     {
 
@@ -613,7 +613,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// Sends a message to an arbitrary JID without changing the current chat
     /// partner.
     /// </summary>
-    public async Task<string> SendMessageAsync(string to, string body,
+    public async Task<string> SendMessageAsync(JID to, string body,
                                                MessageType type = MessageType.Chat)
     {
 
@@ -743,10 +743,10 @@ public sealed class XMPPClient : IAsyncDisposable
 
     #region Roster and contact requests
 
-    public Task AddContactAsync(string jid, string? name = null, IEnumerable<string>? groups = null)
+    public Task AddContactAsync(JID jid, string? name = null, IEnumerable<string>? groups = null)
         => _connection.AddContactAsync(jid.Trim(), name, groups);
 
-    public Task RemoveContactAsync(string jid)
+    public Task RemoveContactAsync(JID jid)
         => _connection.RemoveContactAsync(jid.Trim());
 
     /// <summary>
@@ -760,7 +760,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// have to be worked off. The contact stays in the roster - whoever wants
     /// to get rid of them entirely takes <see cref="RemoveContactAsync"/>.
     /// </remarks>
-    public Task CancelSubscriptionAsync(string jid)
+    public Task CancelSubscriptionAsync(JID jid)
         => _connection.CancelSubscriptionAsync(jid.Trim());
 
     /// <summary>XEP-0384: the OMEMO manager, as soon as it is switched on.</summary>
@@ -785,7 +785,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// XEP-0384: Sends an encrypted message.
     /// </summary>
     /// <returns>The devices that cannot read along - empty means: all can.</returns>
-    public Task<IReadOnlyList<OmemoSkippedDevice>> SendEncryptedMessageAsync(string             to,
+    public Task<IReadOnlyList<OmemoSkippedDevice>> SendEncryptedMessageAsync(JID                to,
                                                                             string             body,
                                                                             CancellationToken  ct = default)
         => _connection.SendEncryptedMessageAsync(to, body, ct);
@@ -820,7 +820,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     /// <param name="jid">The applicant; without one the oldest open request.</param>
     /// <returns>The JID processed, or null when no request was open.</returns>
-    public async Task<string?> AcceptSubscriptionAsync(string? jid = null)
+    public async Task<string?> AcceptSubscriptionAsync(JID? jid = null)
     {
         var target = ResolvePendingSubscription(jid);
         if (target == null)
@@ -853,7 +853,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// nothing to accept, and whoever admits in advance has not thereby said
     /// that they want to see the other one themselves as well.
     /// </remarks>
-    public async Task<bool> PreApproveContactAsync(string jid)
+    public async Task<bool> PreApproveContactAsync(JID jid)
     {
 
         if (!ServerSupportsPreApproval)
@@ -882,7 +882,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     /// <param name="jid">The applicant; without one the oldest open request.</param>
     /// <returns>The JID processed, or null when no request was open.</returns>
-    public async Task<string?> DenySubscriptionAsync(string? jid = null)
+    public async Task<string?> DenySubscriptionAsync(JID? jid = null)
     {
         var target = ResolvePendingSubscription(jid);
         if (target == null)
@@ -905,7 +905,7 @@ public sealed class XMPPClient : IAsyncDisposable
             return _pendingSubscriptions.Count > 0 ? _pendingSubscriptions[0] : null;
     }
 
-    private void RemovePendingSubscription(string jid)
+    private void RemovePendingSubscription(JID jid)
     {
         lock (_pendingLock)
             _pendingSubscriptions.RemoveAll(p => string.Equals(p, jid, StringComparison.OrdinalIgnoreCase));
@@ -931,7 +931,7 @@ public sealed class XMPPClient : IAsyncDisposable
     public IEnumerable<RosterItem> GetOnlineContacts() => _connection.Roster.GetOnlineContacts();
     public IEnumerable<string> GetGroups() => _connection.Roster.GetGroups();
     public IEnumerable<RosterItem> GetContactsByGroup(string group) => _connection.Roster.GetByGroup(group);
-    public RosterItem? GetContact(string jid) => _connection.Roster.GetItem(jid.Trim());
+    public RosterItem? GetContact(JID jid) => _connection.Roster.GetItem(jid.Trim());
 
     #endregion
 
@@ -940,13 +940,13 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>
     /// XEP-0030: Queries the features of a peer.
     /// </summary>
-    public Task<DiscoInfo?> DiscoverInfoAsync(string jid, CancellationToken ct = default)
+    public Task<DiscoInfo?> DiscoverInfoAsync(JID jid, CancellationToken ct = default)
         => _connection.DiscoverInfoAsync(jid, ct);
 
     /// <summary>
     /// XEP-0030: Queries the items/services of a peer.
     /// </summary>
-    public Task<DiscoItems?> DiscoverItemsAsync(string jid, CancellationToken ct = default)
+    public Task<DiscoItems?> DiscoverItemsAsync(JID jid, CancellationToken ct = default)
         => _connection.DiscoverItemsAsync(jid, ct);
 
     /// <summary>
@@ -963,104 +963,104 @@ public sealed class XMPPClient : IAsyncDisposable
     /// Subscribes to a node. The result is what the service has promised - or
     /// null when it has not done so.
     /// </summary>
-    public Task<PubSubSubscription?> PubSubSubscribeAsync(String nodeId, String? service = null)
+    public Task<PubSubSubscription?> PubSubSubscribeAsync(String nodeId, JID? service = null)
         => _connection.PubSubSubscribeAsync(nodeId, service);
 
     /// <summary>
     /// Ends a subscription. <paramref name="subId"/> says which one - without
     /// it, this only works as long as there is exactly one.
     /// </summary>
-    public Task<Boolean> PubSubUnsubscribeAsync(String nodeId, String? service = null, String? subId = null)
+    public Task<Boolean> PubSubUnsubscribeAsync(String nodeId, JID? service = null, String? subId = null)
         => _connection.PubSubUnsubscribeAsync(nodeId, service, subId);
 
     /// <summary>What am I where? (XEP-0060, section 5.7)</summary>
-    public Task<IReadOnlyList<(String NodeId, PubSubAffiliation Affiliation)>?> PubSubGetAffiliationsAsync(String? service = null)
+    public Task<IReadOnlyList<(String NodeId, PubSubAffiliation Affiliation)>?> PubSubGetAffiliationsAsync(JID? service = null)
         => _connection.PubSubGetAffiliationsAsync(service);
 
     /// <summary>Who is what at my node? (XEP-0060, section 8.9.1)</summary>
-    public Task<IReadOnlyList<(String Jid, PubSubAffiliation Affiliation)>?> PubSubGetNodeAffiliationsAsync(String nodeId, String? service = null)
+    public Task<IReadOnlyList<(String Jid, PubSubAffiliation Affiliation)>?> PubSubGetNodeAffiliationsAsync(String nodeId, JID? service = null)
         => _connection.PubSubGetNodeAffiliationsAsync(nodeId, service);
 
     /// <summary>Grants or takes a role (XEP-0060, section 8.9.2).</summary>
-    public Task<Boolean> PubSubSetAffiliationAsync(String nodeId, String jid, PubSubAffiliation affiliation, String? service = null)
+    public Task<Boolean> PubSubSetAffiliationAsync(String nodeId, String jid, PubSubAffiliation affiliation, JID? service = null)
         => _connection.PubSubSetAffiliationAsync(nodeId, jid, affiliation, service);
 
     /// <summary>
     /// Answers an application for a subscription (XEP-0060, section 8.6.2).
     /// </summary>
-    public Task PubSubAnswerSubscriptionRequestAsync(PubSubSubscribeAuthorization request, Boolean allow, String? service = null)
+    public Task PubSubAnswerSubscriptionRequestAsync(PubSubSubscribeAuthorization request, Boolean allow, JID? service = null)
         => _connection.PubSubAnswerSubscriptionRequestAsync(request, allow, service);
 
     /// <summary>Who hangs on my node? (XEP-0060, section 8.8.1)</summary>
-    public Task<IReadOnlyList<(String Jid, String? SubId, PubSubSubscriptionState State)>?> PubSubGetNodeSubscribersAsync(String nodeId, String? service = null)
+    public Task<IReadOnlyList<(String Jid, String? SubId, PubSubSubscriptionState State)>?> PubSubGetNodeSubscribersAsync(String nodeId, JID? service = null)
         => _connection.PubSubGetNodeSubscribersAsync(nodeId, service);
 
     /// <summary>
     /// Ends someone else's subscription at one's own node (XEP-0060, section
     /// 8.8.2) - without <paramref name="subId"/> all of this JID.
     /// </summary>
-    public Task<Boolean> PubSubRemoveSubscriberAsync(String nodeId, String jid, String? subId = null, String? service = null)
+    public Task<Boolean> PubSubRemoveSubscriberAsync(String nodeId, String jid, String? subId = null, JID? service = null)
         => _connection.PubSubRemoveSubscriberAsync(nodeId, jid, subId, service);
 
     /// <summary>
     /// Fetches one's own subscriptions from the service and takes them over -
     /// the way back to the identifiers after a connection drop.
     /// </summary>
-    public Task<IReadOnlyList<PubSubSubscription>?> PubSubGetSubscriptionsAsync(String? service = null, String? nodeId = null)
+    public Task<IReadOnlyList<PubSubSubscription>?> PubSubGetSubscriptionsAsync(JID? service = null, String? nodeId = null)
         => _connection.PubSubGetSubscriptionsAsync(service, nodeId);
 
     /// <summary>
     /// Reads the settings of a subscription from the service.
     /// </summary>
-    public Task<PubSubSubscriptionOptions?> PubSubGetOptionsAsync(String nodeId, String? service = null, String? subId = null)
+    public Task<PubSubSubscriptionOptions?> PubSubGetOptionsAsync(String nodeId, JID? service = null, String? subId = null)
         => _connection.PubSubGetOptionsAsync(nodeId, service, subId);
 
     /// <summary>
     /// Configures a subscription - noted down is only what the service has
     /// confirmed.
     /// </summary>
-    public Task<Boolean> PubSubSetOptionsAsync(String nodeId, PubSubSubscriptionOptions options, String? service = null, String? subId = null)
+    public Task<Boolean> PubSubSetOptionsAsync(String nodeId, PubSubSubscriptionOptions options, JID? service = null, String? subId = null)
         => _connection.PubSubSetOptionsAsync(nodeId, options, service, subId);
 
-    public Task<Boolean> PubSubPublishAsync(String nodeId, String itemId, String payload, String? service = null)
+    public Task<Boolean> PubSubPublishAsync(String nodeId, String itemId, String payload, JID? service = null)
         => _connection.PubSubPublishAsync(nodeId, itemId, payload, service);
 
     /// <summary>
     /// Creates a node, optionally right away with its settings.
     /// </summary>
-    public Task<Boolean> PubSubCreateNodeAsync(String nodeId, PubSubNodeConfiguration? configuration = null, String? service = null)
+    public Task<Boolean> PubSubCreateNodeAsync(String nodeId, PubSubNodeConfiguration? configuration = null, JID? service = null)
         => _connection.PubSubCreateNodeAsync(nodeId, configuration, service);
 
     /// <summary>Reads the settings of a node.</summary>
-    public Task<PubSubNodeConfiguration?> PubSubGetNodeConfigAsync(String nodeId, String? service = null)
+    public Task<PubSubNodeConfiguration?> PubSubGetNodeConfigAsync(String nodeId, JID? service = null)
         => _connection.PubSubGetNodeConfigAsync(nodeId, service);
 
     /// <summary>Configures a node - only the owner may do that.</summary>
-    public Task<Boolean> PubSubConfigureNodeAsync(String nodeId, PubSubNodeConfiguration configuration, String? service = null)
+    public Task<Boolean> PubSubConfigureNodeAsync(String nodeId, PubSubNodeConfiguration configuration, JID? service = null)
         => _connection.PubSubConfigureNodeAsync(nodeId, configuration, service);
 
     /// <summary>
     /// Retracts a single item (XEP-0060, section 7.2) - the node and its
     /// subscribers stay.
     /// </summary>
-    public Task<Boolean> PubSubRetractAsync(String nodeId, String itemId, String? service = null)
+    public Task<Boolean> PubSubRetractAsync(String nodeId, String itemId, JID? service = null)
         => _connection.PubSubRetractAsync(nodeId, itemId, service);
 
     /// <summary>
     /// Deletes a node - together with one's own note about a subscription to
     /// it.
     /// </summary>
-    public Task<Boolean> PubSubDeleteNodeAsync(String nodeId, String? service = null)
+    public Task<Boolean> PubSubDeleteNodeAsync(String nodeId, JID? service = null)
         => _connection.PubSubDeleteNodeAsync(nodeId, service);
 
     /// <summary>
     /// Purges a node (XEP-0060, section 8.5) - the node stays, its content
     /// goes.
     /// </summary>
-    public Task<Boolean> PubSubPurgeNodeAsync(String nodeId, String? service = null)
+    public Task<Boolean> PubSubPurgeNodeAsync(String nodeId, JID? service = null)
         => _connection.PubSubPurgeNodeAsync(nodeId, service);
 
-    public Task<IReadOnlyList<PubSubItem>?> PubSubGetItemsAsync(String nodeId, Int32? maxItems = null, String? service = null)
+    public Task<IReadOnlyList<PubSubItem>?> PubSubGetItemsAsync(String nodeId, Int32? maxItems = null, JID? service = null)
         => _connection.PubSubGetItemsAsync(nodeId, maxItems, service);
 
     #endregion

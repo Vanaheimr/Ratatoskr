@@ -22,7 +22,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// </summary>
 public sealed class RosterItem
 {
-    public string Jid { get; }
+    public JID Jid { get; }
     public string? Name { get; set; }
     public SubscriptionState Subscription { get; set; } = SubscriptionState.None;
     public List<string> Groups { get; } = [];
@@ -31,21 +31,35 @@ public sealed class RosterItem
     public string? PresenceStatus { get; set; }
     public DateTime LastSeen { get; set; }
 
-    public RosterItem(string jid)
+    public RosterItem(JID jid)
     {
-        Jid = jid.ToLowerInvariant();
+        Jid = jid;
     }
 
-    public string DisplayName => Name ?? Jid;
+    /// <summary>
+    /// A roster entry for the given address.
+    /// </summary>
+    /// <exception cref="JidFormatException">If it is not an address.</exception>
+    public RosterItem(String jid)
 
-    public string BareJid
-    {
-        get
-        {
-            var slash = Jid.IndexOf('/');
-            return slash > 0 ? Jid[..slash] : Jid;
-        }
-    }
+        : this(JID.Parse(jid))
+
+    { }
+
+    public string DisplayName => Name ?? Jid.ToString();
+
+    /// <summary>
+    /// The account, without the device.
+    /// </summary>
+    /// <remarks>
+    /// This used to cut the string at the first slash by hand, and a roster
+    /// entry never carries a resourcepart, so the cut had nothing to do. Which
+    /// is why nobody noticed that the constructor beside it prepared nothing
+    /// either: <c>ToLowerInvariant</c> over the whole address is not what
+    /// RFC 7622 asks for, and it flattens a resourcepart that is meant to keep
+    /// its spelling.
+    /// </remarks>
+    public JID BareJid => Jid.Bare;
 
     public override string ToString()
     {

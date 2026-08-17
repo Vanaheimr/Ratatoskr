@@ -61,7 +61,7 @@ public sealed class CarbonManager
     /// <summary>The namespace of XEP-0297, in which the message sits.</summary>
     public const string ForwardNamespace = "urn:xmpp:forward:0";
 
-    private readonly string   _myBareJid;
+    private readonly JID      _myBareJid;
     private readonly ILogger  _logger;
     private bool _enabled;
 
@@ -70,10 +70,10 @@ public sealed class CarbonManager
     public event OnCarbonReceivedDelegate?    OnCarbonReceived;
     public event OnCarbonParseErrorDelegate?  OnParseError;
 
-    public CarbonManager(string    myBareJid,
+    public CarbonManager(JID       myBareJid,
                          ILogger?  logger   = null)
     {
-        _myBareJid  = JidUtilities.Bare(myBareJid);
+        _myBareJid  = myBareJid.Bare;
         _logger     = logger ?? NullLogger.Instance;
     }
 
@@ -88,7 +88,7 @@ public sealed class CarbonManager
     /// element the distinction is possible directly and without side effects.
     /// </summary>
     public async Task<CarbonResult> ProcessCarbonAsync(XElement           message,
-                                                       string             from,
+                                                       JID                from,
                                                        CancellationToken  CancellationToken   = default)
     {
 
@@ -112,8 +112,12 @@ public sealed class CarbonManager
             return CarbonResult.ParseError;
         }
 
-        var originalFrom  = inner.Attr("from");
-        var originalTo    = inner.Attr("to");
+        // Addresses, not text. An unreadable one is a parse error like any
+        // other: a carbon whose sender this side cannot name is one it cannot
+        // file under any conversation, and letting it through with the raw
+        // characters only postpones that to whoever displays it.
+        var originalFrom  = JID.TryParse(inner.Attr("from"));
+        var originalTo    = JID.TryParse(inner.Attr("to"));
 
         if (originalFrom is null && originalTo is null)
         {
@@ -122,8 +126,8 @@ public sealed class CarbonManager
         }
 
         var carbon = new CarbonMessage(isSent,
-                                       originalFrom ?? "",
-                                       originalTo   ?? "",
+                                       originalFrom ?? default,
+                                       originalTo   ?? default,
                                        inner.ChildValue("body"),
                                        inner.Attr("id"));
 
@@ -137,9 +141,9 @@ public sealed class CarbonManager
     /// Did this stanza come from one's own account - which for a carbon means:
     /// from one's own server?
     /// </summary>
-    private bool IsFromOwnAccount(string from)
+    private bool IsFromOwnAccount(JID from)
 
-        => string.Equals(JidUtilities.Bare(from), _myBareJid, StringComparison.OrdinalIgnoreCase);
+        => from.Bare == _myBareJid;
 
     /// <summary>
     /// The <c>&lt;sent/&gt;</c> or <c>&lt;received/&gt;</c> of a carbon, or null
@@ -184,7 +188,7 @@ public sealed class CarbonManager
     /// message got decrypted was the one path with no sender check on it at
     /// all - XEP-0280's only real rule, missing exactly where it was needed.
     /// </remarks>
-    public XElement? UnwrapVerified(XElement message, string from)
+    public XElement? UnwrapVerified(XElement message, JID from)
 
         => IsFromOwnAccount(from) && CarbonElement(message) is XElement carbon
                ? InnerMessage(carbon)

@@ -47,7 +47,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// right away mistakes an intention for a fact.
 /// </remarks>
 public sealed record PubSubSubscription(String                      NodeId,
-                                        String                      ServiceJid,
+                                        JID                         ServiceJid,
                                         String?                     SubId,
                                         PubSubSubscriptionState     State,
                                         PubSubSubscriptionOptions?  Options = null)

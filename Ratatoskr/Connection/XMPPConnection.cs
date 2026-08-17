@@ -45,21 +45,21 @@ public delegate Task OnXMPPConnectionMessageDelegate                    (DateTim
 /// <summary>A contact's presence changed.</summary>
 public delegate Task OnXMPPConnectionPresenceDelegate                   (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
-                                                                         String             From,
+                                                                         JID                From,
                                                                          String             Type,
                                                                          CancellationToken  CancellationToken);
 
 /// <summary>XEP-0085: a contact is typing, or has stopped.</summary>
 public delegate Task OnXMPPConnectionChatStateDelegate                  (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
-                                                                         String             From,
+                                                                         JID                From,
                                                                          ChatState          State,
                                                                          CancellationToken  CancellationToken);
 
 /// <summary>XEP-0184: a message we sent was delivered.</summary>
 public delegate Task OnXMPPConnectionReceiptReceivedDelegate            (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
-                                                                         String             From,
+                                                                         JID                From,
                                                                          String             MessageId,
                                                                          CancellationToken  CancellationToken);
 
@@ -115,7 +115,7 @@ public delegate Task OnXMPPConnectionChatMarkerDelegate                 (DateTim
 /// <summary>XEP-0115: the capabilities of a peer were determined.</summary>
 public delegate Task OnXMPPConnectionCapsDiscoveredDelegate             (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
-                                                                         String             From,
+                                                                         JID                From,
                                                                          DiscoInfo          Info,
                                                                          CancellationToken  CancellationToken);
 
@@ -125,7 +125,7 @@ public delegate Task OnXMPPConnectionCapsDiscoveredDelegate             (DateTim
 /// </summary>
 public delegate Task OnXMPPConnectionStanzaErrorDelegate                (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
-                                                                         String?            From,
+                                                                         JID?               From,
                                                                          StanzaError        Error,
                                                                          CancellationToken  CancellationToken);
 
@@ -138,7 +138,7 @@ public delegate Task OnXMPPConnectionStreamErrorDelegate                (DateTim
 /// <summary>XEP-0384: a peer published a different set of devices.</summary>
 public delegate Task OnXMPPConnectionOmemoDeviceListChangedDelegate     (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
-                                                                         String             BareJid,
+                                                                         JID                BareJid,
                                                                          OmemoDeviceList    Devices,
                                                                          CancellationToken  CancellationToken);
 
@@ -180,7 +180,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     private string? _wsUri;
     private readonly string _defaultWsUri;
     private bool _endpointDiscovered;
-    private readonly string _jid;
+    private readonly JID    _jid;
     private readonly string _password;
     private readonly string _username;
     private readonly string _domain;
@@ -565,7 +565,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     // State
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
-    public string FullJid { get; private set; } = string.Empty;
+    public JID FullJid { get; private set; }
 
     /// <summary>
     /// The account this connection belongs to.
@@ -578,11 +578,11 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// connect this returned the empty string, because it had nothing but
     /// <see cref="FullJid"/> to look at.
     /// </remarks>
-    public string BareJid => FullJid.Length > 0
-                                 ? JidUtilities.Bare(FullJid)
-                                 : _jid;
+    public JID BareJid => FullJid.IsNotNullOrEmpty
+                              ? FullJid.Bare
+                              : _jid;
 
-    public string Domain => _domain;
+    public String Domain => _domain;
 
     /// <summary>
     /// The endpoint that is connected to: the one given, the one found through
@@ -726,11 +726,11 @@ public sealed class XMPPConnection : IAsyncDisposable
         // What the parse adds beyond the splitting is the preparation: PRECIS
         // for the localpart, IDNA for the domain. "ALICE@Example.COM" reaches
         // the server as what it is instead of as typed.
-        JidParts parts;
+        JID parts;
 
         try
         {
-            parts = JidUtilities.Parse(jid);
+            parts = JID.Parse(jid);
         }
         catch (JidFormatException e)
         {
@@ -3441,7 +3441,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// server keeps nothing ready. Both are the same thing for whoever wants to
     /// write.
     /// </returns>
-    public async Task<OmemoDeviceList?> FetchOmemoDeviceListAsync(string             bareJid,
+    public async Task<OmemoDeviceList?> FetchOmemoDeviceListAsync(JID                bareJid,
                                                                   CancellationToken  ct = default)
     {
 
@@ -3462,7 +3462,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// protects against. Passing an unchecked bundle on would mean leaving the
     /// check to whoever is most likely to forget it.
     /// </remarks>
-    public async Task<OmemoBundle?> FetchOmemoBundleAsync(string             bareJid,
+    public async Task<OmemoBundle?> FetchOmemoBundleAsync(JID                bareJid,
                                                           UInt32             deviceId,
                                                           CancellationToken  ct = default)
     {
@@ -3655,7 +3655,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// has made the worst of all mistakes - and silently at that.
     /// </exception>
     public async Task<IReadOnlyList<OmemoSkippedDevice>> SendEncryptedMessageAsync(
-        string to, string body, CancellationToken ct = default)
+        JID to, string body, CancellationToken ct = default)
     {
 
         if (Omemo is null)
@@ -3877,7 +3877,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// no answer is to be expected: in a room everyone present would get to see
     /// the acknowledgements, and a shout wants none.
     /// </param>
-    public async Task<string> SendMessageAsync(string       to,
+    public async Task<string> SendMessageAsync(JID          to,
                                                string       body,
                                                bool         requestReceipt  = true,
                                                bool         markable        = true,
@@ -3936,12 +3936,12 @@ public sealed class XMPPConnection : IAsyncDisposable
         return messageId;
     }
 
-    public async Task SendChatStateAsync(string to, ChatState state)
+    public async Task SendChatStateAsync(JID to, ChatState state)
     {
         await SendAsync($"<message to='{XmlEscaping.Escape(to)}' type='chat'>{state.ToXml()}</message>");
     }
 
-    public async Task SendReceiptAsync(string to, string messageId)
+    public async Task SendReceiptAsync(JID to, string messageId)
     {
         await SendAsync(ReceiptBuilder.CreateReceipt(to, messageId));
     }
@@ -3949,7 +3949,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>
     /// XEP-0333: Sends a chat marker
     /// </summary>
-    public async Task SendChatMarkerAsync(string to, string refMessageId, ChatMarkerType type)
+    public async Task SendChatMarkerAsync(JID to, string refMessageId, ChatMarkerType type)
     {
         await SendAsync(ChatMarkers.CreateMarker(to, refMessageId, type));
     }
@@ -3957,7 +3957,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>
     /// XEP-0199: Sends a ping
     /// </summary>
-    public Task<TimeSpan?> PingAsync(string? to = null, CancellationToken ct = default)
+    public Task<TimeSpan?> PingAsync(JID? to = null, CancellationToken ct = default)
     {
         return Ping?.PingAsync(to, ct) ?? Task.FromResult<TimeSpan?>(null);
     }
@@ -3965,7 +3965,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>
     /// XEP-0030: Queries service discovery info
     /// </summary>
-    public Task<DiscoInfo?> DiscoverInfoAsync(string jid, CancellationToken ct = default)
+    public Task<DiscoInfo?> DiscoverInfoAsync(JID jid, CancellationToken ct = default)
     {
         return Disco?.QueryInfoAsync(jid, ct: ct) ?? Task.FromResult<DiscoInfo?>(null);
     }
@@ -3973,7 +3973,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>
     /// XEP-0030: Queries service discovery items
     /// </summary>
-    public Task<DiscoItems?> DiscoverItemsAsync(string jid, CancellationToken ct = default)
+    public Task<DiscoItems?> DiscoverItemsAsync(JID jid, CancellationToken ct = default)
     {
         return Disco?.QueryItemsAsync(jid, ct: ct) ?? Task.FromResult<DiscoItems?>(null);
     }
@@ -3989,15 +3989,15 @@ public sealed class XMPPConnection : IAsyncDisposable
     public async Task SendRawAsync(string xml) => await SendAsync(xml);
 
     // Roster operations
-    public async Task AddContactAsync(string jid, string? name = null, IEnumerable<string>? groups = null)
+    public async Task AddContactAsync(JID jid, string? name = null, IEnumerable<string>? groups = null)
     {
         await SendAsync(RosterStanzaBuilder.SetItem(jid, name, groups));
         await SendAsync(RosterStanzaBuilder.Subscribe(jid));
     }
 
-    public async Task RemoveContactAsync(string jid) => await SendAsync(RosterStanzaBuilder.RemoveItem(jid));
-    public async Task AcceptSubscriptionAsync(string jid) => await SendAsync(RosterStanzaBuilder.Subscribed(jid));
-    public async Task DenySubscriptionAsync(string jid) => await SendAsync(RosterStanzaBuilder.Unsubscribed(jid));
+    public async Task RemoveContactAsync(JID jid) => await SendAsync(RosterStanzaBuilder.RemoveItem(jid));
+    public async Task AcceptSubscriptionAsync(JID jid) => await SendAsync(RosterStanzaBuilder.Subscribed(jid));
+    public async Task DenySubscriptionAsync(JID jid) => await SendAsync(RosterStanzaBuilder.Unsubscribed(jid));
 
     /// <summary>
     /// Cancels one's own subscription to the presence of a contact (RFC 6121,
@@ -4015,7 +4015,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// there it is about what the contact sees of me, here about what I see of
     /// them.
     /// </remarks>
-    public async Task CancelSubscriptionAsync(string jid) => await SendAsync(RosterStanzaBuilder.Unsubscribe(jid));
+    public async Task CancelSubscriptionAsync(JID jid) => await SendAsync(RosterStanzaBuilder.Unsubscribe(jid));
     #region PubSub (XEP-0060) - outgoing
 
     /// <summary>
@@ -4058,7 +4058,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// have not even been decided on yet.
     /// </remarks>
     public async Task<PubSubSubscription?> PubSubSubscribeAsync(String             nodeId,
-                                                                String?            service  = null,
+                                                                JID?               service  = null,
                                                                 CancellationToken  ct       = default)
     {
 
@@ -4128,7 +4128,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// round: one would lose the reports of a subscription that still exists.
     /// </remarks>
     public async Task<Boolean> PubSubUnsubscribeAsync(String             nodeId,
-                                                      String?            service  = null,
+                                                      JID?               service  = null,
                                                       String?            subId    = null,
                                                       CancellationToken  ct       = default)
     {
@@ -4177,7 +4177,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// feature most never use - and against an address that possibly does not
     /// exist at all.
     /// </remarks>
-    public async Task<IReadOnlyList<PubSubSubscription>?> PubSubGetSubscriptionsAsync(String?            service  = null,
+    public async Task<IReadOnlyList<PubSubSubscription>?> PubSubGetSubscriptionsAsync(JID?               service  = null,
                                                                                       String?            nodeId   = null,
                                                                                       CancellationToken  ct       = default)
     {
@@ -4233,7 +4233,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// Per node the role, or null on a rejection and on silence.
     /// </returns>
     public async Task<IReadOnlyList<(String NodeId, PubSubAffiliation Affiliation)>?>
-        PubSubGetAffiliationsAsync(String? service = null, CancellationToken ct = default)
+        PubSubGetAffiliationsAsync(JID? service = null, CancellationToken ct = default)
 
         => await ReadAffiliationsAsync(PubSubBuilder.GetAffiliations(service ?? PubSub!.PubSubService,
                                                                      NextPubSubId()),
@@ -4249,7 +4249,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </returns>
     public async Task<IReadOnlyList<(String Jid, PubSubAffiliation Affiliation)>?>
         PubSubGetNodeAffiliationsAsync(String             nodeId,
-                                       String?            service  = null,
+                                       JID?               service  = null,
                                        CancellationToken  ct       = default)
 
         => await ReadAffiliationsAsync(PubSubBuilder.GetNodeAffiliations(service ?? PubSub!.PubSubService,
@@ -4262,7 +4262,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     public async Task<Boolean> PubSubSetAffiliationAsync(String             nodeId,
                                                          String             jid,
                                                          PubSubAffiliation  affiliation,
-                                                         String?            service  = null,
+                                                         JID?               service  = null,
                                                          CancellationToken  ct       = default)
 
         => await PubSubRequestAsync(PubSubBuilder.SetAffiliation(service ?? PubSub!.PubSubService,
@@ -4291,7 +4291,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public async Task<IReadOnlyList<(String Jid, String? SubId, PubSubSubscriptionState State)>?>
         PubSubGetNodeSubscribersAsync(String             nodeId,
-                                      String?            service  = null,
+                                      JID?               service  = null,
                                       CancellationToken  ct       = default)
     {
 
@@ -4349,7 +4349,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     public async Task<Boolean> PubSubRemoveSubscriberAsync(String             nodeId,
                                                            String             jid,
                                                            String?            subId    = null,
-                                                           String?            service  = null,
+                                                           JID?               service  = null,
                                                            CancellationToken  ct       = default)
 
         => await PubSubRequestAsync(PubSubBuilder.RemoveSubscriber(service ?? PubSub!.PubSubService,
@@ -4429,7 +4429,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// information.
     /// </remarks>
     public async Task<PubSubSubscriptionOptions?> PubSubGetOptionsAsync(String             nodeId,
-                                                                        String?            service  = null,
+                                                                        JID?               service  = null,
                                                                         String?            subId    = null,
                                                                         CancellationToken  ct       = default)
     {
@@ -4550,7 +4550,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     public async Task<Boolean> PubSubPublishAsync(String             nodeId,
                                                   String             itemId,
                                                   String             payload,
-                                                  String?            service  = null,
+                                                  JID?               service  = null,
                                                   CancellationToken  ct       = default)
 
         => await PubSubRequestAsync(PubSubBuilder.Publish(service ?? PubSub!.PubSubService,
@@ -4585,7 +4585,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// when there is nothing in the offer this client understands.
     /// </returns>
     public async Task<PubSubNodeConfiguration?> PubSubGetNodeConfigAsync(String             nodeId,
-                                                                         String?            service  = null,
+                                                                         JID?               service  = null,
                                                                          CancellationToken  ct       = default)
     {
 
@@ -4670,7 +4670,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public async Task<Boolean> PubSubRetractAsync(String             nodeId,
                                                   String             itemId,
-                                                  String?            service  = null,
+                                                  JID?               service  = null,
                                                   CancellationToken  ct       = default)
 
         => await PubSubRequestAsync(PubSubBuilder.Retract(service ?? PubSub!.PubSubService,
@@ -4687,7 +4687,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// only one left holding an entry about a node they removed themselves.
     /// </remarks>
     public async Task<Boolean> PubSubDeleteNodeAsync(String             nodeId,
-                                                     String?            service  = null,
+                                                     JID?               service  = null,
                                                      CancellationToken  ct       = default)
     {
 
@@ -4714,7 +4714,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// address.
     /// </remarks>
     public async Task<Boolean> PubSubPurgeNodeAsync(String             nodeId,
-                                                    String?            service  = null,
+                                                    JID?               service  = null,
                                                     CancellationToken  ct       = default)
 
         => await PubSubRequestAsync(PubSubBuilder.PurgeNode(service ?? PubSub!.PubSubService,

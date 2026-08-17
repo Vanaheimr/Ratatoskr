@@ -239,7 +239,7 @@ public sealed class OmemoManager
     private SemaphoreSlim SessionGate(String jid, UInt32 deviceId)
     {
 
-        var key = $"{JidUtilities.Bare(jid)}/{deviceId}";
+        var key = $"{jid.Bare}/{deviceId}";
 
         lock (_lock)
         {
@@ -280,7 +280,7 @@ public sealed class OmemoManager
         // One's own further devices belong with it - otherwise one's own
         // computer does not see what one's own telephone has written.
         foreach (var jid in recipients.Append(_ownBareJid)
-                                      .Select(JidUtilities.Bare)
+                                      .Select(JID.BareTextOf)
                                       .Distinct(StringComparer.OrdinalIgnoreCase))
         {
 
@@ -436,7 +436,7 @@ public sealed class OmemoManager
                                                     String                 senderBareJid)
     {
 
-        var jid     = JidUtilities.Bare(senderBareJid);
+        var jid     = senderBareJid.Bare;
         var entry = element.KeyFor(_ownBareJid, Identity.DeviceId);
 
         if (entry is null)
@@ -633,7 +633,7 @@ public sealed class OmemoManager
 
     /// <summary>Decides about a device.</summary>
     public Boolean SetTrust(String bareJid, UInt32 deviceId, OmemoTrust trust)
-        => _store.SetTrust(JidUtilities.Bare(bareJid), deviceId, trust);
+        => _store.SetTrust(bareJid.Bare.ToString(), deviceId, trust);
 
     #endregion
 

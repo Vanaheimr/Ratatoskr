@@ -50,14 +50,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// ordinary one. The <c>Body</c> is then, too, the complete new text and not
 /// the change to it.
 /// </param>
-public sealed record XMPPMessage(string       From,
-                                 string       To,
+public sealed record XMPPMessage(JID          From,
+                                 JID          To,
                                  string       Body,
                                  string?      MessageId,
                                  DateTime     Timestamp,
                                  MessageType  Type        = MessageType.Normal,
                                  DateTime?    ReceivedAt  = null,
-                                 string?      DelayedBy   = null,
+                                 JID?         DelayedBy   = null,
                                  string?      ReplacesId  = null)
 {
 
@@ -67,7 +67,7 @@ public sealed record XMPPMessage(string       From,
     /// <summary>
     /// Sender without resource.
     /// </summary>
-    public string FromBareJid => JidUtilities.Bare(From);
+    public JID FromBareJid => From.Bare;
 
     /// <summary>
     /// Was this message held and delivered late?
