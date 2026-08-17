@@ -185,6 +185,18 @@ public sealed class XMPPConnection : IAsyncDisposable
     private readonly string _username;
     private readonly string _domain;
 
+    /// <summary>
+    /// What the last SCRAM authentication derived, kept for the next one.
+    /// </summary>
+    /// <remarks>
+    /// A reconnect otherwise pays the PBKDF2 again over the same password, the
+    /// same salt and the same iteration count - and servers name counts in the
+    /// tens of thousands precisely so that it is not cheap. It stays the
+    /// default until an authentication has succeeded, and is only reused when
+    /// all three parameters still agree.
+    /// </remarks>
+    private SaltedPassword _saltedPassword;
+
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger _logger;
 
@@ -3034,6 +3046,10 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (!scram.VerifyServerFinalMessage(serverFinal))
             throw new AuthenticationException("Server signature invalid - possible MITM attack!");
 
+        // Kept for the next authentication, now that the server has proved it
+        // derived the same thing.
+        _saltedPassword = scram.SaltedPassword;
+
         _completedTaskSignature = serverFinal;
 
         var offered = continueElement.Child("tasks")?.
@@ -3072,7 +3088,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         await SendAsync("<task-data xmlns='urn:xmpp:sasl:2'>" +
                         $"<hash xmlns='{ScramUpgrade.DataNamespace}'>" +
-                        Convert.ToBase64String(saltedPassword) +
+                        Convert.ToBase64String(saltedPassword.ToArray()) +
                         "</hash></task-data>");
 
         UpgradedTo = target;
@@ -3135,7 +3151,17 @@ public sealed class XMPPConnection : IAsyncDisposable
                         // announcement having been stripped in flight, and
                         // refuses - a downgrade caught without either side
                         // implementing anything experimental.
-                        CanDoChannelBinding  = binding is not null
+                        CanDoChannelBinding  = binding is not null,
+
+                        // What the last authentication derived. The PBKDF2
+                        // behind it is the most expensive thing in this
+                        // exchange by design, and at a reconnect its three
+                        // inputs - password, salt, iteration count - are almost
+                        // always the ones from last time. Handing in something
+                        // that no longer matches is harmless: the authenticator
+                        // checks all three and derives afresh if any has
+                        // changed.
+                        KeptSaltedPassword   = _saltedPassword
                     };
 
         // Step 1: client-first-message
@@ -3204,6 +3230,10 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             if (!scram.VerifyServerFinalMessage(serverFinal))
                 throw new AuthenticationException("Server signature invalid - possible MITM attack!");
+
+            // Kept for the next authentication, now that the server has proved
+            // it derived the same thing.
+            _saltedPassword = scram.SaltedPassword;
 
             // The mechanism alone does not say whether the announcement that
             // led to it was checked, and those are different facts: one server

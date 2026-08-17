@@ -110,22 +110,15 @@ public static class ScramUpgrade
     /// that fails the very next connection, and it would fail as a wrong
     /// password rather than as a bad upgrade.
     /// </remarks>
-    public static Byte[] SaltedPassword(SCRAMMechanism  Mechanism,
-                                        String          Password,
-                                        Byte[]          Salt,
-                                        Int32           IterationCount)
+    public static SaltedPassword SaltedPassword(SCRAMMechanism  Mechanism,
+                                                String          Password,
+                                                Byte[]          Salt,
+                                                Int32           IterationCount)
 
-        => Rfc2898DeriveBytes.Pbkdf2(
-               Encoding.UTF8.GetBytes(SaslPrep.Prepare(Password)),
-               Salt,
-               IterationCount,
-               Mechanism == SCRAMMechanism.ScramSha256
-                   ? HashAlgorithmName.SHA256
-                   : HashAlgorithmName.SHA1,
-               Mechanism == SCRAMMechanism.ScramSha256
-                   ? 32
-                   : 20
-           );
+        => Ratatoskr.SaltedPassword.Derive(Mechanism,
+                                           SaslPrep.Prepare(Password),
+                                           Salt,
+                                           (UInt32) IterationCount);
 
     #endregion
 

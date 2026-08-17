@@ -69,7 +69,7 @@ public sealed class SCRAMAuthenticator
     private string? _clientNonce;
     private string? _clientFirstMessageBare;
     private string? _serverFirstMessage;
-    private byte[]? _saltedPassword;
+    private SaltedPassword _saltedPassword;
 
     /// <summary>
     /// The announcement this client received, for XEP-0474. Null when the
@@ -115,6 +115,29 @@ public sealed class SCRAMAuthenticator
     /// <see cref="SaslDowngradeProtectionResult.Mismatch"/>.
     /// </remarks>
     public Boolean RefuseOnMismatch { get; set; } = true;
+
+    /// <summary>
+    /// A salted password from an earlier authentication, to be reused when the
+    /// server names the same mechanism, salt and iteration count again.
+    /// </summary>
+    /// <remarks>
+    /// Handing in a value that does not match is not an error and not a risk -
+    /// <see cref="SaltedPassword.Matches"/> checks all three parameters and the
+    /// derivation simply runs. The caller therefore does not have to know
+    /// whether the server has changed anything.
+    /// </remarks>
+    public SaltedPassword? KeptSaltedPassword { get; init; }
+
+    /// <summary>
+    /// What this exchange derived - to be kept for the next one.
+    /// </summary>
+    /// <remarks>
+    /// Worth reading only after <see cref="ComputeClientFinalMessage"/>; before
+    /// that the server has not named a salt and there is nothing to derive
+    /// from. It is the default until then rather than null, which is what
+    /// <see cref="SaltedPassword.IsNullOrEmpty"/> is for.
+    /// </remarks>
+    public SaltedPassword SaltedPassword => _saltedPassword;
 
     public SCRAMAuthenticator(string username, string password, SCRAMMechanism mechanism = SCRAMMechanism.ScramSha1)
 
@@ -267,14 +290,25 @@ public sealed class SCRAMAuthenticator
         var salt = Convert.FromBase64String(saltBase64);
         var iterations = ReadIterationCount(iterationsStr);
 
-        // Compute SaltedPassword = Hi(password, salt, iterations)
-        _saltedPassword = Hi(_password, salt, iterations);
+        // SaltedPassword = Hi(password, salt, iterations), and only when there
+        // is nothing to reuse. The PBKDF2 is the expensive part of this
+        // exchange by design - servers name iteration counts in the tens of
+        // thousands - and at a reconnect the password, the salt and the count
+        // are usually the same three values as last time. Matches() is what
+        // decides that: all three have to agree, and a changed salt is the one
+        // that would otherwise fail as "wrong password" for a password that is
+        // right.
+        _saltedPassword = KeptSaltedPassword is SaltedPassword kept &&
+                          kept.Matches(_mechanism, salt, (UInt32) iterations)
+
+                              ? kept
+                              : SaltedPassword.Derive(_mechanism, _password, salt, (UInt32) iterations);
 
         // ClientKey = HMAC(SaltedPassword, "Client Key")
-        var clientKey = HmacCompute(_saltedPassword, "Client Key");
+        var clientKey = _saltedPassword.ClientKey();
 
         // StoredKey = H(ClientKey)
-        var storedKey = HashCompute(clientKey);
+        var storedKey = _saltedPassword.StoredKey();
 
         // client-final-message-without-proof = c=<cbind-input>,r=serverNonce
         var clientFinalWithoutProof = $"c={ChannelBindingInput()},r={serverNonce}";
@@ -317,7 +351,7 @@ public sealed class SCRAMAuthenticator
 
         // Compute the expected ServerSignature
         // ServerKey = HMAC(SaltedPassword, "Server Key")
-        var serverKey = HmacCompute(_saltedPassword!, "Server Key");
+        var serverKey = _saltedPassword.ServerKey();
 
         // Reconstruct the AuthMessage
         var serverNonce = ExtractValue(_serverFirstMessage!, "r");
@@ -394,22 +428,6 @@ public sealed class SCRAMAuthenticator
 
         return iterations;
 
-    }
-
-    private byte[] Hi(string password, byte[] salt, int iterations)
-    {
-        // PBKDF2 with SHA-1 or SHA-256
-        var hashName = _mechanism == SCRAMMechanism.ScramSha256
-            ? HashAlgorithmName.SHA256
-            : HashAlgorithmName.SHA1;
-
-        return Rfc2898DeriveBytes.Pbkdf2(
-            Encoding.UTF8.GetBytes(password),
-            salt,
-            iterations,
-            hashName,
-            hashName == HashAlgorithmName.SHA256 ? 32 : 20
-        );
     }
 
     private byte[] HmacCompute(byte[] key, string data)
