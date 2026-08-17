@@ -315,7 +315,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var account = plain.AddAccount("alice", Sha1Only("pw"));
 
             await using var client = new XMPPClient(
-                                         new XMPPConnection(JID.Parse($"alice@{plain.Domain}"), "pw", plain.Uri)
+                                         new XMPPConnection(
+                                             JID.Parse($"alice@{plain.Domain}"),
+                                             "pw",
+                                             plain.Uri
+                                         )
                                      );
 
             await client.ConnectAsync();

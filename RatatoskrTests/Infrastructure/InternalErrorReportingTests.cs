@@ -317,8 +317,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             second.Start();
             second.AddAccount("carol");
 
-            var connection = new XMPPConnection(JID.Parse($"carol@{second.Domain}"), "pw", second.Uri)
-            {
+            var connection = new XMPPConnection(
+                                 JID.Parse($"carol@{second.Domain}"),
+                                 "pw",
+                                 second.Uri
+                             ) {
                 KeepaliveEnabled            = false,
                 MaxReconnectAttempts        = 0,
                 ServerCertificateValidator  = second.IsOwnCertificate

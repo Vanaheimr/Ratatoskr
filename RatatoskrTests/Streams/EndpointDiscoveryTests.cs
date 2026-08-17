@@ -18,7 +18,7 @@
 #region Usings
 
 using NUnit.Framework;
-
+using org.GraphDefined.Vanaheimr.Hermod.HTTP;
 using org.GraphDefined.Vanaheimr.Ratatoskr;
 
 #endregion
@@ -104,33 +104,38 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task WithoutAHostMeta_TheDefaultRemains()
         {
 
-            var asked = 0;
+            var asked       = 0;
 
-            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw")
-            {
-                EndpointDiscovery      = new AltConnectionsResolver((uri, ct) =>
-                                         {
-                                             asked++;
-                                             return Task.FromResult<String?>(null);
-                                         }),
+            var connection  = new XMPPConnection(
+                                  JID.Parse($"alice@{Server.Domain}"),
+                                  "pw"
+                              ) {
 
-                // Nothing listens on 5443; every attempt ends at once. The
-                // default would be five of them with growing waits - for a
-                // statement the first one already makes.
-                MaxReconnectAttempts   = 1,
-                InitialReconnectDelay  = TimeSpan.FromMilliseconds(50)
-            };
+                                    EndpointDiscovery      = new AltConnectionsResolver(
+                                                                 (uri, ct) => {
+                                                                     asked++;
+                                                                     return Task.FromResult<String?>(null);
+                                                                 }
+                                                             ),
 
-            var client = new XMPPClient(connection);
+                                    // Nothing listens on 5443; every attempt ends at once. The
+                                    // default would be five of them with growing waits - for a
+                                    // statement the first one already makes.
+                                    MaxReconnectAttempts   = 1,
 
-            var error = await FailingConnectAsync(client);
+                                    InitialReconnectDelay  = TimeSpan.FromMilliseconds(50)
 
-            Assert.Multiple(() =>
-            {
+                                };
 
-                Assert.That(connection.WebSocketUri, Is.EqualTo($"wss://{Server.Domain}:5443/ws"));
+            var client     = new XMPPClient(connection);
 
-                Assert.That(error.Message, Does.Contain(connection.WebSocketUri),
+            var error      = await FailingConnectAsync(client);
+
+            Assert.Multiple(() => {
+
+                Assert.That(connection.WebSocketUri, Is.EqualTo(URL.Parse($"wss://{Server.Domain}:5443/ws")));
+
+                Assert.That(error.Message, Does.Contain(connection.WebSocketUri.ToString()),
                             $"The error does not name the endpoint: {error.Message}");
 
                 Assert.That(error.InnerException, Is.Not.Null,
@@ -167,26 +172,31 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             // Nothing listens on port 1, and reliably so.
-            const String Discovered = "wss://127.0.0.1:1/ws";
+            var discovered  = URL.Parse("wss://127.0.0.1:1/ws");
 
-            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw")
-            {
-                EndpointDiscovery      = Answers(
-                    "{ \"links\": [ { \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"" +
-                    Discovered + "\" } ] }"),
+            var connection  = new XMPPConnection(
+                                  JID.Parse($"alice@{Server.Domain}"),
+                                  "pw"
+                              ) {
 
-                MaxReconnectAttempts   = 1,
-                InitialReconnectDelay  = TimeSpan.FromMilliseconds(50)
-            };
+                                    EndpointDiscovery      = Answers(
+                                                                 "{ \"links\": [ { \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"" +
+                                                                 discovered + "\" } ] }"
+                                                             ),
 
-            var client  = new XMPPClient(connection);
+                                    MaxReconnectAttempts   = 1,
 
-            var error  = await FailingConnectAsync(client);
+                                    InitialReconnectDelay  = TimeSpan.FromMilliseconds(50)
 
-            Assert.Multiple(() =>
-            {
-                Assert.That(connection.WebSocketUri, Is.EqualTo(Discovered));
-                Assert.That(error.Message,          Does.Contain(Discovered),
+                              };
+
+            var client      = new XMPPClient(connection);
+
+            var error       = await FailingConnectAsync(client);
+
+            Assert.Multiple(() => {
+                Assert.That(connection.WebSocketUri,  Is.  EqualTo(discovered));
+                Assert.That(error.Message,            Does.Contain(discovered.ToString()),
                             $"The error does not name the discovered endpoint: {error.Message}");
             });
 
@@ -210,8 +220,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void ADeliberateCancel_StaysACancel()
         {
 
-            var connection = new XMPPConnection(JID.Parse($"alice@{Server.Domain}"), "pw", Server.Uri)
-            {
+            var connection = new XMPPConnection(
+                                 JID.Parse($"alice@{Server.Domain}"),
+                                 "pw",
+                                 Server.Uri
+                             ) {
                 ServerCertificateValidator = Server.IsOwnCertificate
             };
 

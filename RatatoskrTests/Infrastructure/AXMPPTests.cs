@@ -163,10 +163,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                           Int32      maxReconnectAttempts  = 20)
         {
 
-            var connection = new XMPPConnection(JID.Parse($"{localPart}@{Server.Domain}"),
-                                                password,
-                                                Server.Uri)
-            {
+            var connection = new XMPPConnection(
+                                 JID.Parse($"{localPart}@{Server.Domain}"),
+                                 password,
+                                 Server.Uri
+                             ) {
                 KeepaliveEnabled         = keepalive.HasValue,
                 KeepaliveInterval        = keepalive ?? TimeSpan.FromSeconds(25),
                 InitialReconnectDelay    = reconnectDelay ?? TimeSpan.FromMilliseconds(200),

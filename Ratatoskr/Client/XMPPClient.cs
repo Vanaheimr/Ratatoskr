@@ -22,6 +22,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using org.GraphDefined.Vanaheimr.Illias;
 using org.GraphDefined.Vanaheimr.Hermod;
+using org.GraphDefined.Vanaheimr.Hermod.HTTP;
 
 #endregion
 
@@ -219,49 +220,10 @@ public sealed class XMPPClient : IAsyncDisposable
 
     #region Data
 
-    private readonly XMPPConnection _connection;
-    private readonly ILogger _logger;
-    private readonly List<JID> _pendingSubscriptions = [];
-    private readonly Lock _pendingLock = new();
-
-    /// <summary>
-    /// Valid values for the &lt;show/&gt; element (RFC 6121, section 4.7.2.1).
-    /// "available" is the absence of &lt;show/&gt; and therefore permitted as well.
-    /// </summary>
-    private static readonly string[] ValidShowValues = ["available", "away", "chat", "dnd", "xa"];
-
-    #endregion
-
-    #region Properties
-
-    /// <summary>
-    /// The underlying connection - for status queries and special cases.
-    /// </summary>
-    public XMPPConnection Connection => _connection;
-
-    public Roster Roster => _connection.Roster;
-    public ConnectionState State => _connection.State;
-    public JID FullJid => _connection.FullJid;
-    public JID BareJid => _connection.BareJid;
-    public string Domain => _connection.Domain;
-    public string WebSocketUri => _connection.WebSocketUri;
-    public IReadOnlyList<string> ServerFeatures => _connection.ServerFeatures;
-    public IReadOnlyList<string> LocalFeatures => _connection.Disco?.LocalFeatures ?? [];
-
-    public bool IsConnected => _connection.State == ConnectionState.Connected;
-    public bool CarbonsEnabled => _connection.Carbons?.IsEnabled == true;
-    public StreamManagementManager? StreamManagement => _connection.StreamManagement;
-
-    /// <summary>
-    /// JID of the current chat partner; null when no chat is active.
-    /// </summary>
-    public JID? CurrentChatPartner { get; private set; }
-
-    /// <summary>
-    /// ID of the last received message - the point of reference for chat
-    /// markers without an explicit ID.
-    /// </summary>
-    public string? LastReceivedMessageId { get; private set; }
+    private readonly XMPPConnection           _connection;
+    private readonly ILogger                  _logger;
+    private readonly List<JID>                _pendingSubscriptions  = [];
+    private readonly Lock                     _pendingLock           = new();
 
     /// <summary>
     /// The message last sent to a recipient - the point of reference for a
@@ -273,31 +235,91 @@ public sealed class XMPPClient : IAsyncDisposable
     /// note would be wrong after every change of subject - and wrong in such a
     /// way that the correction ends up with the previous conversation partner.
     /// </remarks>
-    private readonly Dictionary<JID, string> _lastSentTo     = new();
-    private readonly Lock                       _lastSentToLock = new();
+    private readonly Dictionary<JID, string>  _lastSentTo            = [];
+    private readonly Lock                     _lastSentToLock        = new();
+
+    /// <summary>
+    /// Valid values for the &lt;show/&gt; element (RFC 6121, section 4.7.2.1).
+    /// "available" is the absence of &lt;show/&gt; and therefore permitted as well.
+    /// </summary>
+    private static readonly String[]          ValidShowValues        = ["available", "away", "chat", "dnd", "xa"];
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// The underlying connection - for status queries and special cases.
+    /// </summary>
+    public XMPPConnection            Connection
+        => _connection;
+
+    public Roster                    Roster
+        => _connection.Roster;
+
+    public ConnectionState           State
+        => _connection.State;
+
+    public JID                       FullJid
+        => _connection.FullJid;
+
+    public JID                       BareJid
+        => _connection.BareJid;
+
+    public string                    Domain
+        => _connection.Domain;
+
+    public URL                       WebSocketUri
+        => _connection.WebSocketUri;
+
+    public IReadOnlyList<string>     ServerFeatures
+        => _connection.ServerFeatures;
+
+    public IReadOnlyList<string>     LocalFeatures
+        => _connection.Disco?.LocalFeatures ?? [];
+
+    public Boolean                   IsConnected
+        => _connection.State == ConnectionState.Connected;
+
+    public Boolean                   CarbonsEnabled
+        => _connection.Carbons?.IsEnabled == true;
+
+    public StreamManagementManager?  StreamManagement
+        => _connection.StreamManagement;
+
+    /// <summary>
+    /// JID of the current chat partner; null when no chat is active.
+    /// </summary>
+    public JID?                       CurrentChatPartner       { get; private set; }
+
+    /// <summary>
+    /// ID of the last received message - the point of reference for chat
+    /// markers without an explicit ID.
+    /// </summary>
+    public string?                    LastReceivedMessageId    { get; private set; }
 
     /// <summary>
     /// Contact requests not answered yet, in order of arrival.
     /// </summary>
-    public IReadOnlyList<JID> PendingSubscriptions
+    public IReadOnlyList<JID>         PendingSubscriptions
     {
         get { lock (_pendingLock) return _pendingSubscriptions.ToList(); }
     }
 
     // Configuration - takes effect when the connection is established resp. on reconnect
-    public bool KeepaliveEnabled
+    public Boolean                    KeepaliveEnabled
     {
         get => _connection.KeepaliveEnabled;
         set => _connection.KeepaliveEnabled = value;
     }
 
-    public TimeSpan KeepaliveInterval
+    public TimeSpan                   KeepaliveInterval
     {
         get => _connection.KeepaliveInterval;
         set => _connection.KeepaliveInterval = value;
     }
 
-    public bool StreamManagementEnabled
+    public Boolean                    StreamManagementEnabled
     {
         get => _connection.StreamManagementEnabled;
         set => _connection.StreamManagementEnabled = value;
@@ -435,7 +457,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </remarks>
     public XMPPClient(JID             jid,
                       string          password,
-                      string?         wsUri           = null,
+                      URL?            wsUri           = null,
                       ILoggerFactory? LoggerFactory   = null)
     {
 
@@ -443,7 +465,12 @@ public sealed class XMPPClient : IAsyncDisposable
                            ? LoggerFactory.CreateLogger<XMPPClient>()
                            : NullLogger<XMPPClient>.Instance;
 
-        _connection  = new XMPPConnection(jid, password, wsUri, LoggerFactory);
+        _connection  = new XMPPConnection(
+                           jid,
+                           password,
+                           wsUri,
+                           LoggerFactory
+                       );
 
         WireUpConnection();
 

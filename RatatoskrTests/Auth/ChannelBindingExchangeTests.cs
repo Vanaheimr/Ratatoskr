@@ -184,7 +184,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // No certificate validator: there is no certificate. That absence
             // is the whole premise of this test.
             await using var client = new XMPPClient(
-                                         new XMPPConnection(JID.Parse($"alice@{plain.Domain}"), "pw", plain.Uri)
+                                         new XMPPConnection(
+                                             JID.Parse($"alice@{plain.Domain}"),
+                                             "pw",
+                                             plain.Uri
+                                         )
                                      );
 
             await client.ConnectAsync();

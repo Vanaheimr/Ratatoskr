@@ -17,6 +17,7 @@
 
 #region Usings
 
+using org.GraphDefined.Vanaheimr.Hermod.HTTP;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -99,19 +100,19 @@ public sealed class AltConnectionsResolver
     /// only when the first yields nothing - a domain that delivers both thereby
     /// costs one query instead of two.
     /// </remarks>
-    public async Task<string?> DiscoverWebSocketAsync(string             domain,
-                                                      CancellationToken  ct   = default)
+    public async Task<URL?> DiscoverWebSocketAsync(string             domain,
+                                                   CancellationToken  ct   = default)
     {
 
         var jrd = await _fetch($"https://{domain}/.well-known/host-meta.json", ct);
 
         if (jrd is not null && WebSocketEndpointsFromJrd(jrd) is { Count: > 0 } fromJson)
-            return fromJson[0];
+            return URL.Parse(fromJson[0]);
 
         var xrd = await _fetch($"https://{domain}/.well-known/host-meta", ct);
 
         if (xrd is not null && WebSocketEndpointsFromXrd(xrd) is { Count: > 0 } fromXml)
-            return fromXml[0];
+            return URL.Parse(fromXml[0]);
 
         return null;
 

@@ -138,13 +138,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             if (server.GetAccount($"{localPart}@{server.Domain}") is null)
                 server.AddAccount(localPart);
 
-            var connection                                   = new XMPPConnection(JID.Parse($"{localPart}@{server.Domain}"), "pw", server.Uri) {
-                                 KeepaliveEnabled            = false,
-                                 MaxReconnectAttempts        = 0,
-                                 ServerCertificateValidator  = server.IsOwnCertificate
-                             };
+            var connection  = new XMPPConnection(
+                                  JID.Parse($"{localPart}@{server.Domain}"),
+                                  "pw",
+                                  server.Uri
+                              ) {
+                                    KeepaliveEnabled            = false,
+                                    MaxReconnectAttempts        = 0,
+                                    ServerCertificateValidator  = server.IsOwnCertificate
+                                };
 
-            var client = new XMPPClient(connection);
+            var client      = new XMPPClient(connection);
             _clients.Add(client);
 
             await client.ConnectAsync();

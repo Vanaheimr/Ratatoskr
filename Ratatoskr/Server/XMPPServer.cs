@@ -41,6 +41,7 @@ using org.GraphDefined.Vanaheimr.Hermod.WebSocket;
 // the alias, and the alias had to go into the body of the namespace
 // declaration.
 using IPAddress = System.Net.IPAddress;
+using org.GraphDefined.Vanaheimr.Hermod.HTTP;
 
 #endregion
 
@@ -190,7 +191,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// <summary>
         /// The WebSocket URI for the client.
         /// </summary>
-        public String Uri => $"{(Certificate is not null ? "wss" : "ws")}://localhost:{Port}/ws/";
+        public URL Uri => URL.Parse($"{(Certificate is not null ? "wss" : "ws")}://localhost:{Port}/ws/");
 
         /// <summary>
         /// The number of all connections ever accepted.

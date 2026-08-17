@@ -55,13 +55,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void ServerUri_IsWss()
         {
 
-            Assert.Multiple(() =>
-            {
-                Assert.That(Server.Uri, Does.StartWith("wss://"),
+            Assert.Multiple(() => {
+
+                Assert.That(Server.Uri.ToString(),  Does.StartWith("wss://"),
                             "The server has to be reachable over TLS.");
 
-                Assert.That(Server.Certificate, Is.Not.Null,
+                Assert.That(Server.Certificate,     Is.Not.Null,
                             "Without a certificate there is no TLS.");
+
             });
 
         }
@@ -80,10 +81,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            Assert.Multiple(() =>
-            {
-                Assert.That(client.IsConnected, Is.True);
-                Assert.That(client.Connection.WebSocketUri, Does.StartWith("wss://"));
+            Assert.Multiple(() => {
+                Assert.That(client.IsConnected,                         Is.True);
+                Assert.That(client.Connection.WebSocketUri.ToString(),  Does.StartWith("wss://"));
             });
 
         }
@@ -207,13 +207,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             plain.Start();
             plain.AddAccount("alice");
 
-            Assert.That(plain.Uri, Does.StartWith("ws://"));
-            Assert.That(plain.Certificate, Is.Null);
+            Assert.That(plain.Uri.ToString(),  Does.StartWith("ws://"));
+            Assert.That(plain.Certificate,     Is.Null);
 
-            var connection = new XMPPConnection(JID.Parse($"alice@{plain.Domain}"),
-                                                "pw",
-                                                plain.Uri)
-            {
+            var connection = new XMPPConnection(
+                                 JID.Parse($"alice@{plain.Domain}"),
+                                 "pw",
+                                 plain.Uri
+                             ) {
                 KeepaliveEnabled      = false,
                 MaxReconnectAttempts  = 0
             };

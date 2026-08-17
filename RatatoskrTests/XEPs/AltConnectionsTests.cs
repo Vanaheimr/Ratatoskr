@@ -18,7 +18,7 @@
 #region Usings
 
 using NUnit.Framework;
-
+using org.GraphDefined.Vanaheimr.Hermod.HTTP;
 using org.GraphDefined.Vanaheimr.Ratatoskr;
 
 #endregion
@@ -201,24 +201,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task TheFirstEndpointWins()
         {
 
-            var jrd = "{ \"links\": [" +
-                      "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://first.example/ws\" }," +
-                      "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://then.example/ws\" }" +
-                      "] }";
+            var jrd       = "{ \"links\": [" +
+                            "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://first.example/ws\" }," +
+                            "{ \"rel\": \"urn:xmpp:alt-connections:websocket\", \"href\": \"wss://then.example/ws\" }" +
+                            "] }";
 
-            var resolver = Resolver([],
-                               new Dictionary<String, String> {
-                                   ["https://example.test/.well-known/host-meta.json"] = jrd
-                               });
+            var resolver  = Resolver(
+                                [],
+                                new Dictionary<String, String> {
+                                    [ "https://example.test/.well-known/host-meta.json" ] = jrd
+                                }
+                            );
 
-            Assert.Multiple(async () =>
-            {
+            Assert.Multiple(async () => {
 
                 Assert.That(AltConnectionsResolver.WebSocketEndpointsFromJrd(jrd),
-                            Is.EqualTo(new[] { "wss://first.example/ws", "wss://then.example/ws" }));
+                            Is.EqualTo([ "wss://first.example/ws", "wss://then.example/ws" ]));
 
                 Assert.That(await resolver.DiscoverWebSocketAsync("example.test"),
-                            Is.EqualTo("wss://first.example/ws"));
+                            Is.EqualTo(URL.Parse("wss://first.example/ws")));
 
             });
 
@@ -276,8 +277,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(endpoint, Is.EqualTo("wss://web.example.com:443/ws"));
-                Assert.That(queried, Is.EqualTo(new[] { "https://example.test/.well-known/host-meta.json" }),
+                Assert.That(endpoint, Is.EqualTo(URL.Parse("wss://web.example.com:443/ws")));
+                Assert.That(queried, Is.EqualTo([ "https://example.test/.well-known/host-meta.json" ]),
                             $"What was queried: {String.Join(", ", queried)}");
             });
 
@@ -295,22 +296,23 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public async Task WithoutTheJsonForm_TheXrdIsUsed()
         {
 
-            var queried = new List<String>();
+            var queried   = new List<String>();
 
-            var resolver = Resolver(queried,
-                               new Dictionary<String, String> {
-                                   ["https://example.test/.well-known/host-meta"] = Xrd
-                               });
+            var resolver  = Resolver(
+                                queried,
+                                new Dictionary<String, String> {
+                                    [ "https://example.test/.well-known/host-meta" ] = Xrd
+                                }
+                            );
 
-            var endpoint = await resolver.DiscoverWebSocketAsync("example.test");
+            var endpoint  = await resolver.DiscoverWebSocketAsync("example.test");
 
-            Assert.Multiple(() =>
-            {
-                Assert.That(endpoint, Is.EqualTo("wss://web.example.com:443/ws"));
-                Assert.That(queried, Is.EqualTo(new[] {
-                              "https://example.test/.well-known/host-meta.json",
+            Assert.Multiple(() => {
+                Assert.That(endpoint, Is.EqualTo(URL.Parse("wss://web.example.com:443/ws")));
+                Assert.That(queried, Is.EqualTo([
+                                "https://example.test/.well-known/host-meta.json",
                                 "https://example.test/.well-known/host-meta"
-                            }),
+                            ]),
                             $"What was queried: {String.Join(", ", queried)}");
             });
 

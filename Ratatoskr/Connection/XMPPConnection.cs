@@ -30,6 +30,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using org.GraphDefined.Vanaheimr.Illias;
 using org.GraphDefined.Vanaheimr.Hermod;
+using org.GraphDefined.Vanaheimr.Hermod.HTTP;
 
 #endregion
 
@@ -210,13 +211,13 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     #region Data
 
-    private string? _wsUri;
-    private readonly string _defaultWsUri;
-    private bool _endpointDiscovered;
-    private readonly JID    _jid;
-    private readonly string _password;
-    private readonly string _username;
-    private readonly string _domain;
+    private URL?             _wsUri;
+    private readonly URL     _defaultWsUri;
+    private Boolean          _endpointDiscovered;
+    private readonly JID     _jid;
+    private readonly string  _password;
+    private readonly string  _username;
+    private readonly string  _domain;
 
     /// <summary>
     /// What the last SCRAM authentication derived, kept for the next one.
@@ -615,17 +616,21 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// connect this returned the empty string, because it had nothing but
     /// <see cref="FullJid"/> to look at.
     /// </remarks>
-    public JID BareJid => FullJid.IsNotNullOrEmpty
-                              ? FullJid.Bare
-                              : _jid;
+    public JID     BareJid
 
-    public String Domain => _domain;
+        => FullJid.IsNotNullOrEmpty
+               ? FullJid.Bare
+               : _jid;
+
+    public String  Domain
+        => _domain;
 
     /// <summary>
     /// The endpoint that is connected to: the one given, the one found through
     /// XEP-0156 or the default value - in that order of precedence.
     /// </summary>
-    public string WebSocketUri => _wsUri ?? _defaultWsUri;
+    public URL     WebSocketUri
+        => _wsUri ?? _defaultWsUri;
 
     /// <summary>
     /// XEP-0156: What the endpoint is searched with when the caller has named
@@ -761,7 +766,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public XMPPConnection(JID                jid,
                           string             password,
-                          string?            wsUri           = null,
+                          URL?               wsUri           = null,
                           ILoggerFactory?    LoggerFactory   = null)
     {
 
@@ -776,31 +781,44 @@ public sealed class XMPPConnection : IAsyncDisposable
                       "'user@domain'.",
                       nameof(jid));
 
-        _jid       = jid.Bare;
-        _username  = jid.Localpart;
-        _domain    = jid.Domainpart;
+        _jid            = jid.Bare;
+        _username       = jid.Localpart;
+        _domain         = jid.Domainpart;
 
         // A resource typed along is a wish and not a mistake: whoever writes
         // "alice@example.com/phone" is saying which device this is. It only
         // sets the default - <see cref="Resource"/> stays settable, and the
         // server has the last word at binding anyway.
         if (jid.Resourcepart is not null)
-            Resource = jid.Resourcepart;
+            Resource    = jid.Resourcepart;
 
         // Kept apart: without one, the host-meta of the domain is asked before
         // the first connect (XEP-0156). Whoever names an endpoint is not asked
         // - the XEP is explicitly the fallback route, not the first address.
-        _wsUri         = wsUri;
-        _defaultWsUri  = $"wss://{_domain}:5443/ws";
+        _wsUri          = wsUri;
+        _defaultWsUri   = URL.Parse($"wss://{_domain}:5443/ws");
 
         _loggerFactory  = LoggerFactory;
         _logger         = CreateLogger<XMPPConnection>();
 
         Roster          = new Roster(LoggerFactory);
 
-        Receipts        = new ReceiptTracker(CreateLogger<ReceiptTracker>());
-        Receipts.OnReceiptReceived += async (timestamp, sender, messageId, from, ct) =>
-            await OnReceiptReceived.InvokeAllAsync(handler => handler(timestamp, this, from, messageId, ct), _logger);
+        Receipts        = new ReceiptTracker(
+                              CreateLogger<ReceiptTracker>()
+                          );
+
+        Receipts.OnReceiptReceived += async (timestamp, sender, messageId, from, ct)
+
+            => await OnReceiptReceived.InvokeAllAsync(
+                         handler => handler(
+                                        timestamp,
+                                        this,
+                                        from,
+                                        messageId,
+                                        ct
+                                    ),
+                         _logger
+                     );
 
     }
 
@@ -902,14 +920,14 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         _endpointDiscovered = true;
 
-        var found = await (EndpointDiscovery ?? new AltConnectionsResolver()).
-                              DiscoverWebSocketAsync(_domain, ct);
+        var foundURL = await (EndpointDiscovery ?? new AltConnectionsResolver()).
+                                  DiscoverWebSocketAsync(_domain, ct);
 
-        if (found is not null)
+        if (foundURL is not null)
         {
             _logger.LogInformation("XEP-0156: {WebSocketUri} from the host-meta of {Domain}",
-                                   found, _domain);
-            _wsUri = found;
+                                   foundURL, _domain);
+            _wsUri = foundURL;
         }
 
         else
@@ -1037,7 +1055,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             // not touched.
             try
             {
-                await webSocket.ConnectAsync(new Uri(WebSocketUri), ct);
+                await webSocket.ConnectAsync(new Uri(WebSocketUri.ToString()), ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

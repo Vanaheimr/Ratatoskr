@@ -743,7 +743,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             socket.Options.AddSubProtocol("xmpp");
             socket.Options.RemoteCertificateValidationCallback = Server.IsOwnCertificate;
 
-            await socket.ConnectAsync(new Uri(Server.Uri), CancellationToken.None);
+            await socket.ConnectAsync(new Uri(Server.Uri.ToString()), CancellationToken.None);
 
             async Task Send(String frame)
                 => await socket.SendAsync(Encoding.UTF8.GetBytes(frame),
