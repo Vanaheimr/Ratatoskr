@@ -425,17 +425,24 @@ tripping over a null does not end somebody's session.
 
 That last part is **`EventInvocation.InvokeAllAsync`, and it lives in Hermod**,
 not here: nothing about it is XMPP, and Hermod is where the
-`Microsoft.Extensions.Logging` dependency it needs already was. It is also
-where the mistake it avoids is most thickly settled — a dozen places in Hermod
-raise their events with one `Task.WhenAll` over the invocation list inside one
+`Microsoft.Extensions.Logging` dependency it needs already was. It was also
+where the mistake it avoids was most thickly settled — two dozen places raised
+their events with one `Task.WhenAll` over the invocation list inside one
 try/catch, which looks like it covers everything and covers less than it looks.
 A handler that throws before its first `await` throws while the list is still
 being built, so the handlers behind it are never called at all; and of those
-that do fail, `WhenAll` re-throws exactly one. Four of the nine tests in
+that do fail, `WhenAll` re-throws exactly one. Four of the eleven tests in
 `HermodTests/Helpers/EventInvocationTests.cs` go red against that alternative,
-which is why they are written down. Converting those dozen places is a separate
-decision — it turns their handlers from concurrent into sequential — and has
-not been made here.
+which is why they are written down.
+
+Those two dozen have since been converted, so Hermod raises its own events the
+same way — including through the six copies of a private `LogEvent` helper it
+had, which is what most of its classes go through. **Three were deliberately
+left alone**, and each says so on the spot: `OnValidateWebSocketConnection`,
+`OnValidateTCPConnection` and `HTTPTestServer.ProcessHTTP` read what their
+handlers return. `InvokeAllAsync` returns `Task` and swallows what a handler
+throws, so putting a validator through it would turn "the validator failed,
+therefore refuse" into "the validator failed, therefore let them in".
 
 The `ILoggerFactory` is optional; without it everything falls back to
 `NullLogger` and nothing is logged. Log levels: `Information` for connection
