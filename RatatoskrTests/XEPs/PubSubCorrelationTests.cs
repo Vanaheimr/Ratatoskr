@@ -91,7 +91,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.AnswerPepRequests = false;
 
-            Server.OnStanzaReceived += (session, frame) =>
+            Server.OnStanzaReceived += (timestamp, sender, session, frame, ct) =>
             {
                 if (frame.Contains(request, StringComparison.Ordinal))
                 {
@@ -101,6 +101,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                     _ = session.SendAsync(reply.Replace("{id}", id));
 
                 }
+
+                return Task.CompletedTask;
+
             };
 
         }

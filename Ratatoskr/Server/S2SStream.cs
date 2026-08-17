@@ -19,10 +19,43 @@
 
 using System.Text.RegularExpressions;
 
+using Microsoft.Extensions.Logging;
+
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
+
+    #region (delegate) OnS2SStream...Delegate
+
+    /// <summary>
+    /// An incoming stanza was not delivered - with the reason.
+    /// </summary>
+    public delegate Task OnS2SStreamStanzaRefusedDelegate(DateTimeOffset     Timestamp,
+                                                          S2SStream          Sender,
+                                                          String             Reason,
+                                                          CancellationToken  CancellationToken);
+
+    /// <summary>
+    /// The stream has ended, with the reason or null on a proper
+    /// <c>&lt;close/&gt;</c>.
+    /// </summary>
+    public delegate Task OnS2SStreamClosedDelegate       (DateTimeOffset     Timestamp,
+                                                          S2SStream          Sender,
+                                                          String?            Reason,
+                                                          CancellationToken  CancellationToken);
+
+    /// <summary>
+    /// The stream starts over (RFC 6120, section 6.4.6).
+    /// </summary>
+    public delegate Task OnS2SStreamRestartDelegate      (DateTimeOffset     Timestamp,
+                                                          S2SStream          Sender,
+                                                          CancellationToken  CancellationToken);
+
+    #endregion
+
 
     /// <summary>
     /// A server-to-server stream - the protocol layer between two servers,
@@ -246,13 +279,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// <summary>
         /// An incoming stanza was not delivered - with the reason.
         /// </summary>
-        public event Action<String>? OnStanzaRefused;
+        /// <summary>
+        /// Where a subscriber that threw gets reported. Null - the default -
+        /// means nowhere.
+        /// </summary>
+        /// <remarks>
+        /// A property and not a constructor parameter, because this class has
+        /// three factories and no logging of its own: it is a protocol layer
+        /// that neither opens sockets nor writes files, and threading a logger
+        /// through all of that to be used in one place would be the tail
+        /// wagging the dog. Whoever builds the stream can set it; whoever does
+        /// not gets the old behaviour, which is silence.
+        /// </remarks>
+        public ILogger? Logger { get; set; }
+
+        public event OnS2SStreamStanzaRefusedDelegate? OnStanzaRefused;
 
         /// <summary>
         /// The stream has ended, with the reason or null on a proper
         /// <c>&lt;close/&gt;</c>.
         /// </summary>
-        public event Action<String?>? OnClosed;
+        public event OnS2SStreamClosedDelegate? OnClosed;
 
         /// <summary>
         /// The stream starts over (RFC 6120, section 6.4.6).
@@ -262,7 +309,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// into elements has seen the stream header so far and would otherwise
         /// take the new one for a child element.
         /// </remarks>
-        public event Action? OnRestart;
+        public event OnS2SStreamRestartDelegate? OnRestart;
 
         #endregion
 
@@ -510,7 +557,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (framing.IsStreamClose(frame))
             {
-                MarkClosed(null);
+                await MarkClosedAsync(null, cancellationToken);
                 return true;
             }
 
@@ -519,7 +566,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (StanzaElement.Is(frame, "error") ||
                 frame.Contains(StreamErrorNamespace, StringComparison.Ordinal))
             {
-                MarkClosed($"Stream error of the peer: {frame}");
+                await MarkClosedAsync($"Stream error of the peer: {frame}", cancellationToken);
                 return true;
             }
 
@@ -534,7 +581,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return await ProcessFeaturesAsync(frame, cancellationToken);
 
             if (StanzaElement.Is(frame, "bidi"))
-                return ProcessBidi(frame);
+                return await ProcessBidiAsync(frame, cancellationToken);
 
             if (StanzaElement.Is(frame, "auth"))
                 return await ProcessSaslAuthAsync(frame, cancellationToken);
@@ -676,7 +723,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // The connection is already gone - the result is the same.
             }
 
-            MarkClosed(null);
+            await MarkClosedAsync(null, cancellationToken);
 
         }
 
@@ -710,7 +757,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // An unheard error ends the stream too.
             }
 
-            MarkClosed(condition);
+            await MarkClosedAsync(condition, cancellationToken);
 
         }
 
@@ -1062,7 +1109,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                           $"<failure xmlns='{SaslNamespace}'><not-authorized/></failure>",
                           cancellationToken);
 
-                OnStanzaRefused?.Invoke($"SASL-EXTERNAL for '{claimed ?? "(none)"}' refused");
+                await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"SASL-EXTERNAL for '{claimed ?? "(none)"}' refused", cancellationToken), Logger);
 
                 return true;
 
@@ -1072,7 +1119,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // identification. The other way round the stream would report
             // itself usable for a moment although its new header is still
             // outstanding.
-            ReopenForRestart();
+            await ReopenForRestartAsync(cancellationToken);
             MarkAuthenticated("SASL-EXTERNAL");
 
             await sendFrame($"<success xmlns='{SaslNamespace}'/>", cancellationToken);
@@ -1091,7 +1138,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (!IsInitiator)
                 return false;
 
-            ReopenForRestart();
+            await ReopenForRestartAsync(cancellationToken);
             MarkAuthenticated("SASL-EXTERNAL");
 
             await sendFrame(framing.StreamOpen(LocalDomain, RemoteDomain, null), cancellationToken);
@@ -1221,7 +1268,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 MarkAuthenticated();
 
             else
-                OnStanzaRefused?.Invoke($"Dialback for '{senderDomain}' failed");
+                await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Dialback for '{senderDomain}' failed", cancellationToken), Logger);
 
             return true;
 
@@ -1414,7 +1461,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// (<c>bidi</c> off): then it is <b>not</b> enabled. An attacker could
         /// otherwise force a return direction this server never offered.
         /// </remarks>
-        private Boolean ProcessBidi(String frame)
+        private async Task<Boolean> ProcessBidiAsync(String frame, CancellationToken cancellationToken = default)
         {
 
             if (IsInitiator || !frame.Contains(BidiNamespace, StringComparison.Ordinal))
@@ -1422,7 +1469,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (!bidi)
             {
-                OnStanzaRefused?.Invoke("<bidi/> without an announcement");
+                await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this, "<bidi/> without an announcement", cancellationToken), Logger);
                 return false;
             }
 
@@ -1481,8 +1528,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (from is not null && !BelongsToLocalDomain(from))
             {
-                OnStanzaRefused?.Invoke(
-                    $"'{from}' does not belong to '{LocalDomain}' - not over the return direction");
+                await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this,
+                    $"'{from}' does not belong to '{LocalDomain}' - not over the return direction",
+                    cancellationToken), Logger);
                 return false;
             }
 
@@ -1565,13 +1613,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // the return direction, and what comes over it belongs here.
             if (IsInitiator && !BidiEnabled)
             {
-                OnStanzaRefused?.Invoke("A stanza on an outgoing stream");
+                await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this, "A stanza on an outgoing stream", cancellationToken), Logger);
                 return false;
             }
 
             if (deliverStanza is null)
             {
-                OnStanzaRefused?.Invoke("No recipient for incoming stanzas");
+                await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this, "No recipient for incoming stanzas", cancellationToken), Logger);
                 return false;
             }
 
@@ -1581,7 +1629,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // would run along without deciding anything.
             if (RequiresDialback && !IsAuthenticated)
             {
-                OnStanzaRefused?.Invoke("A stanza before dialback was completed");
+                await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this, "A stanza before dialback was completed", cancellationToken), Logger);
                 return false;
             }
 
@@ -1590,7 +1638,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (result == RemoteStanzaResult.Accepted)
                 return true;
 
-            OnStanzaRefused?.Invoke(result.ToString());
+            await OnStanzaRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this, result.ToString(), cancellationToken), Logger);
 
             // RFC 6120, section 8.1.1.1: with a 'from' the peer may not speak
             // for, the stream ends. The reason is not strictness for its own
@@ -1622,8 +1670,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// transport itself is already gone and a <c>&lt;close/&gt;</c> would
         /// reach nobody anyway.
         /// </summary>
-        internal void Abort(String? reason)
-            => MarkClosed(reason);
+        internal Task AbortAsync(String? reason)
+            => MarkClosedAsync(reason);
 
         #endregion
 
@@ -1685,7 +1733,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// certificate and not from the stream, and asking for it once more
         /// would mean letting it be guessed once more.
         /// </remarks>
-        private void ReopenForRestart()
+        private async Task ReopenForRestartAsync(CancellationToken cancellationToken = default)
         {
 
             lock (dataLock)
@@ -1699,11 +1747,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             }
 
-            OnRestart?.Invoke();
+            await OnRestart.InvokeAllAsync(handler => handler(Timestamp.Now, this, cancellationToken), Logger);
 
         }
 
-        private void MarkClosed(String? reason)
+        private async Task MarkClosedAsync(String? reason, CancellationToken cancellationToken = default)
         {
 
             lock (dataLock)
@@ -1725,7 +1773,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             ready.TrySetCanceled();
             verificationAnswer?.TrySetResult(false);
 
-            OnClosed?.Invoke(reason);
+            await OnClosed.InvokeAllAsync(handler => handler(Timestamp.Now, this, reason, cancellationToken), Logger);
 
         }
 

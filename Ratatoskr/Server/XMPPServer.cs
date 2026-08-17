@@ -27,6 +27,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
+using Microsoft.Extensions.Logging;
+
 using org.GraphDefined.Vanaheimr.Illias;
 using org.GraphDefined.Vanaheimr.Hermod;
 using org.GraphDefined.Vanaheimr.Hermod.WebSocket;
@@ -44,6 +46,49 @@ using IPAddress = System.Net.IPAddress;
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 {
+
+    #region (delegate) OnXMPPServer...Delegate
+
+    /// <summary>
+    /// A stanza was received from a client.
+    /// </summary>
+    public delegate Task OnXMPPServerStanzaReceivedDelegate      (DateTimeOffset     Timestamp,
+                                                                  XMPPServer         Sender,
+                                                                  XMPPSession        Session,
+                                                                  String             Frame,
+                                                                  CancellationToken  CancellationToken);
+
+    /// <summary>
+    /// A session was bound successfully.
+    /// </summary>
+    public delegate Task OnXMPPServerSessionBoundDelegate        (DateTimeOffset     Timestamp,
+                                                                  XMPPServer         Sender,
+                                                                  XMPPSession        Session,
+                                                                  CancellationToken  CancellationToken);
+
+    /// <summary>
+    /// A stanza from another server was refused - with the peer domain and
+    /// the reason.
+    /// </summary>
+    public delegate Task OnXMPPServerRemoteStanzaRejectedDelegate(DateTimeOffset     Timestamp,
+                                                                  XMPPServer         Sender,
+                                                                  String             PeerDomain,
+                                                                  String             Reason,
+                                                                  CancellationToken  CancellationToken);
+
+    /// <summary>
+    /// Processing a frame ended in an exception - with the session, the frame
+    /// and the exception.
+    /// </summary>
+    public delegate Task OnXMPPServerInternalErrorDelegate       (DateTimeOffset     Timestamp,
+                                                                  XMPPServer         Sender,
+                                                                  XMPPSession        Session,
+                                                                  String             Frame,
+                                                                  Exception          Exception,
+                                                                  CancellationToken  CancellationToken);
+
+    #endregion
+
 
     /// <summary>
     /// A minimal XMPP-over-WebSocket server (RFC 7395).
@@ -677,20 +722,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Events
 
         /// <summary>
+        /// Where a subscriber that threw gets reported. Null - the default -
+        /// means nowhere.
+        /// </summary>
+        /// <remarks>
+        /// The same reasoning as on <see cref="S2SStream.Logger"/>: this class
+        /// does no logging of its own, and the one place that wants a logger is
+        /// the report of a handler that failed. Whoever builds the server can
+        /// set it; whoever does not gets what there was before, which is
+        /// silence.
+        /// </remarks>
+        public ILogger? Logger { get; set; }
+
+        /// <summary>
         /// Is raised for every stanza received from the client.
         /// </summary>
-        public event Action<XMPPSession, String>? OnStanzaReceived;
+        public event OnXMPPServerStanzaReceivedDelegate? OnStanzaReceived;
 
         /// <summary>
         /// Is raised as soon as a session has been bound successfully.
         /// </summary>
-        public event Action<XMPPSession>? OnSessionBound;
+        public event OnXMPPServerSessionBoundDelegate? OnSessionBound;
 
         /// <summary>
         /// Is raised when a stanza was refused by another server - with the
         /// domain of the peer and the reason.
         /// </summary>
-        public event Action<String, String>? OnRemoteStanzaRejected;
+        public event OnXMPPServerRemoteStanzaRejectedDelegate? OnRemoteStanzaRejected;
 
         /// <summary>
         /// Is raised when the processing of a frame ends with an exception -
@@ -717,7 +775,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// about the behaviour of the server changes with that - only whether
         /// anybody learns of it.
         /// </remarks>
-        public event Action<XMPPSession, String, Exception>? OnInternalError;
+        public event OnXMPPServerInternalErrorDelegate? OnInternalError;
 
         #endregion
 
@@ -822,6 +880,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         ///
         /// Raised at the end of the constructor, not at the beginning: a
         /// subscriber gets a fully built instance and not half of one.
+        /// </remarks>
+        /// <remarks>
+        /// <b>The one event here that stayed an <c>Action</c></b>, while every
+        /// other one in this library became a Task-returning delegate. Not an
+        /// oversight, and not laziness: a constructor cannot await.
+        ///
+        /// The two ways round that are both worse than leaving it. Awaiting is
+        /// impossible; firing and forgetting would let the constructor return
+        /// before the subscriber had run - and the subscriber is the guard that
+        /// is supposed to be watching from the first frame onwards, so a server
+        /// could produce an internal error while nobody was yet listening for
+        /// it. Blocking on <c>GetAwaiter().GetResult()</c> in a constructor
+        /// buys the ordering back at the price of a deadlock hazard.
+        ///
+        /// So this one is what it always was: a synchronous construction hook,
+        /// which is what its purpose actually asks for. It is <c>internal</c>,
+        /// visible only through <c>InternalsVisibleTo</c>, and its handlers do
+        /// nothing but attach further handlers.
         /// </remarks>
         internal static event Action<XMPPServer>? OnInstanceCreated;
 
@@ -1179,7 +1255,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return;
 
             session.RecordReceived(frame);
-            OnStanzaReceived?.Invoke(session, frame);
+            await OnStanzaReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, session, frame, CancellationToken.None), Logger);
 
             if (StanzaElement.Is(frame, "open"))
                 session.OpenCount++;
@@ -1194,7 +1270,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // Reported instead of swallowed - see OnInternalError. Before
                 // the closing, so that a subscriber sees the exception even when
                 // the closing itself goes wrong.
-                OnInternalError?.Invoke(session, frame, e);
+                await OnInternalError.InvokeAllAsync(handler => handler(Timestamp.Now, this, session, frame, e, CancellationToken.None), Logger);
 
                 // RFC 6120, section 4.9.3.8: "The server has experienced a
                 // misconfiguration or other internal error that prevents it from
@@ -1220,7 +1296,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 }
                 catch (Exception whileClosing)
                 {
-                    OnInternalError?.Invoke(session, frame, whileClosing);
+                    await OnInternalError.InvokeAllAsync(handler => handler(Timestamp.Now, this, session, frame, whileClosing, CancellationToken.None), Logger);
                 }
 
             }
@@ -2529,7 +2605,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (bound)
             {
 
-                OnSessionBound?.Invoke(session);
+                await OnSessionBound.InvokeAllAsync(handler => handler(Timestamp.Now, this, session, CancellationToken.None), Logger);
 
                 foreach (var frameToDeliver in DeliverAfterBind.ToArray())
                     await session.SendAsync(frameToDeliver.Replace("{jid}", session.FullJid));
@@ -4608,7 +4684,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 $"<jid>{session.FullJid}</jid>" +
                 "</bind></iq>");
 
-            OnSessionBound?.Invoke(session);
+            await OnSessionBound.InvokeAllAsync(handler => handler(Timestamp.Now, this, session, CancellationToken.None), Logger);
 
             // Everything a real server delivers right after the binding.
             foreach (var frameToDeliver in DeliverAfterBind.ToArray())
@@ -5872,7 +5948,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             if (from is null || to is null)
             {
-                OnRemoteStanzaRejected?.Invoke(peerDomain, "from or to is missing");
+                await OnRemoteStanzaRejected.InvokeAllAsync(handler => handler(Timestamp.Now, this, peerDomain, "from or to is missing", CancellationToken.None), Logger);
                 return RemoteStanzaResult.MissingAddress;
             }
 
@@ -5882,15 +5958,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // fragments and then calls the result "foreign domain".
             if (!JID.TryParse(from, out _))
             {
-                OnRemoteStanzaRejected?.Invoke(peerDomain, $"'{from}' is no JID");
+                await OnRemoteStanzaRejected.InvokeAllAsync(handler => handler(Timestamp.Now, this, peerDomain, $"'{from}' is no JID", CancellationToken.None), Logger);
                 return RemoteStanzaResult.MalformedSender;
             }
 
             if (!String.Equals(DomainOf(from), peerDomain, StringComparison.OrdinalIgnoreCase))
             {
-                OnRemoteStanzaRejected?.Invoke(
+                await OnRemoteStanzaRejected.InvokeAllAsync(handler => handler(
+                    Timestamp.Now, this,
                     peerDomain,
-                    $"'{from}' does not belong to '{peerDomain}'");
+                    $"'{from}' does not belong to '{peerDomain}'",
+                    CancellationToken.None), Logger);
                 return RemoteStanzaResult.ForeignSender;
             }
 
@@ -5901,7 +5979,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (!JID.TryParse(to, out _))
             {
 
-                OnRemoteStanzaRejected?.Invoke(peerDomain, $"'{to}' is no JID");
+                await OnRemoteStanzaRejected.InvokeAllAsync(handler => handler(Timestamp.Now, this, peerDomain, $"'{to}' is no JID", CancellationToken.None), Logger);
 
                 // Section 8.3.1: an error is not followed by an error. Across the
                 // boundary that weighs more heavily than in one's own house - two
@@ -5919,7 +5997,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             if (!IsLocal(to))
             {
                 // Forwarding for third parties would be an open relay.
-                OnRemoteStanzaRejected?.Invoke(peerDomain, $"'{to}' does not lie on '{Domain}'");
+                await OnRemoteStanzaRejected.InvokeAllAsync(handler => handler(Timestamp.Now, this, peerDomain, $"'{to}' does not lie on '{Domain}'", CancellationToken.None), Logger);
                 return RemoteStanzaResult.ForeignRecipient;
             }
 

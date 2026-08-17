@@ -290,7 +290,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var refused  = new List<(String Peer, String Reason)>();
 
             bob.OnMessage                  += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
-            _right.OnRemoteStanzaRejected += (peer, reason) => refused.Add((peer, reason));
+            _right.OnRemoteStanzaRejected += (timestamp, sender, peer, reason, ct) => { refused.Add((peer, reason)); return Task.CompletedTask; };
 
             // left.example claims to speak for a third domain.
             var accepted = await _right.ReceiveFromRemoteAsync(
@@ -324,7 +324,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var refused = new List<String>();
-            _right.OnRemoteStanzaRejected += (_, reason) => refused.Add(reason);
+            _right.OnRemoteStanzaRejected += (timestamp, sender, peer, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             var accepted = await _right.ReceiveFromRemoteAsync(
                               "left.example",

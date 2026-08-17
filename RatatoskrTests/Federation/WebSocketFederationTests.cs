@@ -500,7 +500,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var refused  = new List<(String Peer, String Reason)>();
 
             bob.OnMessage                  += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
-            _right.OnRemoteStanzaRejected += (peer, reason) => refused.Add((peer, reason));
+            _right.OnRemoteStanzaRejected += (timestamp, sender, peer, reason, ct) => { refused.Add((peer, reason)); return Task.CompletedTask; };
 
             // left.example builds up regularly (the connection therefore
             // identifies itself correctly as "left.example"), but claims in the

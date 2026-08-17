@@ -85,7 +85,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.ConnectAsync();
 
             var reported = new ConcurrentQueue<(String Frame, Exception Error)>();
-            Server.OnInternalError += (session, frame, e) => reported.Enqueue((frame, e));
+            Server.OnInternalError += (timestamp, sender, session, frame, e, ct) => {
+                reported.Enqueue((frame, e));
+                return Task.CompletedTask;
+            };
 
             // Wait until the client is really quiet - not merely until
             // ConnectAsync comes back.

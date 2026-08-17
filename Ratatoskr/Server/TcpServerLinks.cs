@@ -784,7 +784,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                                         => _localServer.AcceptFromRemoteAsync(peerDomain, stanza),
                                  useBidi:           RequestBidirectionalStreams);
 
-                stream.OnClosed += _ => DropOutbound(remoteDomain, slot);
+                stream.OnClosed += (timestamp, sender, reason, ct) => {
+                    DropOutbound(remoteDomain, slot);
+                    return Task.CompletedTask;
+                };
 
                 _ = PumpAsync(net, stream, () =>
                     {
@@ -796,7 +799,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                 if (!await stream.WaitUntilReadyAsync(HandshakeTimeout, cancellationToken))
                 {
-                    stream.Abort("The setup was not completed");
+                    stream.AbortAsync("The setup was not completed");
                     DropOutbound(remoteDomain, slot);
                     return null;
                 }
@@ -1142,7 +1145,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             var splitter  = new XmlStreamSplitter();
 
             // After a SASL restart the stream begins as a new document.
-            s2s.OnRestart += splitter.Reset;
+            s2s.OnRestart += (timestamp, sender, ct) => {
+                splitter.Reset();
+                return Task.CompletedTask;
+            };
 
             try
             {
@@ -1173,7 +1179,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // Connection gone.
             }
 
-            s2s.Abort("The TCP connection has ended");
+            s2s.AbortAsync("The TCP connection has ended");
 
             onEnd?.Invoke();
 
@@ -1213,7 +1219,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             foreach (var link in inbound)
             {
-                link.Stream.Abort("The server is shutting down");
+                link.Stream.AbortAsync("The server is shutting down");
                 try { link.Client.Dispose(); } catch { /* never mind */ }
             }
 
@@ -1230,7 +1236,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // With a time limit: a hanging connection setup must not block
                 // the shutdown. Without it a failed test turned into a test run
                 // that stood still.
-                try { (await task.WaitAsync(HandshakeTimeout))?.Abort("The server is shutting down"); }
+                try { (await task.WaitAsync(HandshakeTimeout))?.AbortAsync("The server is shutting down"); }
                 catch { /* the setup failed or was too slow */ }
             }
 

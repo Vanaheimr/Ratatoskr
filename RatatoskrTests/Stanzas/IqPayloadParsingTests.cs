@@ -105,7 +105,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var (client, session) = await ConnectedPairAsync();
 
-            Server.OnStanzaReceived += (s, frame) =>
+            Server.OnStanzaReceived += (timestamp, sender, s, frame, ct) =>
             {
                 if (frame.Contains("disco#info", StringComparison.Ordinal) &&
                     frame.Contains("type='get'", StringComparison.Ordinal))
@@ -121,6 +121,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "</query></iq>");
 
                 }
+
+                return Task.CompletedTask;
+
             };
 
             var info = await client.Connection.Disco!.QueryInfoAsync(JID.Parse(Server.Domain),
@@ -153,7 +156,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var (client, session) = await ConnectedPairAsync();
 
-            Server.OnStanzaReceived += (s, frame) =>
+            Server.OnStanzaReceived += (timestamp, sender, s, frame, ct) =>
             {
                 if (frame.Contains("disco#info", StringComparison.Ordinal) &&
                     frame.Contains("type='get'", StringComparison.Ordinal))
@@ -169,6 +172,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "</query></iq>");
 
                 }
+
+                return Task.CompletedTask;
+
             };
 
             var info = await client.Connection.Disco!.QueryInfoAsync(JID.Parse(Server.Domain),

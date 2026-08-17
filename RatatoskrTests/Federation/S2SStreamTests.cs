@@ -348,7 +348,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             var refused = new List<String>();
-            stream.OnStanzaRefused += reason => refused.Add(reason);
+            stream.OnStanzaRefused += (timestamp, sender, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             await stream.ProcessFrameAsync(
                       "<message from='boss@bank.example' to='bob@right.example'><body>Transfer, please.</body></message>");
@@ -389,7 +389,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             var refused = new List<String>();
-            stream.OnStanzaRefused += reason => refused.Add(reason);
+            stream.OnStanzaRefused += (timestamp, sender, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             await stream.ProcessFrameAsync(
                       "<message from='al ice@left.example' to='bob@right.example'><body>Hello</body></message>");
@@ -426,7 +426,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             var refused = new List<String>();
-            stream.OnStanzaRefused += reason => refused.Add(reason);
+            stream.OnStanzaRefused += (timestamp, sender, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             await stream.ProcessFrameAsync(
                       "<message from='alice@left.example' to='b ob@right.example'><body>Hello</body></message>");
@@ -463,7 +463,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync(OpenFrom("left.example"));
 
             var refused = new List<String>();
-            stream.OnStanzaRefused += reason => refused.Add(reason);
+            stream.OnStanzaRefused += (timestamp, sender, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             await stream.ProcessFrameAsync(
                       "<message from='alice@left.example' to='who@faraway.example'><body>Onwards</body></message>");
@@ -502,7 +502,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-1"));
 
             var refused = new List<String>();
-            stream.OnStanzaRefused += reason => refused.Add(reason);
+            stream.OnStanzaRefused += (timestamp, sender, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             var understood = await stream.ProcessFrameAsync(
                                  "<message from='bob@right.example' to='alice@left.example'><body>Answer</body></message>");
@@ -559,7 +559,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await stream.ProcessFrameAsync(OpenFrom("right.example", to: "left.example", id: "s-1"));
 
             var reason   = "not ended yet";
-            stream.OnClosed += r => reason = r ?? "(orderly)";
+            stream.OnClosed += (timestamp, sender, r, ct) => { reason = r ?? "(orderly)"; return Task.CompletedTask; };
 
             await stream.ProcessFrameAsync("<close xmlns='urn:ietf:params:xml:ns:xmpp-framing'/>");
 

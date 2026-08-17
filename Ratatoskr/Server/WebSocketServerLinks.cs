@@ -435,7 +435,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // Connection gone - the abort below wakes any waiting party.
             }
 
-            stream.Abort("The verification connection has ended");
+            stream.AbortAsync("The verification connection has ended");
 
         }
 
@@ -510,7 +510,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                                      => _localServer.AcceptFromRemoteAsync(peerDomain, stanza),
                                  useBidi:        RequestBidirectionalStreams);
 
-                stream.OnClosed += _ => DropOutbound(remoteDomain, slot);
+                stream.OnClosed += (timestamp, sender, reason, ct) => {
+                    DropOutbound(remoteDomain, slot);
+                    return Task.CompletedTask;
+                };
 
                 _ = PumpIncomingFramesAsync(socket, stream, remoteDomain, slot);
 
@@ -527,7 +530,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // anyway.
                 if (!await stream.WaitUntilAuthenticatedAsync(OutboundHandshakeTimeout, cancellationToken))
                 {
-                    stream.Abort("The dialback was not completed");
+                    stream.AbortAsync("The dialback was not completed");
                     DropOutbound(remoteDomain, slot);
                     return null;
                 }
@@ -613,7 +616,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 // Socket gone - the stream learns of it below through the abort.
             }
 
-            stream.Abort("The outgoing WebSocket connection has ended");
+            stream.AbortAsync("The outgoing WebSocket connection has ended");
             DropOutbound(remoteDomain, slot);
 
             try { socket.Dispose(); }
@@ -743,7 +746,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         _streams.Remove(connection, out stream);
                     }
 
-                    stream?.Abort("The incoming WebSocket connection has ended");
+                    stream?.AbortAsync("The incoming WebSocket connection has ended");
 
                     return Task.CompletedTask;
 
@@ -787,7 +790,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                      verifyKey:  _links.VerifyDialbackKeyAsync,
                                      offerBidi:  _links.OfferBidirectionalStreams);
 
-                    stream.OnClosed += reason =>
+                    stream.OnClosed += (timestamp, sender, reason, ct) =>
                     {
 
                         lock (_lock)
@@ -803,6 +806,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                             try { await connection.Close(); }
                             catch { /* never mind */ }
                         });
+
+                        return Task.CompletedTask;
 
                     };
 
@@ -880,7 +885,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
                     if (link is not null)
                     {
-                        link.Stream.Abort("The server is shutting down");
+                        link.Stream.AbortAsync("The server is shutting down");
                         try { link.Socket.Dispose(); }
                         catch { /* never mind */ }
                     }
