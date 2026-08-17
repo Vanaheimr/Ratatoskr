@@ -363,7 +363,7 @@ using org.GraphDefined.Vanaheimr.Ratatoskr;
 using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole());
 
 await using var client = new XMPPClient(
-                             "user@example.com",
+                             JID.Parse("user@example.com"),
                              "secret",
                              "wss://xmpp.example.com:5443/ws",
                              loggerFactory);
@@ -384,19 +384,33 @@ await client.SendMessageAsync("Hello!");
 ```
 
 Addresses are `JID`, not `String`, and there is no implicit conversion in
-either direction — hence the `JID.Parse`. The reason is the comparison: local
-and domain part are independent of spelling, the resourcepart is not, so
-`alice@example.com/Phone` and `alice@example.com/phone` are two devices of one
-person. On a `String`, `==` gives the wrong answer to that; on a `JID` the
-right comparison is the one you get for free. An implicit conversion would put
-a parse that can throw at every call site that merely looks like an assignment,
-and hand the comparison quietly back to `String`.
+either direction — hence the `JID.Parse`, in the constructor as everywhere
+else. The reason is the comparison: local and domain part are independent of
+spelling, the resourcepart is not, so `alice@example.com/Phone` and
+`alice@example.com/phone` are two devices of one person. On a `String`, `==`
+gives the wrong answer to that; on a `JID` the right comparison is the one you
+get for free. An implicit conversion would put a parse that can throw at every
+call site that merely looks like an assignment, and hand the comparison quietly
+back to `String`.
+
+The constructor is the address's one boundary to a human being, and it takes a
+`JID` all the same. It used to take a `String` and call `JID.Parse` as its
+first act — which says the parameter had been a JID all along and was merely
+spelled as a String. What that cost was the error: a mistyped address came back
+as an `ArgumentException` out of a constructor, several frames from the text
+somebody typed. Parsing at the call site puts the failure where the text is,
+and leaves the constructor with the one objection it is actually in a position
+to make — that `example.com` is a perfectly good address and still not a login.
 
 `JID.Parse` throws `JidFormatException`; `JID.TryParse` returns `false` or
-`null` for anything that arrives from outside.
+`null` for anything that arrives from outside. Whoever reads addresses off a
+command line takes `TryParse` or catches the exception, as the XMPPConsole
+does — a typo is the ordinary case there, and what a person should get for one
+is a sentence.
 
 Every event is a **named delegate that returns `Task`**, in the shape
-`(DateTimeOffset Timestamp, TSender Sender, …, CancellationToken)`. That is not
+`(DateTimeOffset Timestamp, TSender Sender, …, CancellationToken)` — on the
+client, on the connection, on the managers and on the server alike. That is not
 decoration. The alternative for a handler that wants to await anything - store
 the message, answer it, forward it, which is most of what one does - is
 `async void`, and an exception in an `async void` lambda has no caller left to
@@ -408,6 +422,20 @@ Handlers are called one after another, in the order subscribed, and each is
 wrapped separately: a subscriber that throws is logged and the ones behind it
 still run. Nothing comes back out into the connection - one debug display
 tripping over a null does not end somebody's session.
+
+That last part is **`EventInvocation.InvokeAllAsync`, and it lives in Hermod**,
+not here: nothing about it is XMPP, and Hermod is where the
+`Microsoft.Extensions.Logging` dependency it needs already was. It is also
+where the mistake it avoids is most thickly settled — a dozen places in Hermod
+raise their events with one `Task.WhenAll` over the invocation list inside one
+try/catch, which looks like it covers everything and covers less than it looks.
+A handler that throws before its first `await` throws while the list is still
+being built, so the handlers behind it are never called at all; and of those
+that do fail, `WhenAll` re-throws exactly one. Four of the nine tests in
+`HermodTests/Helpers/EventInvocationTests.cs` go red against that alternative,
+which is why they are written down. Converting those dozen places is a separate
+decision — it turns their handlers from concurrent into sequential — and has
+not been made here.
 
 The `ILoggerFactory` is optional; without it everything falls back to
 `NullLogger` and nothing is logged. Log levels: `Information` for connection
@@ -785,7 +813,7 @@ therefore needs a validation of its own; `Server.IsOwnCertificate` pins the
 fingerprint of exactly this server:
 
 ```csharp
-var connection = new XMPPConnection(jid, password, Server.Uri)
+var connection = new XMPPConnection(JID.Parse(jid), password, Server.Uri)
 {
     ServerCertificateValidator = Server.IsOwnCertificate
 };
@@ -793,6 +821,45 @@ var connection = new XMPPConnection(jid, password, Server.Uri)
 
 A validator that just returns `true` would be shorter — but it would take the
 authentication out of TLS and let the tests pass against a foreign peer too.
+
+### The server's events
+
+Seven of the eight, in the same shape as the client's — named delegates that
+return `Task`, raised through the same `InvokeAllAsync`, each handler awaited
+and each wrapped on its own:
+
+| Type | Events |
+|---|---|
+| `XMPPServer` | `OnStanzaReceived`, `OnSessionBound`, `OnRemoteStanzaRejected`, `OnInternalError` |
+| `S2SStream` | `OnStanzaRefused`, `OnClosed`, `OnRestart` |
+
+The server side has one wrinkle the client did not, and it is the reason this
+mattered here first: **its events are what the test collection watches.**
+`GlobalErrorWatch` and `InternalErrorGuard` hang on `OnInternalError` and treat
+every report as a defect until shown otherwise. A guard whose own exception
+disappears is worse than no guard, because it reads as silence.
+
+Three methods in `S2SStream` had to become asynchronous to raise them —
+`ProcessBidi`, `ReopenForRestart` and `MarkClosed`, and `Abort` along with the
+last of those, which is why `TcpServerLinks` and `WebSocketServerLinks` say
+`AbortAsync` now.
+
+Both classes gained a settable `Logger`, defaulting to `null`. Neither logs
+anything of its own — `S2SStream` is a protocol layer that does not know what a
+socket is, and threading a logger through its three factories to be used in one
+place would be the tail wagging the dog. Whoever builds one can set it; whoever
+does not gets what there was before, which is silence.
+
+**The eighth is still an `Action`, on purpose.** `OnInstanceCreated` is raised
+at the end of the constructor, and a constructor cannot await. Both ways round
+are worse than leaving it: firing and forgetting would let the constructor
+return before the subscriber had run — and that subscriber is the guard meant
+to be watching from the first frame onwards, so a server could produce an
+internal error while nobody was yet listening. Blocking on
+`GetAwaiter().GetResult()` buys the ordering back at the price of a deadlock
+hazard, in a constructor. It is a synchronous construction hook, which is what
+its purpose asks for; it is `internal`, visible only through
+`InternalsVisibleTo`, and its handlers do nothing but attach further handlers.
 
 ### What the server lacks for production
 
