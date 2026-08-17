@@ -54,23 +54,45 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// and the request goes on waiting for the one it asked.
         /// </summary>
         /// <remarks>
-        /// <b>The forgery is played in from inside the send</b>, on the very
-        /// thread that is sending, and that is what makes the test a
-        /// measurement rather than a coin toss. By then the waiting entry
-        /// exists, and no real answer can have arrived. The first version of
-        /// this test waited for the stanza to go out and injected afterwards -
-        /// whereupon the server's own refusal of the unreachable domain won the
-        /// race, and what got measured was whichever arrived first.
-        ///
         /// <b>Both halves are checked, and the second is the one easy to get
         /// wrong.</b> An implementation that recognises the forgery but takes
         /// the pending entry out along the way has only exchanged one damage
         /// for another: the genuine answer then belongs to nobody, so whoever
-        /// cannot be believed could at least see to it that nobody else is. The
-        /// three-second window is what asks after that - the server refuses an
-        /// unreachable domain within milliseconds, so an answer that never
-        /// arrives means the entry was taken, and the call would sit out its
-        /// full ten-second timeout.
+        /// cannot be believed could at least see to it that nobody else is.
+        ///
+        /// <b>The server is taken out of the exchange</b>, and that is what
+        /// makes this a measurement rather than a coin toss. With
+        /// <c>SwallowClientStanzas</c> nothing answers the request except the
+        /// forgery, so the pending entry can only ever be touched by the thing
+        /// under examination.
+        ///
+        /// It used to bet on winning a race instead, and lost - once in two
+        /// full runs on Debian. The forgery is played in from an
+        /// <c>OnRawXml</c> handler, and the remark here claimed that this
+        /// happens early enough that "no real answer can have arrived". Half of
+        /// that was true: the waiting entry does exist by then. But
+        /// <c>SendAsync</c> writes the stanza to the socket, releases the send
+        /// lock, and raises <c>OnRawXml</c> only afterwards - so in between, the
+        /// server's refusal of the unreachable domain could arrive and the
+        /// receive loop could take the entry. <c>TryCompleteIqAsync</c> then
+        /// finds nothing under that id and returns at its first guard, without
+        /// reporting anything, and the test failed while the code it examines
+        /// had done everything right.
+        ///
+        /// So <b>both answers are now played in by this test</b>, at moments it
+        /// decides: the forgery first, then the genuine one. The report is
+        /// awaited rather than slept for, and whether the request survived the
+        /// forgery is answered by the genuine answer still finding its entry.
+        ///
+        /// <b>Counter-checked, both halves.</b> With
+        /// <c>AnswerBelongsHere</c> forced to <c>true</c> - the forgery
+        /// believed - no report comes and the first await expires. With the
+        /// pending entry removed whatever the sender - the second damage - the
+        /// genuine answer finds nothing and the second await expires. An
+        /// earlier version of this rewrite asked instead whether the fetch was
+        /// still running at that point, and that question passed with the
+        /// second fault in place: a request whose entry is gone does not
+        /// complete either, it just waits for nothing.
         ///
         /// The identifier is <c>pep-1</c> because it really is the first one -
         /// the counter sits on the connection and this client is fresh. That
@@ -83,10 +105,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync();
 
-            String? spoofing = null;
-            client.Connection.OnSpoofingAttempt += (timestamp, sender, message, ct) => { spoofing = message; return Task.CompletedTask; };
+            // Nothing the client sends is answered from here on, so whatever
+            // reaches the pending request is the forgery and nothing else.
+            Server.SwallowClientStanzas = true;
 
-            var asked = "bob@far.example";
+            var asked    = "bob@far.example";
+
+            var reported = new TaskCompletionSource<String>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            client.Connection.OnSpoofingAttempt += (timestamp, sender, message, ct) => {
+                reported.TrySetResult(message);
+                return Task.CompletedTask;
+            };
 
             client.Connection.OnRawXml += async (timestamp, sender, line, ct) => {
                 if (line.StartsWith(">>>") && line.Contains("id='pep-1'"))
@@ -95,21 +125,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         $"to='{client.FullJid}'/>", ct);
             };
 
-            var fetched = await client.Connection.FetchOmemoBundleAsync(JID.Parse(asked), 4711)
-                                      .WaitAsync(TimeSpan.FromSeconds(3));
+            // Deliberately not awaited yet: what happens to it after the
+            // forgery is the second half of what is being measured.
+            var fetch     = client.Connection.FetchOmemoBundleAsync(JID.Parse(asked), 4711);
 
-            Assert.Multiple(() =>
-            {
+            var spoofing  = await reported.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-                Assert.That(spoofing, Is.Not.Null,
-                            "A forged answer has to be reported, not believed.");
+            Assert.That(spoofing, Does.Contain("mallory"),
+                        "A forged answer has to be reported, not believed.");
 
-                Assert.That(spoofing, Does.Contain("mallory"));
+            // And now the one that was actually asked, played in by hand for
+            // the same reason as the forgery: so that it arrives at a moment
+            // this test decides rather than the network does. If the forgery
+            // took the entry along with it, there is nothing here for this
+            // answer to belong to and the fetch sits out its full timeout - so
+            // the second damage shows up as this await expiring.
+            await client.Connection.ProcessStanzaAsync(
+                      $"<iq type='result' id='pep-1' from='{asked}' to='{client.FullJid}'/>");
 
-                Assert.That(fetched,  Is.Null,
-                            "And nothing a stranger sent may come back as a bundle.");
+            var fetched = await fetch.WaitAsync(TimeSpan.FromSeconds(5));
 
-            });
+            Assert.That(fetched, Is.Null,
+                        "And nothing a stranger sent may come back as a bundle.");
 
         }
 
