@@ -60,7 +60,7 @@ public sealed record OmemoKey(UInt32 DeviceId, Byte[] Data, Boolean IsKeyExchang
 /// anything.
 /// </remarks>
 public sealed record OmemoEncryptedElement(UInt32                                        SenderDeviceId,
-                                           IReadOnlyDictionary<String, IReadOnlyList<OmemoKey>>  Keys,
+                                           IReadOnlyDictionary<JID, IReadOnlyList<OmemoKey>>     Keys,
                                            Byte[]?                                       Payload)
 {
 
@@ -143,14 +143,17 @@ public sealed record OmemoEncryptedElement(UInt32                               
             if (header is null || !UInt32.TryParse(header.Attr("sid"), out var sid))
                 return false;
 
-            var all = new Dictionary<String, IReadOnlyList<OmemoKey>>(StringComparer.OrdinalIgnoreCase);
+            // No comparer: the JID compares itself, and by RFC 7622 - which
+            // OrdinalIgnoreCase over a whole address was not.
+            var all = new Dictionary<JID, IReadOnlyList<OmemoKey>>();
 
             foreach (var keys in header.Elements().Where(e => e.Name.LocalName == "keys"))
             {
 
-                var jid = keys.Attr("jid");
-
-                if (String.IsNullOrEmpty(jid))
+                // An address this side cannot read makes the header unusable:
+                // whom these keys are for would be a guess, and guessing wrong
+                // here means reaching for somebody else's key material.
+                if (!JID.TryParse(keys.Attr("jid"), out var jid))
                     return false;
 
                 var list = new List<OmemoKey>();
@@ -202,7 +205,7 @@ public sealed record OmemoEncryptedElement(UInt32                               
     /// take the entry that was meant for a foreign account, and would then
     /// founder on a decryption whose reason they do not see.
     /// </remarks>
-    public OmemoKey? KeyFor(String bareJid, UInt32 deviceId)
+    public OmemoKey? KeyFor(JID bareJid, UInt32 deviceId)
         => Keys.TryGetValue(bareJid, out var list)
                ? list.FirstOrDefault(k => k.DeviceId == deviceId)
                : null;

@@ -145,7 +145,7 @@ public sealed class PingManager
     /// <summary>
     /// Sends a ping and measures the response time
     /// </summary>
-    public async Task<TimeSpan?> PingAsync(string? to = null, CancellationToken ct = default)
+    public async Task<TimeSpan?> PingAsync(JID? to = null, CancellationToken ct = default)
     {
         var id = $"ping-{Interlocked.Increment(ref _counter)}";
         // RunContinuationsAsynchronously: without it the continuations of the
@@ -157,10 +157,10 @@ public sealed class PingManager
 
         lock (_lock)
         {
-            _pending[id] = (tcs, sent, to);
+            _pending[id] = (tcs, sent, to?.ToString());
         }
 
-        var toAttr = to != null ? $" to='{XmlEscaping.Escape(to)}'" : "";
+        var toAttr = to is not null ? $" to='{XmlEscaping.Escape(to.ToString()!)}'" : "";
         await _sendStanza($"<iq type='get' id='{id}'{toAttr}><ping xmlns='urn:xmpp:ping'/></iq>");
 
         try
@@ -173,7 +173,7 @@ public sealed class PingManager
         catch (OperationCanceledException)
         {
             lock (_lock) _pending.Remove(id);
-            await OnPingTimeout.InvokeAllAsync(handler => handler(Timestamp.Now, this, to ?? "server", ct), _logger);
+            await OnPingTimeout.InvokeAllAsync(handler => handler(Timestamp.Now, this, to?.ToString() ?? "server", ct), _logger);
             return null;
         }
     }

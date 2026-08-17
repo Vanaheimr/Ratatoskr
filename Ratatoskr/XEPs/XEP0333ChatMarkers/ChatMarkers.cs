@@ -38,7 +38,7 @@ public static class ChatMarkers
     /// <summary>
     /// Creates a marker message
     /// </summary>
-    public static string CreateMarker(string to, string refId, ChatMarkerType type)
+    public static string CreateMarker(JID to, string refId, ChatMarkerType type)
     {
         var element = type switch
         {
@@ -48,7 +48,7 @@ public static class ChatMarkers
             _ => "received"
         };
 
-        return $"<message to='{XmlEscaping.Escape(to)}'>" +
+        return $"<message to='{XmlEscaping.Escape(to.ToString())}'>" +
                $"<{element} xmlns='{Namespace}' id='{XmlEscaping.Escape(refId)}'/>" +
                $"</message>";
     }

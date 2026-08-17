@@ -913,7 +913,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // distinguished the two from the start (see Occupied); only the
             // lookup did not.
             lock (_lock)
-                return _sessions.Where(s => JidUtilities.AreEqual(s.FullJid, fullJid))
+                return _sessions.Where(s => JID.AreEqual(s.FullJid, fullJid))
                                 .OrderByDescending(s => s.IsOpen)
                                 .FirstOrDefault(s => s.IsOpen || s.ResumptionId is not null);
         }
@@ -5840,7 +5840,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // The check of the sender stands before the question of
             // responsibility: a DomainOf on a string that is no JID compares
             // fragments and then calls the result "foreign domain".
-            if (!JidUtilities.TryParse(from, out _))
+            if (!JID.TryParse(from, out _))
             {
                 OnRemoteStanzaRejected?.Invoke(peerDomain, $"'{from}' is no JID");
                 return RemoteStanzaResult.MalformedSender;
@@ -5858,7 +5858,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // IsLocal looks only at the domain, and 'b ob@this.server' belongs
             // here without being an address. Up to here such a stanza ran into
             // the delivery and looked there like one to an absent party.
-            if (!JidUtilities.TryParse(to, out _))
+            if (!JID.TryParse(to, out _))
             {
 
                 OnRemoteStanzaRejected?.Invoke(peerDomain, $"'{to}' is no JID");
@@ -6379,7 +6379,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var to = Attr(frame, "to");
 
-            if (to is null || JidUtilities.TryParse(to, out _))
+            if (to is null || JID.TryParse(to, out _))
                 return false;
 
             if (Attr(frame, "type") != "error")

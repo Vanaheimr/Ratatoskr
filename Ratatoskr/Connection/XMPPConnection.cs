@@ -1445,17 +1445,17 @@ public sealed class XMPPConnection : IAsyncDisposable
         Carbons.OnParseError     += async (timestamp, sender, reason, ct) =>
             await OnError.InvokeAllAsync(handler => handler(timestamp, this, $"[Carbon] {reason}", ct), _logger);
 
-        PubSub = new PubSubManager($"pubsub.{_domain}", CreateLogger<PubSubManager>());
+        PubSub = new PubSubManager(JID.Parse($"pubsub.{_domain}"), CreateLogger<PubSubManager>());
         PubSub.OnEvent += async (timestamp, sender, pubSubEvent, ct) =>
             await OnPubSubEvent.InvokeAllAsync(handler => handler(timestamp, this, pubSubEvent, ct), _logger);
 
         // XEP-0199: Ping Manager
-        Ping = new PingManager(xml => SendAsync(xml), BareJid, CreateLogger<PingManager>());
+        Ping = new PingManager(xml => SendAsync(xml), BareJid.ToString(), CreateLogger<PingManager>());
         Ping.OnPingTimeout += async (timestamp, sender, target, ct) =>
             await OnError.InvokeAllAsync(handler => handler(timestamp, this, $"Ping timeout: {target}", ct), _logger);
 
         // XEP-0030: Service Discovery
-        Disco = new DiscoManager(xml => SendAsync(xml), BareJid, CreateLogger<DiscoManager>());
+        Disco = new DiscoManager(xml => SendAsync(xml), BareJid.ToString(), CreateLogger<DiscoManager>());
 
         // XEP-0115: Entity Capabilities
         EntityCaps = new EntityCapsManager(Disco, CreateLogger<EntityCapsManager>());
@@ -1738,7 +1738,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </summary>
     internal Boolean AnswerBelongsHere(String? ExpectedFrom, String? From)
 
-        => IqAnswerOrigin.MayBelongTo(ExpectedFrom, From, _jid);
+        => IqAnswerOrigin.MayBelongTo(ExpectedFrom, From, _jid.ToString());
 
     /// <summary>
     /// Cancels all open IQ requests. Without that a reconnect would first wait
@@ -2117,8 +2117,24 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private async Task ProcessMessageAsync(XElement element, CancellationToken CancellationToken = default)
     {
-        var from = element.Attr("from") ?? "unknown";
-        var to = element.Attr("to") ?? FullJid;
+        // The addresses, once, here - and the stanza goes no further when they
+        // will not read.
+        //
+        // Stricter than what stood here, which was `?? "unknown"`: an
+        // unreadable sender travelled on as the literal word "unknown" and
+        // from then on matched everything else that had also failed to parse.
+        // A sender this side cannot name is one it cannot answer, route,
+        // compare against the roster or file under a conversation, so carrying
+        // it further only postpones the same question to whoever displays it -
+        // and answers it worse.
+        if (!JID.TryParse(element.Attr("from"), out var from))
+        {
+            _logger.LogDebug("Message from '{From}' discarded - that is not an address",
+                             element.Attr("from") ?? "(none)");
+            return;
+        }
+
+        var to    = JID.TryParse(element.Attr("to")) ?? FullJid;
         var msgId = element.Attr("id");
 
         // RFC 6120, section 8.3: An error stanza carries no payload but the
@@ -2160,7 +2176,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (PubSub is not null)
                 await PubSub.ProcessEventAsync(element, from, PubSub.PubSubService, CancellationToken);
 
-            _ = ProcessPepEventAsync(element, from);
+            _ = ProcessPepEventAsync(element, from.ToString());
 
             return;
 
@@ -2191,8 +2207,8 @@ public sealed class XMPPConnection : IAsyncDisposable
             // "pubsub.example.com" and a user never is - the server stamps a
             // client's full JID onto everything it sends. That covers accounts
             // with nodes on several services, which naming one would not.
-            var fromIsAService = !JidUtilities.Bare(from).Contains('@');
-            var fromIsOwnself  = JidUtilities.Bare(from).Equals(BareJid, StringComparison.OrdinalIgnoreCase);
+            var fromIsAService = from.IsDomainOnly;
+            var fromIsOwnself  = from.Bare == BareJid;
 
             if (!fromIsAService && !fromIsOwnself)
             {
@@ -2277,7 +2293,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
 
         // XEP-0333: Chat Markers
-        var chatMarker = ChatMarkers.Parse(element, from);
+        var chatMarker = ChatMarkers.Parse(element, from.ToString());
         if (chatMarker != null)
         {
 
@@ -2373,7 +2389,15 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     private async Task ProcessPresenceAsync(XElement element, CancellationToken CancellationToken = default)
     {
-        var from = element.Attr("from") ?? "unknown";
+        // As with a message: a presence whose sender will not read is one this
+        // side cannot put next to anybody in the roster.
+        if (!JID.TryParse(element.Attr("from"), out var from))
+        {
+            _logger.LogDebug("Presence from '{From}' discarded - that is not an address",
+                             element.Attr("from") ?? "(none)");
+            return;
+        }
+
         var type = element.Attr("type") ?? "available";
 
         // RFC 6120, section 8.3: 'error' is not a presence state. Previously it
@@ -2416,7 +2440,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             // XEP-0115: Entity Capabilities
             // IMPORTANT: skip our own presences - we know our caps already!
             // Otherwise a query loop to ourselves → server error → disconnect
-            var fromBareJid = JidUtilities.Bare(from);
+            var fromBareJid = from.Bare;
             var isOwnPresence = fromBareJid.Equals(BareJid, StringComparison.OrdinalIgnoreCase);
 
             if (!isOwnPresence && (type == "available" || string.IsNullOrEmpty(type)))
@@ -2430,7 +2454,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                     // The hash attribute goes along: without it the ver value
                     // cannot be recomputed, and what cannot be recomputed is not
                     // stored.
-                    _ = EntityCaps.ProcessCapsAsync(from,
+                    _ = EntityCaps.ProcessCapsAsync(from.ToString(),
                                                     caps.Value.Node,
                                                     caps.Value.Ver,
                                                     caps.Value.Hash);
@@ -2647,7 +2671,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             // XEP-0384, section 5.2: The device list comes over the same route
             // but demands an answer - if one's own device is missing from it, it
             // has to enter itself again.
-            _ = ProcessPepEventAsync(element, from);
+            _ = ProcessPepEventAsync(element, from.ToString());
 
             // If the event comes as an iq set instead of as a message, it is a
             // request and needs a result per section 8.2.3.
@@ -2787,10 +2811,10 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         // Before the resource binding there is no own JID yet that could be
         // checked against - then refuse when in doubt.
-        if (string.IsNullOrEmpty(FullJid))
+        if (FullJid.IsNullOrEmpty)
             return false;
 
-        return JidUtilities.Bare(from).Equals(BareJid, StringComparison.OrdinalIgnoreCase);
+        return JID.TryParse(from, out var sender) && sender.Bare == BareJid;
 
     }
 
@@ -2996,8 +3020,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                       "The server reported an inline binding but named no full JID for it: " +
                       $"'{identifier}'.");
 
-        FullJid      = identifier;
-        Resource     = JidUtilities.Parse(identifier).Resourcepart;
+        FullJid      = JID.Parse(identifier);
+        Resource     = JID.Parse(identifier).Resourcepart;
         BoundInline  = true;
 
         _logger.LogInformation("Bound inline as {FullJid} (XEP-0386)", FullJid);
@@ -3544,10 +3568,10 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (payload is null || !OmemoDeviceList.TryRead(payload, out var list) || list is null)
             return;
 
-        await OnOmemoDeviceListChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, JidUtilities.Bare(from), list, ConnectionToken), _logger);
+        await OnOmemoDeviceListChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, JID.Parse(JID.BareTextOf(from)), list, ConnectionToken), _logger);
 
         if (OmemoDeviceId is not UInt32 own ||
-            !string.Equals(JidUtilities.Bare(from), BareJid, StringComparison.OrdinalIgnoreCase) ||
+            JID.BareTextOf(from) != BareJid.ToString() ||
             list.Contains(own))
             return;
 
@@ -3671,7 +3695,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // outside this message looks like one without content, and a server
         // deciding by the <body/> would throw it away.
         var stanza = new XElement(client + "message",
-                                  new XAttribute("to",   JidUtilities.Bare(to)),
+                                  new XAttribute("to",   to.Bare.ToString()),
                                   new XAttribute("type", "chat"),
                                   new XAttribute("id",   GenerateMessageId()),
                                   result.Element.ToXml(),
@@ -3889,7 +3913,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         var typeAttr = type.AsAttribute() is string t ? $" type='{t}'" : "";
 
         var sb = new StringBuilder();
-        sb.Append($"<message to='{XmlEscaping.Escape(to)}'{typeAttr} id='{messageId}'>");
+        sb.Append($"<message to='{XmlEscaping.Escape(to.ToString())}'{typeAttr} id='{messageId}'>");
         sb.Append($"<body>{XmlEscaping.Escape(body)}</body>");
 
         // XEP-0308: An id of its own and the full new text - the <replace/> only
@@ -3938,7 +3962,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     public async Task SendChatStateAsync(JID to, ChatState state)
     {
-        await SendAsync($"<message to='{XmlEscaping.Escape(to)}' type='chat'>{state.ToXml()}</message>");
+        await SendAsync($"<message to='{XmlEscaping.Escape(to.ToString())}' type='chat'>{state.ToXml()}</message>");
     }
 
     public async Task SendReceiptAsync(JID to, string messageId)
@@ -4476,7 +4500,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public async Task<Boolean> PubSubSetOptionsAsync(String                     nodeId,
                                                      PubSubSubscriptionOptions  options,
-                                                     String?                    service  = null,
+                                                     JID?                    service  = null,
                                                      String?                    subId    = null,
                                                      CancellationToken          ct       = default)
     {
@@ -4516,7 +4540,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </returns>
     private Boolean TryPickSubscription(String       nodeId,
                                         String?      subId,
-                                        String?      service,
+                                        JID?      service,
                                         out String   target,
                                         out String?  usedSubId)
     {
@@ -4568,7 +4592,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public async Task<Boolean> PubSubCreateNodeAsync(String                    nodeId,
                                                      PubSubNodeConfiguration?  configuration  = null,
-                                                     String?                   service        = null,
+                                                     JID?                   service        = null,
                                                      CancellationToken         ct             = default)
 
         => await PubSubRequestAsync(PubSubBuilder.CreateNode(service ?? PubSub!.PubSubService,
@@ -4621,7 +4645,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </summary>
     public async Task<Boolean> PubSubConfigureNodeAsync(String                   nodeId,
                                                         PubSubNodeConfiguration  configuration,
-                                                        String?                  service  = null,
+                                                        JID?                  service  = null,
                                                         CancellationToken        ct       = default)
 
         => await PubSubRequestAsync(PubSubBuilder.SetNodeConfig(service ?? PubSub!.PubSubService,
@@ -4647,7 +4671,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public async Task PubSubAnswerSubscriptionRequestAsync(PubSubSubscribeAuthorization  request,
                                                            Boolean                       allow,
-                                                           String?                       service  = null)
+                                                           JID?                       service  = null)
     {
 
         var target = service ?? PubSub!.PubSubService;
@@ -4771,7 +4795,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public async Task<IReadOnlyList<PubSubItem>?> PubSubGetItemsAsync(String             nodeId,
                                                                       Int32?             maxItems  = null,
-                                                                      String?            service   = null,
+                                                                      JID?            service   = null,
                                                                       CancellationToken  ct        = default)
     {
 

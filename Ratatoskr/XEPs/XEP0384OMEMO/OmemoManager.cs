@@ -45,7 +45,7 @@ public delegate Task OnOmemoBundleChangedDelegate(DateTimeOffset     Timestamp,
 /// <param name="Jid">Whom it belongs to.</param>
 /// <param name="DeviceId">Which device.</param>
 /// <param name="Reason">Why it was skipped.</param>
-public sealed record OmemoSkippedDevice(String Jid, UInt32 DeviceId, String Reason);
+public sealed record OmemoSkippedDevice(JID Jid, UInt32 DeviceId, String Reason);
 
 /// <summary>
 /// A decrypted message.
@@ -68,7 +68,7 @@ public sealed record OmemoDecrypted(IReadOnlyList<XElement>  Content,
                                     UInt32                   SenderDeviceId,
                                     OmemoTrust               Trust,
                                     OmemoIdentityCheck       IdentityCheck,
-                                    String?                  EnvelopeFrom);
+                                    JID?                     EnvelopeFrom);
 
 /// <summary>
 /// Brings together what the stages before have built: key material, X3DH,
@@ -101,9 +101,9 @@ public sealed class OmemoManager
     #region Data
 
     private readonly IOmemoStore                                _store;
-    private readonly String                                     _ownBareJid;
-    private readonly Func<String, Task<OmemoDeviceList?>>       _fetchDeviceList;
-    private readonly Func<String, UInt32, Task<OmemoBundle?>>   _fetchBundle;
+    private readonly JID                                        _ownBareJid;
+    private readonly Func<JID, Task<OmemoDeviceList?>>          _fetchDeviceList;
+    private readonly Func<JID, UInt32, Task<OmemoBundle?>>      _fetchBundle;
     private readonly ILogger?                                   _logger;
     private readonly Lock                                       _lock = new();
 
@@ -113,8 +113,7 @@ public sealed class OmemoManager
     /// ratchet has - a single gate for everything would let one unreachable
     /// bundle hold up the messages to everybody else for ten seconds.
     /// </summary>
-    private readonly Dictionary<String, SemaphoreSlim>          _sessionGates
-        = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<String, SemaphoreSlim>          _sessionGates = new();
 
     #endregion
 
@@ -184,9 +183,9 @@ public sealed class OmemoManager
     /// there is none yet.
     /// </summary>
     public OmemoManager(IOmemoStore                               store,
-                        String                                    ownBareJid,
-                        Func<String, Task<OmemoDeviceList?>>      fetchDeviceList,
-                        Func<String, UInt32, Task<OmemoBundle?>>  fetchBundle,
+                        JID                                       ownBareJid,
+                        Func<JID, Task<OmemoDeviceList?>>         fetchDeviceList,
+                        Func<JID, UInt32, Task<OmemoBundle?>>     fetchBundle,
                         ILogger?                                  logger = null)
     {
 
@@ -236,7 +235,7 @@ public sealed class OmemoManager
     /// semaphore per device one has ever written to is a handful of objects,
     /// and they last as long as the connection.
     /// </remarks>
-    private SemaphoreSlim SessionGate(String jid, UInt32 deviceId)
+    private SemaphoreSlim SessionGate(JID jid, UInt32 deviceId)
     {
 
         var key = $"{jid.Bare}/{deviceId}";
@@ -261,27 +260,29 @@ public sealed class OmemoManager
     /// Encrypts a content for all devices of the recipients and one's own
     /// further ones.
     /// </summary>
-    public async Task<OmemoEncryptionResult> EncryptAsync(IEnumerable<String>      recipients,
+    public async Task<OmemoEncryptionResult> EncryptAsync(IEnumerable<JID>         recipients,
                                                           IReadOnlyList<XElement>  content)
     {
 
         // The envelope per XEP-0420 - with one's own sender in it, so that the
         // message cannot be passed on under a foreign name.
         var envelope = new SceEnvelope(content,
-                                     From: _ownBareJid,
+                                     From: _ownBareJid.ToString(),
                                      Time: DateTimeOffset.UtcNow).ToXml();
 
         var payload = OmemoPayloadCipher.Encrypt(
                            System.Text.Encoding.UTF8.GetBytes(envelope.ToString(SaveOptions.DisableFormatting)));
 
-        var keys  = new Dictionary<String, IReadOnlyList<OmemoKey>>(StringComparer.OrdinalIgnoreCase);
+        // No comparer any more: the JID brings its own, and it is the right
+        // one - which the OrdinalIgnoreCase here was not, over a full address.
+        var keys  = new Dictionary<JID, IReadOnlyList<OmemoKey>>();
         var skipped = new List<OmemoSkippedDevice>();
 
         // One's own further devices belong with it - otherwise one's own
         // computer does not see what one's own telephone has written.
         foreach (var jid in recipients.Append(_ownBareJid)
-                                      .Select(JID.BareTextOf)
-                                      .Distinct(StringComparer.OrdinalIgnoreCase))
+                                      .Select(recipient => recipient.Bare)
+                                      .Distinct())
         {
 
             var list = await _fetchDeviceList(jid);
@@ -299,7 +300,7 @@ public sealed class OmemoManager
 
                 // One's own device would have to keep a session with itself.
                 if (device.Id == Identity.DeviceId &&
-                    String.Equals(jid, _ownBareJid, StringComparison.OrdinalIgnoreCase))
+                    jid == _ownBareJid)
                     continue;
 
                 var (entry, reason) = await EncryptForAsync(jid, device.Id, payload.KeyAndHmac);
@@ -343,12 +344,12 @@ public sealed class OmemoManager
     /// seconds. Two first messages to the same device would otherwise both begin
     /// a session, and the second would throw away the first one's.
     /// </remarks>
-    private async Task<(OmemoKey? Key, String? Reason)> EncryptForAsync(String  jid,
+    private async Task<(OmemoKey? Key, String? Reason)> EncryptForAsync(JID     jid,
                                                                                 UInt32  deviceId,
                                                                                 Byte[]  keyAndHmac)
     {
 
-        var trust = _store.TrustOf(jid, deviceId);
+        var trust = _store.TrustOf(jid.ToString(), deviceId);
 
         if (trust == OmemoTrust.Distrusted)
             return (null, "expressly refused");
@@ -362,7 +363,7 @@ public sealed class OmemoManager
         try
         {
 
-            var stored = _store.LoadSession(jid, deviceId);
+            var stored = _store.LoadSession(jid.ToString(), deviceId);
 
             // An existing session.
             if (stored is not null)
@@ -371,7 +372,7 @@ public sealed class OmemoManager
                 var ratchet   = DoubleRatchet.Import(stored.Ratchet);
                 var message = ratchet.Encrypt(keyAndHmac, stored.AssociatedData);
 
-                _store.SaveSession(jid, deviceId,
+                _store.SaveSession(jid.ToString(), deviceId,
                                    new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
 
                 return (new OmemoKey(deviceId, OmemoWireFormat.Encode(message), false), null);
@@ -386,19 +387,19 @@ public sealed class OmemoManager
 
             // The identity key from the bundle is noted down before anything is
             // computed with it: a change belongs reported, not used silently.
-            var check = _store.RecordIdentity(jid, deviceId, bundle.IdentityKey);
+            var check = _store.RecordIdentity(jid.ToString(), deviceId, bundle.IdentityKey);
 
             if (check == OmemoIdentityCheck.Changed)
                 return (null, "the identity key has changed");
 
-            if (!TrustNewDevicesBlindly && _store.TrustOf(jid, deviceId) != OmemoTrust.Trusted)
+            if (!TrustNewDevicesBlindly && _store.TrustOf(jid.ToString(), deviceId) != OmemoTrust.Trusted)
                 return (null, "not confirmed");
 
             var x3dh    = X3DH.Initiate(Identity, bundle);
             var fresh     = DoubleRatchet.InitiateAsSender(x3dh.SharedSecret, bundle.SignedPreKey);
             var content  = fresh.Encrypt(keyAndHmac, x3dh.AssociatedData);
 
-            _store.SaveSession(jid, deviceId, new OmemoSessionState(fresh.Export(), x3dh.AssociatedData));
+            _store.SaveSession(jid.ToString(), deviceId, new OmemoSessionState(fresh.Export(), x3dh.AssociatedData));
 
             var exchange = new OmemoKeyExchange(x3dh.UsedPreKeyId ?? 0,
                                                  bundle.SignedPreKeyId,
@@ -433,7 +434,7 @@ public sealed class OmemoManager
     /// somebody who is looking will look.
     /// </remarks>
     public async Task<OmemoDecrypted?> DecryptAsync(OmemoEncryptedElement  element,
-                                                    String                 senderBareJid)
+                                                    JID                    senderBareJid)
     {
 
         var jid     = senderBareJid.Bare;
@@ -473,9 +474,9 @@ public sealed class OmemoManager
 
             return new OmemoDecrypted(envelope!.Content,
                                       element.SenderDeviceId,
-                                      _store.TrustOf(jid, element.SenderDeviceId),
+                                      _store.TrustOf(jid.ToString(), element.SenderDeviceId),
                                       check,
-                                      envelope.From);
+                                      JID.TryParse(envelope.From));
 
         }
         catch (Exception e)
@@ -492,7 +493,7 @@ public sealed class OmemoManager
     /// by way of a key exchange.
     /// </summary>
     private async Task<(Byte[]? KeyAndHmac, OmemoIdentityCheck Check)> DecryptEntryAsync(
-        String jid, UInt32 deviceId, OmemoKey entry)
+        JID jid, UInt32 deviceId, OmemoKey entry)
     {
 
         // Takes the gate itself - and must, because a semaphore is not
@@ -507,7 +508,7 @@ public sealed class OmemoManager
         try
         {
 
-            var stored = _store.LoadSession(jid, deviceId);
+            var stored = _store.LoadSession(jid.ToString(), deviceId);
 
             if (stored is null)
             {
@@ -519,7 +520,7 @@ public sealed class OmemoManager
             var ratchet   = DoubleRatchet.Import(stored.Ratchet);
             var plaintext  = ratchet.Decrypt(OmemoWireFormat.Decode(entry.Data), stored.AssociatedData);
 
-            _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
+            _store.SaveSession(jid.ToString(), deviceId, new OmemoSessionState(ratchet.Export(), stored.AssociatedData));
 
             return (plaintext, OmemoIdentityCheck.Known);
 
@@ -549,7 +550,7 @@ public sealed class OmemoManager
     /// off and on again, which was the only thing that published a bundle.
     /// </remarks>
     private async Task<(Byte[]? KeyAndHmac, OmemoIdentityCheck Check)> BuildSessionAsync(
-        String jid, UInt32 deviceId, OmemoKey entry)
+        JID jid, UInt32 deviceId, OmemoKey entry)
     {
 
         var exchange = OmemoKeyExchange.Decode(entry.Data);
@@ -564,7 +565,7 @@ public sealed class OmemoManager
             // and the message is not accepted - from outside a newly set-up device
             // cannot be told apart from an attacker, and that is not a decision a
             // program can make.
-            var check = _store.RecordIdentity(jid, deviceId, exchange.IdentityKey);
+            var check = _store.RecordIdentity(jid.ToString(), deviceId, exchange.IdentityKey);
 
             if (check == OmemoIdentityCheck.Changed)
             {
@@ -590,7 +591,7 @@ public sealed class OmemoManager
             lock (_lock)
             {
 
-                _store.SaveSession(jid, deviceId, new OmemoSessionState(ratchet.Export(), x3dh.AssociatedData));
+                _store.SaveSession(jid.ToString(), deviceId, new OmemoSessionState(ratchet.Export(), x3dh.AssociatedData));
 
                 // The prekey used up is gone - that belongs stored at once,
                 // otherwise it would be back after a restart and the message
@@ -632,7 +633,7 @@ public sealed class OmemoManager
         => _store.KnownDevices();
 
     /// <summary>Decides about a device.</summary>
-    public Boolean SetTrust(String bareJid, UInt32 deviceId, OmemoTrust trust)
+    public Boolean SetTrust(JID bareJid, UInt32 deviceId, OmemoTrust trust)
         => _store.SetTrust(bareJid.Bare.ToString(), deviceId, trust);
 
     #endregion

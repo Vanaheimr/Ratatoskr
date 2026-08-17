@@ -25,11 +25,11 @@ public static class PubSubBuilder
     /// <summary>
     /// Subscribe to a node
     /// </summary>
-    public static string Subscribe(string pubsubJid, string nodeId, string myJid, string id = "pubsub-sub")
+    public static string Subscribe(JID pubsubJid, string nodeId, JID myJid, string id = "pubsub-sub")
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
-               $"<subscribe node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid)}'/>" +
+               $"<subscribe node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid.ToString())}'/>" +
                $"</pubsub></iq>";
     }
 
@@ -41,11 +41,11 @@ public static class PubSubBuilder
     /// null. Prescribed as soon as one JID holds several subscriptions on the
     /// same node (XEP-0060, section 6.2.3.1).
     /// </param>
-    public static string Unsubscribe(string pubsubJid, string nodeId, string myJid, string id = "pubsub-unsub", string? subId = null)
+    public static string Unsubscribe(JID pubsubJid, string nodeId, JID myJid, string id = "pubsub-unsub", string? subId = null)
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
-               $"<unsubscribe node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid)}'" +
+               $"<unsubscribe node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid.ToString())}'" +
                (subId is not null ? $" subid='{XmlEscaping.Escape(subId)}'" : "") +
                "/></pubsub></iq>";
     }
@@ -58,7 +58,7 @@ public static class PubSubBuilder
     /// </param>
     public static string GetSubscriptions(string pubsubJid, string id = "pubsub-subs", string? nodeId = null)
     {
-        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
                "<subscriptions" +
                (nodeId is not null ? $" node='{XmlEscaping.Escape(nodeId)}'" : "") +
@@ -70,7 +70,7 @@ public static class PubSubBuilder
     /// </summary>
     public static string GetAffiliations(string pubsubJid, string id = "pubsub-affs")
     {
-        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'><affiliations/></pubsub></iq>";
     }
 
@@ -79,7 +79,7 @@ public static class PubSubBuilder
     /// </summary>
     public static string GetNodeAffiliations(string pubsubJid, string nodeId, string id = "pubsub-nodeaffs")
     {
-        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<affiliations node='{XmlEscaping.Escape(nodeId)}'/>" +
                "</pubsub></iq>";
@@ -90,10 +90,10 @@ public static class PubSubBuilder
     /// </summary>
     public static string SetAffiliation(string pubsubJid, string nodeId, string id, string jid, string affiliation)
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<affiliations node='{XmlEscaping.Escape(nodeId)}'>" +
-               $"<affiliation jid='{XmlEscaping.Escape(jid)}' affiliation='{affiliation}'/>" +
+               $"<affiliation jid='{XmlEscaping.Escape(jid.ToString())}' affiliation='{affiliation}'/>" +
                "</affiliations></pubsub></iq>";
     }
 
@@ -107,7 +107,7 @@ public static class PubSubBuilder
     /// </remarks>
     public static string GetNodeSubscriptions(string pubsubJid, string nodeId, string id = "pubsub-nodesubs")
     {
-        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<subscriptions node='{XmlEscaping.Escape(nodeId)}'/>" +
                "</pubsub></iq>";
@@ -127,10 +127,10 @@ public static class PubSubBuilder
     /// </remarks>
     public static string RemoveSubscriber(string pubsubJid, string nodeId, string id, string jid, string? subId = null)
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<subscriptions node='{XmlEscaping.Escape(nodeId)}'>" +
-               $"<subscription jid='{XmlEscaping.Escape(jid)}' subscription='none'" +
+               $"<subscription jid='{XmlEscaping.Escape(jid.ToString())}' subscription='none'" +
                (subId is not null ? $" subid='{XmlEscaping.Escape(subId)}'" : "") +
                "/></subscriptions></pubsub></iq>";
     }
@@ -140,9 +140,9 @@ public static class PubSubBuilder
     /// </summary>
     public static string GetOptions(string pubsubJid, string nodeId, string myJid, string id = "pubsub-opts", string? subId = null)
     {
-        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
-               $"<options node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid)}'" +
+               $"<options node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid.ToString())}'" +
                (subId is not null ? $" subid='{XmlEscaping.Escape(subId)}'" : "") +
                "/></pubsub></iq>";
     }
@@ -156,9 +156,9 @@ public static class PubSubBuilder
     /// </param>
     public static string SetOptions(string pubsubJid, string nodeId, string myJid, string id, string? subId, string form)
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
-               $"<options node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid)}'" +
+               $"<options node='{XmlEscaping.Escape(nodeId)}' jid='{XmlEscaping.Escape(myJid.ToString())}'" +
                (subId is not null ? $" subid='{XmlEscaping.Escape(subId)}'" : "") +
                $">{form}</options></pubsub></iq>";
     }
@@ -172,7 +172,7 @@ public static class PubSubBuilder
     /// </remarks>
     public static string Publish(string pubsubJid, string nodeId, string itemId, string payload, string id = "pubsub-pub")
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
                $"<publish node='{XmlEscaping.Escape(nodeId)}'>" +
                $"<item id='{XmlEscaping.Escape(itemId)}'>{payload}</item>" +
@@ -189,7 +189,7 @@ public static class PubSubBuilder
     /// </remarks>
     public static string Retract(string pubsubJid, string nodeId, string itemId, string id = "pubsub-retract")
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
                $"<retract node='{XmlEscaping.Escape(nodeId)}'>" +
                $"<item id='{XmlEscaping.Escape(itemId)}'/>" +
@@ -202,7 +202,7 @@ public static class PubSubBuilder
     public static string GetItems(string pubsubJid, string nodeId, int? maxItems = null, string id = "pubsub-get")
     {
         var maxAttr = maxItems.HasValue ? $" max_items='{maxItems}'" : "";
-        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
                $"<items node='{XmlEscaping.Escape(nodeId)}'{maxAttr}/>" +
                $"</pubsub></iq>";
@@ -221,7 +221,7 @@ public static class PubSubBuilder
     /// </param>
     public static string CreateNode(string pubsubJid, string nodeId, string id = "pubsub-create", string? configuration = null)
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
                $"<create node='{XmlEscaping.Escape(nodeId)}'/>" +
                (configuration is not null ? $"<configure>{configuration}</configure>" : "") +
@@ -233,7 +233,7 @@ public static class PubSubBuilder
     /// </summary>
     public static string GetNodeConfig(string pubsubJid, string nodeId, string id = "pubsub-cfg")
     {
-        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<configure node='{XmlEscaping.Escape(nodeId)}'/>" +
                "</pubsub></iq>";
@@ -244,7 +244,7 @@ public static class PubSubBuilder
     /// </summary>
     public static string SetNodeConfig(string pubsubJid, string nodeId, string id, string form)
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<configure node='{XmlEscaping.Escape(nodeId)}'>{form}</configure>" +
                "</pubsub></iq>";
@@ -255,7 +255,7 @@ public static class PubSubBuilder
     /// </summary>
     public static string DeleteNode(string pubsubJid, string nodeId, string id = "pubsub-delete")
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<delete node='{XmlEscaping.Escape(nodeId)}'/>" +
                $"</pubsub></iq>";
@@ -270,7 +270,7 @@ public static class PubSubBuilder
     /// </remarks>
     public static string PurgeNode(string pubsubJid, string nodeId, string id = "pubsub-purge")
     {
-        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid)}' id='{id}'>" +
+        return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
                $"<purge node='{XmlEscaping.Escape(nodeId)}'/>" +
                $"</pubsub></iq>";

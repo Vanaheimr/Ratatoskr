@@ -54,7 +54,7 @@ public static class RosterStanzaBuilder
                $"</iq>";
     }
 
-    public static string SetItem(string jid, string? name = null, IEnumerable<string>? groups = null)
+    public static string SetItem(JID jid, string? name = null, IEnumerable<string>? groups = null)
     {
         var nameAttr = name != null ? $" name='{XmlEscaping.Escape(name)}'" : "";
         var groupsXml = groups != null
@@ -63,27 +63,27 @@ public static class RosterStanzaBuilder
 
         return $"<iq type='set' id='roster-set-{Guid.NewGuid():N}'>" +
                $"<query xmlns='jabber:iq:roster'>" +
-               $"<item jid='{XmlEscaping.Escape(jid)}'{nameAttr}>{groupsXml}</item>" +
+               $"<item jid='{XmlEscaping.Escape(jid.ToString())}'{nameAttr}>{groupsXml}</item>" +
                $"</query></iq>";
     }
 
-    public static string RemoveItem(string jid)
+    public static string RemoveItem(JID jid)
     {
         return $"<iq type='set' id='roster-remove-{Guid.NewGuid():N}'>" +
                $"<query xmlns='jabber:iq:roster'>" +
-               $"<item jid='{XmlEscaping.Escape(jid)}' subscription='remove'/>" +
+               $"<item jid='{XmlEscaping.Escape(jid.ToString())}' subscription='remove'/>" +
                $"</query></iq>";
     }
 
-    public static string Subscribe(string jid) =>
-        $"<presence to='{XmlEscaping.Escape(jid)}' type='subscribe'/>";
+    public static string Subscribe(JID jid) =>
+        $"<presence to='{XmlEscaping.Escape(jid.ToString())}' type='subscribe'/>";
 
-    public static string Subscribed(string jid) =>
-        $"<presence to='{XmlEscaping.Escape(jid)}' type='subscribed'/>";
+    public static string Subscribed(JID jid) =>
+        $"<presence to='{XmlEscaping.Escape(jid.ToString())}' type='subscribed'/>";
 
-    public static string Unsubscribed(string jid) =>
-        $"<presence to='{XmlEscaping.Escape(jid)}' type='unsubscribed'/>";
+    public static string Unsubscribed(JID jid) =>
+        $"<presence to='{XmlEscaping.Escape(jid.ToString())}' type='unsubscribed'/>";
 
-    public static string Unsubscribe(string jid) =>
-        $"<presence to='{XmlEscaping.Escape(jid)}' type='unsubscribe'/>";
+    public static string Unsubscribe(JID jid) =>
+        $"<presence to='{XmlEscaping.Escape(jid.ToString())}' type='unsubscribe'/>";
 }

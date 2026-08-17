@@ -192,7 +192,7 @@ public sealed class DiscoManager
     /// <summary>
     /// Queries disco#info
     /// </summary>
-    public async Task<DiscoInfo?> QueryInfoAsync(string jid, string? node = null,
+    public async Task<DiscoInfo?> QueryInfoAsync(JID jid, string? node = null,
         TimeSpan? timeout = null, CancellationToken ct = default)
     {
         var id = $"disco-info-{Interlocked.Increment(ref _counter)}";
@@ -202,7 +202,7 @@ public sealed class DiscoManager
 
         var nodeAttr = node != null ? $" node='{XmlEscaping.Escape(node)}'" : "";
         await _sendStanza(
-            $"<iq type='get' to='{XmlEscaping.Escape(jid)}' id='{id}'>" +
+            $"<iq type='get' to='{XmlEscaping.Escape(jid.ToString())}' id='{id}'>" +
             $"<query xmlns='http://jabber.org/protocol/disco#info'{nodeAttr}/></iq>");
 
         try
@@ -221,7 +221,7 @@ public sealed class DiscoManager
     /// <summary>
     /// Queries disco#items
     /// </summary>
-    public async Task<DiscoItems?> QueryItemsAsync(string jid, string? node = null,
+    public async Task<DiscoItems?> QueryItemsAsync(JID jid, string? node = null,
         TimeSpan? timeout = null, CancellationToken ct = default)
     {
         var id = $"disco-items-{Interlocked.Increment(ref _counter)}";
@@ -231,7 +231,7 @@ public sealed class DiscoManager
 
         var nodeAttr = node != null ? $" node='{XmlEscaping.Escape(node)}'" : "";
         await _sendStanza(
-            $"<iq type='get' to='{XmlEscaping.Escape(jid)}' id='{id}'>" +
+            $"<iq type='get' to='{XmlEscaping.Escape(jid.ToString())}' id='{id}'>" +
             $"<query xmlns='http://jabber.org/protocol/disco#items'{nodeAttr}/></iq>");
 
         try

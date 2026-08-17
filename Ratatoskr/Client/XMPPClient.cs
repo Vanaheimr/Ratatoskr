@@ -479,7 +479,7 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnStanzaError += async (timestamp, sender, from, error, ct) =>
         {
-            _logger.LogInformation("Stanza refused by {From}: {Error}", from ?? "(server)", error);
+            _logger.LogInformation("Stanza refused by {From}: {Error}", from?.ToString() ?? "(server)", error);
             await OnStanzaError.InvokeAllAsync(handler => handler(timestamp, this, from, error, ct), _logger);
         };
 
@@ -499,11 +499,11 @@ public sealed class XMPPClient : IAsyncDisposable
         _connection.Roster.OnSubscriptionRequest += async (timestamp, sender, from, status, ct) =>
         {
 
-            var bare = JidUtilities.Bare(from);
+            var bare = from.Bare;
 
             lock (_pendingLock)
             {
-                if (!_pendingSubscriptions.Contains(bare, StringComparer.OrdinalIgnoreCase))
+                if (!_pendingSubscriptions.Contains(bare))
                     _pendingSubscriptions.Add(bare);
             }
 
@@ -567,15 +567,15 @@ public sealed class XMPPClient : IAsyncDisposable
                                           CancellationToken  CancellationToken   = default)
     {
 
-        var normalized = string.IsNullOrWhiteSpace(jid) ? null : jid.Trim();
-
-        if (string.Equals(CurrentChatPartner, normalized, StringComparison.OrdinalIgnoreCase))
+        // No trimming and no case folding here any more: a JID arrives
+        // prepared, and comparing two of them is the type's own business.
+        if (CurrentChatPartner == jid)
             return;
 
-        CurrentChatPartner = normalized;
-        _logger.LogDebug("Chat partner: {Partner}", normalized ?? "(none)");
+        CurrentChatPartner = jid;
+        _logger.LogDebug("Chat partner: {Partner}", jid?.ToString() ?? "(none)");
 
-        await OnChatPartnerChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, normalized, CancellationToken), _logger);
+        await OnChatPartnerChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, jid, CancellationToken), _logger);
 
     }
 
@@ -584,13 +584,13 @@ public sealed class XMPPClient : IAsyncDisposable
     /// chat.
     /// </summary>
     /// <returns>The chat partner left, or null when none was active.</returns>
-    public async Task<string?> LeaveChatAsync()
+    public async Task<JID?> LeaveChatAsync()
     {
         var partner = CurrentChatPartner;
         if (partner == null)
             return null;
 
-        await _connection.SendChatStateAsync(partner, ChatState.Gone);
+        await _connection.SendChatStateAsync(partner.Value, ChatState.Gone);
         await SetChatPartnerAsync(null);
 
         return partner;
@@ -606,7 +606,7 @@ public sealed class XMPPClient : IAsyncDisposable
         if (partner == null)
             return null;
 
-        return await SendMessageAsync(partner, body);
+        return await SendMessageAsync(partner.Value, body);
     }
 
     /// <summary>
@@ -622,7 +622,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // For a later correction (XEP-0308). What is never corrected gets
         // remembered too - the price is one entry per conversation partner.
         lock (_lastSentToLock)
-            _lastSentTo[JidUtilities.Bare(to)] = id;
+            _lastSentTo[to.Bare] = id;
 
         return id;
 
@@ -643,7 +643,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// correction can in turn be corrected. That is not hairsplitting but the
     /// usual case: whoever mistypes also mistypes in the correction.
     /// </remarks>
-    public async Task<string?> CorrectLastMessageAsync(string body, string? to = null)
+    public async Task<string?> CorrectLastMessageAsync(string body, JID? to = null)
     {
 
         var recipient = to ?? CurrentChatPartner;
@@ -651,7 +651,7 @@ public sealed class XMPPClient : IAsyncDisposable
         if (recipient is null)
             return null;
 
-        var bare = JidUtilities.Bare(recipient);
+        var bare = recipient.Value.Bare;
 
         string? previous;
 
@@ -659,7 +659,7 @@ public sealed class XMPPClient : IAsyncDisposable
             if (!_lastSentTo.TryGetValue(bare, out previous))
                 return null;
 
-        var id = await _connection.SendMessageAsync(recipient, body, corrects: previous);
+        var id = await _connection.SendMessageAsync(recipient.Value, body, corrects: previous);
 
         lock (_lastSentToLock)
             _lastSentTo[bare] = id;
@@ -678,7 +678,7 @@ public sealed class XMPPClient : IAsyncDisposable
         if (partner == null)
             return false;
 
-        await _connection.SendChatStateAsync(partner, state);
+        await _connection.SendChatStateAsync(partner.Value, state);
         return true;
     }
 
@@ -699,7 +699,7 @@ public sealed class XMPPClient : IAsyncDisposable
         if (string.IsNullOrEmpty(id))
             return null;
 
-        await _connection.SendChatMarkerAsync(partner, id, type);
+        await _connection.SendChatMarkerAsync(partner.Value, id, type);
         return id;
     }
 
@@ -744,10 +744,10 @@ public sealed class XMPPClient : IAsyncDisposable
     #region Roster and contact requests
 
     public Task AddContactAsync(JID jid, string? name = null, IEnumerable<string>? groups = null)
-        => _connection.AddContactAsync(jid.Trim(), name, groups);
+        => _connection.AddContactAsync(jid, name, groups);
 
     public Task RemoveContactAsync(JID jid)
-        => _connection.RemoveContactAsync(jid.Trim());
+        => _connection.RemoveContactAsync(jid);
 
     /// <summary>
     /// Cancels one's own subscription to the presence of a contact (RFC 6121,
@@ -761,7 +761,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// to get rid of them entirely takes <see cref="RemoveContactAsync"/>.
     /// </remarks>
     public Task CancelSubscriptionAsync(JID jid)
-        => _connection.CancelSubscriptionAsync(jid.Trim());
+        => _connection.CancelSubscriptionAsync(jid);
 
     /// <summary>XEP-0384: the OMEMO manager, as soon as it is switched on.</summary>
     public OmemoManager? Omemo => _connection.Omemo;
@@ -820,18 +820,18 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     /// <param name="jid">The applicant; without one the oldest open request.</param>
     /// <returns>The JID processed, or null when no request was open.</returns>
-    public async Task<string?> AcceptSubscriptionAsync(JID? jid = null)
+    public async Task<JID?> AcceptSubscriptionAsync(JID? jid = null)
     {
         var target = ResolvePendingSubscription(jid);
         if (target == null)
             return null;
 
-        await _connection.AcceptSubscriptionAsync(target);
+        await _connection.AcceptSubscriptionAsync(target.Value);
 
         // Counter-request, so that the subscription becomes mutual
-        await _connection.AddContactAsync(target);
+        await _connection.AddContactAsync(target.Value);
 
-        RemovePendingSubscription(target);
+        RemovePendingSubscription(target.Value);
         _logger.LogInformation("Contact request from {Jid} accepted", target);
 
         return target;
@@ -882,33 +882,35 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     /// <param name="jid">The applicant; without one the oldest open request.</param>
     /// <returns>The JID processed, or null when no request was open.</returns>
-    public async Task<string?> DenySubscriptionAsync(JID? jid = null)
+    public async Task<JID?> DenySubscriptionAsync(JID? jid = null)
     {
         var target = ResolvePendingSubscription(jid);
         if (target == null)
             return null;
 
-        await _connection.DenySubscriptionAsync(target);
+        await _connection.DenySubscriptionAsync(target.Value);
 
-        RemovePendingSubscription(target);
+        RemovePendingSubscription(target.Value);
         _logger.LogInformation("Contact request from {Jid} refused", target);
 
         return target;
     }
 
-    private string? ResolvePendingSubscription(string? jid)
+    private JID? ResolvePendingSubscription(JID? jid)
     {
-        if (!string.IsNullOrWhiteSpace(jid))
-            return jid.Trim();
+
+        if (jid is not null)
+            return jid;
 
         lock (_pendingLock)
             return _pendingSubscriptions.Count > 0 ? _pendingSubscriptions[0] : null;
+
     }
 
     private void RemovePendingSubscription(JID jid)
     {
         lock (_pendingLock)
-            _pendingSubscriptions.RemoveAll(p => string.Equals(p, jid, StringComparison.OrdinalIgnoreCase));
+            _pendingSubscriptions.RemoveAll(pending => pending == jid);
     }
 
     /// <summary>
@@ -922,7 +924,7 @@ public sealed class XMPPClient : IAsyncDisposable
             return items;
 
         return items.Where(i =>
-            i.Jid.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+            i.Jid.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase) ||
             (i.Name?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
             i.Groups.Any(g => g.Contains(filter, StringComparison.OrdinalIgnoreCase))
         ).ToList();
@@ -931,7 +933,7 @@ public sealed class XMPPClient : IAsyncDisposable
     public IEnumerable<RosterItem> GetOnlineContacts() => _connection.Roster.GetOnlineContacts();
     public IEnumerable<string> GetGroups() => _connection.Roster.GetGroups();
     public IEnumerable<RosterItem> GetContactsByGroup(string group) => _connection.Roster.GetByGroup(group);
-    public RosterItem? GetContact(JID jid) => _connection.Roster.GetItem(jid.Trim());
+    public RosterItem? GetContact(JID jid) => _connection.Roster.GetItem(jid);
 
     #endregion
 
@@ -953,7 +955,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// XEP-0030: Queries the features of one's own server.
     /// </summary>
     public Task<DiscoInfo?> DiscoverServerInfoAsync(CancellationToken ct = default)
-        => _connection.DiscoverInfoAsync(_connection.Domain, ct);
+        => _connection.DiscoverInfoAsync(JID.Parse(_connection.Domain), ct);
 
     #endregion
 

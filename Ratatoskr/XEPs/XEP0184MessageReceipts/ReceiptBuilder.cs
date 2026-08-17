@@ -40,9 +40,9 @@ public static class ReceiptBuilder
     /// <summary>
     /// Creates a receipt answer
     /// </summary>
-    public static string CreateReceipt(string to, string originalMessageId)
+    public static string CreateReceipt(JID to, string originalMessageId)
     {
-        return $"<message to='{XmlEscaping.Escape(to)}'>" +
+        return $"<message to='{XmlEscaping.Escape(to.ToString())}'>" +
                $"<received xmlns='{Namespace}' id='{XmlEscaping.Escape(originalMessageId)}'/>" +
                $"</message>";
     }

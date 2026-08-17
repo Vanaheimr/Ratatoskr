@@ -287,6 +287,35 @@ public readonly struct JID : IEquatable<JID>,
 
     #endregion
 
+    #region (static) AreEqual(One, Other)
+
+    /// <summary>
+    /// Do these two texts denote the same address (RFC 7622, section 3.4)?
+    /// </summary>
+    /// <remarks>
+    /// For the boundary where an address still arrives as text - the server
+    /// keeps a session's bound JID that way. Parse both and use <c>==</c>
+    /// wherever you can; this exists so that the places which cannot yet are
+    /// at least not comparing with <see cref="String"/> rules.
+    ///
+    /// What is not an address is compared literally, and that is the safe
+    /// answer: rubbish then matches nothing but the identical rubbish.
+    /// </remarks>
+    public static Boolean AreEqual(String? One, String? Other)
+    {
+
+        if (One is null || Other is null)
+            return One is null && Other is null;
+
+        return TryParse(One,   out var left) &&
+               TryParse(Other, out var right)
+                   ? left == right
+                   : String.Equals(One, Other, StringComparison.Ordinal);
+
+    }
+
+    #endregion
+
 
     #region Operator overloading
 

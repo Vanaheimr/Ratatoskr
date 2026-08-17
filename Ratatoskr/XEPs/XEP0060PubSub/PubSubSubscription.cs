@@ -66,7 +66,7 @@ public sealed record PubSubSubscription(String                      NodeId,
     /// subscription, and that is something other than a refusal.
     /// </returns>
     public static Boolean TryRead(XElement              iq,
-                                  String                serviceJid,
+                                  JID                   serviceJid,
                                   out PubSubSubscription?  subscription)
     {
 
