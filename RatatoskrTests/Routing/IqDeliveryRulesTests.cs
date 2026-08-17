@@ -57,7 +57,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         private String Bob => $"bob@{Server.Domain}";
 
-        /// <summary>A ping request (XEP-0199) to an arbitrary address.</summary>
+        /// <summary>
+        /// A ping request (XEP-0199) to an arbitrary address.
+        /// </summary>
         private static String Request(String to, String id)
             => $"<iq type='get' id='{id}' to='{to}'>" +
                "<ping xmlns='urn:xmpp:ping'/></iq>";
@@ -95,7 +97,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Collects the stanza errors of a client.</summary>
+        /// <summary>
+        /// Collects the stanza errors of a client.
+        /// </summary>
         private static ConcurrentQueue<StanzaError> ErrorBasket(XMPPClient client)
         {
 
@@ -106,7 +110,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Counts the incoming IQ stanzas carrying this id.</summary>
+        /// <summary>
+        /// Counts the incoming IQ stanzas carrying this id.
+        /// </summary>
         private static ConcurrentQueue<String> ReplyBasket(XMPPClient client, String id)
         {
 

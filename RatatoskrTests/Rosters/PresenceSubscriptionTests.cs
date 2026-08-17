@@ -459,7 +459,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region IsPresenceSubscriber_IsFalseForAnUnknownContact()
 
-        /// <summary>Whoever does not stand in the roster at all sees nothing.</summary>
+        /// <summary>
+        /// Whoever does not stand in the roster at all sees nothing.
+        /// </summary>
         [Test]
         public void IsPresenceSubscriber_IsFalseForAnUnknownContact()
         {

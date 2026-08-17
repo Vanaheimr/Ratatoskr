@@ -100,7 +100,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>A resolver giving a fixed answer and counting along.</summary>
+        /// <summary>
+        /// A resolver giving a fixed answer and counting along.
+        /// </summary>
         private sealed class FixedResolver : IS2SAddressResolver
         {
 
@@ -122,7 +124,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Wires the sender side up over a resolver.</summary>
+        /// <summary>
+        /// Wires the sender side up over a resolver.
+        /// </summary>
         private FixedResolver SenderWithResolver(Func<String, IReadOnlyList<SrvTarget>> reply)
         {
 

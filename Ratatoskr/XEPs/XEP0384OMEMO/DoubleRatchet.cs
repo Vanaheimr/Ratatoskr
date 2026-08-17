@@ -153,10 +153,14 @@ public sealed class DoubleRatchet
 
     #region Data
 
-    /// <summary>The info string of the root chain (section 4.3).</summary>
+    /// <summary>
+    /// The info string of the root chain (section 4.3).
+    /// </summary>
     public const String RootChainInfo    = "OMEMO Root Chain";
 
-    /// <summary>The info string for the material of a message key.</summary>
+    /// <summary>
+    /// The info string for the material of a message key.
+    /// </summary>
     public const String MessageKeyInfo   = "OMEMO Message Key Material";
 
     /// <summary>
@@ -184,22 +188,32 @@ public sealed class DoubleRatchet
 
     #region Properties
 
-    /// <summary>The running number of the next message sent.</summary>
+    /// <summary>
+    /// The running number of the next message sent.
+    /// </summary>
     public UInt32 SendCount { get; private set; }
 
-    /// <summary>How many messages have been received in the current chain.</summary>
+    /// <summary>
+    /// How many messages have been received in the current chain.
+    /// </summary>
     public UInt32 ReceiveCount { get; private set; }
 
-    /// <summary>The length of the previous send chain.</summary>
+    /// <summary>
+    /// The length of the previous send chain.
+    /// </summary>
     public UInt32 PreviousSendCount { get; private set; }
 
-    /// <summary>How many skipped keys are being kept just now.</summary>
+    /// <summary>
+    /// How many skipped keys are being kept just now.
+    /// </summary>
     public Int32 SkippedKeys
     {
         get { lock (_lock) return _skipped.Count; }
     }
 
-    /// <summary>Can this session send yet?</summary>
+    /// <summary>
+    /// Can this session send yet?
+    /// </summary>
     /// <remarks>
     /// The party called can do so only after it has got the first message:
     /// before that it does not know the ratchet key of the counterpart and has
@@ -600,7 +614,9 @@ public sealed class DoubleRatchet
 
     }
 
-    /// <summary>Checks the HMAC and decrypts.</summary>
+    /// <summary>
+    /// Checks the HMAC and decrypts.
+    /// </summary>
     private static Byte[] Open(Byte[] messageKey, RatchetMessage message, Byte[] associatedData)
     {
 

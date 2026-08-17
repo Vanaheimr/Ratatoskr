@@ -23,13 +23,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public enum OmemoTrust
 {
 
-    /// <summary>Not decided yet - the human being has never looked at the fingerprint.</summary>
+    /// <summary>
+    /// Not decided yet - the human being has never looked at the fingerprint.
+    /// </summary>
     Undecided,
 
-    /// <summary>Confirmed.</summary>
+    /// <summary>
+    /// Confirmed.
+    /// </summary>
     Trusted,
 
-    /// <summary>Expressly refused - nothing goes to this device.</summary>
+    /// <summary>
+    /// Expressly refused - nothing goes to this device.
+    /// </summary>
     Distrusted
 
 }
@@ -40,10 +46,14 @@ public enum OmemoTrust
 public enum OmemoIdentityCheck
 {
 
-    /// <summary>This device has never been here.</summary>
+    /// <summary>
+    /// This device has never been here.
+    /// </summary>
     New,
 
-    /// <summary>Known, and the key is the same as last time.</summary>
+    /// <summary>
+    /// Known, and the key is the same as last time.
+    /// </summary>
     Known,
 
     /// <summary>
@@ -68,7 +78,9 @@ public sealed record OmemoDeviceRecord(String          BareJid,
                                        DateTimeOffset  FirstSeen)
 {
 
-    /// <summary>The fingerprint a human being compares.</summary>
+    /// <summary>
+    /// The fingerprint a human being compares.
+    /// </summary>
     public String Fingerprint
         => Convert.ToHexString(IdentityKey).ToLowerInvariant();
 
@@ -100,7 +112,9 @@ public sealed record OmemoIdentityState(UInt32                                  
                                         IReadOnlyList<OmemoStoredPreKey>        PreKeys,
                                         DateTimeOffset?                         SignedPreKeyCreatedAt = null);
 
-/// <summary>A prekey with its secret part.</summary>
+/// <summary>
+/// A prekey with its secret part.
+/// </summary>
 public sealed record OmemoStoredPreKey(UInt32 Id, Byte[] PrivateKey);
 
 /// <summary>
@@ -145,22 +159,34 @@ public sealed record OmemoSessionState(RatchetState Ratchet, Byte[] AssociatedDa
 public interface IOmemoStore
 {
 
-    /// <summary>One's own key material, or null at the first start.</summary>
+    /// <summary>
+    /// One's own key material, or null at the first start.
+    /// </summary>
     OmemoIdentityState? LoadIdentity();
 
-    /// <summary>Stores one's own key material.</summary>
+    /// <summary>
+    /// Stores one's own key material.
+    /// </summary>
     void SaveIdentity(OmemoIdentityState state);
 
-    /// <summary>A stored session, or null.</summary>
+    /// <summary>
+    /// A stored session, or null.
+    /// </summary>
     OmemoSessionState? LoadSession(String bareJid, UInt32 deviceId);
 
-    /// <summary>Stores a session and replaces an existing one.</summary>
+    /// <summary>
+    /// Stores a session and replaces an existing one.
+    /// </summary>
     void SaveSession(String bareJid, UInt32 deviceId, OmemoSessionState state);
 
-    /// <summary>All devices this one knows of.</summary>
+    /// <summary>
+    /// All devices this one knows of.
+    /// </summary>
     IReadOnlyList<OmemoDeviceRecord> KnownDevices();
 
-    /// <summary>Stores a device record and replaces an existing one.</summary>
+    /// <summary>
+    /// Stores a device record and replaces an existing one.
+    /// </summary>
     void SaveDevice(OmemoDeviceRecord record);
 
 }

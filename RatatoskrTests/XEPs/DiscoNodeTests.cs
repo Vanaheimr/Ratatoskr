@@ -83,7 +83,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>The bound session of the only logged-in client.</summary>
+        /// <summary>
+        /// The bound session of the only logged-in client.
+        /// </summary>
         private async Task<XMPPSession> SessionAsync(XMPPClient client)
         {
 

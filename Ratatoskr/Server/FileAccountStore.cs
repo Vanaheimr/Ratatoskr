@@ -61,7 +61,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The file the accounts lie in.</summary>
+        /// <summary>
+        /// The file the accounts lie in.
+        /// </summary>
         public String Path => _path;
 
         #endregion

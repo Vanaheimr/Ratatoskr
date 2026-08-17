@@ -276,7 +276,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => info is not null, "the message at Bob");
 
-            Assert.That(info!.EnvelopeFrom, Is.EqualTo($"alice@{Server.Domain}"),
+            Assert.That(info!.EnvelopeFrom.ToString(), Is.EqualTo($"alice@{Server.Domain}"),
                         "The envelope names no sender, or a different one.");
 
         }
@@ -439,7 +439,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(notedAtBob.Trust, Is.EqualTo(OmemoTrust.Undecided),
                             "A freshly seen device counts as confirmed.");
 
-                Assert.That(notedAtBob.BareJid, Is.EqualTo($"alice@{Server.Domain}"));
+                Assert.That(notedAtBob.BareJid.ToString(), Is.EqualTo($"alice@{Server.Domain}"));
 
                 // And the decision can be made.
                 Assert.That(bob.Omemo.SetTrust(JID.Parse($"alice@{Server.Domain}"),

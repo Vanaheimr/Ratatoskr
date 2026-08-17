@@ -62,7 +62,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         private String Bob => $"bob@{Server.Domain}";
 
-        /// <summary>Collects the stanza errors of a client.</summary>
+        /// <summary>
+        /// Collects the stanza errors of a client.
+        /// </summary>
         private static ConcurrentQueue<StanzaError> ErrorBasket(XMPPClient client)
         {
 
@@ -73,7 +75,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Collects the raw incoming stanzas with this id.</summary>
+        /// <summary>
+        /// Collects the raw incoming stanzas with this id.
+        /// </summary>
         private static ConcurrentQueue<String> InboxFor(XMPPClient client, String id)
         {
 

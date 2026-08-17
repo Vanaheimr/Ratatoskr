@@ -45,13 +45,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public sealed record PubSubSubscriptionOptions(Boolean Deliver = true)
 {
 
-    /// <summary>The namespace of the data forms (XEP-0004).</summary>
+    /// <summary>
+    /// The namespace of the data forms (XEP-0004).
+    /// </summary>
     public const String DataFormNamespace = "jabber:x:data";
 
-    /// <summary>The form type of these settings.</summary>
+    /// <summary>
+    /// The form type of these settings.
+    /// </summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#subscribe_options";
 
-    /// <summary>The field for the delivery.</summary>
+    /// <summary>
+    /// The field for the delivery.
+    /// </summary>
     public const String DeliverVariable = "pubsub#deliver";
 
     /// <summary>

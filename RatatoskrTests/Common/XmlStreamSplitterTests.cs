@@ -53,11 +53,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>Pushes the text in in one piece.</summary>
+        /// <summary>
+        /// Pushes the text in in one piece.
+        /// </summary>
         private static List<String> All(String text)
             => [.. new XmlStreamSplitter().Push(text)];
 
-        /// <summary>Pushes the text in character by character.</summary>
+        /// <summary>
+        /// Pushes the text in character by character.
+        /// </summary>
         private static List<String> CharacterByCharacter(String text)
         {
 

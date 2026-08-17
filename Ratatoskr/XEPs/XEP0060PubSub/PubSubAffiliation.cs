@@ -35,7 +35,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public enum PubSubAffiliation
 {
 
-    /// <summary>No role - the normal case for strangers.</summary>
+    /// <summary>
+    /// No role - the normal case for strangers.
+    /// </summary>
     None,
 
     /// <summary>

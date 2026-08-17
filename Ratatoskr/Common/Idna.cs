@@ -32,7 +32,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public enum IdnaProperty
 {
 
-    /// <summary>Permitted in a label.</summary>
+    /// <summary>
+    /// Permitted in a label.
+    /// </summary>
     PValid,
 
     /// <summary>
@@ -46,7 +48,9 @@ public enum IdnaProperty
     /// </summary>
     ContextO,
 
-    /// <summary>Not permitted in a label.</summary>
+    /// <summary>
+    /// Not permitted in a label.
+    /// </summary>
     Disallowed,
 
     /// <summary>
@@ -144,10 +148,14 @@ public static class Idna
 
     #region IsValidDomain(Domain, out Reason)
 
-    /// <summary>The prefix of an A-label (RFC 5890, section 2.3.2.1).</summary>
+    /// <summary>
+    /// The prefix of an A-label (RFC 5890, section 2.3.2.1).
+    /// </summary>
     public const String AcePrefix = "xn--";
 
-    /// <summary>The maximum length of a label in octets (RFC 1035).</summary>
+    /// <summary>
+    /// The maximum length of a label in octets (RFC 1035).
+    /// </summary>
     public const Int32 MaxLabelOctets = 63;
 
     /// <summary>

@@ -180,7 +180,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(received[0].Body,         Is.EqualTo("Hello over TCP!"));
-                Assert.That(received[0].FromBareJid,  Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].FromBareJid.ToString(), Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -493,7 +493,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region (helper functions) ImmediateTlsAsync / StartTlsByHandAsync
 
-        /// <summary>TLS from the first byte on.</summary>
+        /// <summary>
+        /// TLS from the first byte on.
+        /// </summary>
         private async Task<SslStream> ImmediateTlsAsync(TcpClient client)
         {
 

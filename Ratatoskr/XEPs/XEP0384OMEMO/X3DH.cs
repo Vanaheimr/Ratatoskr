@@ -85,7 +85,9 @@ public static class X3DH
 
     #region Data
 
-    /// <summary>The info string (XEP-0384, section 4.2).</summary>
+    /// <summary>
+    /// The info string (XEP-0384, section 4.2).
+    /// </summary>
     public const String Info = "OMEMO X3DH";
 
     #endregion

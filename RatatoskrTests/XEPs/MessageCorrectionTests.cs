@@ -53,7 +53,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TheReplacedId_IsRead()
 
-        /// <summary>The ordinary case.</summary>
+        /// <summary>
+        /// The ordinary case.
+        /// </summary>
         [Test]
         public void TheReplacedId_IsRead()
         {
@@ -66,7 +68,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region WithoutAReplace_NothingIsRead()
 
-        /// <summary>An ordinary message corrects nothing.</summary>
+        /// <summary>
+        /// An ordinary message corrects nothing.
+        /// </summary>
         [Test]
         public void WithoutAReplace_NothingIsRead()
         {

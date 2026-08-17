@@ -57,28 +57,44 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
                                              IReadOnlyList<String>?  RosterGroups  = null)
 {
 
-    /// <summary>The groups, never null.</summary>
+    /// <summary>
+    /// The groups, never null.
+    /// </summary>
     public IReadOnlyList<String> RosterGroups { get; init; } = RosterGroups ?? [];
 
-    /// <summary>The form type of these settings.</summary>
+    /// <summary>
+    /// The form type of these settings.
+    /// </summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#node_config";
 
-    /// <summary>The field for the access model.</summary>
+    /// <summary>
+    /// The field for the access model.
+    /// </summary>
     public const String AccessModelVariable = "pubsub#access_model";
 
-    /// <summary>The field for the number of entries kept.</summary>
+    /// <summary>
+    /// The field for the number of entries kept.
+    /// </summary>
     public const String MaxItemsVariable = "pubsub#max_items";
 
-    /// <summary>The field for the storage.</summary>
+    /// <summary>
+    /// The field for the storage.
+    /// </summary>
     public const String PersistItemsVariable = "pubsub#persist_items";
 
-    /// <summary>The field for the permitted roster groups.</summary>
+    /// <summary>
+    /// The field for the permitted roster groups.
+    /// </summary>
     public const String RosterGroupsVariable = "pubsub#roster_groups_allowed";
 
-    /// <summary>The default: open, 256 entries, with storage.</summary>
+    /// <summary>
+    /// The default: open, 256 entries, with storage.
+    /// </summary>
     public static readonly PubSubNodeConfiguration Default = new();
 
-    /// <summary>The access model as it stands in the form.</summary>
+    /// <summary>
+    /// The access model as it stands in the form.
+    /// </summary>
     public static String NameOf(PubSubAccessModel model)
         => model switch {
                PubSubAccessModel.Presence   => "presence",
@@ -131,7 +147,9 @@ public sealed record PubSubNodeConfiguration(PubSubAccessModel       AccessModel
                DataForm.Field     (PersistItemsVariable, "boolean",     "Keep entries",            DataForm.Boolean(PersistItems)),
                DataForm.MultiField(RosterGroupsVariable, "list-multi",  "Permitted roster groups", RosterGroups));
 
-    /// <summary>The answer of the owner (<c>type='submit'</c>).</summary>
+    /// <summary>
+    /// The answer of the owner (<c>type='submit'</c>).
+    /// </summary>
     public XElement ToSubmit()
         => DataForm.Form("submit", FormType,
                DataForm.Field     (AccessModelVariable,  null, null, NameOf(AccessModel)),

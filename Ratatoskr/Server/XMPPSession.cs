@@ -62,10 +62,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The running number of the connection, in the order in which connections were established.</summary>
+        /// <summary>
+        /// The running number of the connection, in the order in which connections were established.
+        /// </summary>
         public Int32 ConnectionNumber { get; }
 
-        /// <summary>The account, as soon as the authentication succeeded.</summary>
+        /// <summary>
+        /// The account, as soon as the authentication succeeded.
+        /// </summary>
         public XMPPAccount? Account { get; internal set; }
 
         /// <summary>
@@ -95,18 +99,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         internal Int32 FailedAuthentications { get; set; }
 
-        /// <summary>The resource assigned, as soon as the binding has taken place.</summary>
+        /// <summary>
+        /// The resource assigned, as soon as the binding has taken place.
+        /// </summary>
         public String? Resource { get; internal set; }
 
-        /// <summary>The bare JID, or null before the authentication.</summary>
+        /// <summary>
+        /// The bare JID, or null before the authentication.
+        /// </summary>
         public String? BareJid => Account?.BareJid;
 
-        /// <summary>The full JID, or null before the binding.</summary>
+        /// <summary>
+        /// The full JID, or null before the binding.
+        /// </summary>
         public String? FullJid => Account is not null && Resource is not null
                                       ? $"{Account.BareJid}/{Resource}"
                                       : null;
 
-        /// <summary>XEP-0280: Has the client enabled carbons for this resource?</summary>
+        /// <summary>
+        /// XEP-0280: Has the client enabled carbons for this resource?
+        /// </summary>
         public Boolean CarbonsEnabled { get; internal set; }
 
         /// <summary>
@@ -389,7 +401,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>XEP-0198: Has stream management been negotiated for this session?</summary>
+        /// <summary>
+        /// XEP-0198: Has stream management been negotiated for this session?
+        /// </summary>
         public Boolean StreamManagementEnabled { get; private set; }
 
         /// <summary>
@@ -448,10 +462,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             get { lock (_lock) return [.. _unackedToClient]; }
         }
 
-        /// <summary>The underlying WebSocket connection.</summary>
+        /// <summary>
+        /// The underlying WebSocket connection.
+        /// </summary>
         public WebSocketServerConnection Connection => _connection;
 
-        /// <summary>Is the connection still open?</summary>
+        /// <summary>
+        /// Is the connection still open?
+        /// </summary>
         public Boolean IsOpen => !_connection.IsClosed;
 
         /// <summary>
@@ -508,13 +526,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         internal String? InlineBindTag { get; set; }
 
-        /// <summary>All frames received from the client, in the order they arrived.</summary>
+        /// <summary>
+        /// All frames received from the client, in the order they arrived.
+        /// </summary>
         public IReadOnlyList<String> Received
         {
             get { lock (_lock) return _received.ToList(); }
         }
 
-        /// <summary>All frames sent to the client, in the order they were sent.</summary>
+        /// <summary>
+        /// All frames sent to the client, in the order they were sent.
+        /// </summary>
         public IReadOnlyList<String> Sent
         {
             get { lock (_lock) return _sent.ToList(); }

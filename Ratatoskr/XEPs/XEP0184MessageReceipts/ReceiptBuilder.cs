@@ -29,7 +29,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class ReceiptBuilder
 {
 
-    /// <summary>The namespace of XEP-0184.</summary>
+    /// <summary>
+    /// The namespace of XEP-0184.
+    /// </summary>
     public const string Namespace = "urn:xmpp:receipts";
 
     /// <summary>

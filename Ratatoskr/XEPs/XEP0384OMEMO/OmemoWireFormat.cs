@@ -40,7 +40,9 @@ public sealed record OmemoKeyExchange(UInt32  PreKeyId,
                                       Byte[]  Message)
 {
 
-    /// <summary>The encoding per the schema of the specification.</summary>
+    /// <summary>
+    /// The encoding per the schema of the specification.
+    /// </summary>
     public Byte[] Encode()
     {
 
@@ -56,7 +58,9 @@ public sealed record OmemoKeyExchange(UInt32  PreKeyId,
 
     }
 
-    /// <summary>Reads a key exchange.</summary>
+    /// <summary>
+    /// Reads a key exchange.
+    /// </summary>
     public static OmemoKeyExchange Decode(Byte[] data)
     {
 
@@ -94,7 +98,9 @@ public sealed record OmemoKeyExchange(UInt32  PreKeyId,
 public sealed record OmemoAuthenticatedMessage(Byte[] Mac, Byte[] Message)
 {
 
-    /// <summary>The encoding per the schema of the specification.</summary>
+    /// <summary>
+    /// The encoding per the schema of the specification.
+    /// </summary>
     public Byte[] Encode()
     {
 
@@ -107,7 +113,9 @@ public sealed record OmemoAuthenticatedMessage(Byte[] Mac, Byte[] Message)
 
     }
 
-    /// <summary>Reads an authenticated message.</summary>
+    /// <summary>
+    /// Reads an authenticated message.
+    /// </summary>
     public static OmemoAuthenticatedMessage Decode(Byte[] data)
     {
 

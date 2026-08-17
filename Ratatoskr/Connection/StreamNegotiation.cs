@@ -38,22 +38,34 @@ internal static class StreamNegotiation
 
     #region Namespaces
 
-    /// <summary>Namespace of the stream layer (RFC 6120, section 4.8.2).</summary>
+    /// <summary>
+    /// Namespace of the stream layer (RFC 6120, section 4.8.2).
+    /// </summary>
     public const string StreamNamespace   = "http://etherx.jabber.org/streams";
 
-    /// <summary>Namespace of the WebSocket framing (RFC 7395).</summary>
+    /// <summary>
+    /// Namespace of the WebSocket framing (RFC 7395).
+    /// </summary>
     public const string FramingNamespace  = "urn:ietf:params:xml:ns:xmpp-framing";
 
-    /// <summary>Namespace of SASL (RFC 6120, section 6).</summary>
+    /// <summary>
+    /// Namespace of SASL (RFC 6120, section 6).
+    /// </summary>
     public const string SaslNamespace     = "urn:ietf:params:xml:ns:xmpp-sasl";
 
-    /// <summary>Namespace of the SASL2 profile (XEP-0388).</summary>
+    /// <summary>
+    /// Namespace of the SASL2 profile (XEP-0388).
+    /// </summary>
     public const string Sasl2Namespace    = "urn:xmpp:sasl:2";
 
-    /// <summary>Namespace of the resource binding (RFC 6120, section 7).</summary>
+    /// <summary>
+    /// Namespace of the resource binding (RFC 6120, section 7).
+    /// </summary>
     public const string BindNamespace     = "urn:ietf:params:xml:ns:xmpp-bind";
 
-    /// <summary>Namespace of the legacy session (RFC 3921, dropped in RFC 6121).</summary>
+    /// <summary>
+    /// Namespace of the legacy session (RFC 3921, dropped in RFC 6121).
+    /// </summary>
     public const string SessionNamespace  = "urn:ietf:params:xml:ns:xmpp-session";
 
     #endregion
@@ -68,7 +80,9 @@ internal static class StreamNegotiation
     public static bool IsStreamOpen(XElement element)
         => element.Name.LocalName is "open" or "stream";
 
-    /// <summary>Are those the stream features?</summary>
+    /// <summary>
+    /// Are those the stream features?
+    /// </summary>
     public static bool IsFeatures(XElement element)
         => element.Name.LocalName     == "features" &&
            element.Name.NamespaceName == StreamNamespace;
@@ -284,11 +298,15 @@ internal static class StreamNegotiation
                    .Distinct()
                    .ToList();
 
-    /// <summary>Does the server offer resource binding?</summary>
+    /// <summary>
+    /// Does the server offer resource binding?
+    /// </summary>
     public static bool OffersBind(XElement features)
         => features.Child(BindNamespace, "bind") is not null;
 
-    /// <summary>Does the server offer XEP-0198 stream management?</summary>
+    /// <summary>
+    /// Does the server offer XEP-0198 stream management?
+    /// </summary>
     public static bool OffersStreamManagement(XElement features)
         => features.Child(StreamManagementManager.Namespace, "sm") is not null;
 

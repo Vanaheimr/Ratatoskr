@@ -45,7 +45,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class MessageCorrection
 {
 
-    /// <summary>The namespace of XEP-0308.</summary>
+    /// <summary>
+    /// The namespace of XEP-0308.
+    /// </summary>
     public const string Namespace = "urn:xmpp:message-correct:0";
 
     /// <summary>

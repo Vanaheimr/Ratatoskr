@@ -55,19 +55,29 @@ public sealed record PubSubSubscribeAuthorization(String   NodeId,
                                                   Boolean  Allow = false)
 {
 
-    /// <summary>The form type of this application.</summary>
+    /// <summary>
+    /// The form type of this application.
+    /// </summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#subscribe_authorization";
 
-    /// <summary>The field for the node.</summary>
+    /// <summary>
+    /// The field for the node.
+    /// </summary>
     public const String NodeVariable = "pubsub#node";
 
-    /// <summary>The field for the identifier of the application.</summary>
+    /// <summary>
+    /// The field for the identifier of the application.
+    /// </summary>
     public const String SubIdVariable = "pubsub#subid";
 
-    /// <summary>The field for the applicant.</summary>
+    /// <summary>
+    /// The field for the applicant.
+    /// </summary>
     public const String SubscriberVariable = "pubsub#subscriber_jid";
 
-    /// <summary>The field for the answer.</summary>
+    /// <summary>
+    /// The field for the answer.
+    /// </summary>
     public const String AllowVariable = "pubsub#allow";
 
     /// <summary>
@@ -84,7 +94,9 @@ public sealed record PubSubSubscribeAuthorization(String   NodeId,
                DataForm.Field(SubscriberVariable, "jid-single",  "Applicant",   SubscriberJid),
                DataForm.Field(AllowVariable,      "boolean",     "Grant?",      DataForm.Boolean(Allow)));
 
-    /// <summary>The answer of the owner (<c>type='submit'</c>).</summary>
+    /// <summary>
+    /// The answer of the owner (<c>type='submit'</c>).
+    /// </summary>
     public XElement ToSubmit()
         => DataForm.Form("submit", FormType,
                DataForm.Field(NodeVariable,       null, null, NodeId),

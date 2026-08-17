@@ -27,7 +27,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public class JidFormatException : Exception
 {
 
-    /// <summary>The string that was objected to.</summary>
+    /// <summary>
+    /// The string that was objected to.
+    /// </summary>
     public String Jid { get; }
 
     public JidFormatException(String jid, String message)

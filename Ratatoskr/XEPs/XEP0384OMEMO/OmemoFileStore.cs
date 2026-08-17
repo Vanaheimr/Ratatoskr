@@ -115,7 +115,9 @@ public sealed class OmemoFileStore : IOmemoStore
 
     private Content _content = new();
 
-    /// <summary>The shape of the file.</summary>
+    /// <summary>
+    /// The shape of the file.
+    /// </summary>
     private sealed class Content
     {
         public OmemoIdentityState?        Identity  { get; set; }
@@ -134,7 +136,9 @@ public sealed class OmemoFileStore : IOmemoStore
 
     #region Properties
 
-    /// <summary>The file the storage lies in.</summary>
+    /// <summary>
+    /// The file the storage lies in.
+    /// </summary>
     public String Path => _path;
 
     #endregion

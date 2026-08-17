@@ -64,7 +64,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(alice.Connection.BoundInline, Is.True);
 
-                Assert.That(alice.FullJid, Does.Contain("/"),
+                Assert.That(alice.FullJid.ToString(), Does.Contain("/"),
                             "A full JID all the same - only reached differently.");
 
                 Assert.That(session.Received.Any(f => f.Contains("urn:ietf:params:xml:ns:xmpp-bind",
@@ -183,8 +183,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
 
-                Assert.That(first.FullJid,  Does.Contain("Phone/"));
-                Assert.That(second.FullJid, Does.Contain("Phone/"));
+                Assert.That(first.FullJid.ToString(), Does.Contain("Phone/"));
+                Assert.That(second.FullJid.ToString(), Does.Contain("Phone/"));
 
                 Assert.That(second.FullJid, Is.Not.EqualTo(first.FullJid),
                             "Two sessions of one account may not share a resource.");
@@ -215,7 +215,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(alice.Connection.BoundInline, Is.False);
                 Assert.That(alice.IsConnected,            Is.True);
-                Assert.That(alice.FullJid,                Does.Contain("/"));
+                Assert.That(alice.FullJid.ToString(), Does.Contain("/"));
 
                 Assert.That(session.Received.Any(f => f.Contains("urn:ietf:params:xml:ns:xmpp-bind",
                                                                  StringComparison.Ordinal)),
@@ -254,7 +254,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(alice.Connection.BoundInline, Is.False);
                 Assert.That(alice.IsConnected,            Is.True);
-                Assert.That(alice.FullJid,                Does.Contain("/"));
+                Assert.That(alice.FullJid.ToString(), Does.Contain("/"));
             });
 
         }

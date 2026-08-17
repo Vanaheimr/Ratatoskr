@@ -71,18 +71,26 @@ internal static class Ed25519Math
 
     #region Data
 
-    /// <summary>The prime field: 2^255 - 19.</summary>
+    /// <summary>
+    /// The prime field: 2^255 - 19.
+    /// </summary>
     internal static readonly BigInteger P = BigInteger.Pow(2, 255) - 19;
 
-    /// <summary>The curve parameter d = -121665/121666 mod p.</summary>
+    /// <summary>
+    /// The curve parameter d = -121665/121666 mod p.
+    /// </summary>
     private static readonly BigInteger D =
         BigInteger.Parse("37095705934669439343138083508754565189542113879843219016388785533085940283555");
 
-    /// <summary>The x coordinate of the base point.</summary>
+    /// <summary>
+    /// The x coordinate of the base point.
+    /// </summary>
     private static readonly BigInteger Bx =
         BigInteger.Parse("15112221349535400772501151409588531511454012693041857206046113283949847762202");
 
-    /// <summary>The y coordinate of the base point: 4/5 mod p.</summary>
+    /// <summary>
+    /// The y coordinate of the base point: 4/5 mod p.
+    /// </summary>
     private static readonly BigInteger By =
         BigInteger.Parse("46316835694926478169428394003475163141307993866256225615783033603165251855960");
 
@@ -124,7 +132,9 @@ internal static class Ed25519Math
 
     }
 
-    /// <summary>The group order.</summary>
+    /// <summary>
+    /// The group order.
+    /// </summary>
     internal static readonly BigInteger Order =
         BigInteger.Pow(2, 252) + BigInteger.Parse("27742317777372353535851937790883648493");
 
@@ -184,7 +194,9 @@ internal static class Ed25519Math
 
     }
 
-    /// <summary>A non-negative remainder modulo p.</summary>
+    /// <summary>
+    /// A non-negative remainder modulo p.
+    /// </summary>
     private static BigInteger Mod(BigInteger value)
     {
         var remainder = value % P;

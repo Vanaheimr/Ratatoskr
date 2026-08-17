@@ -54,13 +54,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         // conditions, and a condition that throws instead of being false does
         // not wait - it fails at once.
 
-        /// <summary>The groups the server keeps for a contact.</summary>
+        /// <summary>
+        /// The groups the server keeps for a contact.
+        /// </summary>
         private IReadOnlyList<String> ServerGroupsOf(XMPPClient client, String contact)
             => Server.GetAccount(client.BareJid.ToString())
                     ?.Roster.FirstOrDefault(e => e.Jid == $"{contact}@{Server.Domain}")
                     ?.Groups ?? [];
 
-        /// <summary>The groups the client keeps for a contact.</summary>
+        /// <summary>
+        /// The groups the client keeps for a contact.
+        /// </summary>
         private static IReadOnlyList<String> ClientGroupsOf(XMPPClient client, JID jid)
             => client.Connection.Roster.Items.FirstOrDefault(i => i.Jid == jid)?.Groups ?? [];
 

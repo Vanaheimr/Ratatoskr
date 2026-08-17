@@ -52,10 +52,14 @@ public sealed record SceEnvelope(IReadOnlyList<XElement>  Content,
                                  DateTimeOffset?          Time    = null)
 {
 
-    /// <summary>The namespace of XEP-0420.</summary>
+    /// <summary>
+    /// The namespace of XEP-0420.
+    /// </summary>
     public const String Namespace = "urn:xmpp:sce:1";
 
-    /// <summary>The upper limit of the padding in characters (XEP-0420, section 4).</summary>
+    /// <summary>
+    /// The upper limit of the padding in characters (XEP-0420, section 4).
+    /// </summary>
     public const Int32 MaxPadding = 200;
 
     #region ToXml()

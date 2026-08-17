@@ -528,7 +528,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             "The sender from the stanza belongs to the same human being.");
 
                 Assert.That(decoded!.Content.Single().Value, Is.EqualTo("Shall we meet at eight?"));
-                Assert.That(decoded.From, Is.EqualTo("alice@example.org"));
+                Assert.That(decoded.From.ToString(), Is.EqualTo("alice@example.org"));
 
             });
 

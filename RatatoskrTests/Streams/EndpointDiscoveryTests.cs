@@ -44,7 +44,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>A resolver that gives the same answer for every address.</summary>
+        /// <summary>
+        /// A resolver that gives the same answer for every address.
+        /// </summary>
         private static AltConnectionsResolver Answers(String? hostMeta)
             => new ((uri, ct) => Task.FromResult(hostMeta));
 

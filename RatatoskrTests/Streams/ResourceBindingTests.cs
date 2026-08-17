@@ -198,7 +198,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.ConnectAsync();
 
-            Assert.That(client.FullJid, Does.EndWith("/phone"));
+            Assert.That(client.FullJid.ToString(), Does.EndWith("/phone"));
 
         }
 
@@ -222,7 +222,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(client.IsConnected, Is.True);
-                Assert.That(client.FullJid, Does.Contain("/"));
+                Assert.That(client.FullJid.ToString(), Does.Contain("/"));
             });
 
         }

@@ -55,7 +55,9 @@ internal static class BidiClasses
 
     #region ClassOf(CodePoint)
 
-    /// <summary>The bidi class of this code point.</summary>
+    /// <summary>
+    /// The bidi class of this code point.
+    /// </summary>
     public static BidiClass ClassOf(UInt32 CodePoint)
     {
 
@@ -78,7 +80,9 @@ internal static class BidiClasses
 
     #region (private) Contains(Table, CodePoint)
 
-    /// <summary>Does the code point lie in one of this table's ranges?</summary>
+    /// <summary>
+    /// Does the code point lie in one of this table's ranges?
+    /// </summary>
     private static Boolean Contains(UInt32[] Table, UInt32 CodePoint)
     {
 
@@ -102,7 +106,9 @@ internal static class BidiClasses
 
     #endregion
 
-    /// <summary>Right-to-left (Hebrew and related scripts) (73 ranges).</summary>
+    /// <summary>
+    /// Right-to-left (Hebrew and related scripts) (73 ranges).
+    /// </summary>
     internal static readonly UInt32[] R = [
         0x05BE, 0x05BE, 0x05C0, 0x05C0, 0x05C3, 0x05C3, 0x05C6, 0x05C6, 0x05D0, 0x05EA,
         0x05EF, 0x05F4, 0x07C0, 0x07EA, 0x07F4, 0x07F5, 0x07FA, 0x07FA, 0x07FE, 0x0815,
@@ -123,7 +129,9 @@ internal static class BidiClasses
         0x1E900, 0x1E943, 0x1E94B, 0x1E94B, 0x1E950, 0x1E959, 0x1E95E, 0x1E95F,
     ];
 
-    /// <summary>Right-to-left Arabic (61 ranges).</summary>
+    /// <summary>
+    /// Right-to-left Arabic (61 ranges).
+    /// </summary>
     internal static readonly UInt32[] AL = [
         0x0608, 0x0608, 0x060B, 0x060B, 0x060D, 0x060D, 0x061B, 0x064A, 0x066D, 0x066F,
         0x0671, 0x06D5, 0x06E5, 0x06E6, 0x06EE, 0x06EF, 0x06FA, 0x070D, 0x070F, 0x0710,
@@ -141,33 +149,43 @@ internal static class BidiClasses
         0x1EE8B, 0x1EE9B, 0x1EEA1, 0x1EEA3, 0x1EEA5, 0x1EEA9, 0x1EEAB, 0x1EEBB,
     ];
 
-    /// <summary>Arabic digits (8 ranges).</summary>
+    /// <summary>
+    /// Arabic digits (8 ranges).
+    /// </summary>
     internal static readonly UInt32[] AN = [
         0x0600, 0x0605, 0x0660, 0x0669, 0x066B, 0x066C, 0x06DD, 0x06DD, 0x0890, 0x0891,
         0x08E2, 0x08E2, 0x10D30, 0x10D39, 0x10E60, 0x10E7E,
     ];
 
-    /// <summary>European digits (13 ranges).</summary>
+    /// <summary>
+    /// European digits (13 ranges).
+    /// </summary>
     internal static readonly UInt32[] EN = [
         0x0030, 0x0039, 0x00B2, 0x00B3, 0x00B9, 0x00B9, 0x06F0, 0x06F9, 0x2070, 0x2070,
         0x2074, 0x2079, 0x2080, 0x2089, 0x2488, 0x249B, 0xFF10, 0xFF19, 0x102E1, 0x102FB,
         0x1D7CE, 0x1D7FF, 0x1F100, 0x1F10A, 0x1FBF0, 0x1FBF9,
     ];
 
-    /// <summary>European separators (plus, minus) (9 ranges).</summary>
+    /// <summary>
+    /// European separators (plus, minus) (9 ranges).
+    /// </summary>
     internal static readonly UInt32[] ES = [
         0x002B, 0x002B, 0x002D, 0x002D, 0x207A, 0x207B, 0x208A, 0x208B, 0x2212, 0x2212,
         0xFB29, 0xFB29, 0xFE62, 0xFE63, 0xFF0B, 0xFF0B, 0xFF0D, 0xFF0D,
     ];
 
-    /// <summary>Common separators (comma, full stop, colon) (13 ranges).</summary>
+    /// <summary>
+    /// Common separators (comma, full stop, colon) (13 ranges).
+    /// </summary>
     internal static readonly UInt32[] CS = [
         0x002C, 0x002C, 0x002E, 0x002F, 0x003A, 0x003A, 0x00A0, 0x00A0, 0x060C, 0x060C,
         0x202F, 0x202F, 0x2044, 0x2044, 0xFE50, 0xFE50, 0xFE52, 0xFE52, 0xFE55, 0xFE55,
         0xFF0C, 0xFF0C, 0xFF0E, 0xFF0F, 0xFF1A, 0xFF1A,
     ];
 
-    /// <summary>European terminators (currency, per cent) (24 ranges).</summary>
+    /// <summary>
+    /// European terminators (currency, per cent) (24 ranges).
+    /// </summary>
     internal static readonly UInt32[] ET = [
         0x0023, 0x0025, 0x00A2, 0x00A5, 0x00B0, 0x00B1, 0x058F, 0x058F, 0x0609, 0x060A,
         0x066A, 0x066A, 0x09F2, 0x09F3, 0x09FB, 0x09FB, 0x0AF1, 0x0AF1, 0x0BF9, 0x0BF9,
@@ -176,7 +194,9 @@ internal static class BidiClasses
         0xFFE0, 0xFFE1, 0xFFE5, 0xFFE6, 0x11FDD, 0x11FE0, 0x1E2FF, 0x1E2FF,
     ];
 
-    /// <summary>Other neutral characters (190 ranges).</summary>
+    /// <summary>
+    /// Other neutral characters (190 ranges).
+    /// </summary>
     internal static readonly UInt32[] ON = [
         0x0021, 0x0022, 0x0026, 0x002A, 0x003B, 0x0040, 0x005B, 0x0060, 0x007B, 0x007E,
         0x00A1, 0x00A1, 0x00A6, 0x00A9, 0x00AB, 0x00AC, 0x00AE, 0x00AF, 0x00B4, 0x00B4,
@@ -221,7 +241,9 @@ internal static class BidiClasses
         0x1FAF0, 0x1FAF8, 0x1FB00, 0x1FB92, 0x1FB94, 0x1FBCA,
     ];
 
-    /// <summary>No effect on the direction of run (32 ranges).</summary>
+    /// <summary>
+    /// No effect on the direction of run (32 ranges).
+    /// </summary>
     internal static readonly UInt32[] BN = [
         0x0000, 0x0008, 0x000E, 0x001B, 0x007F, 0x0084, 0x0086, 0x009F, 0x00AD, 0x00AD,
         0x180E, 0x180E, 0x200B, 0x200D, 0x2060, 0x2065, 0x206A, 0x206F, 0xFDD0, 0xFDEF,
@@ -233,7 +255,9 @@ internal static class BidiClasses
         0x10FFFE, 0x10FFFF,
     ];
 
-    /// <summary>Non-spacing characters (combining marks) (341 ranges).</summary>
+    /// <summary>
+    /// Non-spacing characters (combining marks) (341 ranges).
+    /// </summary>
     internal static readonly UInt32[] NSM = [
         0x0300, 0x036F, 0x0483, 0x0489, 0x0591, 0x05BD, 0x05BF, 0x05BF, 0x05C1, 0x05C2,
         0x05C4, 0x05C5, 0x05C7, 0x05C7, 0x0610, 0x061A, 0x064B, 0x065F, 0x0670, 0x0670,

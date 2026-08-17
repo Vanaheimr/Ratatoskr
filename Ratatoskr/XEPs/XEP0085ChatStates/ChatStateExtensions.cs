@@ -29,7 +29,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class ChatStateExtensions
 {
 
-    /// <summary>The namespace of XEP-0085.</summary>
+    /// <summary>
+    /// The namespace of XEP-0085.
+    /// </summary>
     public const string Namespace = "http://jabber.org/protocol/chatstates";
 
     public static string ToXml(this ChatState state) => state switch

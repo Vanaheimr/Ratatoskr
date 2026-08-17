@@ -46,7 +46,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>A manager over a store already holding this identity.</summary>
+        /// <summary>
+        /// A manager over a store already holding this identity.
+        /// </summary>
         private static OmemoManager ManagerOver(OmemoIdentityState state)
         {
 

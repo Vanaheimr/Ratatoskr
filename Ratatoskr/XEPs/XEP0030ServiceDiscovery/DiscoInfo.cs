@@ -39,10 +39,14 @@ public sealed class DiscoInfo
     /// </remarks>
     public List<DiscoForm> Forms { get; } = [];
 
-    /// <summary>Did the answer carry a data form (XEP-0128)?</summary>
+    /// <summary>
+    /// Did the answer carry a data form (XEP-0128)?
+    /// </summary>
     public bool HasExtendedInfo => Forms.Count > 0;
 
-    /// <summary>Does the answer list this feature?</summary>
+    /// <summary>
+    /// Does the answer list this feature?
+    /// </summary>
     /// <remarks>
     /// Five abbreviations once stood beside this one - <c>SupportsCarbons</c>,
     /// <c>SupportsReceipts</c> and three more -, each a line above this one and

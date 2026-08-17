@@ -117,8 +117,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(upperClient.FullJid, Does.EndWith("/Mobile"));
-                Assert.That(lowerClient.FullJid, Does.EndWith("/mobile"),
+                Assert.That(upperClient.FullJid.ToString(), Does.EndWith("/Mobile"));
+                Assert.That(lowerClient.FullJid.ToString(), Does.EndWith("/mobile"),
                             "The second login has to get a resource of its own.");
             });
 
@@ -276,7 +276,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             {
                 Assert.That(carbon!.IsSent,   Is.True, "The carbon was not recognised as 'sent'.");
                 Assert.That(carbon.Body,      Is.EqualTo("Written from the phone"));
-                Assert.That(carbon.OriginalTo, Does.StartWith(bob.BareJid.ToString()));
+                Assert.That(carbon.OriginalTo.ToString(), Does.StartWith(bob.BareJid.ToString()));
             });
 
         }

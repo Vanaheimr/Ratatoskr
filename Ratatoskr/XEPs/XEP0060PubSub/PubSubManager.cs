@@ -47,7 +47,9 @@ public delegate Task OnPubSubEventDelegate(DateTimeOffset     Timestamp,
 public sealed class PubSubManager
 {
 
-    /// <summary>The namespace of the PubSub notifications.</summary>
+    /// <summary>
+    /// The namespace of the PubSub notifications.
+    /// </summary>
     public const string EventNamespace = "http://jabber.org/protocol/pubsub#event";
 
     /// <summary>
@@ -264,7 +266,9 @@ public sealed class PubSubManager
                                             e.Name.LocalName is "items" or "purge" or "delete" or "subscription")
                       ?.Attr("node") ?? "";
 
-    /// <summary>The namespace of the SHIM headers (XEP-0131).</summary>
+    /// <summary>
+    /// The namespace of the SHIM headers (XEP-0131).
+    /// </summary>
     public const string ShimNamespace = "http://jabber.org/protocol/shim";
 
     /// <summary>
@@ -471,7 +475,9 @@ public sealed class PubSubManager
         lock (_lock) return _subscriptions.TryGetValue(nodeId, out var subs) ? [.. subs] : [];
     }
 
-    /// <summary>All subscriptions, across all nodes.</summary>
+    /// <summary>
+    /// All subscriptions, across all nodes.
+    /// </summary>
     public IReadOnlyList<PubSubSubscription> Subscriptions
     {
         get { lock (_lock) return [.. _subscriptions.Values.SelectMany(a => a)]; }

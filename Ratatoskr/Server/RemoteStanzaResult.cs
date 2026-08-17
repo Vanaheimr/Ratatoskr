@@ -31,10 +31,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
     public enum RemoteStanzaResult
     {
 
-        /// <summary>Accepted and delivered locally.</summary>
+        /// <summary>
+        /// Accepted and delivered locally.
+        /// </summary>
         Accepted,
 
-        /// <summary><c>from</c> or <c>to</c> is missing - without both it cannot be delivered.</summary>
+        /// <summary>
+        /// <c>from</c> or <c>to</c> is missing - without both it cannot be delivered.
+        /// </summary>
         MissingAddress,
 
         /// <summary>

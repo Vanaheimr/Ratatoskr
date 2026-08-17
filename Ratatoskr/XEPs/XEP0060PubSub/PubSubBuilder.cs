@@ -208,7 +208,9 @@ public static class PubSubBuilder
                $"</pubsub></iq>";
     }
 
-    /// <summary>The namespace of the owner requests (XEP-0060, section 8).</summary>
+    /// <summary>
+    /// The namespace of the owner requests (XEP-0060, section 8).
+    /// </summary>
     public const string OwnerNamespace = "http://jabber.org/protocol/pubsub#owner";
 
     /// <summary>

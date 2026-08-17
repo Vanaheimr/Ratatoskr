@@ -67,7 +67,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         private readonly String? secret;
 
-        /// <summary>How this stream is wrapped.</summary>
+        /// <summary>
+        /// How this stream is wrapped.
+        /// </summary>
         private readonly IS2SFraming framing;
 
         /// <summary>
@@ -135,19 +137,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The namespace of the WebSocket framing (RFC 7395, section 3.1).</summary>
+        /// <summary>
+        /// The namespace of the WebSocket framing (RFC 7395, section 3.1).
+        /// </summary>
         public const String FramingNamespace = WebSocketFraming.Namespace;
 
-        /// <summary>The namespace of the stream layer (RFC 6120, section 4.8.2).</summary>
+        /// <summary>
+        /// The namespace of the stream layer (RFC 6120, section 4.8.2).
+        /// </summary>
         public const String StreamNamespace = "http://etherx.jabber.org/streams";
 
-        /// <summary>The namespace of the stream error conditions (RFC 6120, section 4.9.2).</summary>
+        /// <summary>
+        /// The namespace of the stream error conditions (RFC 6120, section 4.9.2).
+        /// </summary>
         public const String StreamErrorNamespace = "urn:ietf:params:xml:ns:xmpp-streams";
 
-        /// <summary>XEP-0288: the namespace of the <c>&lt;bidi/&gt;</c> element.</summary>
+        /// <summary>
+        /// XEP-0288: the namespace of the <c>&lt;bidi/&gt;</c> element.
+        /// </summary>
         public const String BidiNamespace = "urn:xmpp:bidi";
 
-        /// <summary>XEP-0288: the namespace of the announcement in the features.</summary>
+        /// <summary>
+        /// XEP-0288: the namespace of the announcement in the features.
+        /// </summary>
         public const String BidiFeatureNamespace = "urn:xmpp:features:bidi";
 
         /// <summary>
@@ -165,7 +177,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         public Boolean BidiEnabled { get; private set; }
 
-        /// <summary>Our own domain.</summary>
+        /// <summary>
+        /// Our own domain.
+        /// </summary>
         public String LocalDomain { get; }
 
         /// <summary>
@@ -175,7 +189,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         public String? RemoteDomain { get; private set; }
 
-        /// <summary>Did this server establish the stream?</summary>
+        /// <summary>
+        /// Did this server establish the stream?
+        /// </summary>
         public Boolean IsInitiator { get; }
 
         /// <summary>
@@ -185,10 +201,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         public String? StreamId { get; private set; }
 
-        /// <summary>Does the handshake stand?</summary>
+        /// <summary>
+        /// Does the handshake stand?
+        /// </summary>
         public Boolean IsOpen { get; private set; }
 
-        /// <summary>Has the stream ended?</summary>
+        /// <summary>
+        /// Has the stream ended?
+        /// </summary>
         public Boolean IsClosed { get; private set; }
 
         /// <summary>
@@ -853,7 +873,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region SASL-EXTERNAL (RFC 6120, section 6; XEP-0178)
 
-        /// <summary>The namespace of the SASL negotiation.</summary>
+        /// <summary>
+        /// The namespace of the SASL negotiation.
+        /// </summary>
         public const String SaslNamespace = "urn:ietf:params:xml:ns:xmpp-sasl";
 
         /// <summary>
@@ -1361,7 +1383,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>The text content of a frame, without surrounding whitespace.</summary>
+        /// <summary>
+        /// The text content of a frame, without surrounding whitespace.
+        /// </summary>
         private static String? Body(String xml)
         {
 

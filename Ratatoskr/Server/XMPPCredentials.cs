@@ -67,20 +67,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         public const Int32 DefaultIterationCount = 4096;
 
-        /// <summary>Length of the salt produced, in bytes.</summary>
+        /// <summary>
+        /// Length of the salt produced, in bytes.
+        /// </summary>
         public const Int32 SaltLength = 16;
 
         #endregion
 
         #region Properties
 
-        /// <summary>The salt of this account.</summary>
+        /// <summary>
+        /// The salt of this account.
+        /// </summary>
         public Byte[] Salt => [.. _salt];
 
-        /// <summary>The iteration count that was derived with.</summary>
+        /// <summary>
+        /// The iteration count that was derived with.
+        /// </summary>
         public Int32 IterationCount { get; }
 
-        /// <summary>For which mechanisms keys are on hand.</summary>
+        /// <summary>
+        /// For which mechanisms keys are on hand.
+        /// </summary>
         public IEnumerable<SCRAMMechanism> Mechanisms => _keys.Keys;
 
         #endregion

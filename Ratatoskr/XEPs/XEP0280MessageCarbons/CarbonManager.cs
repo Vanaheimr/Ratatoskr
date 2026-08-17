@@ -55,10 +55,14 @@ public delegate Task OnCarbonParseErrorDelegate (DateTimeOffset     Timestamp,
 public sealed class CarbonManager
 {
 
-    /// <summary>The namespace of XEP-0280.</summary>
+    /// <summary>
+    /// The namespace of XEP-0280.
+    /// </summary>
     public const string Namespace = "urn:xmpp:carbons:2";
 
-    /// <summary>The namespace of XEP-0297, in which the message sits.</summary>
+    /// <summary>
+    /// The namespace of XEP-0297, in which the message sits.
+    /// </summary>
     public const string ForwardNamespace = "urn:xmpp:forward:0";
 
     private readonly JID      _myBareJid;

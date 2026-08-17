@@ -53,7 +53,9 @@ public sealed class AltConnectionsResolver
 
     #region Data
 
-    /// <summary>The link type of the WebSocket endpoint.</summary>
+    /// <summary>
+    /// The link type of the WebSocket endpoint.
+    /// </summary>
     public const string WebSocketRel = "urn:xmpp:alt-connections:websocket";
 
     private const string XrdNamespace = "http://docs.oasis-open.org/ns/xri/xrd-1.0";

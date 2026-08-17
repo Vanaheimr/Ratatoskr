@@ -63,7 +63,9 @@ public sealed class ReceiptTracker
     /// </remarks>
     private readonly Dictionary<string, JID> _sentTo = new();
 
-    /// <summary>The order they were remembered in, so the oldest can go first.</summary>
+    /// <summary>
+    /// The order they were remembered in, so the oldest can go first.
+    /// </summary>
     private readonly Queue<string> _remembered = new();
 
     /// <summary>

@@ -43,7 +43,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class DelayedDelivery
 {
 
-    /// <summary>The namespace of XEP-0203.</summary>
+    /// <summary>
+    /// The namespace of XEP-0203.
+    /// </summary>
     public const string Namespace = "urn:xmpp:delay";
 
     /// <summary>

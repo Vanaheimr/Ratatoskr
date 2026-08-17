@@ -23,7 +23,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class PubSubAffiliations
 {
 
-    /// <summary>The role as it is called in the protocol.</summary>
+    /// <summary>
+    /// The role as it is called in the protocol.
+    /// </summary>
     public static String NameOf(PubSubAffiliation affiliation)
         => affiliation switch {
                PubSubAffiliation.Owner      => "owner",

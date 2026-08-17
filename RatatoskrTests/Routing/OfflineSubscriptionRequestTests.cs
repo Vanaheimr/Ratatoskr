@@ -74,7 +74,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Logs a client out and waits until the server sees it.</summary>
+        /// <summary>
+        /// Logs a client out and waits until the server sees it.
+        /// </summary>
         private async Task DisconnectAndWaitAsync(XMPPClient client, String bareJid)
         {
             await client.DisconnectAsync();
@@ -106,7 +108,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => requests.Count > 0, "the handed-over request");
 
-            Assert.That(requests[0].From, Is.EqualTo(Alice));
+            Assert.That(requests[0].From.ToString(), Is.EqualTo(Alice));
 
         }
 
@@ -212,7 +214,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => secondRequests.Count > 0, "the request at the second login");
 
-            Assert.That(secondRequests[0].From, Is.EqualTo(Alice));
+            Assert.That(secondRequests[0].From.ToString(), Is.EqualTo(Alice));
 
         }
 
@@ -449,7 +451,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(requests, Has.Count.EqualTo(1));
-                Assert.That(requests[0].From, Is.EqualTo(Alice),
+                Assert.That(requests[0].From.ToString(), Is.EqualTo(Alice),
                             "The request stored first stays.");
             });
 
@@ -487,7 +489,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => secondRequests.Count > 0, "the request at the second resource");
 
-            Assert.That(secondRequests[0].From, Is.EqualTo(Alice));
+            Assert.That(secondRequests[0].From.ToString(), Is.EqualTo(Alice));
 
         }
 

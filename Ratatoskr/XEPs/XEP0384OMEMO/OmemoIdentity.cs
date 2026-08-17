@@ -61,14 +61,18 @@ public sealed class OmemoIdentity
     /// </summary>
     private UInt32 _highestPreKeyId;
 
-    /// <summary>How many prekeys a fresh device publishes.</summary>
+    /// <summary>
+    /// How many prekeys a fresh device publishes.
+    /// </summary>
     public const Int32 PreKeyCount = 100;
 
     #endregion
 
     #region Properties
 
-    /// <summary>The identity key - valid as long as this device.</summary>
+    /// <summary>
+    /// The identity key - valid as long as this device.
+    /// </summary>
     public Curve25519KeyPair IdentityKey { get; }
 
     /// <summary>
@@ -77,13 +81,19 @@ public sealed class OmemoIdentity
     /// </summary>
     public UInt32 DeviceId { get; }
 
-    /// <summary>The current signed prekey.</summary>
+    /// <summary>
+    /// The current signed prekey.
+    /// </summary>
     public Curve25519KeyPair SignedPreKey { get; private set; }
 
-    /// <summary>Its identifier.</summary>
+    /// <summary>
+    /// Its identifier.
+    /// </summary>
     public UInt32 SignedPreKeyId { get; private set; }
 
-    /// <summary>The signature of the identity key over it.</summary>
+    /// <summary>
+    /// The signature of the identity key over it.
+    /// </summary>
     public Byte[] SignedPreKeySignature { get; private set; }
 
     /// <summary>
@@ -102,7 +112,9 @@ public sealed class OmemoIdentity
     /// </remarks>
     public Curve25519KeyPair? PreviousSignedPreKey { get; private set; }
 
-    /// <summary>The identifier of the superseded signed prekey, or null.</summary>
+    /// <summary>
+    /// The identifier of the superseded signed prekey, or null.
+    /// </summary>
     public UInt32? PreviousSignedPreKeyId { get; private set; }
 
     /// <summary>
@@ -116,7 +128,9 @@ public sealed class OmemoIdentity
     /// </remarks>
     public DateTimeOffset? SignedPreKeyCreatedAt { get; private set; }
 
-    /// <summary>How many prekeys are still in stock.</summary>
+    /// <summary>
+    /// How many prekeys are still in stock.
+    /// </summary>
     public Int32 AvailablePreKeys
     {
         get { lock (_lock) return _preKeys.Count; }
@@ -244,7 +258,9 @@ public sealed class OmemoIdentity
 
     }
 
-    /// <summary>The public parts of all prekeys in stock.</summary>
+    /// <summary>
+    /// The public parts of all prekeys in stock.
+    /// </summary>
     private IReadOnlyList<OmemoPreKey> PublicPreKeys()
         => [.. _preKeys.OrderBy(e => e.Key)
                        .Select(e => new OmemoPreKey(e.Key, e.Value.PublicKey))];

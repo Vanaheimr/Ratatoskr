@@ -35,25 +35,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class SubscriptionStateExtensions
 {
 
-    /// <summary>We may see the contact from now on: None→To, From→Both.</summary>
+    /// <summary>
+    /// We may see the contact from now on: None→To, From→Both.
+    /// </summary>
     public static SubscriptionState GrantTo(this SubscriptionState state)
         => state is SubscriptionState.From or SubscriptionState.Both
                ? SubscriptionState.Both
                : SubscriptionState.To;
 
-    /// <summary>We may no longer see the contact: To→None, Both→From.</summary>
+    /// <summary>
+    /// We may no longer see the contact: To→None, Both→From.
+    /// </summary>
     public static SubscriptionState RevokeTo(this SubscriptionState state)
         => state is SubscriptionState.From or SubscriptionState.Both
                ? SubscriptionState.From
                : SubscriptionState.None;
 
-    /// <summary>The contact may see us from now on: None→From, To→Both.</summary>
+    /// <summary>
+    /// The contact may see us from now on: None→From, To→Both.
+    /// </summary>
     public static SubscriptionState GrantFrom(this SubscriptionState state)
         => state is SubscriptionState.To or SubscriptionState.Both
                ? SubscriptionState.Both
                : SubscriptionState.From;
 
-    /// <summary>The contact may no longer see us: From→None, Both→To.</summary>
+    /// <summary>
+    /// The contact may no longer see us: From→None, Both→To.
+    /// </summary>
     public static SubscriptionState RevokeFrom(this SubscriptionState state)
         => state is SubscriptionState.To or SubscriptionState.Both
                ? SubscriptionState.To

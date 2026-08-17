@@ -62,19 +62,29 @@ internal sealed class SaslMechanismPolicy
 
     #region Data
 
-    /// <summary>SASL PLAIN (RFC 4616) - the password itself.</summary>
+    /// <summary>
+    /// SASL PLAIN (RFC 4616) - the password itself.
+    /// </summary>
     public const String Plain         = "PLAIN";
 
-    /// <summary>SCRAM-SHA-1 (RFC 5802).</summary>
+    /// <summary>
+    /// SCRAM-SHA-1 (RFC 5802).
+    /// </summary>
     public const String ScramSha1     = "SCRAM-SHA-1";
 
-    /// <summary>SCRAM-SHA-256 (RFC 7677).</summary>
+    /// <summary>
+    /// SCRAM-SHA-256 (RFC 7677).
+    /// </summary>
     public const String ScramSha256   = "SCRAM-SHA-256";
 
-    /// <summary>SCRAM-SHA-1 bound to the TLS channel (RFC 5802, section 6).</summary>
+    /// <summary>
+    /// SCRAM-SHA-1 bound to the TLS channel (RFC 5802, section 6).
+    /// </summary>
     public const String ScramSha1Plus     = "SCRAM-SHA-1-PLUS";
 
-    /// <summary>SCRAM-SHA-256 bound to the TLS channel.</summary>
+    /// <summary>
+    /// SCRAM-SHA-256 bound to the TLS channel.
+    /// </summary>
     public const String ScramSha256Plus   = "SCRAM-SHA-256-PLUS";
 
     /// <summary>
@@ -162,7 +172,9 @@ internal sealed class SaslMechanismPolicy
 
     #region (static) IsKnown   (mechanism)
 
-    /// <summary>Does this ranking know the mechanism?</summary>
+    /// <summary>
+    /// Does this ranking know the mechanism?
+    /// </summary>
     public static Boolean IsKnown(String mechanism)
 
         => Strength(mechanism) > 0;

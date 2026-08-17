@@ -100,7 +100,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>A stanza whose body consists of exactly one repeated character.</summary>
+        /// <summary>
+        /// A stanza whose body consists of exactly one repeated character.
+        /// </summary>
         /// <remarks>
         /// Until D26 an invented <c>&lt;p/&gt;</c> stood here. The thought was
         /// right — the frame is meant to be <b>without consequence</b>, so that
@@ -122,7 +124,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                new String((Char) ('A' + i % 26), PayloadSize) +
                "</iq>";
 
-        /// <summary>Counts complete and damaged payload frames.</summary>
+        /// <summary>
+        /// Counts complete and damaged payload frames.
+        /// </summary>
         private static (Int32 intact, Int32 corrupt) Inspect(IEnumerable<String> frames)
         {
 

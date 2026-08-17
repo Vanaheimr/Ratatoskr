@@ -65,7 +65,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(connection.BareJid, Is.EqualTo("alice@example.com"));
+                Assert.That(connection.BareJid.ToString(), Is.EqualTo("alice@example.com"));
                 Assert.That(connection.Resource, Does.StartWith("console-"),
                             "No resource was named, so the default stands.");
             });
@@ -96,7 +96,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(connection.BareJid,  Is.EqualTo("alice@example.com"));
+                Assert.That(connection.BareJid.ToString(), Is.EqualTo("alice@example.com"));
                 Assert.That(connection.Resource, Is.EqualTo("phone"));
             });
 
@@ -192,7 +192,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void TheAddressIsPrepared_NotJustSplit()
         {
 
-            Assert.That(Connect("ALICE@Example.COM").BareJid, Is.EqualTo("alice@example.com"));
+            Assert.That(Connect("ALICE@Example.COM").BareJid.ToString(), Is.EqualTo("alice@example.com"));
 
         }
 

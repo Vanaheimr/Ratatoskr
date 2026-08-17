@@ -116,11 +116,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static String Sha1Base64(String s)
             => Convert.ToBase64String(SHA1.HashData(Encoding.UTF8.GetBytes(s)));
 
-        /// <summary>One field of a data form.</summary>
+        /// <summary>
+        /// One field of a data form.
+        /// </summary>
         private static DiscoField Field(String var, params String[] values)
             => new(var, null, values);
 
-        /// <summary>The softwareinfo form from XEP-0115, section 5.3.</summary>
+        /// <summary>
+        /// The softwareinfo form from XEP-0115, section 5.3.
+        /// </summary>
         private static DiscoForm SoftwareInfo()
             => new([
                    new DiscoField("FORM_TYPE", "hidden", ["urn:xmpp:dataforms:softwareinfo"]),
@@ -131,7 +135,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                    Field("software_version", "0.11")
                ]);
 
-        /// <summary>The two identities from XEP-0115, section 5.3.</summary>
+        /// <summary>
+        /// The two identities from XEP-0115, section 5.3.
+        /// </summary>
         private static DiscoIdentity[] PsiIdentities()
             => [
                    new("client", "pc", "Psi 0.11", "en"),

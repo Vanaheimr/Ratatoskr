@@ -46,7 +46,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// </summary>
         private readonly InternalErrorGuard _guard = new();
 
-        /// <summary>The test server of the running test.</summary>
+        /// <summary>
+        /// The test server of the running test.
+        /// </summary>
         protected XMPPServer Server { get; private set; } = null!;
 
         #endregion
@@ -101,7 +103,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         protected void ExpectInternalErrors()
             => _guard.Expect();
 
-        /// <summary>The internal errors reported in this test.</summary>
+        /// <summary>
+        /// The internal errors reported in this test.
+        /// </summary>
         protected IReadOnlyList<String> InternalErrors
             => _guard.Errors;
 

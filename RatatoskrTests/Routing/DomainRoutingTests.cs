@@ -64,7 +64,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(errors[0].Error.Condition, Is.EqualTo("remote-server-not-found"));
-                Assert.That(errors[0].From,            Is.EqualTo("bob@elsewhere.example"),
+                Assert.That(errors[0].From.ToString(), Is.EqualTo("bob@elsewhere.example"),
                             "The error has to appear to come from the original recipient.");
             });
 

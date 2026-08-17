@@ -53,7 +53,9 @@ public static class Punycode
     private const Int32  InitialN     = 0x80;
     private const Char   Delimiter    = '-';
 
-    /// <summary>The largest code point number Unicode knows.</summary>
+    /// <summary>
+    /// The largest code point number Unicode knows.
+    /// </summary>
     private const Int32  MaxCodePoint = 0x10FFFF;
 
     #endregion
@@ -274,7 +276,9 @@ public static class Punycode
 
     #region (private) Bootstring computation
 
-    /// <summary>RFC 3492, section 6.1: the bias adaptation.</summary>
+    /// <summary>
+    /// RFC 3492, section 6.1: the bias adaptation.
+    /// </summary>
     private static Int32 Adapt(Int32 Delta, Int32 Count, Boolean FirstAdaptation)
     {
 
@@ -293,7 +297,9 @@ public static class Punycode
 
     }
 
-    /// <summary>The value of a digit of the base-36 alphabet, or -1.</summary>
+    /// <summary>
+    /// The value of a digit of the base-36 alphabet, or -1.
+    /// </summary>
     private static Int32 Digit(Char Character)
 
         => Character switch {
@@ -303,7 +309,9 @@ public static class Punycode
                _                  => -1
            };
 
-    /// <summary>The digit for a value - lowercase letters, then digits.</summary>
+    /// <summary>
+    /// The digit for a value - lowercase letters, then digits.
+    /// </summary>
     private static Char Character(Int32 Digit)
 
         => (Char) (Digit < 26 ? Digit + 'a' : Digit - 26 + '0');

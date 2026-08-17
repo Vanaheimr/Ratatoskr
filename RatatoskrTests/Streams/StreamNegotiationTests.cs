@@ -191,7 +191,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region RequiresSession_False_WhenTheSessionItselfIsOptional()
 
-        /// <summary>The counter-check: its own <c>&lt;optional/&gt;</c> counts.</summary>
+        /// <summary>
+        /// The counter-check: its own <c>&lt;optional/&gt;</c> counts.
+        /// </summary>
         [Test]
         public void RequiresSession_False_WhenTheSessionItselfIsOptional()
         {

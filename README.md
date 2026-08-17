@@ -184,9 +184,15 @@ no `host-meta`. Whoever does not want it gives the URL, e.g. for Prosody:
 
 ### RFC 7622 — JID handling
 
-`JidUtilities` splits, validates and compares JIDs per RFC 7622; checked
-against both example tables from §3.5 (fifteen valid and eight invalid
-addresses).
+`JID` is a `readonly struct` that splits, validates and compares addresses
+per RFC 7622; checked against both example tables from §3.5 (fifteen valid and
+eight invalid addresses).
+
+It is a type and not a `String` because the comparison is the whole problem:
+local and domain part are independent of spelling, the resourcepart is not, so
+`==` on strings gives the wrong answer and the right one had to be remembered
+and called by hand. There is no implicit conversion in either direction -
+`JID.Parse` in, `ToString` out, both visible.
 
 | Rule | State |
 |---|---|
@@ -336,6 +342,20 @@ and they do so deliberately.
 
 ### Using it as a library
 
+The library itself pulls in `Microsoft.Extensions.Logging`, which is the
+*abstraction* — `ILoggerFactory`, `ILogger`, and nothing that writes anywhere.
+Where the lines actually go is the application's choice, so the provider is a
+package of its own. For the console:
+
+```bash
+dotnet add package Microsoft.Extensions.Logging.Console
+```
+
+Without it `AddSimpleConsole` below does not exist, and the compiler says so in
+a way that does not mention a package. Whoever logs elsewhere takes that
+provider instead — or hands in no factory at all, in which case everything
+falls back to `NullLogger` and nothing is written.
+
 ```csharp
 using Microsoft.Extensions.Logging;
 using org.GraphDefined.Vanaheimr.Ratatoskr;
@@ -359,9 +379,21 @@ client.OnSubscriptionRequest += async (timestamp, sender, from, status, ct) =>
 
 await client.ConnectAsync();
 
-await client.SetChatPartnerAsync("contact@example.com");
+await client.SetChatPartnerAsync(JID.Parse("contact@example.com"));
 await client.SendMessageAsync("Hello!");
 ```
+
+Addresses are `JID`, not `String`, and there is no implicit conversion in
+either direction — hence the `JID.Parse`. The reason is the comparison: local
+and domain part are independent of spelling, the resourcepart is not, so
+`alice@example.com/Phone` and `alice@example.com/phone` are two devices of one
+person. On a `String`, `==` gives the wrong answer to that; on a `JID` the
+right comparison is the one you get for free. An implicit conversion would put
+a parse that can throw at every call site that merely looks like an assignment,
+and hand the comparison quietly back to `String`.
+
+`JID.Parse` throws `JidFormatException`; `JID.TryParse` returns `false` or
+`null` for anything that arrives from outside.
 
 Every event is a **named delegate that returns `Task`**, in the shape
 `(DateTimeOffset Timestamp, TSender Sender, …, CancellationToken)`. That is not
@@ -454,12 +486,12 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it — 1204 tests, of which the platform decides how many get an answer:
+all of it — 1226 tests, of which the platform decides how many get an answer:
 
 | Platform | passed | skipped |
 |----------|-------:|--------:|
-| Windows | 1201 | 3 |
-| Debian 13 | 1203 | 1 |
+| Windows | 1223 | 3 |
+| Debian 13 | 1225 | 1 |
 
 The skip both share checks a property which exists only in STARTTLS operation,
 and the fixture is parameterised over the TLS modes, so in the other one the

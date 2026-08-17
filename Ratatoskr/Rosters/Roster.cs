@@ -91,16 +91,24 @@ public sealed class Roster
 
     #region Events
 
-    /// <summary>A contact entered the roster.</summary>
+    /// <summary>
+    /// A contact entered the roster.
+    /// </summary>
     public event OnRosterItemAddedDelegate?            OnItemAdded;
 
-    /// <summary>Something about a contact changed.</summary>
+    /// <summary>
+    /// Something about a contact changed.
+    /// </summary>
     public event OnRosterItemUpdatedDelegate?          OnItemUpdated;
 
-    /// <summary>A contact left the roster.</summary>
+    /// <summary>
+    /// A contact left the roster.
+    /// </summary>
     public event OnRosterItemRemovedDelegate?          OnItemRemoved;
 
-    /// <summary>Someone asks to see our presence.</summary>
+    /// <summary>
+    /// Someone asks to see our presence.
+    /// </summary>
     public event OnRosterSubscriptionRequestDelegate?  OnSubscriptionRequest;
 
     #endregion

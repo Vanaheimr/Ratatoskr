@@ -116,13 +116,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The port on which incoming S2S connections are expected.</summary>
+        /// <summary>
+        /// The port on which incoming S2S connections are expected.
+        /// </summary>
         public Int32 Port { get; }
 
-        /// <summary>The certificate for incoming connections, or null for plaintext.</summary>
+        /// <summary>
+        /// The certificate for incoming connections, or null for plaintext.
+        /// </summary>
         public X509Certificate2? Certificate { get; }
 
-        /// <summary>How incoming connections come to TLS.</summary>
+        /// <summary>
+        /// How incoming connections come to TLS.
+        /// </summary>
         public TcpTlsMode Mode { get; }
 
         /// <summary>
@@ -177,7 +183,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         public Int32 BidirectionalDeliveryCount => Volatile.Read(ref _bidiDeliveries);
 
-        /// <summary>The dialback secret of this server (XEP-0220).</summary>
+        /// <summary>
+        /// The dialback secret of this server (XEP-0220).
+        /// </summary>
         public String DialbackSecret { get; } = DialbackKey.NewSecret();
 
         /// <summary>
@@ -200,7 +208,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         public IS2SAddressResolver? AddressResolver { get; init; }
 
-        /// <summary>The number of incoming connections ever accepted.</summary>
+        /// <summary>
+        /// The number of incoming connections ever accepted.
+        /// </summary>
         public Int32 InboundConnectionCount => Volatile.Read(ref _inboundCounter);
 
         /// <summary>
@@ -844,7 +854,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             /// </summary>
             public Boolean HasPending => _pending.Count > 0;
 
-            /// <summary>The next frame, or null when the stream ends.</summary>
+            /// <summary>
+            /// The next frame, or null when the stream ends.
+            /// </summary>
             public async Task<String?> NextAsync(CancellationToken cancellationToken)
             {
 
@@ -871,7 +883,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region (private) STARTTLS (RFC 6120, section 5.4)
 
-        /// <summary>The namespace of the TLS negotiation.</summary>
+        /// <summary>
+        /// The namespace of the TLS negotiation.
+        /// </summary>
         private const String TlsNamespace = "urn:ietf:params:xml:ns:xmpp-tls";
 
         /// <summary>

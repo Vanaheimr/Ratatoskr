@@ -63,10 +63,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Data
 
-        /// <summary>RFC 7395, section 3.1 - the same framing as for clients.</summary>
+        /// <summary>
+        /// RFC 7395, section 3.1 - the same framing as for clients.
+        /// </summary>
         private const String FramingNamespace = S2SStream.FramingNamespace;
 
-        /// <summary>The WebSocket subprotocol by which S2S differs from the client access.</summary>
+        /// <summary>
+        /// The WebSocket subprotocol by which S2S differs from the client access.
+        /// </summary>
         internal const String S2SSubprotocol = "xmpp-server";
 
         private readonly XMPPServer                          _localServer;
@@ -105,7 +109,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The port on which incoming S2S connections are expected.</summary>
+        /// <summary>
+        /// The port on which incoming S2S connections are expected.
+        /// </summary>
         public Int32 Port { get; }
 
         /// <summary>
@@ -114,10 +120,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         public String DialbackSecret { get; } = DialbackKey.NewSecret();
 
-        /// <summary>The certificate the incoming branch speaks TLS with, or null.</summary>
+        /// <summary>
+        /// The certificate the incoming branch speaks TLS with, or null.
+        /// </summary>
         public X509Certificate2? Certificate { get; }
 
-        /// <summary>Our own S2S address, meant for <see cref="AddPeer"/> on the other side.</summary>
+        /// <summary>
+        /// Our own S2S address, meant for <see cref="AddPeer"/> on the other side.
+        /// </summary>
         public String Uri => $"{(Certificate is not null ? "wss" : "ws")}://localhost:{Port}/s2s/";
 
         /// <summary>
@@ -375,7 +385,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>How long the query at the authoritative server may take.</summary>
+        /// <summary>
+        /// How long the query at the authoritative server may take.
+        /// </summary>
         private static readonly TimeSpan VerificationTimeout = TimeSpan.FromSeconds(10);
 
         /// <summary>
@@ -534,7 +546,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>How long the <c>&lt;open/&gt;</c> of the peer is waited for.</summary>
+        /// <summary>
+        /// How long the <c>&lt;open/&gt;</c> of the peer is waited for.
+        /// </summary>
         private static readonly TimeSpan OutboundHandshakeTimeout = TimeSpan.FromSeconds(10);
 
         #endregion
@@ -694,7 +708,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             #endregion
 
-            /// <summary>The number of S2S connections ever accepted.</summary>
+            /// <summary>
+            /// The number of S2S connections ever accepted.
+            /// </summary>
             public Int32 ConnectionCounter => Volatile.Read(ref _connectionCounter);
 
             #region Constructor(s)

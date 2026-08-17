@@ -62,7 +62,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Counts the logins of this client.</summary>
+        /// <summary>
+        /// Counts the logins of this client.
+        /// </summary>
         private static Func<Int32> CountConnects(XMPPClient client)
         {
 
@@ -81,12 +83,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>All roster requests the server has ever seen.</summary>
+        /// <summary>
+        /// All roster requests the server has ever seen.
+        /// </summary>
         private IEnumerable<String> RosterRequests
             => Server.AllReceived.Where(f => f.Contains("jabber:iq:roster", StringComparison.Ordinal) &&
                                              f.Contains("type='get'",       StringComparison.Ordinal));
 
-        /// <summary>The roster results of the session opened last.</summary>
+        /// <summary>
+        /// The roster results of the session opened last.
+        /// </summary>
         private IEnumerable<String> RosterResults
             => Server.Sessions.Last().Sent
                      .Where(f => f.Contains("id='roster1'", StringComparison.Ordinal));

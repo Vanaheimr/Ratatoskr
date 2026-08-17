@@ -48,7 +48,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class AesGcmUrl
 {
 
-    /// <summary>The scheme this recognises.</summary>
+    /// <summary>
+    /// The scheme this recognises.
+    /// </summary>
     public const String Scheme = "aesgcm";
 
     /// <summary>

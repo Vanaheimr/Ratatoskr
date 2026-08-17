@@ -67,7 +67,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>What the server has sent since this mark.</summary>
+        /// <summary>
+        /// What the server has sent since this mark.
+        /// </summary>
         private static IEnumerable<String> SentSince(XMPPSession session, Int32 mark)
             => session.Sent.Skip(mark);
 

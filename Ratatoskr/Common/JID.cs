@@ -31,11 +31,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class JIDExtensions
 {
 
-    /// <summary>Is this JID absent or unset?</summary>
+    /// <summary>
+    /// Is this JID absent or unset?
+    /// </summary>
     public static Boolean IsNullOrEmpty(this JID? JID)
         => !JID.HasValue || JID.Value.IsNullOrEmpty;
 
-    /// <summary>Is this JID present?</summary>
+    /// <summary>
+    /// Is this JID present?
+    /// </summary>
     public static Boolean IsNotNullOrEmpty(this JID? JID)
         => JID.HasValue && JID.Value.IsNotNullOrEmpty;
 
@@ -116,54 +120,76 @@ public readonly struct JID : IEquatable<JID>,
 
     #region Properties
 
-    /// <summary>The part before the <c>@</c>, prepared - or null when the JID names a domain.</summary>
+    /// <summary>
+    /// The part before the <c>@</c>, prepared - or null when the JID names a domain.
+    /// </summary>
     public String?  Localpart       { get; }
 
-    /// <summary>The part behind it, prepared - the only mandatory piece.</summary>
+    /// <summary>
+    /// The part behind it, prepared - the only mandatory piece.
+    /// </summary>
     public String   Domainpart      { get; }
 
-    /// <summary>The part behind the first <c>/</c> - unchanged in its spelling, or null.</summary>
+    /// <summary>
+    /// The part behind the first <c>/</c> - unchanged in its spelling, or null.
+    /// </summary>
     public String?  Resourcepart    { get; }
 
 
-    /// <summary>Is this the default, which names nothing?</summary>
+    /// <summary>
+    /// Is this the default, which names nothing?
+    /// </summary>
     [MemberNotNullWhen(false, nameof(Domainpart))]
     public Boolean  IsNullOrEmpty
 
         => String.IsNullOrEmpty(Domainpart);
 
-    /// <summary>Does this name an address?</summary>
+    /// <summary>
+    /// Does this name an address?
+    /// </summary>
     [MemberNotNullWhen(true, nameof(Domainpart))]
     public Boolean  IsNotNullOrEmpty
 
         => !String.IsNullOrEmpty(Domainpart);
 
-    /// <summary>Is there no resourcepart - does this name an account rather than a device?</summary>
+    /// <summary>
+    /// Is there no resourcepart - does this name an account rather than a device?
+    /// </summary>
     public Boolean  IsBare
 
         => Resourcepart is null;
 
-    /// <summary>Is there a resourcepart - does this name one particular device?</summary>
+    /// <summary>
+    /// Is there a resourcepart - does this name one particular device?
+    /// </summary>
     public Boolean  IsFull
 
         => Resourcepart is not null;
 
-    /// <summary>Does this name a domain rather than an account on one?</summary>
+    /// <summary>
+    /// Does this name a domain rather than an account on one?
+    /// </summary>
     public Boolean  IsDomainOnly
 
         => Localpart is null && Resourcepart is null;
 
-    /// <summary>The same address without its resourcepart.</summary>
+    /// <summary>
+    /// The same address without its resourcepart.
+    /// </summary>
     public JID      Bare
 
         => new (Localpart, Domainpart, null);
 
-    /// <summary>The domain this address lives on, as an address of its own.</summary>
+    /// <summary>
+    /// The domain this address lives on, as an address of its own.
+    /// </summary>
     public JID      Domain
 
         => new (null, Domainpart, null);
 
-    /// <summary>The length of the whole address in characters.</summary>
+    /// <summary>
+    /// The length of the whole address in characters.
+    /// </summary>
     public UInt64   Length
 
         => (UInt64) ToString().Length;
@@ -319,11 +345,15 @@ public readonly struct JID : IEquatable<JID>,
 
     #region Operator overloading
 
-    /// <summary>Do the two denote the same address (RFC 7622, section 3.4)?</summary>
+    /// <summary>
+    /// Do the two denote the same address (RFC 7622, section 3.4)?
+    /// </summary>
     public static Boolean operator == (JID JID1, JID JID2)
         =>  JID1.Equals(JID2);
 
-    /// <summary>Do the two denote different addresses?</summary>
+    /// <summary>
+    /// Do the two denote different addresses?
+    /// </summary>
     public static Boolean operator != (JID JID1, JID JID2)
         => !JID1.Equals(JID2);
 
@@ -350,17 +380,18 @@ public readonly struct JID : IEquatable<JID>,
     public Int32 CompareTo(JID Other)
     {
 
-        var domain = String.Compare(Domainpart, Other.Domainpart, StringComparison.OrdinalIgnoreCase);
+        var domain = String.Compare(Domainpart, Other.Domainpart, StringComparison.Ordinal);
         if (domain != 0)
             return domain;
 
-        var local  = String.Compare(Localpart,  Other.Localpart,  StringComparison.OrdinalIgnoreCase);
+        var local  = String.Compare(Localpart,  Other.Localpart,  StringComparison.Ordinal);
         if (local  != 0)
             return local;
 
-        // Ordinal, and not IgnoreCase: two resourceparts differing only in
-        // spelling are two devices, and an ordering that called them equal
-        // would let a sort drop one of them.
+        // Ordinal throughout, and it has to agree with Equals: an ordering
+        // that calls two addresses equal where Equals does not would let a
+        // sort drop one of them. See the remarks on Equals for why a second
+        // case folding here would be the wrong kind of robustness.
         return String.Compare(Resourcepart, Other.Resourcepart, StringComparison.Ordinal);
 
     }
@@ -376,20 +407,35 @@ public readonly struct JID : IEquatable<JID>,
     #region IEquatable<JID> Members
 
     /// <summary>
-    /// RFC 7622, section 3.4: local and domain part without regard to spelling,
-    /// the resourcepart with it.
+    /// RFC 7622, section 3.4: two addresses are the same when their prepared
+    /// parts are, byte for byte.
     /// </summary>
     /// <remarks>
-    /// Both parts are already lowercased by <see cref="Parse(String)"/>, so an
-    /// ordinal comparison would do for anything that came through it. It is
-    /// case-insensitive anyway, because that is the rule, and a comparison that
-    /// only holds while every instance took one particular route is a
-    /// comparison waiting for the route that is added later.
+    /// <b>Ordinal, all three of them</b>, and the first draft of this got it
+    /// wrong: local and domain part were compared with
+    /// <c>OrdinalIgnoreCase</c>, on the reasoning that the case-insensitivity
+    /// is the rule and a comparison depending on the value having come through
+    /// <see cref="Parse(String)"/> is one waiting to be broken.
+    ///
+    /// That reasoning is backwards, and RFC 8265 says why. The case mapping is
+    /// part of the <i>preparation</i>, and it is a Unicode one: <c>Parse</c>
+    /// lowercases per the PRECIS profile, and after that the parts mean what
+    /// they say. <c>OrdinalIgnoreCase</c> is a second and <i>different</i>
+    /// folding - simple, ordinal, not the one the profile prescribes - and it
+    /// does not reinforce the first, it overrides it.
+    ///
+    /// The final sigma is where that shows. U+03C2 (ς) and U+03C3 (σ) are two
+    /// characters and stay two after the PRECIS mapping, so
+    /// <c>ς@example.com</c> and <c>σ@example.com</c> are two accounts.
+    /// <c>OrdinalIgnoreCase</c> folds both to Σ and calls them one - which is
+    /// to say it hands somebody else's address to whoever asks for either.
+    /// RFC 7622's own §3.5 notes name this case, and the test that carries it
+    /// is what caught the mistake.
     /// </remarks>
     public Boolean Equals(JID Other)
 
-        => String.Equals(Localpart,    Other.Localpart,    StringComparison.OrdinalIgnoreCase) &&
-           String.Equals(Domainpart,   Other.Domainpart,   StringComparison.OrdinalIgnoreCase) &&
+        => String.Equals(Localpart,    Other.Localpart,    StringComparison.Ordinal) &&
+           String.Equals(Domainpart,   Other.Domainpart,   StringComparison.Ordinal) &&
            String.Equals(Resourcepart, Other.Resourcepart, StringComparison.Ordinal);
 
     public override Boolean Equals(Object? Object)
@@ -399,9 +445,9 @@ public readonly struct JID : IEquatable<JID>,
 
     public override Int32 GetHashCode()
 
-        => HashCode.Combine(Localpart    is null ? 0 : StringComparer.OrdinalIgnoreCase.GetHashCode(Localpart),
-                            Domainpart   is null ? 0 : StringComparer.OrdinalIgnoreCase.GetHashCode(Domainpart),
-                            Resourcepart is null ? 0 : StringComparer.Ordinal.          GetHashCode(Resourcepart));
+        => HashCode.Combine(Localpart,
+                            Domainpart,
+                            Resourcepart);
 
     #endregion
 

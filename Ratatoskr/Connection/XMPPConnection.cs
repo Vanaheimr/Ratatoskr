@@ -36,83 +36,109 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 #region (delegate) OnXMPPConnection...Delegate
 
-/// <summary>A chat message arrived, fully assembled.</summary>
+/// <summary>
+/// A chat message arrived, fully assembled.
+/// </summary>
 public delegate Task OnXMPPConnectionMessageDelegate                    (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          XMPPMessage        Message,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>A contact's presence changed.</summary>
+/// <summary>
+/// A contact's presence changed.
+/// </summary>
 public delegate Task OnXMPPConnectionPresenceDelegate                   (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          JID                From,
                                                                          String             Type,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0085: a contact is typing, or has stopped.</summary>
+/// <summary>
+/// XEP-0085: a contact is typing, or has stopped.
+/// </summary>
 public delegate Task OnXMPPConnectionChatStateDelegate                  (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          JID                From,
                                                                          ChatState          State,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0184: a message we sent was delivered.</summary>
+/// <summary>
+/// XEP-0184: a message we sent was delivered.
+/// </summary>
 public delegate Task OnXMPPConnectionReceiptReceivedDelegate            (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          JID                From,
                                                                          String             MessageId,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0280: a message was mirrored from or to another device of our own.</summary>
+/// <summary>
+/// XEP-0280: a message was mirrored from or to another device of our own.
+/// </summary>
 public delegate Task OnXMPPConnectionCarbonMessageDelegate              (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          CarbonMessage      Carbon,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0060: something happened at a node we subscribe to.</summary>
+/// <summary>
+/// XEP-0060: something happened at a node we subscribe to.
+/// </summary>
 public delegate Task OnXMPPConnectionPubSubEventDelegate                (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          PubSubEvent        Event,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0060, section 8.6.1: someone applies for a subscription to a node of our own.</summary>
+/// <summary>
+/// XEP-0060, section 8.6.1: someone applies for a subscription to a node of our own.
+/// </summary>
 public delegate Task OnXMPPConnectionPubSubSubscriptionRequestDelegate  (DateTimeOffset                  Timestamp,
                                                                          XMPPConnection                  Sender,
                                                                          PubSubSubscribeAuthorization    Request,
                                                                          CancellationToken               CancellationToken);
 
-/// <summary>Raw XML, inbound and outbound - for debug displays.</summary>
+/// <summary>
+/// Raw XML, inbound and outbound - for debug displays.
+/// </summary>
 public delegate Task OnXMPPConnectionRawXmlDelegate                     (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          String             XML,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>Something went wrong; it has already been logged.</summary>
+/// <summary>
+/// Something went wrong; it has already been logged.
+/// </summary>
 public delegate Task OnXMPPConnectionErrorDelegate                      (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          String             Message,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>A stanza claiming to be somebody it is not was thrown away.</summary>
+/// <summary>
+/// A stanza claiming to be somebody it is not was thrown away.
+/// </summary>
 public delegate Task OnXMPPConnectionSpoofingAttemptDelegate            (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          String             Details,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>The connection state has changed.</summary>
+/// <summary>
+/// The connection state has changed.
+/// </summary>
 public delegate Task OnXMPPConnectionStateChangedDelegate               (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          ConnectionState    OldState,
                                                                          ConnectionState    NewState,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0333: a chat marker was received.</summary>
+/// <summary>
+/// XEP-0333: a chat marker was received.
+/// </summary>
 public delegate Task OnXMPPConnectionChatMarkerDelegate                 (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          ChatMarker         Marker,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0115: the capabilities of a peer were determined.</summary>
+/// <summary>
+/// XEP-0115: the capabilities of a peer were determined.
+/// </summary>
 public delegate Task OnXMPPConnectionCapsDiscoveredDelegate             (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          JID                From,
@@ -129,20 +155,26 @@ public delegate Task OnXMPPConnectionStanzaErrorDelegate                (DateTim
                                                                          StanzaError        Error,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>RFC 6120, section 4.9: the server ended the stream with an error.</summary>
+/// <summary>
+/// RFC 6120, section 4.9: the server ended the stream with an error.
+/// </summary>
 public delegate Task OnXMPPConnectionStreamErrorDelegate                (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          StreamError        Error,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0384: a peer published a different set of devices.</summary>
+/// <summary>
+/// XEP-0384: a peer published a different set of devices.
+/// </summary>
 public delegate Task OnXMPPConnectionOmemoDeviceListChangedDelegate     (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          JID                BareJid,
                                                                          OmemoDeviceList    Devices,
                                                                          CancellationToken  CancellationToken);
 
-/// <summary>XEP-0384: a message that arrived encrypted, already decrypted.</summary>
+/// <summary>
+/// XEP-0384: a message that arrived encrypted, already decrypted.
+/// </summary>
 public delegate Task OnXMPPConnectionEncryptedMessageDelegate           (DateTimeOffset     Timestamp,
                                                                          XMPPConnection     Sender,
                                                                          XMPPMessage        Message,
@@ -230,10 +262,14 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </summary>
     private static readonly TimeSpan CloseHandshakeTimeout = TimeSpan.FromSeconds(3);
 
-    /// <summary>Namespace of the stream layer (RFC 6120, section 4.8.2).</summary>
+    /// <summary>
+    /// Namespace of the stream layer (RFC 6120, section 4.8.2).
+    /// </summary>
     private const string StreamNamespace = StreamNegotiation.StreamNamespace;
 
-    /// <summary>Namespace of XEP-0198 stream management.</summary>
+    /// <summary>
+    /// Namespace of XEP-0198 stream management.
+    /// </summary>
     private const string StreamManagementNamespace = StreamManagementManager.Namespace;
 
     /// <summary>
@@ -1310,7 +1346,9 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
     }
 
-    /// <summary>The stream header per RFC 7395.</summary>
+    /// <summary>
+    /// The stream header per RFC 7395.
+    /// </summary>
     private string OpenStream()
         => $"<open xmlns='{StreamNegotiation.FramingNamespace}' " +
            $"to='{XmlEscaping.Escape(_domain)}' version='1.0'/>";
@@ -2951,7 +2989,9 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
-    /// <summary>The continuation frame - same name, different namespace.</summary>
+    /// <summary>
+    /// The continuation frame - same name, different namespace.
+    /// </summary>
     private String SaslResponseFrame(String payload)
 
         => _usingSasl2

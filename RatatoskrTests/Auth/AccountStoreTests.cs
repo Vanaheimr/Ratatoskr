@@ -116,7 +116,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(loaded[0].BareJid,                       Is.EqualTo("alice@localhost"));
+                Assert.That(loaded[0].BareJid.ToString(), Is.EqualTo("alice@localhost"));
                 Assert.That(loaded[0].Credentials.Verify("secret"),  Is.True,
                             "After reading back in the login must still work.");
                 Assert.That(loaded[0].Credentials.Verify("wrong"),  Is.False);

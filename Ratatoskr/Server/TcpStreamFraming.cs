@@ -45,16 +45,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>There is nothing to tell apart - one instance suffices.</summary>
+        /// <summary>
+        /// There is nothing to tell apart - one instance suffices.
+        /// </summary>
         public static readonly TcpStreamFraming Instance = new();
 
-        /// <summary>The default namespace of the stanzas on an S2S link (RFC 6120, section 4.8.2).</summary>
+        /// <summary>
+        /// The default namespace of the stanzas on an S2S link (RFC 6120, section 4.8.2).
+        /// </summary>
         public const String ContentNamespace = "jabber:server";
 
-        /// <summary>The namespace of the stream layer.</summary>
+        /// <summary>
+        /// The namespace of the stream layer.
+        /// </summary>
         public const String StreamNamespace = S2SStream.StreamNamespace;
 
-        /// <summary>The default port for S2S (RFC 6120, section 3.2.1).</summary>
+        /// <summary>
+        /// The default port for S2S (RFC 6120, section 3.2.1).
+        /// </summary>
         public const Int32 DefaultPort = 5269;
 
         #endregion

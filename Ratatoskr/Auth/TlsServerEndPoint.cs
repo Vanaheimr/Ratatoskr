@@ -58,7 +58,9 @@ public static class TlsServerEndPoint
 
     #region Data
 
-    /// <summary>The name this binding carries in SASL (RFC 5929, section 4.1).</summary>
+    /// <summary>
+    /// The name this binding carries in SASL (RFC 5929, section 4.1).
+    /// </summary>
     public const String Name = "tls-server-end-point";
 
     #endregion

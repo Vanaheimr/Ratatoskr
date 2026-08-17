@@ -52,13 +52,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </param>
         String StreamOpen(String from, String? to, String? id);
 
-        /// <summary>The end of the stream.</summary>
+        /// <summary>
+        /// The end of the stream.
+        /// </summary>
         String StreamClose();
 
-        /// <summary>Is this frame a stream header?</summary>
+        /// <summary>
+        /// Is this frame a stream header?
+        /// </summary>
         Boolean IsStreamOpen(String frame);
 
-        /// <summary>Is this frame the end of the stream?</summary>
+        /// <summary>
+        /// Is this frame the end of the stream?
+        /// </summary>
         Boolean IsStreamClose(String frame);
 
     }

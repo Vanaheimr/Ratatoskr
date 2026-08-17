@@ -61,7 +61,9 @@ public sealed record XMPPMessage(JID          From,
                                  string?      ReplacesId  = null)
 {
 
-    /// <summary>Does this message correct an earlier one (XEP-0308)?</summary>
+    /// <summary>
+    /// Does this message correct an earlier one (XEP-0308)?
+    /// </summary>
     public bool IsCorrection => ReplacesId is not null;
 
     /// <summary>

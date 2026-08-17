@@ -64,12 +64,16 @@ public sealed record OmemoEncryptedElement(UInt32                               
                                            Byte[]?                                       Payload)
 {
 
-    /// <summary>The namespace of OMEMO 2.</summary>
+    /// <summary>
+    /// The namespace of OMEMO 2.
+    /// </summary>
     public const String Namespace = "urn:xmpp:omemo:2";
 
     #region ToXml()
 
-    /// <summary>The element as XML.</summary>
+    /// <summary>
+    /// The element as XML.
+    /// </summary>
     public XElement ToXml()
     {
 

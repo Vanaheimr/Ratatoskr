@@ -91,7 +91,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>The answer of the server to an <c>&lt;enable/&gt;</c>.</summary>
+        /// <summary>
+        /// The answer of the server to an <c>&lt;enable/&gt;</c>.
+        /// </summary>
         private static String? EnabledFrame(XMPPSession session)
             => session.Sent.LastOrDefault(f => f.StartsWith("<enabled", StringComparison.Ordinal));
 

@@ -97,11 +97,15 @@ internal static class UnicodeSets
 
     };
 
-    /// <summary>The first and the last Arabic-Indic digit.</summary>
+    /// <summary>
+    /// The first and the last Arabic-Indic digit.
+    /// </summary>
     internal const UInt32 ArabicIndicZero          = 0x0660;
     internal const UInt32 ArabicIndicNine          = 0x0669;
 
-    /// <summary>The same for the extended series.</summary>
+    /// <summary>
+    /// The same for the extended series.
+    /// </summary>
     internal const UInt32 ExtendedArabicIndicZero  = 0x06F0;
     internal const UInt32 ExtendedArabicIndicNine  = 0x06F9;
 
@@ -148,7 +152,9 @@ internal static class UnicodeSets
 
     #region Sets from RFC 5892, section 2
 
-    /// <summary>Section 2.6: the exception list.</summary>
+    /// <summary>
+    /// Section 2.6: the exception list.
+    /// </summary>
     internal static Boolean TryException(UInt32 CodePoint, out ExceptionValue Value)
 
         => _exceptions.TryGetValue(CodePoint, out Value);
@@ -162,7 +168,9 @@ internal static class UnicodeSets
         => CodePoint is >= ArabicIndicZero         and <= ArabicIndicNine or
                         >= ExtendedArabicIndicZero and <= ExtendedArabicIndicNine;
 
-    /// <summary>Section 2.1: <c>{Ll, Lu, Lo, Nd, Lm, Mn, Mc}</c>.</summary>
+    /// <summary>
+    /// Section 2.1: <c>{Ll, Lu, Lo, Nd, Lm, Mn, Mc}</c>.
+    /// </summary>
     internal static Boolean IsLetterDigits(UInt32 CodePoint)
 
         => Category(CodePoint) is UnicodeCategory.LowercaseLetter      or
@@ -218,7 +226,9 @@ internal static class UnicodeSets
            IsNoncharacter(CodePoint)     ||
            Rune.IsWhiteSpace(new Rune(CodePoint));
 
-    /// <summary>Section 2.4: the three blocks.</summary>
+    /// <summary>
+    /// Section 2.4: the three blocks.
+    /// </summary>
     internal static Boolean IsIgnorableBlocks(UInt32 CodePoint)
 
         => InRanges(CodePoint, _ignorableBlocks);
@@ -235,12 +245,16 @@ internal static class UnicodeSets
 
         => CodePoint is 0x2D or (>= 0x30 and <= 0x39) or (>= 0x61 and <= 0x7A);
 
-    /// <summary>Section 2.8: the two joiners.</summary>
+    /// <summary>
+    /// Section 2.8: the two joiners.
+    /// </summary>
     internal static Boolean IsJoinControl(UInt32 CodePoint)
 
         => CodePoint is 0x200C or 0x200D;
 
-    /// <summary>Section 2.9: the old Hangul jamo.</summary>
+    /// <summary>
+    /// Section 2.9: the old Hangul jamo.
+    /// </summary>
     internal static Boolean IsOldHangulJamo(UInt32 CodePoint)
 
         => InRanges(CodePoint, _oldHangulJamo);
@@ -271,7 +285,9 @@ internal static class UnicodeSets
 
         => InRanges(CodePoint, _defaultIgnorable);
 
-    /// <summary>RFC 8264, section 9.17: <c>toNFKC(cp) != cp</c>.</summary>
+    /// <summary>
+    /// RFC 8264, section 9.17: <c>toNFKC(cp) != cp</c>.
+    /// </summary>
     internal static Boolean HasCompat(UInt32 CodePoint)
     {
 

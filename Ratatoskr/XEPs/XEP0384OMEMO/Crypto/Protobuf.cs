@@ -141,7 +141,9 @@ public static class Protobuf
 
     }
 
-    /// <summary>Reads a varint and moves the read pointer on.</summary>
+    /// <summary>
+    /// Reads a varint and moves the read pointer on.
+    /// </summary>
     public static UInt64 ReadVarint(Byte[] data, ref Int32 i)
     {
 

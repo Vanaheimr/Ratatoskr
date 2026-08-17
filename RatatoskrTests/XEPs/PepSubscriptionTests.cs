@@ -146,7 +146,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                $"<publish node='{node}'><item id='{itemId}'>{payload}</item></publish>" +
                "</pubsub></iq>";
 
-        /// <summary>The error condition of an answer, or null.</summary>
+        /// <summary>
+        /// The error condition of an answer, or null.
+        /// </summary>
         private static String? ConditionOf(XElement reply)
             => reply.Elements().FirstOrDefault(e => e.Name.LocalName == "error")
                    ?.Elements().FirstOrDefault(e => e.Name.NamespaceName ==
@@ -160,7 +162,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static String? ErrorTypeOf(XElement reply)
             => reply.Elements().FirstOrDefault(e => e.Name.LocalName == "error")?.Attr("type");
 
-        /// <summary>The PubSub-own error condition of an answer, or null.</summary>
+        /// <summary>
+        /// The PubSub-own error condition of an answer, or null.
+        /// </summary>
         private static String? PubSubConditionOf(XElement reply)
             => reply.Elements().FirstOrDefault(e => e.Name.LocalName == "error")
                    ?.Elements().FirstOrDefault(e => e.Name.NamespaceName == ErrorNamespace)
@@ -223,7 +227,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                (form is null ? "/>" : $">{form}</options>") +
                "</pubsub></iq>";
 
-        /// <summary>A submitted form with the given fields.</summary>
+        /// <summary>
+        /// A submitted form with the given fields.
+        /// </summary>
         private static String SubmitForm(String fields, String kind = "submit")
             => $"<x xmlns='jabber:x:data' type='{kind}'>" +
                "<field var='FORM_TYPE' type='hidden'>" +
@@ -234,14 +240,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static String DeliverField(String value)
             => $"<field var='pubsub#deliver'><value>{value}</value></field>";
 
-        /// <summary>A collective query of the own subscriptions.</summary>
+        /// <summary>
+        /// A collective query of the own subscriptions.
+        /// </summary>
         private String SubscriptionsIq(String id, String? node = null)
             => $"<iq type='get' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{PubSubNamespace}'>" +
                "<subscriptions" + (node is null ? "" : $" node='{node}'") + "/>" +
                "</pubsub></iq>";
 
-        /// <summary>The entries of a subscription list.</summary>
+        /// <summary>
+        /// The entries of a subscription list.
+        /// </summary>
         private static List<XElement> SubscriptionsIn(XElement reply, String? ns = null)
             => [.. reply.Child(ns ?? PubSubNamespace, "pubsub")
                          ?.Child(ns ?? PubSubNamespace, "subscriptions")
@@ -263,12 +273,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                (content is null ? "/>" : $">{content}</subscriptions>") +
                "</pubsub></iq>";
 
-        /// <summary>An entry in a subscriber instruction.</summary>
+        /// <summary>
+        /// An entry in a subscriber instruction.
+        /// </summary>
         private static String SubscriberEntry(String jid, String state, String? subId = null)
             => $"<subscription jid='{jid}' subscription='{state}'" +
                (subId is null ? "" : $" subid='{subId}'") + "/>";
 
-        /// <summary>A <c>&lt;configure/&gt;</c> IQ in the owner namespace.</summary>
+        /// <summary>
+        /// A <c>&lt;configure/&gt;</c> IQ in the owner namespace.
+        /// </summary>
         private String ConfigureIq(String   id,
                                    String   kind,
                                    String?  form = null,
@@ -280,7 +294,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                (form is null ? "/>" : $">{form}</configure>") +
                "</pubsub></iq>";
 
-        /// <summary>A role query of the owner (XEP-0060, section 8.9).</summary>
+        /// <summary>
+        /// A role query of the owner (XEP-0060, section 8.9).
+        /// </summary>
         private String AffiliationsIq(String   id,
                                       String   kind,
                                       String?  content = null,
@@ -292,18 +308,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                (content is null ? "/>" : $">{content}</affiliations>") +
                "</pubsub></iq>";
 
-        /// <summary>The question about the own roles (XEP-0060, section 5.7).</summary>
+        /// <summary>
+        /// The question about the own roles (XEP-0060, section 5.7).
+        /// </summary>
         private String OwnAffiliationsIq(String id)
             => $"<iq type='get' to='bob@{Server.Domain}' id='{id}'>" +
                $"<pubsub xmlns='{PubSubNamespace}'><affiliations/></pubsub></iq>";
 
-        /// <summary>The entries of a role list.</summary>
+        /// <summary>
+        /// The entries of a role list.
+        /// </summary>
         private static List<XElement> AffiliationsIn(XElement reply, String? ns = null)
             => [.. reply.Child(ns ?? OwnerNamespace, "pubsub")
                          ?.Child(ns ?? OwnerNamespace, "affiliations")
                        ?.Children(ns ?? OwnerNamespace, "affiliation") ?? []];
 
-        /// <summary>A submitted node form.</summary>
+        /// <summary>
+        /// A submitted node form.
+        /// </summary>
         private static String ConfigForm(String fields)
             => "<x xmlns='jabber:x:data' type='submit'>" +
                "<field var='FORM_TYPE' type='hidden'>" +
@@ -311,7 +333,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                fields +
                "</x>";
 
-        /// <summary>A condition form for a publication.</summary>
+        /// <summary>
+        /// A condition form for a publication.
+        /// </summary>
         private static String PublishOptionsForm(String fields)
             => "<x xmlns='jabber:x:data' type='submit'>" +
                "<field var='FORM_TYPE' type='hidden'>" +
@@ -319,7 +343,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                fields +
                "</x>";
 
-        /// <summary>The value of a field in the node form of an answer.</summary>
+        /// <summary>
+        /// The value of a field in the node form of an answer.
+        /// </summary>
         private static String? ConfigField(XElement reply, String var)
             => reply.Child(OwnerNamespace, "pubsub")
                    ?.Child(OwnerNamespace, "configure")
@@ -329,7 +355,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                    ?.Child("jabber:x:data", "value")
                    ?.Value;
 
-        /// <summary>All values of a field in the node form of an answer.</summary>
+        /// <summary>
+        /// All values of a field in the node form of an answer.
+        /// </summary>
         private static List<String> ConfigValues(XElement reply, String var)
             => [.. reply.Child(OwnerNamespace, "pubsub")
                          ?.Child(OwnerNamespace, "configure")
@@ -339,7 +367,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                        ?.Children("jabber:x:data", "value")
                         .Select(v => v.Value) ?? []];
 
-        /// <summary>The value of a form field in an answer.</summary>
+        /// <summary>
+        /// The value of a form field in an answer.
+        /// </summary>
         private static String? FieldValue(XElement reply, String var)
             => reply.Child(PubSubNamespace, "pubsub")
                    ?.Child(PubSubNamespace, "options")
@@ -374,7 +404,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>The value of a field in any form.</summary>
+        /// <summary>
+        /// The value of a field in any form.
+        /// </summary>
         private static String? FormValue(XElement form, String var)
             => form.Children("jabber:x:data", "field")
                    .FirstOrDefault(f => f.Attr("var") == var)
@@ -531,7 +563,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(sub, Is.Not.Null, "The confirmation is missing.");
                 Assert.That(sub!.Attr("node"),         Is.EqualTo(Node));
                 Assert.That(sub!.Attr("subscription"), Is.EqualTo("subscribed"));
-                Assert.That(sub!.Attr("jid"),          Is.EqualTo(alice.BareJid));
+                Assert.That(sub!.Attr("jid"),          Is.EqualTo(alice.BareJid.ToString()));
                 Assert.That(sub!.Attr("subid"),        Is.Not.Null.And.Not.Empty,
                             "Without a subid nobody can name a subscription.");
 
@@ -1935,7 +1967,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             Is.EquivalentTo(new[] { (Node, firstId), ("urn:example:second", secondId) }));
 
                 Assert.That(entries.Select(e => e.Attr("jid")).Distinct(),
-                            Is.EqualTo(new[] { alice.BareJid }));
+                            Is.EqualTo(new[] { alice.BareJid.ToString() }));
 
                 Assert.That(entries.Select(e => e.Attr("subscription")).Distinct(),
                             Is.EqualTo(new[] { "subscribed" }));
@@ -1971,7 +2003,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var list = await AskAsync(alice, "list-2", SubscriptionsIq("list-2"));
 
             Assert.That(SubscriptionsIn(list).Select(e => e.Attr("jid")),
-                        Is.EqualTo(new[] { alice.BareJid }),
+                        Is.EqualTo(new[] { alice.BareJid.ToString() }),
                         "Foreign subscriptions stand in the list.");
 
         }
@@ -4236,7 +4268,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             Is.EqualTo(Node));
 
                 Assert.That(FormValue(form, PubSubSubscribeAuthorization.SubscriberVariable),
-                            Is.EqualTo(alice.BareJid));
+                            Is.EqualTo(alice.BareJid.ToString()));
 
                 Assert.That(FormValue(form, PubSubSubscribeAuthorization.SubIdVariable),
                             Is.EqualTo(SubscriptionOf(grant)!.Attr("subid")));
@@ -5428,7 +5460,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             Is.Empty);
 
                 Assert.That(account.RemovePepSubscriptions(Node, alice.BareJid.ToString()).Select(a => a.Jid),
-                            Is.EqualTo(new[] { alice.BareJid }));
+                            Is.EqualTo(new[] { alice.BareJid.ToString() }));
 
                 Assert.That(account.PepSubscriptions(Node), Is.Empty);
 

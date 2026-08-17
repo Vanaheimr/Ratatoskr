@@ -58,7 +58,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TheDeviceList_RoundTripsThroughXml()
 
-        /// <summary>The device list as XML - there and back.</summary>
+        /// <summary>
+        /// The device list as XML - there and back.
+        /// </summary>
         [Test]
         public void TheDeviceList_RoundTripsThroughXml()
         {

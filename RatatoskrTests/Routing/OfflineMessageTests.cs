@@ -79,7 +79,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Logs a client out and waits until the server sees it.</summary>
+        /// <summary>
+        /// Logs a client out and waits until the server sees it.
+        /// </summary>
         private async Task DisconnectAndWaitAsync(XMPPClient client, String bareJid)
         {
             await client.DisconnectAsync();
@@ -87,7 +89,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           $"the end of the session of {bareJid}");
         }
 
-        /// <summary>Waits until this many messages are stored for an account.</summary>
+        /// <summary>
+        /// Waits until this many messages are stored for an account.
+        /// </summary>
         private async Task WaitForTheStore(String bareJid, Int32 count)
             => await WaitFor(() => Server.GetAccount(bareJid)?.OfflineMessages.Count == count,
                              $"{count} stored message(s) for {bareJid}");
@@ -131,7 +135,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(loaded[0].Body,        Is.EqualTo("First"));
                 Assert.That(loaded[1].Body,        Is.EqualTo("Second"));
-                Assert.That(loaded[0].FromBareJid, Is.EqualTo(Alice),
+                Assert.That(loaded[0].FromBareJid.ToString(), Is.EqualTo(Alice),
                             "The handing over happens with the original sender.");
 
                 Assert.That(Server.GetAccount(Bob)!.OfflineMessages, Is.Empty,
@@ -688,7 +692,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(message.ReceivedAt, Is.GreaterThanOrEqualTo(message.Timestamp),
                             "It arrived after the writing, not before it.");
 
-                Assert.That(message.DelayedBy, Is.EqualTo(Server.Domain),
+                Assert.That(message.DelayedBy.ToString(), Is.EqualTo(Server.Domain),
                             "XEP-0203, section 4: the server is what kept it.");
 
             });
@@ -1137,7 +1141,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Asks the server for its features.</summary>
+        /// <summary>
+        /// Asks the server for its features.
+        /// </summary>
         private async Task<String> AskDiscoInfoAsync(Boolean storeOfflineMessages)
         {
 

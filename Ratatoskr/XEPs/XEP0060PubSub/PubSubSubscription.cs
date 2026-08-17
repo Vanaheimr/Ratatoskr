@@ -53,7 +53,9 @@ public sealed record PubSubSubscription(String                      NodeId,
                                         PubSubSubscriptionOptions?  Options = null)
 {
 
-    /// <summary>The namespace of XEP-0060.</summary>
+    /// <summary>
+    /// The namespace of XEP-0060.
+    /// </summary>
     public const String Namespace = "http://jabber.org/protocol/pubsub";
 
     /// <summary>

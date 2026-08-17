@@ -44,7 +44,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static SrvTarget Target(UInt16 priority, UInt16 weight, String host)
             => new (priority, weight, host, 5269);
 
-        /// <summary>A source of randomness delivering fixed values in turn.</summary>
+        /// <summary>
+        /// A source of randomness delivering fixed values in turn.
+        /// </summary>
         private static Func<Int32, Int32> Rolls(params Int32[] values)
         {
 

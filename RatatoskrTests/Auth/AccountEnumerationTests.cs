@@ -69,7 +69,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>The names of the elements the server has sent.</summary>
+        /// <summary>
+        /// The names of the elements the server has sent.
+        /// </summary>
         private static IReadOnlyList<String> ElementSequence(XMPPSession session)
             => [.. session.Sent.Select(f => Regex.Match(f, @"^\s*<([\w:.-]+)").Groups[1].Value)];
 
@@ -91,7 +93,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Reads an attribute of the server-first-message.</summary>
+        /// <summary>
+        /// Reads an attribute of the server-first-message.
+        /// </summary>
         private static String ValueOf(String message, String name)
             => message.Split(',')
                         .First(part => part.StartsWith($"{name}=", StringComparison.Ordinal))

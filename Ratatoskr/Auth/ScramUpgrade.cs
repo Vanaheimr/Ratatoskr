@@ -55,10 +55,14 @@ public static class ScramUpgrade
 
     #region Data
 
-    /// <summary>The namespace of the upgrade advertisement.</summary>
+    /// <summary>
+    /// The namespace of the upgrade advertisement.
+    /// </summary>
     public const String Namespace       = "urn:xmpp:sasl:upgrade:0";
 
-    /// <summary>The namespace of the salt and hash elements.</summary>
+    /// <summary>
+    /// The namespace of the salt and hash elements.
+    /// </summary>
     public const String DataNamespace   = "urn:xmpp:scram-upgrade:0";
 
     #endregion

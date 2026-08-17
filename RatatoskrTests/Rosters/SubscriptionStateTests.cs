@@ -179,7 +179,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Unsubscribe_KeepsTheOtherDirection()
 
-        /// <summary>The same the other way round.</summary>
+        /// <summary>
+        /// The same the other way round.
+        /// </summary>
         [Test]
         public async Task Unsubscribe_KeepsTheOtherDirection()
         {
@@ -245,7 +247,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => requested is not null, "the contact request reported");
 
-            Assert.That(requested, Is.EqualTo(Bob));
+            Assert.That(requested.ToString(), Is.EqualTo(Bob));
 
         }
 

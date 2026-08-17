@@ -71,7 +71,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>The frames sent to the client that contain this text.</summary>
+        /// <summary>
+        /// The frames sent to the client that contain this text.
+        /// </summary>
         private static IReadOnlyList<String> Delivered(XMPPSession session, String contains)
             => [.. session.Sent.Where(f => f.Contains(contains, StringComparison.Ordinal))];
 

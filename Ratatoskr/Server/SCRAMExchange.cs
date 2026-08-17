@@ -427,7 +427,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>The position of the n-th comma, or -1.</summary>
+        /// <summary>
+        /// The position of the n-th comma, or -1.
+        /// </summary>
         private static Int32 NthComma(String text, Int32 n)
         {
 

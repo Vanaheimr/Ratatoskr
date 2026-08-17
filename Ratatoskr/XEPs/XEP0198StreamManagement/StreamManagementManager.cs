@@ -63,7 +63,9 @@ public delegate Task OnStreamResumedDelegate    (DateTimeOffset           Timest
 public sealed class StreamManagementManager
 {
 
-    /// <summary>The namespace of XEP-0198.</summary>
+    /// <summary>
+    /// The namespace of XEP-0198.
+    /// </summary>
     public const string Namespace = "urn:xmpp:sm:3";
 
     private readonly Func<string, Task> _sendStanza;

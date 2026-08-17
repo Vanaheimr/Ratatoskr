@@ -59,7 +59,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>Collects the stream errors of a client.</summary>
+        /// <summary>
+        /// Collects the stream errors of a client.
+        /// </summary>
         private static ConcurrentQueue<StreamError> ErrorBasket(XMPPClient client)
         {
 

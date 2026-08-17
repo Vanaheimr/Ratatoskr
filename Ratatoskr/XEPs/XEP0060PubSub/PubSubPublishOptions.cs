@@ -46,7 +46,9 @@ public sealed record PubSubPublishOptions(PubSubAccessModel?  AccessModel   = nu
                                           Boolean?            PersistItems  = null)
 {
 
-    /// <summary>The form type of these conditions.</summary>
+    /// <summary>
+    /// The form type of these conditions.
+    /// </summary>
     public const String FormType = "http://jabber.org/protocol/pubsub#publish-options";
 
     /// <summary>

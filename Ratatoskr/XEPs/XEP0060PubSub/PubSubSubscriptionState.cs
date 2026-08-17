@@ -31,7 +31,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public enum PubSubSubscriptionState
 {
 
-    /// <summary>No subscription.</summary>
+    /// <summary>
+    /// No subscription.
+    /// </summary>
     None,
 
     /// <summary>
@@ -46,7 +48,9 @@ public enum PubSubSubscriptionState
     /// </summary>
     Unconfigured,
 
-    /// <summary>Subscribed - from here on notifications come.</summary>
+    /// <summary>
+    /// Subscribed - from here on notifications come.
+    /// </summary>
     Subscribed
 
 }

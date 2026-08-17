@@ -70,7 +70,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             return Task.CompletedTask;
         }
 
-        /// <summary>An inbound stream that takes everything in.</summary>
+        /// <summary>
+        /// An inbound stream that takes everything in.
+        /// </summary>
         private S2SStream Incoming(List<String>? delivered = null)
 
             => S2SStream.Accept(
@@ -82,7 +84,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                        return Task.FromResult(RemoteStanzaResult.Accepted);
                    });
 
-        /// <summary>An inbound stream that answers with a fixed verdict.</summary>
+        /// <summary>
+        /// An inbound stream that answers with a fixed verdict.
+        /// </summary>
         private S2SStream IncomingWith(RemoteStanzaResult verdict)
 
             => S2SStream.Accept(

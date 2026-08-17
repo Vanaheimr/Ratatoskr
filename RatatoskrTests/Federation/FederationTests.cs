@@ -95,7 +95,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>Connects a client to one of the two servers.</summary>
+        /// <summary>
+        /// Connects a client to one of the two servers.
+        /// </summary>
         private async Task<XMPPClient> ConnectAsync(XMPPServer server, String localPart)
         {
 
@@ -163,7 +165,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(received[0].Body,         Is.EqualTo("Hello across the border!"));
-                Assert.That(received[0].FromBareJid,  Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].FromBareJid.ToString(), Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -198,7 +200,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(atAlice[0].Body,         Is.EqualTo("Answer"));
-                Assert.That(atAlice[0].FromBareJid,  Is.EqualTo("bob@right.example"));
+                Assert.That(atAlice[0].FromBareJid.ToString(), Is.EqualTo("bob@right.example"));
             });
 
         }

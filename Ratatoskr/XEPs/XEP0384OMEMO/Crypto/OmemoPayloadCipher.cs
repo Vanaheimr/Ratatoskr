@@ -60,10 +60,14 @@ public static class OmemoPayloadCipher
 
     #region Data
 
-    /// <summary>The info string of the derivation (section 4.4).</summary>
+    /// <summary>
+    /// The info string of the derivation (section 4.4).
+    /// </summary>
     public const String Info = "OMEMO Payload";
 
-    /// <summary>Length of the message key in bytes.</summary>
+    /// <summary>
+    /// Length of the message key in bytes.
+    /// </summary>
     public const Int32 KeyLength = 32;
 
     /// <summary>

@@ -32,13 +32,19 @@ public sealed record DiscoField(String                 Var,
                                 IReadOnlyList<String>  Values)
 {
 
-    /// <summary>The name of the field that carries the form type.</summary>
+    /// <summary>
+    /// The name of the field that carries the form type.
+    /// </summary>
     public const String FormTypeVar = "FORM_TYPE";
 
-    /// <summary>The field type XEP-0115 demands for <see cref="FormTypeVar"/>.</summary>
+    /// <summary>
+    /// The field type XEP-0115 demands for <see cref="FormTypeVar"/>.
+    /// </summary>
     public const String HiddenType  = "hidden";
 
-    /// <summary>Is this a valid FORM_TYPE field (XEP-0115, section 5.4)?</summary>
+    /// <summary>
+    /// Is this a valid FORM_TYPE field (XEP-0115, section 5.4)?
+    /// </summary>
     public Boolean IsFormType
 
         => Var  == FormTypeVar &&

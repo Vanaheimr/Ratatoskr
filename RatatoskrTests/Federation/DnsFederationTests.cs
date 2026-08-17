@@ -251,7 +251,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(received[0].Body,        Is.EqualTo("Hello over DNS!"));
-                Assert.That(received[0].FromBareJid, Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].FromBareJid.ToString(), Is.EqualTo("alice@left.example"));
 
                 Assert.That(_rightLinks.DialbackVerificationCount, Is.GreaterThan(0),
                             "The query must have taken place - and have found its way over DNS.");

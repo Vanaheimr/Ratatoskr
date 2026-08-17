@@ -408,7 +408,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region RevokeTo_KeepsTheOtherDirection()
 
-        /// <summary>The other direction to <c>RevokeFrom</c>.</summary>
+        /// <summary>
+        /// The other direction to <c>RevokeFrom</c>.
+        /// </summary>
         [TestCase("none", "none")]
         [TestCase("to",   "none")]
         [TestCase("from", "from")]

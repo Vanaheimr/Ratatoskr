@@ -28,7 +28,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
 #region (delegate) OnXMPPClient...Delegate
 
-/// <summary>A chat message was received.</summary>
+/// <summary>
+/// A chat message was received.
+/// </summary>
 public delegate Task OnXMPPClientMessageDelegate                    (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      XMPPMessage        Message,
@@ -44,91 +46,119 @@ public delegate Task OnXMPPClientEncryptedMessageDelegate           (DateTimeOff
                                                                      OmemoDecrypted     Omemo,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>XEP-0280: a message was mirrored from or to another device of our own.</summary>
+/// <summary>
+/// XEP-0280: a message was mirrored from or to another device of our own.
+/// </summary>
 public delegate Task OnXMPPClientCarbonMessageDelegate              (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      CarbonMessage      Carbon,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>XEP-0085: a contact changed their typing state.</summary>
+/// <summary>
+/// XEP-0085: a contact changed their typing state.
+/// </summary>
 public delegate Task OnXMPPClientChatStateDelegate                  (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      JID                From,
                                                                      ChatState          State,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>XEP-0333: a chat marker was received.</summary>
+/// <summary>
+/// XEP-0333: a chat marker was received.
+/// </summary>
 public delegate Task OnXMPPClientChatMarkerDelegate                 (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      ChatMarker         Marker,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>XEP-0184: a sent message was delivered.</summary>
+/// <summary>
+/// XEP-0184: a sent message was delivered.
+/// </summary>
 public delegate Task OnXMPPClientReceiptReceivedDelegate            (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      JID                From,
                                                                      String             MessageId,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>Presence change of a contact.</summary>
+/// <summary>
+/// Presence change of a contact.
+/// </summary>
 public delegate Task OnXMPPClientPresenceChangedDelegate            (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      JID                From,
                                                                      String             Type,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>XEP-0060: PubSub event from the service.</summary>
+/// <summary>
+/// XEP-0060: PubSub event from the service.
+/// </summary>
 public delegate Task OnXMPPClientPubSubEventDelegate                (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      PubSubEvent        Event,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>XEP-0060, section 8.6.1: someone applies for a subscription to a node of our own.</summary>
+/// <summary>
+/// XEP-0060, section 8.6.1: someone applies for a subscription to a node of our own.
+/// </summary>
 public delegate Task OnXMPPClientPubSubSubscriptionRequestDelegate  (DateTimeOffset                Timestamp,
                                                                      XMPPClient                    Sender,
                                                                      PubSubSubscribeAuthorization  Request,
                                                                      CancellationToken             CancellationToken);
 
-/// <summary>A new contact request.</summary>
+/// <summary>
+/// A new contact request.
+/// </summary>
 public delegate Task OnXMPPClientSubscriptionRequestDelegate        (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      JID                From,
                                                                      String             Status,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>A contact was added to the roster.</summary>
+/// <summary>
+/// A contact was added to the roster.
+/// </summary>
 public delegate Task OnXMPPClientRosterItemAddedDelegate            (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      RosterItem         Item,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>A contact was removed from the roster.</summary>
+/// <summary>
+/// A contact was removed from the roster.
+/// </summary>
 public delegate Task OnXMPPClientRosterItemRemovedDelegate          (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      JID                BareJid,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>XEP-0115: the capabilities of a peer were determined.</summary>
+/// <summary>
+/// XEP-0115: the capabilities of a peer were determined.
+/// </summary>
 public delegate Task OnXMPPClientCapsDiscoveredDelegate             (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      JID                From,
                                                                      DiscoInfo          Info,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>The connection state has changed.</summary>
+/// <summary>
+/// The connection state has changed.
+/// </summary>
 public delegate Task OnXMPPClientStateChangedDelegate               (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      ConnectionState    OldState,
                                                                      ConnectionState    NewState,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>An error occurred (already logged).</summary>
+/// <summary>
+/// An error occurred (already logged).
+/// </summary>
 public delegate Task OnXMPPClientErrorDelegate                      (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      String             Message,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>A spoofing attempt was fended off (already logged).</summary>
+/// <summary>
+/// A spoofing attempt was fended off (already logged).
+/// </summary>
 public delegate Task OnXMPPClientSpoofingAttemptDelegate            (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      String             Details,
@@ -144,19 +174,25 @@ public delegate Task OnXMPPClientStanzaErrorDelegate                (DateTimeOff
                                                                      StanzaError        Error,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>RFC 6120, section 4.9: the server ended the stream with an error.</summary>
+/// <summary>
+/// RFC 6120, section 4.9: the server ended the stream with an error.
+/// </summary>
 public delegate Task OnXMPPClientStreamErrorDelegate                (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      StreamError        Error,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>Raw XML, inbound and outbound - for debug displays.</summary>
+/// <summary>
+/// Raw XML, inbound and outbound - for debug displays.
+/// </summary>
 public delegate Task OnXMPPClientRawXmlDelegate                     (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      String             XML,
                                                                      CancellationToken  CancellationToken);
 
-/// <summary>The current chat partner was switched or reset.</summary>
+/// <summary>
+/// The current chat partner was switched or reset.
+/// </summary>
 public delegate Task OnXMPPClientChatPartnerChangedDelegate         (DateTimeOffset     Timestamp,
                                                                      XMPPClient         Sender,
                                                                      JID?               ChatPartner,
@@ -270,7 +306,9 @@ public sealed class XMPPClient : IAsyncDisposable
 
     #region Events
 
-    /// <summary>A chat message was received.</summary>
+    /// <summary>
+    /// A chat message was received.
+    /// </summary>
     public event OnXMPPClientMessageDelegate? OnMessage;
 
     /// <summary>
@@ -279,22 +317,34 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     public event OnXMPPClientEncryptedMessageDelegate? OnEncryptedMessage;
 
-    /// <summary>XEP-0280: A message was mirrored from/to another device of our own.</summary>
+    /// <summary>
+    /// XEP-0280: A message was mirrored from/to another device of our own.
+    /// </summary>
     public event OnXMPPClientCarbonMessageDelegate? OnCarbonMessage;
 
-    /// <summary>XEP-0085: A contact changed their typing state.</summary>
+    /// <summary>
+    /// XEP-0085: A contact changed their typing state.
+    /// </summary>
     public event OnXMPPClientChatStateDelegate? OnChatState;
 
-    /// <summary>XEP-0333: A chat marker was received.</summary>
+    /// <summary>
+    /// XEP-0333: A chat marker was received.
+    /// </summary>
     public event OnXMPPClientChatMarkerDelegate? OnChatMarker;
 
-    /// <summary>XEP-0184: A sent message was delivered.</summary>
+    /// <summary>
+    /// XEP-0184: A sent message was delivered.
+    /// </summary>
     public event OnXMPPClientReceiptReceivedDelegate? OnReceiptReceived;
 
-    /// <summary>Presence change of a contact.</summary>
+    /// <summary>
+    /// Presence change of a contact.
+    /// </summary>
     public event OnXMPPClientPresenceChangedDelegate? OnPresenceChanged;
 
-    /// <summary>XEP-0060: PubSub event from the service.</summary>
+    /// <summary>
+    /// XEP-0060: PubSub event from the service.
+    /// </summary>
     public event OnXMPPClientPubSubEventDelegate? OnPubSubEvent;
 
     /// <summary>
@@ -304,25 +354,39 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     public event OnXMPPClientPubSubSubscriptionRequestDelegate? OnPubSubSubscriptionRequest;
 
-    /// <summary>A new contact request; afterwards it lies in <see cref="PendingSubscriptions"/>.</summary>
+    /// <summary>
+    /// A new contact request; afterwards it lies in <see cref="PendingSubscriptions"/>.
+    /// </summary>
     public event OnXMPPClientSubscriptionRequestDelegate? OnSubscriptionRequest;
 
-    /// <summary>A contact was added to the roster.</summary>
+    /// <summary>
+    /// A contact was added to the roster.
+    /// </summary>
     public event OnXMPPClientRosterItemAddedDelegate? OnRosterItemAdded;
 
-    /// <summary>A contact was removed from the roster.</summary>
+    /// <summary>
+    /// A contact was removed from the roster.
+    /// </summary>
     public event OnXMPPClientRosterItemRemovedDelegate? OnRosterItemRemoved;
 
-    /// <summary>XEP-0115: The capabilities of a peer were determined.</summary>
+    /// <summary>
+    /// XEP-0115: The capabilities of a peer were determined.
+    /// </summary>
     public event OnXMPPClientCapsDiscoveredDelegate? OnCapsDiscovered;
 
-    /// <summary>The connection state has changed.</summary>
+    /// <summary>
+    /// The connection state has changed.
+    /// </summary>
     public event OnXMPPClientStateChangedDelegate? OnStateChanged;
 
-    /// <summary>An error occurred (already logged).</summary>
+    /// <summary>
+    /// An error occurred (already logged).
+    /// </summary>
     public event OnXMPPClientErrorDelegate? OnError;
 
-    /// <summary>A spoofing attempt was fended off (already logged).</summary>
+    /// <summary>
+    /// A spoofing attempt was fended off (already logged).
+    /// </summary>
     public event OnXMPPClientSpoofingAttemptDelegate? OnSpoofingAttempt;
 
     /// <summary>
@@ -337,10 +401,14 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     public event OnXMPPClientStreamErrorDelegate? OnStreamError;
 
-    /// <summary>Raw XML, inbound and outbound - for debug displays.</summary>
+    /// <summary>
+    /// Raw XML, inbound and outbound - for debug displays.
+    /// </summary>
     public event OnXMPPClientRawXmlDelegate? OnRawXml;
 
-    /// <summary>The current chat partner was switched or reset.</summary>
+    /// <summary>
+    /// The current chat partner was switched or reset.
+    /// </summary>
     public event OnXMPPClientChatPartnerChangedDelegate? OnChatPartnerChanged;
 
     #endregion
@@ -763,10 +831,14 @@ public sealed class XMPPClient : IAsyncDisposable
     public Task CancelSubscriptionAsync(JID jid)
         => _connection.CancelSubscriptionAsync(jid);
 
-    /// <summary>XEP-0384: the OMEMO manager, as soon as it is switched on.</summary>
+    /// <summary>
+    /// XEP-0384: the OMEMO manager, as soon as it is switched on.
+    /// </summary>
     public OmemoManager? Omemo => _connection.Omemo;
 
-    /// <summary>XEP-0384: Is OMEMO switched on?</summary>
+    /// <summary>
+    /// XEP-0384: Is OMEMO switched on?
+    /// </summary>
     public bool OmemoEnabled => _connection.Omemo is not null;
 
     /// <summary>
@@ -975,15 +1047,21 @@ public sealed class XMPPClient : IAsyncDisposable
     public Task<Boolean> PubSubUnsubscribeAsync(String nodeId, JID? service = null, String? subId = null)
         => _connection.PubSubUnsubscribeAsync(nodeId, service, subId);
 
-    /// <summary>What am I where? (XEP-0060, section 5.7)</summary>
+    /// <summary>
+    /// What am I where? (XEP-0060, section 5.7)
+    /// </summary>
     public Task<IReadOnlyList<(String NodeId, PubSubAffiliation Affiliation)>?> PubSubGetAffiliationsAsync(JID? service = null)
         => _connection.PubSubGetAffiliationsAsync(service);
 
-    /// <summary>Who is what at my node? (XEP-0060, section 8.9.1)</summary>
+    /// <summary>
+    /// Who is what at my node? (XEP-0060, section 8.9.1)
+    /// </summary>
     public Task<IReadOnlyList<(String Jid, PubSubAffiliation Affiliation)>?> PubSubGetNodeAffiliationsAsync(String nodeId, JID? service = null)
         => _connection.PubSubGetNodeAffiliationsAsync(nodeId, service);
 
-    /// <summary>Grants or takes a role (XEP-0060, section 8.9.2).</summary>
+    /// <summary>
+    /// Grants or takes a role (XEP-0060, section 8.9.2).
+    /// </summary>
     public Task<Boolean> PubSubSetAffiliationAsync(String nodeId, JID jid, PubSubAffiliation affiliation, JID? service = null)
         => _connection.PubSubSetAffiliationAsync(nodeId, jid, affiliation, service);
 
@@ -993,7 +1071,9 @@ public sealed class XMPPClient : IAsyncDisposable
     public Task PubSubAnswerSubscriptionRequestAsync(PubSubSubscribeAuthorization request, Boolean allow, JID? service = null)
         => _connection.PubSubAnswerSubscriptionRequestAsync(request, allow, service);
 
-    /// <summary>Who hangs on my node? (XEP-0060, section 8.8.1)</summary>
+    /// <summary>
+    /// Who hangs on my node? (XEP-0060, section 8.8.1)
+    /// </summary>
     public Task<IReadOnlyList<(String Jid, String? SubId, PubSubSubscriptionState State)>?> PubSubGetNodeSubscribersAsync(String nodeId, JID? service = null)
         => _connection.PubSubGetNodeSubscribersAsync(nodeId, service);
 
@@ -1033,11 +1113,15 @@ public sealed class XMPPClient : IAsyncDisposable
     public Task<Boolean> PubSubCreateNodeAsync(String nodeId, PubSubNodeConfiguration? configuration = null, JID? service = null)
         => _connection.PubSubCreateNodeAsync(nodeId, configuration, service);
 
-    /// <summary>Reads the settings of a node.</summary>
+    /// <summary>
+    /// Reads the settings of a node.
+    /// </summary>
     public Task<PubSubNodeConfiguration?> PubSubGetNodeConfigAsync(String nodeId, JID? service = null)
         => _connection.PubSubGetNodeConfigAsync(nodeId, service);
 
-    /// <summary>Configures a node - only the owner may do that.</summary>
+    /// <summary>
+    /// Configures a node - only the owner may do that.
+    /// </summary>
     public Task<Boolean> PubSubConfigureNodeAsync(String nodeId, PubSubNodeConfiguration configuration, JID? service = null)
         => _connection.PubSubConfigureNodeAsync(nodeId, configuration, service);
 

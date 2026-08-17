@@ -119,7 +119,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The port served.</summary>
+        /// <summary>
+        /// The port served.
+        /// </summary>
         /// <remarks>
         /// The port that was actually bound. Constructed with 0 - "whichever is
         /// free" - it stays 0 until <see cref="Start"/> has run, because until
@@ -129,7 +131,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         public Int32 Port { get; private set; }
 
-        /// <summary>The domain the server is responsible for.</summary>
+        /// <summary>
+        /// The domain the server is responsible for.
+        /// </summary>
         public String Domain { get; }
 
         /// <summary>
@@ -138,19 +142,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         public X509Certificate2? Certificate { get; }
 
-        /// <summary>The WebSocket URI for the client.</summary>
+        /// <summary>
+        /// The WebSocket URI for the client.
+        /// </summary>
         public String Uri => $"{(Certificate is not null ? "wss" : "ws")}://localhost:{Port}/ws/";
 
-        /// <summary>The number of all connections ever accepted.</summary>
+        /// <summary>
+        /// The number of all connections ever accepted.
+        /// </summary>
         public Int32 ConnectionCount => Volatile.Read(ref _connectionCounter);
 
-        /// <summary>All sessions currently open.</summary>
+        /// <summary>
+        /// All sessions currently open.
+        /// </summary>
         public IReadOnlyList<XMPPSession> Sessions
         {
             get { lock (_lock) return _sessions.Where(s => s.IsOpen).ToList(); }
         }
 
-        /// <summary>All frames of all sessions, regardless of the sender.</summary>
+        /// <summary>
+        /// All frames of all sessions, regardless of the sender.
+        /// </summary>
         public IReadOnlyList<String> AllReceived
         {
             get { lock (_lock) return _sessions.SelectMany(s => s.Received).ToList(); }
@@ -445,7 +457,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         public IServerLinks? ServerLinks { get; set; }
 
-        /// <summary>Are message/presence/iq delivered between sessions?</summary>
+        /// <summary>
+        /// Are message/presence/iq delivered between sessions?
+        /// </summary>
         public Boolean RouteStanzas { get; set; } = true;
 
         /// <summary>
@@ -455,10 +469,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         public Boolean BroadcastPresence { get; set; } = true;
 
-        /// <summary>Are XEP-0280 carbons distributed to further resources?</summary>
+        /// <summary>
+        /// Are XEP-0280 carbons distributed to further resources?
+        /// </summary>
         public Boolean DeliverCarbons { get; set; } = true;
 
-        /// <summary>Does the server answer XEP-0199 pings directed at it?</summary>
+        /// <summary>
+        /// Does the server answer XEP-0199 pings directed at it?
+        /// </summary>
         public Boolean AnswerPings { get; set; } = true;
 
         /// <summary>
@@ -480,7 +498,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </summary>
         public Boolean OfferStreamManagement { get; set; } = true;
 
-        /// <summary>XEP-0198: Does the server answer an <c>&lt;r/&gt;</c> of the client?</summary>
+        /// <summary>
+        /// XEP-0198: Does the server answer an <c>&lt;r/&gt;</c> of the client?
+        /// </summary>
         public Boolean AnswerAckRequests { get; set; } = true;
 
         /// <summary>
@@ -656,10 +676,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Events
 
-        /// <summary>Is raised for every stanza received from the client.</summary>
+        /// <summary>
+        /// Is raised for every stanza received from the client.
+        /// </summary>
         public event Action<XMPPSession, String>? OnStanzaReceived;
 
-        /// <summary>Is raised as soon as a session has been bound successfully.</summary>
+        /// <summary>
+        /// Is raised as soon as a session has been bound successfully.
+        /// </summary>
         public event Action<XMPPSession>? OnSessionBound;
 
         /// <summary>
@@ -841,14 +865,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Delivers an account or null.</summary>
+        /// <summary>
+        /// Delivers an account or null.
+        /// </summary>
         public XMPPAccount? GetAccount(String bareJid)
         {
             lock (_lock)
                 return _accounts.TryGetValue(bareJid, out var a) ? a : null;
         }
 
-        /// <summary>All accounts of this server.</summary>
+        /// <summary>
+        /// All accounts of this server.
+        /// </summary>
         public IReadOnlyList<XMPPAccount> Accounts
         {
             get { lock (_lock) return _accounts.Values.ToList(); }
@@ -918,14 +946,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                                 .FirstOrDefault(s => s.IsOpen || s.ResumptionId is not null);
         }
 
-        /// <summary>Tears all open sessions down.</summary>
+        /// <summary>
+        /// Tears all open sessions down.
+        /// </summary>
         public void KillAllSessions()
         {
             foreach (var s in Sessions)
                 s.Kill();
         }
 
-        /// <summary>Tears all sessions of an account down.</summary>
+        /// <summary>
+        /// Tears all sessions of an account down.
+        /// </summary>
         public void KillSessionsOf(String bareJid)
         {
             foreach (var s in SessionsOf(bareJid))
@@ -953,7 +985,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Sends a stanza to all open sessions.</summary>
+        /// <summary>
+        /// Sends a stanza to all open sessions.
+        /// </summary>
         public async Task BroadcastAsync(String xml)
         {
             foreach (var s in Sessions)
@@ -983,7 +1017,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Waits until at least this many sessions are bound.</summary>
+        /// <summary>
+        /// Waits until at least this many sessions are bound.
+        /// </summary>
         public Task<Boolean> WaitForBoundSessionsAsync(Int32 count, TimeSpan? timeout = null)
             => WaitUntilAsync(() => Sessions.Count(s => s.FullJid is not null) >= count, timeout);
 
@@ -4988,7 +5024,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>The namespace of the typing state elements (XEP-0085).</summary>
+        /// <summary>
+        /// The namespace of the typing state elements (XEP-0085).
+        /// </summary>
         private const String ChatStatesNamespace = "http://jabber.org/protocol/chatstates";
 
         /// <summary>
@@ -5495,7 +5533,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>The roster entry of a contact, or null.</summary>
+        /// <summary>
+        /// The roster entry of a contact, or null.
+        /// </summary>
         private static RosterEntry? RosterEntryOf(XMPPAccount account, String contactBareJid)
             => account.Roster.FirstOrDefault(
                    e => String.Equals(e.Jid, contactBareJid, StringComparison.OrdinalIgnoreCase));
@@ -6308,19 +6348,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         // standing - it is exactly on that that an implementation founders which
         // treats the four states as one scale from none to both.
 
-        /// <summary>The contact may now see us: none→from, to→both.</summary>
+        /// <summary>
+        /// The contact may now see us: none→from, to→both.
+        /// </summary>
         internal static String GrantFrom(String? subscription)
             => subscription is "to" or "both" ? "both" : "from";
 
-        /// <summary>The contact may no longer see us: from→none, both→to.</summary>
+        /// <summary>
+        /// The contact may no longer see us: from→none, both→to.
+        /// </summary>
         internal static String RevokeFrom(String? subscription)
             => subscription is "to" or "both" ? "to" : "none";
 
-        /// <summary>We may now see the contact: none→to, from→both.</summary>
+        /// <summary>
+        /// We may now see the contact: none→to, from→both.
+        /// </summary>
         internal static String GrantTo(String? subscription)
             => subscription is "from" or "both" ? "both" : "to";
 
-        /// <summary>We may no longer see the contact: to→none, both→from.</summary>
+        /// <summary>
+        /// We may no longer see the contact: to→none, both→from.
+        /// </summary>
         internal static String RevokeTo(String? subscription)
             => subscription is "from" or "both" ? "from" : "none";
 
@@ -6463,7 +6511,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                $"<forwarded xmlns='urn:xmpp:forward:0'>{inner}</forwarded>" +
                $"</{kind}></message>";
 
-        /// <summary>Sets or replaces the from attribute in the outermost element.</summary>
+        /// <summary>
+        /// Sets or replaces the from attribute in the outermost element.
+        /// </summary>
         internal static String StampFrom(String stanza, String? fullJid)
         {
 
@@ -6482,7 +6532,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Sets or replaces the to attribute in the outermost element.</summary>
+        /// <summary>
+        /// Sets or replaces the to attribute in the outermost element.
+        /// </summary>
         /// <remarks>
         /// Undirected presence carries no <c>to</c> - within one server it needs
         /// none either, because the server itself knows to whom it distributes
@@ -6588,7 +6640,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>Does this JID belong to the domain this server serves?</summary>
+        /// <summary>
+        /// Does this JID belong to the domain this server serves?
+        /// </summary>
         internal Boolean IsLocal(String jid)
             => String.Equals(DomainOf(jid), Domain, StringComparison.OrdinalIgnoreCase);
 

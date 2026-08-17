@@ -79,10 +79,14 @@ public sealed class SaslDowngradeException : AuthenticationException
     /// </summary>
     public String              Offered    { get; }
 
-    /// <summary>The mechanism that was demanded of it.</summary>
+    /// <summary>
+    /// The mechanism that was demanded of it.
+    /// </summary>
     public String              Demanded   { get; }
 
-    /// <summary>Which of the three checks refused it.</summary>
+    /// <summary>
+    /// Which of the three checks refused it.
+    /// </summary>
     public SaslDowngradeCause  Cause      { get; }
 
     /// <summary>

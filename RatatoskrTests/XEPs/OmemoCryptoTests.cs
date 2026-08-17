@@ -475,7 +475,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TheMac_IsHmacSha256()
 
-        /// <summary>RFC 4231, test case 1 - the same for the HMAC.</summary>
+        /// <summary>
+        /// RFC 4231, test case 1 - the same for the HMAC.
+        /// </summary>
         [Test]
         public void TheMac_IsHmacSha256()
         {

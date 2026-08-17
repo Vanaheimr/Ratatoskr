@@ -44,7 +44,9 @@ public sealed record StanzaError(StanzaErrorType  Type,
                                  string?          By    = null)
 {
 
-    /// <summary>The namespace of the defined conditions.</summary>
+    /// <summary>
+    /// The namespace of the defined conditions.
+    /// </summary>
     public const string Namespace = "urn:ietf:params:xml:ns:xmpp-stanzas";
 
     /// <summary>

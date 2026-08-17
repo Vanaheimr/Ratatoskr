@@ -115,7 +115,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region WithoutAStamp_NothingIsRead()
 
-        /// <summary>An ordinary message carries none.</summary>
+        /// <summary>
+        /// An ordinary message carries none.
+        /// </summary>
         [Test]
         public void WithoutAStamp_NothingIsRead()
         {

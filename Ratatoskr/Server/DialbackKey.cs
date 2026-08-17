@@ -70,7 +70,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The namespace of XEP-0220.</summary>
+        /// <summary>
+        /// The namespace of XEP-0220.
+        /// </summary>
         public const String Namespace = "jabber:server:dialback";
 
         #endregion

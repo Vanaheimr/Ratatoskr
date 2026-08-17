@@ -23,19 +23,29 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public enum StanzaErrorType
 {
 
-    /// <summary>Retry after authentication has taken place.</summary>
+    /// <summary>
+    /// Retry after authentication has taken place.
+    /// </summary>
     Auth,
 
-    /// <summary>Final - do not repeat the same request.</summary>
+    /// <summary>
+    /// Final - do not repeat the same request.
+    /// </summary>
     Cancel,
 
-    /// <summary>A warning only; processing may continue.</summary>
+    /// <summary>
+    /// A warning only; processing may continue.
+    /// </summary>
     Continue,
 
-    /// <summary>Retry after the data has been corrected.</summary>
+    /// <summary>
+    /// Retry after the data has been corrected.
+    /// </summary>
     Modify,
 
-    /// <summary>Retry unchanged, but later.</summary>
+    /// <summary>
+    /// Retry unchanged, but later.
+    /// </summary>
     Wait
 
 }

@@ -50,13 +50,19 @@ public delegate Task OnDiscoQueryErrorDelegate(DateTimeOffset     Timestamp,
 public sealed class DiscoManager
 {
 
-    /// <summary>The namespace of disco#info.</summary>
+    /// <summary>
+    /// The namespace of disco#info.
+    /// </summary>
     public const string InfoNamespace = "http://jabber.org/protocol/disco#info";
 
-    /// <summary>The namespace of disco#items.</summary>
+    /// <summary>
+    /// The namespace of disco#items.
+    /// </summary>
     public const string ItemsNamespace = "http://jabber.org/protocol/disco#items";
 
-    /// <summary>The namespace of the data forms (XEP-0004/XEP-0128).</summary>
+    /// <summary>
+    /// The namespace of the data forms (XEP-0004/XEP-0128).
+    /// </summary>
     private const string DataFormNamespace = "jabber:x:data";
 
     private readonly Func<string, Task> _sendStanza;

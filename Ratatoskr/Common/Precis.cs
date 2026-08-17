@@ -30,7 +30,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public enum PrecisProperty
 {
 
-    /// <summary>Permitted in both classes.</summary>
+    /// <summary>
+    /// Permitted in both classes.
+    /// </summary>
     PValid,
 
     /// <summary>
@@ -49,7 +51,9 @@ public enum PrecisProperty
     /// </summary>
     ContextO,
 
-    /// <summary>Permitted in neither class.</summary>
+    /// <summary>
+    /// Permitted in neither class.
+    /// </summary>
     Disallowed,
 
     /// <summary>

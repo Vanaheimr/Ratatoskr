@@ -102,7 +102,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>Wires both servers together, optionally with SASL-EXTERNAL.</summary>
+        /// <summary>
+        /// Wires both servers together, optionally with SASL-EXTERNAL.
+        /// </summary>
         private void Wire(Boolean withExternal)
         {
 
@@ -184,7 +186,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(received[0].Body,        Is.EqualTo("Hello by certificate!"));
-                Assert.That(received[0].FromBareJid, Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].FromBareJid.ToString(), Is.EqualTo("alice@left.example"));
 
                 Assert.That(_rightLinks.DialbackVerificationCount, Is.Zero,
                             "With SASL-EXTERNAL the counterpart must not ask back.");

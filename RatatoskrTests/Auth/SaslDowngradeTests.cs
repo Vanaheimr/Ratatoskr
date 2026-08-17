@@ -101,7 +101,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Everything the server has ever seen by way of <c>&lt;auth/&gt;</c>.</summary>
+        /// <summary>
+        /// Everything the server has ever seen by way of <c>&lt;auth/&gt;</c>.
+        /// </summary>
         private Boolean SawAuthWith(String mechanism)
 
             => Server.AllReceived.Any(f => f.Contains($"mechanism='{mechanism}'", StringComparison.Ordinal));

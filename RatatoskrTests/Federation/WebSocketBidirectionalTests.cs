@@ -65,7 +65,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TearDown
 
-        /// <summary>Arm the guard before every test.</summary>
+        /// <summary>
+        /// Arm the guard before every test.
+        /// </summary>
         [SetUp]
         public void ArmTheGuard()
             => _guard.Reset();

@@ -23,7 +23,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class RosterStanzaBuilder
 {
 
-    /// <summary>The namespace of the roster (RFC 6121, section 2).</summary>
+    /// <summary>
+    /// The namespace of the roster (RFC 6121, section 2).
+    /// </summary>
     public const string Namespace = "jabber:iq:roster";
 
     /// <summary>

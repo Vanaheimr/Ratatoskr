@@ -48,7 +48,9 @@ public sealed record OmemoDevice(UInt32 Id, String? Label = null);
 public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
 {
 
-    /// <summary>The PEP node of the device list.</summary>
+    /// <summary>
+    /// The PEP node of the device list.
+    /// </summary>
     public const String Node = "urn:xmpp:omemo:2:devices";
 
     /// <summary>
@@ -63,7 +65,9 @@ public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
 
     #region ToXml() / TryRead(xml, out list)
 
-    /// <summary>The list as XML.</summary>
+    /// <summary>
+    /// The list as XML.
+    /// </summary>
     public XElement ToXml()
     {
 
@@ -113,7 +117,9 @@ public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
 
     #region Contains(deviceId) / With(device)
 
-    /// <summary>Does this device stand in the list?</summary>
+    /// <summary>
+    /// Does this device stand in the list?
+    /// </summary>
     public Boolean Contains(UInt32 deviceId)
         => Devices.Any(d => d.Id == deviceId);
 
@@ -149,15 +155,21 @@ public sealed record OmemoDeviceList(IReadOnlyList<OmemoDevice> Devices)
 public static class OmemoPep
 {
 
-    /// <summary>The PEP node of the bundles.</summary>
+    /// <summary>
+    /// The PEP node of the bundles.
+    /// </summary>
     public const String BundlesNode = "urn:xmpp:omemo:2:bundles";
 
-    /// <summary>The namespace of XEP-0060.</summary>
+    /// <summary>
+    /// The namespace of XEP-0060.
+    /// </summary>
     public const String PubSubNamespace = "http://jabber.org/protocol/pubsub";
 
     #region The bundle as XML
 
-    /// <summary>A bundle as XML (section 5.2).</summary>
+    /// <summary>
+    /// A bundle as XML (section 5.2).
+    /// </summary>
     public static XElement ToXml(this OmemoBundle bundle)
     {
 
@@ -272,7 +284,9 @@ public static class OmemoPep
 
     #region The IQs
 
-    /// <summary>Publishes an entry in a PEP node of one's own.</summary>
+    /// <summary>
+    /// Publishes an entry in a PEP node of one's own.
+    /// </summary>
     public static String PublishIq(String id, String node, String itemId, XElement payload)
         => $"<iq type='set' id='{XmlEscaping.Escape(id)}'>" +
            $"<pubsub xmlns='{PubSubNamespace}'>" +
@@ -291,7 +305,9 @@ public static class OmemoPep
 
            "</pubsub></iq>";
 
-    /// <summary>Fetches an entry out of the PEP node of somebody else.</summary>
+    /// <summary>
+    /// Fetches an entry out of the PEP node of somebody else.
+    /// </summary>
     /// <param name="itemId">
     /// Which entry; without a value the one published last.
     /// </param>

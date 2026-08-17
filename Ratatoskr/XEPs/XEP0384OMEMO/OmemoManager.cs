@@ -133,10 +133,14 @@ public sealed class OmemoManager
 
     #region Properties
 
-    /// <summary>One's own key material.</summary>
+    /// <summary>
+    /// One's own key material.
+    /// </summary>
     public OmemoIdentity Identity { get; }
 
-    /// <summary>One's own fingerprint.</summary>
+    /// <summary>
+    /// One's own fingerprint.
+    /// </summary>
     public String Fingerprint => Identity.Fingerprint;
 
     /// <summary>
@@ -628,11 +632,15 @@ public sealed class OmemoManager
 
     #region Fingerprints and trust
 
-    /// <summary>All known devices together with fingerprint and classification.</summary>
+    /// <summary>
+    /// All known devices together with fingerprint and classification.
+    /// </summary>
     public IReadOnlyList<OmemoDeviceRecord> KnownDevices()
         => _store.KnownDevices();
 
-    /// <summary>Decides about a device.</summary>
+    /// <summary>
+    /// Decides about a device.
+    /// </summary>
     public Boolean SetTrust(JID bareJid, UInt32 deviceId, OmemoTrust trust)
         => _store.SetTrust(bareJid.Bare.ToString(), deviceId, trust);
 

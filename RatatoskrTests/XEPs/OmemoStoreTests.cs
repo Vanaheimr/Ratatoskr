@@ -66,7 +66,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static Byte[] Text(String s)
             => Encoding.UTF8.GetBytes(s);
 
-        /// <summary>A pair of ratchets, as it comes about after X3DH.</summary>
+        /// <summary>
+        /// A pair of ratchets, as it comes about after X3DH.
+        /// </summary>
         private static (DoubleRatchet Alice, DoubleRatchet Bob) Pair()
         {
 

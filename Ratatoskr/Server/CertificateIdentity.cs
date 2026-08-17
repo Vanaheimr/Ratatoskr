@@ -66,7 +66,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Data
 
-        /// <summary>OID of the subject alternative name extension.</summary>
+        /// <summary>
+        /// OID of the subject alternative name extension.
+        /// </summary>
         private const String SubjectAlternativeNameOid = "2.5.29.17";
 
         #endregion

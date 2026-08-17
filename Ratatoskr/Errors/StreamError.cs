@@ -36,7 +36,9 @@ public sealed record StreamError(string   Condition,
                                  string?  Text = null)
 {
 
-    /// <summary>The namespace of the defined conditions.</summary>
+    /// <summary>
+    /// The namespace of the defined conditions.
+    /// </summary>
     public const string Namespace = "urn:ietf:params:xml:ns:xmpp-streams";
 
     /// <summary>

@@ -108,7 +108,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region TheWebsocketLinkIsTakenFromTheJrd()
 
-        /// <summary>The same for the JSON version.</summary>
+        /// <summary>
+        /// The same for the JSON version.
+        /// </summary>
         [Test]
         public void TheWebsocketLinkIsTakenFromTheJrd()
         {

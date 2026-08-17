@@ -186,7 +186,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 // And the login really did complete - otherwise "no restart"
                 // would be true of a handshake that simply stopped.
                 Assert.That(client.IsConnected,      Is.True);
-                Assert.That(client.FullJid,          Is.Not.Empty);
+                Assert.That(client.FullJid.ToString(),          Is.Not.Empty);
 
             });
 

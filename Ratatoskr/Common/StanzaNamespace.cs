@@ -53,10 +53,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 internal static class StanzaNamespace
 {
 
-    /// <summary>The content namespace of the client connection.</summary>
+    /// <summary>
+    /// The content namespace of the client connection.
+    /// </summary>
     public const String Client = "jabber:client";
 
-    /// <summary>The content namespace between servers.</summary>
+    /// <summary>
+    /// The content namespace between servers.
+    /// </summary>
     public const String Server = "jabber:server";
 
 

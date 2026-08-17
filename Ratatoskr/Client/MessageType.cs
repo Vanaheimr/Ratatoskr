@@ -35,10 +35,14 @@ public enum MessageType
     /// </summary>
     Normal,
 
-    /// <summary>Part of a one-on-one conversation.</summary>
+    /// <summary>
+    /// Part of a one-on-one conversation.
+    /// </summary>
     Chat,
 
-    /// <summary>From a multi-user room (XEP-0045).</summary>
+    /// <summary>
+    /// From a multi-user room (XEP-0045).
+    /// </summary>
     GroupChat,
 
     /// <summary>

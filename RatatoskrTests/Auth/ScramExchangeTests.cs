@@ -82,7 +82,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static XMPPCredentials Invented(String user)
             => XMPPCredentials.Decoy(user, ServerSecret);
 
-        /// <summary>Begins an exchange with a fixed client nonce.</summary>
+        /// <summary>
+        /// Begins an exchange with a fixed client nonce.
+        /// </summary>
         private SCRAMExchange StartExchange(String clientNonce = "clientnonce")
         {
 
@@ -100,7 +102,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>The server-first-message in the clear.</summary>
+        /// <summary>
+        /// The server-first-message in the clear.
+        /// </summary>
         private static String ServerFirst(SCRAMExchange exchange)
             => Encoding.UTF8.GetString(Convert.FromBase64String(exchange.Challenge));
 
@@ -144,7 +148,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Reads an attribute, anchored at the start or behind a comma.</summary>
+        /// <summary>
+        /// Reads an attribute, anchored at the start or behind a comma.
+        /// </summary>
         private static String ValueOf(String message, String name)
             => message.Split(',')
                         .First(part => part.StartsWith($"{name}=", StringComparison.Ordinal))

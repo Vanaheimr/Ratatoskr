@@ -238,7 +238,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(received[0].Body,         Is.EqualTo("Hello over the real wire!"));
-                Assert.That(received[0].FromBareJid,  Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].FromBareJid.ToString(), Is.EqualTo("alice@left.example"));
             });
 
         }
@@ -525,7 +525,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(received[0].FromBareJid, Is.EqualTo("alice@left.example"));
+                Assert.That(received[0].FromBareJid.ToString(), Is.EqualTo("alice@left.example"));
                 Assert.That(_rightLinks.InboundConnectionCount, Is.GreaterThan(beforeTheRealOne),
                             "After the stream error the next delivery has to build a new connection.");
             });

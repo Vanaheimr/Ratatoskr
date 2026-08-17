@@ -31,13 +31,19 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public enum ClientStateHandling
 {
 
-    /// <summary>Goes out at once - the state of the client changes nothing about that.</summary>
+    /// <summary>
+    /// Goes out at once - the state of the client changes nothing about that.
+    /// </summary>
     Immediately,
 
-    /// <summary>Is held back and delivered afterwards at the <c>&lt;active/&gt;</c>.</summary>
+    /// <summary>
+    /// Is held back and delivered afterwards at the <c>&lt;active/&gt;</c>.
+    /// </summary>
     Queued,
 
-    /// <summary>Is dropped and never arrives.</summary>
+    /// <summary>
+    /// Is dropped and never arrives.
+    /// </summary>
     Discarded
 
 }
@@ -67,16 +73,24 @@ public enum ClientStateHandling
 public static class ClientStateIndication
 {
 
-    /// <summary>The namespace of XEP-0352.</summary>
+    /// <summary>
+    /// The namespace of XEP-0352.
+    /// </summary>
     public const String Namespace    = "urn:xmpp:csi:0";
 
-    /// <summary>The announcement among the stream features (section 4.1).</summary>
+    /// <summary>
+    /// The announcement among the stream features (section 4.1).
+    /// </summary>
     public const String FeatureXml   = $"<csi xmlns='{Namespace}'/>";
 
-    /// <summary>"Somebody is looking again."</summary>
+    /// <summary>
+    /// "Somebody is looking again."
+    /// </summary>
     public const String ActiveXml    = $"<active xmlns='{Namespace}'/>";
 
-    /// <summary>"The device is lying in the pocket."</summary>
+    /// <summary>
+    /// "The device is lying in the pocket."
+    /// </summary>
     public const String InactiveXml  = $"<inactive xmlns='{Namespace}'/>";
 
     #region HandlingOf(stanza)

@@ -67,7 +67,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Only the sign-offs out of it.</summary>
+        /// <summary>
+        /// Only the sign-offs out of it.
+        /// </summary>
         private static Int32 SignOffs(ConcurrentQueue<(JID From, String? Type)> basket)
             => basket.Count(p => p.Type == "unavailable");
 

@@ -37,7 +37,9 @@ internal static class StringPrepTables
 
     #region Contains(Table, CodePoint)
 
-    /// <summary>Does the code point lie within one of the ranges of this table?</summary>
+    /// <summary>
+    /// Does the code point lie within one of the ranges of this table?
+    /// </summary>
     public static Boolean Contains(UInt32[] Table, UInt32 CodePoint)
     {
 
@@ -61,7 +63,9 @@ internal static class StringPrepTables
 
     #endregion
 
-    /// <summary>A.1: Unassigned in Unicode 3.2 (396 ranges).</summary>
+    /// <summary>
+    /// A.1: Unassigned in Unicode 3.2 (396 ranges).
+    /// </summary>
     public static readonly UInt32[] Unassigned = [
         0x0221, 0x0221, 0x0234, 0x024F, 0x02AE, 0x02AF, 0x02EF, 0x02FF, 0x0350, 0x035F,
         0x0370, 0x0373, 0x0376, 0x0379, 0x037B, 0x037D, 0x037F, 0x0383, 0x038B, 0x038B,
@@ -147,36 +151,48 @@ internal static class StringPrepTables
         0xE0002, 0xE001F, 0xE0080, 0xEFFFD,
     ];
 
-    /// <summary>B.1: Falls away without replacement during mapping (8 ranges).</summary>
+    /// <summary>
+    /// B.1: Falls away without replacement during mapping (8 ranges).
+    /// </summary>
     public static readonly UInt32[] MappedToNothing = [
         0x00AD, 0x00AD, 0x034F, 0x034F, 0x1806, 0x1806, 0x180B, 0x180D, 0x200B, 0x200D,
         0x2060, 0x2060, 0xFE00, 0xFE0F, 0xFEFF, 0xFEFF,
     ];
 
-    /// <summary>C.1.2: Space characters outside of ASCII (6 ranges).</summary>
+    /// <summary>
+    /// C.1.2: Space characters outside of ASCII (6 ranges).
+    /// </summary>
     public static readonly UInt32[] NonAsciiSpace = [
         0x00A0, 0x00A0, 0x1680, 0x1680, 0x2000, 0x200B, 0x202F, 0x202F, 0x205F, 0x205F,
         0x3000, 0x3000,
     ];
 
-    /// <summary>C.2.1: ASCII control characters (2 ranges).</summary>
+    /// <summary>
+    /// C.2.1: ASCII control characters (2 ranges).
+    /// </summary>
     public static readonly UInt32[] AsciiControl = [
         0x0000, 0x001F, 0x007F, 0x007F,
     ];
 
-    /// <summary>C.2.2: Control characters outside of ASCII (11 ranges).</summary>
+    /// <summary>
+    /// C.2.2: Control characters outside of ASCII (11 ranges).
+    /// </summary>
     public static readonly UInt32[] NonAsciiControl = [
         0x0080, 0x009F, 0x06DD, 0x06DD, 0x070F, 0x070F, 0x180E, 0x180E, 0x200C, 0x200D,
         0x2028, 0x2029, 0x2060, 0x2063, 0x206A, 0x206F, 0xFEFF, 0xFEFF, 0xFFF9, 0xFFFC,
         0x1D173, 0x1D17A,
     ];
 
-    /// <summary>C.3: Private use (3 ranges).</summary>
+    /// <summary>
+    /// C.3: Private use (3 ranges).
+    /// </summary>
     public static readonly UInt32[] PrivateUse = [
         0xE000, 0xF8FF, 0xF0000, 0xFFFFD, 0x100000, 0x10FFFD,
     ];
 
-    /// <summary>C.4: Non-characters (18 ranges).</summary>
+    /// <summary>
+    /// C.4: Non-characters (18 ranges).
+    /// </summary>
     public static readonly UInt32[] NonCharacter = [
         0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x1FFFF, 0x2FFFE, 0x2FFFF, 0x3FFFE, 0x3FFFF,
         0x4FFFE, 0x4FFFF, 0x5FFFE, 0x5FFFF, 0x6FFFE, 0x6FFFF, 0x7FFFE, 0x7FFFF,
@@ -185,32 +201,44 @@ internal static class StringPrepTables
         0x10FFFE, 0x10FFFF,
     ];
 
-    /// <summary>C.5: Surrogates (1 ranges).</summary>
+    /// <summary>
+    /// C.5: Surrogates (1 ranges).
+    /// </summary>
     public static readonly UInt32[] Surrogate = [
         0xD800, 0xDFFF,
     ];
 
-    /// <summary>C.6: Inappropriate for plain text (1 ranges).</summary>
+    /// <summary>
+    /// C.6: Inappropriate for plain text (1 ranges).
+    /// </summary>
     public static readonly UInt32[] InappropriateForPlainText = [
         0xFFF9, 0xFFFD,
     ];
 
-    /// <summary>C.7: Inappropriate for canonical representation (1 ranges).</summary>
+    /// <summary>
+    /// C.7: Inappropriate for canonical representation (1 ranges).
+    /// </summary>
     public static readonly UInt32[] InappropriateForCanonical = [
         0x2FF0, 0x2FFB,
     ];
 
-    /// <summary>C.8: Change the display or are deprecated (4 ranges).</summary>
+    /// <summary>
+    /// C.8: Change the display or are deprecated (4 ranges).
+    /// </summary>
     public static readonly UInt32[] DisplayOrDeprecated = [
         0x0340, 0x0341, 0x200E, 0x200F, 0x202A, 0x202E, 0x206A, 0x206F,
     ];
 
-    /// <summary>C.9: Tagging characters (2 ranges).</summary>
+    /// <summary>
+    /// C.9: Tagging characters (2 ranges).
+    /// </summary>
     public static readonly UInt32[] Tagging = [
         0xE0001, 0xE0001, 0xE0020, 0xE007F,
     ];
 
-    /// <summary>D.1: Bidirectional category R or AL (34 ranges).</summary>
+    /// <summary>
+    /// D.1: Bidirectional category R or AL (34 ranges).
+    /// </summary>
     public static readonly UInt32[] RandALCat = [
         0x05BE, 0x05BE, 0x05C0, 0x05C0, 0x05C3, 0x05C3, 0x05D0, 0x05EA, 0x05F0, 0x05F4,
         0x061B, 0x061B, 0x061F, 0x061F, 0x0621, 0x063A, 0x0640, 0x064A, 0x066D, 0x066F,
@@ -221,7 +249,9 @@ internal static class StringPrepTables
         0xFD92, 0xFDC7, 0xFDF0, 0xFDFC, 0xFE70, 0xFE74, 0xFE76, 0xFEFC,
     ];
 
-    /// <summary>D.2: Bidirectional category L (360 ranges).</summary>
+    /// <summary>
+    /// D.2: Bidirectional category L (360 ranges).
+    /// </summary>
     public static readonly UInt32[] LCat = [
         0x0041, 0x005A, 0x0061, 0x007A, 0x00AA, 0x00AA, 0x00B5, 0x00B5, 0x00BA, 0x00BA,
         0x00C0, 0x00D6, 0x00D8, 0x00F6, 0x00F8, 0x0220, 0x0222, 0x0233, 0x0250, 0x02AD,

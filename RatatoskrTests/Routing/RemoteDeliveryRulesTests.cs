@@ -175,7 +175,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         Is.False, $"Should not have come about: {what}");
         }
 
-        /// <summary>The offline store of Bob's account on the right server.</summary>
+        /// <summary>
+        /// The offline store of Bob's account on the right server.
+        /// </summary>
         private IReadOnlyList<OfflineMessage> BobsStore
             => _right.GetAccount(Bob)!.OfflineMessages;
 
@@ -223,7 +225,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(message!.Body,          Is.EqualTo("See you later"));
 
-                Assert.That(message.FromBareJid,    Is.EqualTo(Alice),
+                Assert.That(message.FromBareJid.ToString(), Is.EqualTo(Alice),
                             "The handing over happens with the sender from the other domain.");
 
                 Assert.That(BobsStore,              Is.Empty);
@@ -333,7 +335,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(refused.Error.Condition, Is.EqualTo("service-unavailable"));
 
-                Assert.That(refused.From, Is.EqualTo(Bob),
+                Assert.That(refused.From.ToString(), Is.EqualTo(Bob),
                             "The reply comes from the address it did not go to - " +
                             "Alice's question is what has become of her message to Bob, " +
                             "and not what Bob's server thinks of its own accord.");

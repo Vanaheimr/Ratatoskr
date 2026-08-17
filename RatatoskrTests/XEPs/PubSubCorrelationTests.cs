@@ -997,8 +997,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.PubSubGetSubscriptionsAsync(JID.Parse(BobsJid));
 
-            Assert.That(alice.Connection.PubSub!.SubscriptionsOf(Node).Select(a => a.ServiceJid),
-                        Is.EqualTo(new[] { carol.BareJid }),
+            Assert.That(alice.Connection.PubSub!.SubscriptionsOf(Node).Select(a => a.ServiceJid.ToString()),
+                        Is.EqualTo(new[] { carol.BareJid.ToString() }),
                         "Carol's subscription was not up for discussion.");
 
         }
@@ -1068,8 +1068,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atTheNode = await bob.PubSubGetNodeAffiliationsAsync(Node, bob.BareJid);
 
             Assert.That(atTheNode, Is.EquivalentTo(new[] {
-                             (bob.BareJid,   PubSubAffiliation.Owner),
-                             (alice.BareJid, PubSubAffiliation.Publisher)
+                             (bob.BareJid.ToString(),   PubSubAffiliation.Owner),
+                             (alice.BareJid.ToString(), PubSubAffiliation.Publisher)
                          }));
 
             var alices = await alice.PubSubGetAffiliationsAsync(JID.Parse(BobsJid));
@@ -1670,10 +1670,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(list, Is.Not.Null);
 
-                Assert.That(list!.Select(e => (e.Jid, e.SubId)),
+                Assert.That(list!.Select(e => (e.Jid.ToString(), e.SubId)),
                             Is.EquivalentTo(new[] {
-                                (alice.BareJid, first!.SubId),
-                                (alice.BareJid, second!.SubId)
+                                (alice.BareJid.ToString(), first!.SubId),
+                                (alice.BareJid.ToString(), second!.SubId)
                             }));
 
                 Assert.That(list!.Select(e => e.State).Distinct(),
@@ -2106,7 +2106,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             "Before the grant it is no subscription.");
 
                 Assert.That(application!.NodeId,        Is.EqualTo(Node));
-                Assert.That(application!.SubscriberJid, Is.EqualTo(alice.BareJid));
+                Assert.That(application!.SubscriberJid, Is.EqualTo(alice.BareJid.ToString()));
                 Assert.That(application!.SubId,         Is.EqualTo(requested!.SubId));
 
             });
@@ -2395,8 +2395,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => reported is not null, "the event about Bob's deleted node");
 
-            Assert.That(alice.Connection.PubSub!.SubscriptionsOf(Node).Select(a => a.ServiceJid),
-                        Is.EqualTo(new[] { carol.BareJid }),
+            Assert.That(alice.Connection.PubSub!.SubscriptionsOf(Node).Select(a => a.ServiceJid.ToString()),
+                        Is.EqualTo(new[] { carol.BareJid.ToString() }),
                         "Carol's node of the same name goes on standing in the books.");
 
         }

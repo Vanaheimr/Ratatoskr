@@ -46,7 +46,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 internal static class DataForm
 {
 
-    /// <summary>The namespace of the data forms.</summary>
+    /// <summary>
+    /// The namespace of the data forms.
+    /// </summary>
     public const String Namespace = "jabber:x:data";
 
     /// <summary>
@@ -57,7 +59,9 @@ internal static class DataForm
            x.Name.LocalName     == "x" &&
            x.Attr("type")       == type;
 
-    /// <summary>The fields of a form.</summary>
+    /// <summary>
+    /// The fields of a form.
+    /// </summary>
     public static IEnumerable<XElement> Fields(XElement x)
         => x.Children(Namespace, "field");
 
@@ -107,11 +111,15 @@ internal static class DataForm
 
     }
 
-    /// <summary>A truth value as it is written.</summary>
+    /// <summary>
+    /// A truth value as it is written.
+    /// </summary>
     public static String Boolean(Boolean value)
         => value ? "1" : "0";
 
-    /// <summary>A field with one value.</summary>
+    /// <summary>
+    /// A field with one value.
+    /// </summary>
     public static XElement Field(String var, String? type, String? label, String value)
     {
 

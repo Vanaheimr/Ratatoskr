@@ -57,13 +57,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private const String Mallory  = "mallory@example.org/r";
         private const String Alice    = "alice@example.org/r";
 
-        /// <summary>The features the widespread client really has.</summary>
+        /// <summary>
+        /// The features the widespread client really has.
+        /// </summary>
         private static readonly String[] Real = [
             "http://jabber.org/protocol/caps",
             "http://jabber.org/protocol/disco#info"
         ];
 
-        /// <summary>The list the attacker wants to substitute instead.</summary>
+        /// <summary>
+        /// The list the attacker wants to substitute instead.
+        /// </summary>
         private static readonly String[] Substituted = [
          "urn:xmpp:receipts"
         ];
@@ -105,11 +109,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #region Helper functions
 
-        /// <summary>The verification string over these features.</summary>
+        /// <summary>
+        /// The verification string over these features.
+        /// </summary>
         private static String VerOf(params String[] features)
             => EntityCapsManager.VerificationString([Identity], features);
 
-        /// <summary>A disco#info answer with exactly these features.</summary>
+        /// <summary>
+        /// A disco#info answer with exactly these features.
+        /// </summary>
         private static String Reply(params String[] features)
             => "<query xmlns='http://jabber.org/protocol/disco#info'>" +
                $"<identity category='{Identity.Category}' type='{Identity.Type}' " +
@@ -132,7 +140,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                $"<field var='os'><value>{os}</value></field>" +
                "</x></query>";
 
-        /// <summary>The verification string that goes with it.</summary>
+        /// <summary>
+        /// The verification string that goes with it.
+        /// </summary>
         private static String VerWithForm(String os)
             => EntityCapsManager.VerificationString(
                    [Identity],
@@ -147,7 +157,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             get { lock (sent) return sent.Count; }
         }
 
-        /// <summary>Waits until this many disco#info queries have been sent off.</summary>
+        /// <summary>
+        /// Waits until this many disco#info queries have been sent off.
+        /// </summary>
         private async Task WaitForQueries(Int32 count)
         {
 
@@ -158,7 +170,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Answers the query that was sent off last.</summary>
+        /// <summary>
+        /// Answers the query that was sent off last.
+        /// </summary>
         private void Answer(String from, String query)
         {
 

@@ -32,10 +32,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>There is nothing to tell apart - one instance suffices.</summary>
+        /// <summary>
+        /// There is nothing to tell apart - one instance suffices.
+        /// </summary>
         public static readonly WebSocketFraming Instance = new();
 
-        /// <summary>The namespace of the framing (RFC 7395, section 3.1).</summary>
+        /// <summary>
+        /// The namespace of the framing (RFC 7395, section 3.1).
+        /// </summary>
         public const String Namespace = "urn:ietf:params:xml:ns:xmpp-framing";
 
         #endregion

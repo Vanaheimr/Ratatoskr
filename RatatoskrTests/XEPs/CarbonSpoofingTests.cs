@@ -51,7 +51,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         private static CarbonManager Manager()
             => new(JID.Parse(Mine));
 
-        /// <summary>A carbon as XEP-0280 builds one.</summary>
+        /// <summary>
+        /// A carbon as XEP-0280 builds one.
+        /// </summary>
         private static XElement Carbon(String from, String innerFrom, String kind = "received")
             => XElement.Parse(
                    $"<message from='{from}' to='{Mine}/laptop'>" +

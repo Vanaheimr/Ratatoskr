@@ -98,7 +98,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         #region Properties
 
-        /// <summary>The bare JID of the account, e.g. alice@localhost.</summary>
+        /// <summary>
+        /// The bare JID of the account, e.g. alice@localhost.
+        /// </summary>
         public String BareJid { get; }
 
         /// <summary>
@@ -132,7 +134,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>A snapshot of the server-side roster.</summary>
+        /// <summary>
+        /// A snapshot of the server-side roster.
+        /// </summary>
         public IReadOnlyList<RosterEntry> Roster
         {
             get { lock (_lock) return _roster.ToList(); }
@@ -454,7 +458,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         }
 
-        /// <summary>The nodes this account has published something in.</summary>
+        /// <summary>
+        /// The nodes this account has published something in.
+        /// </summary>
         public IReadOnlyCollection<String> PepNodes
         {
             get { lock (_lock) return [.. _pepNodes.Keys]; }

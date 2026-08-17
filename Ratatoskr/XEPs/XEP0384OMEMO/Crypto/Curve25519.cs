@@ -38,10 +38,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public sealed class Curve25519KeyPair
 {
 
-    /// <summary>The secret part, already clamped.</summary>
+    /// <summary>
+    /// The secret part, already clamped.
+    /// </summary>
     public Byte[] PrivateKey { get; }
 
-    /// <summary>The public part, 32 bytes of Montgomery u.</summary>
+    /// <summary>
+    /// The public part, 32 bytes of Montgomery u.
+    /// </summary>
     public Byte[] PublicKey { get; }
 
     internal Curve25519KeyPair(Byte[] privateKey, Byte[] publicKey)
@@ -74,16 +78,24 @@ public static class Curve25519
 
     #region Data
 
-    /// <summary>Length of a key in bytes.</summary>
+    /// <summary>
+    /// Length of a key in bytes.
+    /// </summary>
     public const Int32 KeyLength        = 32;
 
-    /// <summary>Length of a signature in bytes.</summary>
+    /// <summary>
+    /// Length of a signature in bytes.
+    /// </summary>
     public const Int32 SignatureLength  = 64;
 
-    /// <summary>The prime field: 2^255 - 19.</summary>
+    /// <summary>
+    /// The prime field: 2^255 - 19.
+    /// </summary>
     private static readonly BigInteger P = BigInteger.Pow(2, 255) - 19;
 
-    /// <summary>The group order: 2^252 + 27742317777372353535851937790883648493.</summary>
+    /// <summary>
+    /// The group order: 2^252 + 27742317777372353535851937790883648493.
+    /// </summary>
     private static readonly BigInteger Q = BigInteger.Pow(2, 252) +
                                            BigInteger.Parse("27742317777372353535851937790883648493");
 
@@ -408,11 +420,15 @@ public static class Curve25519
 
     }
 
-    /// <summary>A hash result as a number modulo <paramref name="modulus"/>.</summary>
+    /// <summary>
+    /// A hash result as a number modulo <paramref name="modulus"/>.
+    /// </summary>
     private static BigInteger ReduceMod(Byte[] hash, BigInteger modulus)
         => new BigInteger(hash, isUnsigned: true, isBigEndian: false) % modulus;
 
-    /// <summary>A number as 32 bytes, least significant first.</summary>
+    /// <summary>
+    /// A number as 32 bytes, least significant first.
+    /// </summary>
     private static Byte[] ToLittleEndian(BigInteger value)
     {
 

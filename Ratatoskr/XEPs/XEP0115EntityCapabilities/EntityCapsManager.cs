@@ -60,7 +60,9 @@ public delegate Task OnCapsRejectedDelegate  (DateTimeOffset     Timestamp,
 public sealed class EntityCapsManager
 {
 
-    /// <summary>The namespace of XEP-0115.</summary>
+    /// <summary>
+    /// The namespace of XEP-0115.
+    /// </summary>
     public const string Namespace = "http://jabber.org/protocol/caps";
 
     /// <summary>
@@ -69,7 +71,9 @@ public sealed class EntityCapsManager
     /// </summary>
     public const string Sha1Algorithm = "sha-1";
 
-    /// <summary>The namespace of the data forms (XEP-0004).</summary>
+    /// <summary>
+    /// The namespace of the data forms (XEP-0004).
+    /// </summary>
     private const string DataFormNamespace = "jabber:x:data";
 
     /// <summary>

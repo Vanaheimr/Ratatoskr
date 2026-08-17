@@ -135,7 +135,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         Is.True, $"Timeout while waiting for: {what}");
         }
 
-        /// <summary>The subscription state as a server carries it.</summary>
+        /// <summary>
+        /// The subscription state as a server carries it.
+        /// </summary>
         private static String? State(XMPPServer server, String account, String contact)
             => server.GetAccount(account)?.SubscriptionOf(contact);
 

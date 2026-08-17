@@ -153,7 +153,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>A connected raw client with an opened stream.</summary>
+        /// <summary>
+        /// A connected raw client with an opened stream.
+        /// </summary>
         private async Task<RawClient> OpenedAsync()
         {
 
@@ -174,7 +176,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>The content of the last received element of this name.</summary>
+        /// <summary>
+        /// The content of the last received element of this name.
+        /// </summary>
         private static String ContentOf(RawClient client, String element)
         {
 

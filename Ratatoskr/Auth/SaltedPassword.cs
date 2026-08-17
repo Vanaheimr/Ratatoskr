@@ -31,11 +31,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public static class SaltedPasswordExtensions
 {
 
-    /// <summary>Is this salted password absent or unset?</summary>
+    /// <summary>
+    /// Is this salted password absent or unset?
+    /// </summary>
     public static Boolean IsNullOrEmpty(this SaltedPassword? SaltedPassword)
         => !SaltedPassword.HasValue || SaltedPassword.Value.IsNullOrEmpty;
 
-    /// <summary>Is this salted password present?</summary>
+    /// <summary>
+    /// Is this salted password present?
+    /// </summary>
     public static Boolean IsNotNullOrEmpty(this SaltedPassword? SaltedPassword)
         => SaltedPassword.HasValue && SaltedPassword.Value.IsNotNullOrEmpty;
 
@@ -93,24 +97,34 @@ public readonly struct SaltedPassword : IEquatable<SaltedPassword>
 
     #region Properties
 
-    /// <summary>Which SCRAM mechanism this was derived for.</summary>
+    /// <summary>
+    /// Which SCRAM mechanism this was derived for.
+    /// </summary>
     public SCRAMMechanism  Mechanism     { get; }
 
-    /// <summary>How many PBKDF2 iterations went into it.</summary>
+    /// <summary>
+    /// How many PBKDF2 iterations went into it.
+    /// </summary>
     public UInt32          Iterations    { get; }
 
-    /// <summary>The salt it was derived with.</summary>
+    /// <summary>
+    /// The salt it was derived with.
+    /// </summary>
     public Byte[]          Salt
 
         => salt is null ? [] : [.. salt];
 
-    /// <summary>Is this the default, which is no key at all?</summary>
+    /// <summary>
+    /// Is this the default, which is no key at all?
+    /// </summary>
     [MemberNotNullWhen(false, nameof(bytes))]
     public Boolean         IsNullOrEmpty
 
         => bytes is null || bytes.Length == 0;
 
-    /// <summary>Is there key material here?</summary>
+    /// <summary>
+    /// Is there key material here?
+    /// </summary>
     [MemberNotNullWhen(true, nameof(bytes))]
     public Boolean         IsNotNullOrEmpty
 
@@ -216,12 +230,16 @@ public readonly struct SaltedPassword : IEquatable<SaltedPassword>
 
     #region ClientKey() / StoredKey() / ServerKey()
 
-    /// <summary>RFC 5802: <c>ClientKey = HMAC(SaltedPassword, "Client Key")</c>.</summary>
+    /// <summary>
+    /// RFC 5802: <c>ClientKey = HMAC(SaltedPassword, "Client Key")</c>.
+    /// </summary>
     public Byte[] ClientKey()
 
         => Hmac("Client Key"u8.ToArray());
 
-    /// <summary>RFC 5802: <c>StoredKey = H(ClientKey)</c> - what a server keeps.</summary>
+    /// <summary>
+    /// RFC 5802: <c>StoredKey = H(ClientKey)</c> - what a server keeps.
+    /// </summary>
     public Byte[] StoredKey()
     {
 
@@ -233,7 +251,9 @@ public readonly struct SaltedPassword : IEquatable<SaltedPassword>
 
     }
 
-    /// <summary>RFC 5802: <c>ServerKey = HMAC(SaltedPassword, "Server Key")</c>.</summary>
+    /// <summary>
+    /// RFC 5802: <c>ServerKey = HMAC(SaltedPassword, "Server Key")</c>.
+    /// </summary>
     public Byte[] ServerKey()
 
         => Hmac("Server Key"u8.ToArray());

@@ -157,7 +157,9 @@ public static class SaslPrep
 
     }
 
-    /// <summary>The table that prohibits this code point - or null.</summary>
+    /// <summary>
+    /// The table that prohibits this code point - or null.
+    /// </summary>
     private static String? Forbidden(UInt32 CodePoint)
     {
 

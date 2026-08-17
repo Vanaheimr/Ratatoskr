@@ -72,7 +72,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                (id is not null ? $" id='{id}'" : "") +
                " version='1.0'/>";
 
-        /// <summary>The features of the recipient, optionally with a bidi announcement.</summary>
+        /// <summary>
+        /// The features of the recipient, optionally with a bidi announcement.
+        /// </summary>
         private static String FeaturesWith(Boolean bidi, Boolean external = true)
 
             => "<stream:features xmlns:stream='http://etherx.jabber.org/streams'>" +

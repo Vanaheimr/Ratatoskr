@@ -168,7 +168,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         }
 
-        /// <summary>Wires the server to a scripted counterpart.</summary>
+        /// <summary>
+        /// Wires the server to a scripted counterpart.
+        /// </summary>
         private TcpServerLinks LinksTo(ScriptedServer peer)
         {
 

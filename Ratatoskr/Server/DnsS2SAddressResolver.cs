@@ -46,10 +46,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
         private readonly IDNSClient _dns;
 
-        /// <summary>The service name from RFC 6120, section 3.2.1.</summary>
+        /// <summary>
+        /// The service name from RFC 6120, section 3.2.1.
+        /// </summary>
         public const String ServicePrefix = "_xmpp-server._tcp.";
 
-        /// <summary>The standard port when there is no SRV record.</summary>
+        /// <summary>
+        /// The standard port when there is no SRV record.
+        /// </summary>
         public const Int32 DefaultPort = TcpStreamFraming.DefaultPort;
 
         #endregion

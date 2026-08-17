@@ -67,7 +67,9 @@ public delegate Task OnPingErrorDelegate   (DateTimeOffset     Timestamp,
 public sealed class PingManager
 {
 
-    /// <summary>The namespace of XEP-0199.</summary>
+    /// <summary>
+    /// The namespace of XEP-0199.
+    /// </summary>
     public const string Namespace = "urn:xmpp:ping";
 
     private readonly Func<string, Task> _sendStanza;
