@@ -1206,7 +1206,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (!resumed && !BoundInline && StreamNegotiation.OffersBind(features))
             {
                 _logger.LogDebug("Resource binding ...");
-                FullJid = await PerformBindAsync(ct);
+                FullJid = JID.Parse(await PerformBindAsync(ct));
                 _logger.LogInformation("Connected as {FullJid}", FullJid);
             }
 
@@ -1627,7 +1627,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     private async Task<XElement?> SendIqAsync(string             id,
                                               string             xml,
                                               CancellationToken  ct,
-                                              string?            expectedFrom   = null)
+                                              JID?               expectedFrom   = null)
     {
 
         // RunContinuationsAsynchronously: the answer is delivered on the thread
@@ -1636,7 +1636,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         var tcs = new TaskCompletionSource<XElement>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         lock (_iqLock)
-            _pendingIqs[id] = new PendingIq(tcs, expectedFrom);
+            _pendingIqs[id] = new PendingIq(tcs, expectedFrom?.ToString());
 
         try
         {
@@ -2158,7 +2158,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // Before everything else, because what stands here cannot be seen from
         // the outside: the stanza has no <body/>, and every evaluation after
         // this would take it for empty.
-        if (element.Attr("from") is String sender && TryProcessEncrypted(element, sender))
+        if (TryProcessEncrypted(element, from))
             return;
 
         // XEP-0060/XEP-0163: a PubSub notification.
@@ -2257,7 +2257,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // in the one place that does the reporting.
         if (Omemo is not null &&
             Carbons?.UnwrapVerified(element, from) is XElement wrapped &&
-            wrapped.Attr("from") is String innerSender &&
+            JID.TryParse(wrapped.Attr("from"), out var innerSender) &&
             TryProcessEncrypted(wrapped, innerSender))
         {
             return;
@@ -2363,7 +2363,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                            written,
                                                                            messageType,
                                                                            received,
-                                                                           heldBy,
+                                                                           JID.TryParse(heldBy),
                                                                            MessageCorrection.ReplacedId(element)),
                                                            CancellationToken), _logger);
 
@@ -2441,7 +2441,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             // IMPORTANT: skip our own presences - we know our caps already!
             // Otherwise a query loop to ourselves → server error → disconnect
             var fromBareJid = from.Bare;
-            var isOwnPresence = fromBareJid.Equals(BareJid, StringComparison.OrdinalIgnoreCase);
+            var isOwnPresence = fromBareJid == BareJid;
 
             if (!isOwnPresence && (type == "available" || string.IsNullOrEmpty(type)))
             {
@@ -2454,7 +2454,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                     // The hash attribute goes along: without it the ver value
                     // cannot be recomputed, and what cannot be recomputed is not
                     // stored.
-                    _ = EntityCaps.ProcessCapsAsync(from.ToString(),
+                    _ = EntityCaps.ProcessCapsAsync(from,
                                                     caps.Value.Node,
                                                     caps.Value.Ver,
                                                     caps.Value.Hash);
@@ -2535,7 +2535,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             }
 
             if (!claimed)
-                await OnStanzaError.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, parsed, CancellationToken), _logger);
+                await OnStanzaError.InvokeAllAsync(handler => handler(Timestamp.Now, this, JID.TryParse(from), parsed, CancellationToken), _logger);
 
             return;
 
@@ -2665,8 +2665,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         // PubSub event (can come as a message or an iq)
         if (element.Child(PubSubManager.EventNamespace, "event") is not null && from != null)
         {
-            if (PubSub is not null)
-                await PubSub.ProcessEventAsync(element, from, PubSub.PubSubService, CancellationToken);
+            if (PubSub is not null && JID.TryParse(from, out var pubSubSender))
+                await PubSub.ProcessEventAsync(element, pubSubSender, PubSub.PubSubService, CancellationToken);
 
             // XEP-0384, section 5.2: The device list comes over the same route
             // but demands an answer - if one's own device is missing from it, it
@@ -2845,7 +2845,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                 continue;
 
             if (itemElement.Attr("subscription") == "remove")
-                await Roster.RemoveItemAsync(jid, CancellationToken);
+                await Roster.RemoveItemAsync(JID.Parse(jid), CancellationToken);
             else
                 await Roster.ProcessRosterItemAsync(ToRosterItem(itemElement, jid), CancellationToken);
 
@@ -3507,14 +3507,14 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
-    private async Task<XElement?> FetchPepAsync(string             bareJid,
+    private async Task<XElement?> FetchPepAsync(JID                bareJid,
                                                 string             node,
                                                 string             itemId,
                                                 CancellationToken  ct)
     {
 
         var id       = $"pep-{Interlocked.Increment(ref _pepCounter)}";
-        var response = await SendIqAsync(id, OmemoPep.FetchIq(id, bareJid, node, itemId), ct,
+        var response = await SendIqAsync(id, OmemoPep.FetchIq(id, bareJid.ToString(), node, itemId), ct,
                                          expectedFrom: bareJid);
 
         if (response is null || response.Attr("type") != "result")
@@ -3711,7 +3711,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// Takes an encrypted message in.
     /// </summary>
     /// <returns>true when it was processed - then it no longer goes the ordinary way.</returns>
-    private bool TryProcessEncrypted(XElement element, string from, CancellationToken CancellationToken = default)
+    private bool TryProcessEncrypted(XElement element, JID from, CancellationToken CancellationToken = default)
     {
 
         if (Omemo is null || !OmemoEncryptedElement.TryRead(element, out var encrypted))
@@ -3736,7 +3736,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                             Timestamp.Now,
                                                             this,
                                                             new XMPPMessage(from,
-                                                                            element.Attr("to") ?? FullJid,
+                                                                            JID.TryParse(element.Attr("to")) ?? FullJid,
                                                                             body,
                                                                             element.Attr("id"),
                                                                             DateTime.Now,
@@ -4284,7 +4284,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// XEP-0060, section 8.9.2: Sets, as the owner, a role.
     /// </summary>
     public async Task<Boolean> PubSubSetAffiliationAsync(String             nodeId,
-                                                         String             jid,
+                                                         JID                jid,
                                                          PubSubAffiliation  affiliation,
                                                          JID?               service  = null,
                                                          CancellationToken  ct       = default)
@@ -4371,7 +4371,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// A particular subscription, or null for all of this JID at this node.
     /// </param>
     public async Task<Boolean> PubSubRemoveSubscriberAsync(String             nodeId,
-                                                           String             jid,
+                                                           JID                jid,
                                                            String?            subId    = null,
                                                            JID?               service  = null,
                                                            CancellationToken  ct       = default)
@@ -4402,7 +4402,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // what is waited for cannot drift from what was sent.
         var request  = XElement.Parse(iq);
         var id       = request.Attr("id")!;
-        var answer   = await SendIqAsync(id, iq, ct, expectedFrom: request.Attr("to"));
+        var answer   = await SendIqAsync(id, iq, ct, expectedFrom: JID.TryParse(request.Attr("to")));
 
         if (answer is null || answer.Attr("type") != "result")
         {
@@ -4540,8 +4540,8 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </returns>
     private Boolean TryPickSubscription(String       nodeId,
                                         String?      subId,
-                                        JID?      service,
-                                        out String   target,
+                                        JID?         service,
+                                        out JID      target,
                                         out String?  usedSubId)
     {
 
@@ -4676,7 +4676,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var target = service ?? PubSub!.PubSubService;
 
-        await SendAsync($"<message to='{XmlEscaping.Escape(target)}'>" +
+        await SendAsync($"<message to='{XmlEscaping.Escape(target.ToString())}'>" +
                         (request with { Allow = allow }).ToSubmit()
                                                         .ToString(SaveOptions.DisableFormatting) +
                         "</message>");
@@ -4765,7 +4765,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // what is waited for cannot drift from what was sent.
         var request  = XElement.Parse(iq);
         var id       = request.Attr("id")!;
-        var answer   = await SendIqAsync(id, iq, ct, expectedFrom: request.Attr("to"));
+        var answer   = await SendIqAsync(id, iq, ct, expectedFrom: JID.TryParse(request.Attr("to")));
 
         if (answer is null || answer.Attr("type") != "result")
         {

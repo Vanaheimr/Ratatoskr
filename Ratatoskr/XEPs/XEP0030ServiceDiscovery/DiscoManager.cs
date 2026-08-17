@@ -198,7 +198,7 @@ public sealed class DiscoManager
         var id = $"disco-info-{Interlocked.Increment(ref _counter)}";
         var tcs = new TaskCompletionSource<DiscoInfo?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        lock (_lock) _infoQueries[id] = (tcs, jid);
+        lock (_lock) _infoQueries[id] = (tcs, jid.ToString());
 
         var nodeAttr = node != null ? $" node='{XmlEscaping.Escape(node)}'" : "";
         await _sendStanza(
@@ -227,7 +227,7 @@ public sealed class DiscoManager
         var id = $"disco-items-{Interlocked.Increment(ref _counter)}";
         var tcs = new TaskCompletionSource<DiscoItems?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        lock (_lock) _itemsQueries[id] = (tcs, jid);
+        lock (_lock) _itemsQueries[id] = (tcs, jid.ToString());
 
         var nodeAttr = node != null ? $" node='{XmlEscaping.Escape(node)}'" : "";
         await _sendStanza(

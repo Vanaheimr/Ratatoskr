@@ -37,7 +37,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// </summary>
 public delegate Task OnCapsDiscoveredDelegate(DateTimeOffset     Timestamp,
                                               EntityCapsManager  Sender,
-                                              String             From,
+                                              JID                From,
                                               DiscoInfo          Info,
                                               CancellationToken  CancellationToken);
 
@@ -46,7 +46,7 @@ public delegate Task OnCapsDiscoveredDelegate(DateTimeOffset     Timestamp,
 /// </summary>
 public delegate Task OnCapsRejectedDelegate  (DateTimeOffset     Timestamp,
                                               EntityCapsManager  Sender,
-                                              String             From,
+                                              JID                From,
                                               String             Reason,
                                               CancellationToken  CancellationToken);
 
@@ -248,7 +248,7 @@ public sealed class EntityCapsManager
     /// <c>sha-1</c> is still queried - that far end does keep to the current
     /// form, its answer is merely not recomputable here - but not stored either.
     /// </param>
-    public async Task ProcessCapsAsync(string             from,
+    public async Task ProcessCapsAsync(JID                from,
                                        string             node,
                                        string             ver,
                                        string?            hash   = null,

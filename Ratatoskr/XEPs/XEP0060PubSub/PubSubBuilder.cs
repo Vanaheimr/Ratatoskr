@@ -56,7 +56,7 @@ public static class PubSubBuilder
     /// <param name="nodeId">
     /// Which node it is narrowed to, or null for all.
     /// </param>
-    public static string GetSubscriptions(string pubsubJid, string id = "pubsub-subs", string? nodeId = null)
+    public static string GetSubscriptions(JID pubsubJid, string id = "pubsub-subs", string? nodeId = null)
     {
         return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
@@ -68,7 +68,7 @@ public static class PubSubBuilder
     /// <summary>
     /// XEP-0060, section 5.7: Query one's own roles.
     /// </summary>
-    public static string GetAffiliations(string pubsubJid, string id = "pubsub-affs")
+    public static string GetAffiliations(JID pubsubJid, string id = "pubsub-affs")
     {
         return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'><affiliations/></pubsub></iq>";
@@ -77,7 +77,7 @@ public static class PubSubBuilder
     /// <summary>
     /// XEP-0060, section 8.9.1: Query the roles at a node of one's own.
     /// </summary>
-    public static string GetNodeAffiliations(string pubsubJid, string nodeId, string id = "pubsub-nodeaffs")
+    public static string GetNodeAffiliations(JID pubsubJid, string nodeId, string id = "pubsub-nodeaffs")
     {
         return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
@@ -88,7 +88,7 @@ public static class PubSubBuilder
     /// <summary>
     /// XEP-0060, section 8.9.2: Set a role.
     /// </summary>
-    public static string SetAffiliation(string pubsubJid, string nodeId, string id, string jid, string affiliation)
+    public static string SetAffiliation(JID pubsubJid, string nodeId, string id, JID jid, string affiliation)
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
@@ -105,7 +105,7 @@ public static class PubSubBuilder
     /// not "where am I hanging everywhere", but "who hangs on my node". The two
     /// are to be told apart by the namespace alone.
     /// </remarks>
-    public static string GetNodeSubscriptions(string pubsubJid, string nodeId, string id = "pubsub-nodesubs")
+    public static string GetNodeSubscriptions(JID pubsubJid, string nodeId, string id = "pubsub-nodesubs")
     {
         return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
@@ -125,7 +125,7 @@ public static class PubSubBuilder
     /// this file for it: whoever wants that says what they are doing. And the
     /// test server of this project refuses it anyway.
     /// </remarks>
-    public static string RemoveSubscriber(string pubsubJid, string nodeId, string id, string jid, string? subId = null)
+    public static string RemoveSubscriber(JID pubsubJid, string nodeId, string id, JID jid, string? subId = null)
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
@@ -138,7 +138,7 @@ public static class PubSubBuilder
     /// <summary>
     /// XEP-0060, section 6.3.1: Query the settings of a subscription.
     /// </summary>
-    public static string GetOptions(string pubsubJid, string nodeId, string myJid, string id = "pubsub-opts", string? subId = null)
+    public static string GetOptions(JID pubsubJid, string nodeId, JID myJid, string id = "pubsub-opts", string? subId = null)
     {
         return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
@@ -154,7 +154,7 @@ public static class PubSubBuilder
     /// The submitted data form as finished XML - it is passed through like a
     /// payload and not escaped.
     /// </param>
-    public static string SetOptions(string pubsubJid, string nodeId, string myJid, string id, string? subId, string form)
+    public static string SetOptions(JID pubsubJid, string nodeId, JID myJid, string id, string? subId, string form)
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
@@ -170,7 +170,7 @@ public static class PubSubBuilder
     /// <paramref name="payload"/> is deliberately NOT escaped - it is raw XML.
     /// Callers have to make sure that it is well-formed.
     /// </remarks>
-    public static string Publish(string pubsubJid, string nodeId, string itemId, string payload, string id = "pubsub-pub")
+    public static string Publish(JID pubsubJid, string nodeId, string itemId, string payload, string id = "pubsub-pub")
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
@@ -187,7 +187,7 @@ public static class PubSubBuilder
     /// publish may also retract. And with an identifier - "retract just
     /// anything" does not exist, that is what the purging is for.
     /// </remarks>
-    public static string Retract(string pubsubJid, string nodeId, string itemId, string id = "pubsub-retract")
+    public static string Retract(JID pubsubJid, string nodeId, string itemId, string id = "pubsub-retract")
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
@@ -199,7 +199,7 @@ public static class PubSubBuilder
     /// <summary>
     /// Get items from a node
     /// </summary>
-    public static string GetItems(string pubsubJid, string nodeId, int? maxItems = null, string id = "pubsub-get")
+    public static string GetItems(JID pubsubJid, string nodeId, int? maxItems = null, string id = "pubsub-get")
     {
         var maxAttr = maxItems.HasValue ? $" max_items='{maxItems}'" : "";
         return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
@@ -219,7 +219,7 @@ public static class PubSubBuilder
     /// configuring in one go (XEP-0060, section 8.1.3): two steps would have a
     /// gap in which the node stands open.
     /// </param>
-    public static string CreateNode(string pubsubJid, string nodeId, string id = "pubsub-create", string? configuration = null)
+    public static string CreateNode(JID pubsubJid, string nodeId, string id = "pubsub-create", string? configuration = null)
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='http://jabber.org/protocol/pubsub'>" +
@@ -231,7 +231,7 @@ public static class PubSubBuilder
     /// <summary>
     /// XEP-0060, section 8.2.1: Query the settings of a node.
     /// </summary>
-    public static string GetNodeConfig(string pubsubJid, string nodeId, string id = "pubsub-cfg")
+    public static string GetNodeConfig(JID pubsubJid, string nodeId, string id = "pubsub-cfg")
     {
         return $"<iq type='get' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
@@ -242,7 +242,7 @@ public static class PubSubBuilder
     /// <summary>
     /// XEP-0060, section 8.2.4: Set the settings of a node.
     /// </summary>
-    public static string SetNodeConfig(string pubsubJid, string nodeId, string id, string form)
+    public static string SetNodeConfig(JID pubsubJid, string nodeId, string id, string form)
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
@@ -253,7 +253,7 @@ public static class PubSubBuilder
     /// <summary>
     /// XEP-0060, section 8.4: Delete a node.
     /// </summary>
-    public static string DeleteNode(string pubsubJid, string nodeId, string id = "pubsub-delete")
+    public static string DeleteNode(JID pubsubJid, string nodeId, string id = "pubsub-delete")
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +
@@ -268,7 +268,7 @@ public static class PubSubBuilder
     /// Looks confusingly like the deleting and means something else: the node
     /// stays, its subscribers stay, only the content goes.
     /// </remarks>
-    public static string PurgeNode(string pubsubJid, string nodeId, string id = "pubsub-purge")
+    public static string PurgeNode(JID pubsubJid, string nodeId, string id = "pubsub-purge")
     {
         return $"<iq type='set' to='{XmlEscaping.Escape(pubsubJid.ToString())}' id='{id}'>" +
                $"<pubsub xmlns='{OwnerNamespace}'>" +

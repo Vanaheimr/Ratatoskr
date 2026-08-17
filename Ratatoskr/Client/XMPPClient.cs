@@ -984,7 +984,7 @@ public sealed class XMPPClient : IAsyncDisposable
         => _connection.PubSubGetNodeAffiliationsAsync(nodeId, service);
 
     /// <summary>Grants or takes a role (XEP-0060, section 8.9.2).</summary>
-    public Task<Boolean> PubSubSetAffiliationAsync(String nodeId, String jid, PubSubAffiliation affiliation, JID? service = null)
+    public Task<Boolean> PubSubSetAffiliationAsync(String nodeId, JID jid, PubSubAffiliation affiliation, JID? service = null)
         => _connection.PubSubSetAffiliationAsync(nodeId, jid, affiliation, service);
 
     /// <summary>
@@ -1001,7 +1001,7 @@ public sealed class XMPPClient : IAsyncDisposable
     /// Ends someone else's subscription at one's own node (XEP-0060, section
     /// 8.8.2) - without <paramref name="subId"/> all of this JID.
     /// </summary>
-    public Task<Boolean> PubSubRemoveSubscriberAsync(String nodeId, String jid, String? subId = null, JID? service = null)
+    public Task<Boolean> PubSubRemoveSubscriberAsync(String nodeId, JID jid, String? subId = null, JID? service = null)
         => _connection.PubSubRemoveSubscriberAsync(nodeId, jid, subId, service);
 
     /// <summary>
