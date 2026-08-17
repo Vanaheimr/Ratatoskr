@@ -96,8 +96,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             caps = new EntityCapsManager(disco) { Node = NodeName };
 
-            caps.OnCapsRejected   += (from, reason) => { lock (refused) refused.Add(reason); };
-            caps.OnCapsDiscovered += (from, info)  => { lock (reported)  reported.Add(info);   };
+            caps.OnCapsRejected   += (timestamp, sender, from, reason, ct) => { lock (refused) refused.Add(reason);  return Task.CompletedTask; };
+            caps.OnCapsDiscovered += (timestamp, sender, from, info, ct)  => { lock (reported)  reported.Add(info);    return Task.CompletedTask; };
 
         }
 

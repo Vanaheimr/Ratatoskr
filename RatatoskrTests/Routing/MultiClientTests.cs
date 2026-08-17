@@ -51,7 +51,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello Bob!");
 
@@ -125,8 +125,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atUpper = new ConcurrentQueue<XMPPMessage>();
             var atLower = new ConcurrentQueue<XMPPMessage>();
 
-            upperClient.OnMessage += m => atUpper.Enqueue(m);
-            lowerClient.OnMessage += m => atLower.Enqueue(m);
+            upperClient.OnMessage += (timestamp, sender, m, ct) => { atUpper.Enqueue(m); return Task.CompletedTask; };
+            lowerClient.OnMessage += (timestamp, sender, m, ct) => { atLower.Enqueue(m); return Task.CompletedTask; };
 
             await bob.SendMessageAsync(lowerClient.FullJid, "Only to the lower-case mobile");
 
@@ -166,8 +166,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var receipts = new ConcurrentQueue<String>();
             var markers  = new ConcurrentQueue<ChatMarker>();
 
-            alice.OnReceiptReceived += (from, id) => receipts.Enqueue(id);
-            alice.OnChatMarker      += m           => markers.Enqueue(m);
+            alice.OnReceiptReceived += (timestamp, sender, from, id, ct) => { receipts.Enqueue(id); return Task.CompletedTask; };
+            alice.OnChatMarker      += (timestamp, sender, m, ct)           => { markers.Enqueue(m); return Task.CompletedTask; };
 
             var messageId = await alice.SendMessageAsync(bob.BareJid, "Please confirm");
 
@@ -201,9 +201,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var states = new ConcurrentQueue<ChatState>();
-            bob.OnChatState += (from, state) => states.Enqueue(state);
+            bob.OnChatState += (timestamp, sender, from, state, ct) => { states.Enqueue(state); return Task.CompletedTask; };
 
-            alice.SetChatPartner(bob.BareJid);
+            await alice.SetChatPartnerAsync(bob.BareJid);
             await alice.SendChatStateAsync(ChatState.Composing);
 
             await WaitFor(() => states.Contains(ChatState.Composing),
@@ -264,7 +264,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "the switching on of carbons for both resources");
 
             var carbons = new ConcurrentQueue<CarbonMessage>();
-            desktop.OnCarbonMessage += c => carbons.Enqueue(c);
+            desktop.OnCarbonMessage += (timestamp, sender, c, ct) => { carbons.Enqueue(c); return Task.CompletedTask; };
 
             await phone.SendMessageAsync(bob.BareJid, "Written from the phone");
 
@@ -336,7 +336,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             var presences = new ConcurrentQueue<String>();
-            alice.OnPresenceChanged += (from, type) => presences.Enqueue($"{from}|{type}");
+            alice.OnPresenceChanged += (timestamp, sender, from, type, ct) => { presences.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
 
             var bob = await ConnectClientAsync("bob");
             await bob.SetPresenceAsync("away", "Back in a moment");

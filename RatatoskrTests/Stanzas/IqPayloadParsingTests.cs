@@ -209,7 +209,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             PubSubEvent? reported = null;
-            client.OnPubSubEvent += e => reported = e;
+            client.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<iq type='set' id='ps1' from='pubsub.{Server.Domain}' to='{client.FullJid}'>" +
@@ -246,7 +246,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             PubSubEvent? reported = null;
-            client.OnPubSubEvent += e => reported = e;
+            client.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<iq type='set' id='ps2' from='pubsub.{Server.Domain}' to='{client.FullJid}'>" +

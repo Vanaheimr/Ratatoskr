@@ -123,9 +123,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session = Server.SessionOf(client.FullJid)!;
 
             var dropped = false;
-            client.Connection.OnStateChanged += (_, now) => {
+            client.Connection.OnStateChanged += (timestamp, sender, _, now, ct) => {
                 if (now != ConnectionState.Connected)
                     dropped = true;
+
+                return Task.CompletedTask;
+
             };
 
             var oversized = new String('x', (Int32) XMPPConnection.MaxStanzaBytes + 1024);

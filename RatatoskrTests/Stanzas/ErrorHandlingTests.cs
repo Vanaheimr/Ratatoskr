@@ -77,8 +77,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             StanzaError? reported  = null;
             StanzaError? general   = null;
-            client.Connection.Ping!.OnPingError += (_, error) => reported = error;
-            client.OnStanzaError                += (_, error) => general  = error;
+            client.Connection.Ping!.OnPingError += (timestamp, sender, _, error, ct) => { reported = error; return Task.CompletedTask; };
+            client.OnStanzaError                += (timestamp, sender, _, error, ct) => { general  = error; return Task.CompletedTask; };
 
             var rtt = await client.PingAsync();
 
@@ -139,8 +139,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             StanzaError? reported  = null;
             StanzaError? general   = null;
-            client.Connection.Disco!.OnQueryError += (_, error) => reported = error;
-            client.OnStanzaError                  += (_, error) => general  = error;
+            client.Connection.Disco!.OnQueryError += (timestamp, sender, _, error, ct) => { reported = error; return Task.CompletedTask; };
+            client.OnStanzaError                  += (timestamp, sender, _, error, ct) => { general  = error; return Task.CompletedTask; };
 
             var info = await client.Connection.Disco!.QueryInfoAsync(Server.Domain,
                                                                      timeout: TimeSpan.FromSeconds(5));
@@ -193,7 +193,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
 
             StanzaError? general = null;
-            client.OnStanzaError += (_, error) => general = error;
+            client.OnStanzaError += (timestamp, sender, _, error, ct) => { general = error; return Task.CompletedTask; };
 
             // An IQ without a type, which the server refuses with
             // <bad-request/> (RFC 6120, section 8.2.3) - and the refusal carries
@@ -234,8 +234,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             StanzaError?  reported  = null;
             XMPPMessage?  asMessage = null;
 
-            client.OnStanzaError += (_, error) => reported  = error;
-            client.OnMessage     += m          => asMessage = m;
+            client.OnStanzaError += (timestamp, sender, _, error, ct) => { reported  = error; return Task.CompletedTask; };
+            client.OnMessage     += (timestamp, sender, m, ct)          => { asMessage = m; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<message type='error' from='nobody@{Server.Domain}' to='{client.FullJid}'>" +
@@ -280,7 +280,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "Precondition: Bob is offline.");
 
             StanzaError? reported = null;
-            client.OnStanzaError += (_, error) => reported = error;
+            client.OnStanzaError += (timestamp, sender, _, error, ct) => { reported = error; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<presence type='error' from='{bob}/x' to='{client.FullJid}'>" +
@@ -317,7 +317,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session  = await SessionOfAsync(client);
 
             StreamError? reported = null;
-            client.OnStreamError += error => reported = error;
+            client.OnStreamError += (timestamp, sender, error, ct) => { reported = error; return Task.CompletedTask; };
 
             var connectionsBefore = Server.ConnectionCount;
 
@@ -358,7 +358,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var session  = await SessionOfAsync(client);
 
             StreamError? reported = null;
-            client.OnStreamError += error => reported = error;
+            client.OnStreamError += (timestamp, sender, error, ct) => { reported = error; return Task.CompletedTask; };
 
             var connectionsBefore = Server.ConnectionCount;
 

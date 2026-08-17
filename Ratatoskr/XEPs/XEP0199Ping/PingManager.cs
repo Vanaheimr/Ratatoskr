@@ -19,9 +19,46 @@
 
 using System.Xml.Linq;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnPing...Delegate
+
+/// <summary>
+/// XEP-0199: a ping came back, and how long it took.
+/// </summary>
+public delegate Task OnPongDelegate        (DateTimeOffset     Timestamp,
+                                            PingManager        Sender,
+                                            String             PingId,
+                                            TimeSpan           RoundTripTime,
+                                            CancellationToken  CancellationToken);
+
+/// <summary>
+/// XEP-0199: a ping was not answered in time.
+/// </summary>
+public delegate Task OnPingTimeoutDelegate (DateTimeOffset     Timestamp,
+                                            PingManager        Sender,
+                                            String             Target,
+                                            CancellationToken  CancellationToken);
+
+/// <summary>
+/// XEP-0199: a ping was declined - which is not a timeout, the far end was
+/// there.
+/// </summary>
+public delegate Task OnPingErrorDelegate   (DateTimeOffset     Timestamp,
+                                            PingManager        Sender,
+                                            String             PingId,
+                                            StanzaError        Error,
+                                            CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XEP-0199: XMPP Ping - measures round-trip times and keeps the connection
@@ -48,13 +85,14 @@ public sealed class PingManager
     /// this, and a measurement that anybody may write is not a measurement.
     /// </remarks>
     private readonly Dictionary<string, (TaskCompletionSource<TimeSpan?> Tcs, DateTime Sent, string? Target)> _pending = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
+    private readonly ILogger _logger;
     private int _counter;
 
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 
-    public event Action<string, TimeSpan>? OnPong;
-    public event Action<string>? OnPingTimeout;
+    public event OnPongDelegate? OnPong;
+    public event OnPingTimeoutDelegate? OnPingTimeout;
 
     /// <summary>
     /// The ping was answered with a stanza error. That is something other than
@@ -62,16 +100,19 @@ public sealed class PingManager
     /// <c>service-unavailable</c> simply means that it does not support
     /// XEP-0199.
     /// </summary>
-    public event Action<string, StanzaError>? OnPingError;
+    public event OnPingErrorDelegate? OnPingError;
 
     /// <param name="ownBareJid">
     /// One's own account, so that an answer from one's own server is recognised
     /// as such. Without it the comparison is narrower, never wider.
     /// </param>
-    public PingManager(Func<string, Task> sendStanza, string? ownBareJid = null)
+    public PingManager(Func<string, Task>  sendStanza,
+                       string?             ownBareJid   = null,
+                       ILogger?            logger       = null)
     {
         _sendStanza  = sendStanza;
         _ownBareJid  = ownBareJid;
+        _logger      = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -132,7 +173,7 @@ public sealed class PingManager
         catch (OperationCanceledException)
         {
             lock (_lock) _pending.Remove(id);
-            OnPingTimeout?.Invoke(to ?? "server");
+            await OnPingTimeout.InvokeAllAsync(handler => handler(Timestamp.Now, this, to ?? "server", ct), _logger);
             return null;
         }
     }
@@ -140,7 +181,9 @@ public sealed class PingManager
     /// <summary>
     /// Processes a ping answer
     /// </summary>
-    public bool ProcessPong(string id, string? from = null)
+    public async Task<bool> ProcessPongAsync(string             id,
+                                             string?            from                = null,
+                                             CancellationToken  CancellationToken   = default)
     {
 
         if (!TryClaim(id, from, out var entry))
@@ -149,7 +192,7 @@ public sealed class PingManager
         var rtt = DateTime.UtcNow - entry.Sent;
 
         entry.Tcs.TrySetResult(rtt);
-        OnPong?.Invoke(id, rtt);
+        await OnPong.InvokeAllAsync(handler => handler(Timestamp.Now, this, id, rtt, CancellationToken), _logger);
 
         return true;
 
@@ -162,14 +205,17 @@ public sealed class PingManager
     /// was counted as a valid answer - a declined request thereby looked like a
     /// measured round-trip time.
     /// </summary>
-    public bool ProcessError(string id, StanzaError error, string? from = null)
+    public async Task<bool> ProcessErrorAsync(string             id,
+                                              StanzaError        error,
+                                              string?            from                = null,
+                                              CancellationToken  CancellationToken   = default)
     {
 
         if (!TryClaim(id, from, out var entry))
             return false;
 
         entry.Tcs.TrySetResult(null);
-        OnPingError?.Invoke(id, error);
+        await OnPingError.InvokeAllAsync(handler => handler(Timestamp.Now, this, id, error, CancellationToken), _logger);
 
         return true;
 

@@ -21,9 +21,37 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnCaps...Delegate
+
+/// <summary>
+/// XEP-0115: what a peer says it can do.
+/// </summary>
+public delegate Task OnCapsDiscoveredDelegate(DateTimeOffset     Timestamp,
+                                              EntityCapsManager  Sender,
+                                              String             From,
+                                              DiscoInfo          Info,
+                                              CancellationToken  CancellationToken);
+
+/// <summary>
+/// XEP-0115: an answer that was not taken into the cache, and why.
+/// </summary>
+public delegate Task OnCapsRejectedDelegate  (DateTimeOffset     Timestamp,
+                                              EntityCapsManager  Sender,
+                                              String             From,
+                                              String             Reason,
+                                              CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XEP-0115: Entity Capabilities - shortens repeated disco#info queries by way
@@ -55,11 +83,12 @@ public sealed class EntityCapsManager
 
     private readonly DiscoManager _disco;
     private readonly Dictionary<string, DiscoInfo> _cache = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
+    private readonly ILogger _logger;
 
     public string Node { get; set; } = "https://github.com/xmpp-console";
 
-    public event Action<string, DiscoInfo>? OnCapsDiscovered;
+    public event OnCapsDiscoveredDelegate? OnCapsDiscovered;
 
     /// <summary>
     /// A disco#info answer was not taken into the cache because it does not
@@ -73,11 +102,13 @@ public sealed class EntityCapsManager
     /// is only the bundling - to store it under <c>node#ver</c> and thereby
     /// ascribe it to everybody else who announces the same pair.
     /// </remarks>
-    public event Action<string, string>? OnCapsRejected;
+    public event OnCapsRejectedDelegate? OnCapsRejected;
 
-    public EntityCapsManager(DiscoManager disco)
+    public EntityCapsManager(DiscoManager  disco,
+                             ILogger?      logger   = null)
     {
-        _disco = disco;
+        _disco   = disco;
+        _logger  = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -225,13 +256,15 @@ public sealed class EntityCapsManager
     {
         var cacheKey = $"{node}#{ver}";
 
+        DiscoInfo? cached;
+
         lock (_lock)
+            _cache.TryGetValue(cacheKey, out cached);
+
+        if (cached is not null)
         {
-            if (_cache.TryGetValue(cacheKey, out var cached))
-            {
-                OnCapsDiscovered?.Invoke(from, cached);
-                return;
-            }
+            await OnCapsDiscovered.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, cached, ct), _logger);
+            return;
         }
 
         // XEP-0115 before 1.4: 'ver' is a version number there and no hash.
@@ -253,7 +286,7 @@ public sealed class EntityCapsManager
         // needs it asks disco#info directly, without a node.
         if (hash is null)
         {
-            OnCapsRejected?.Invoke(from, LegacyFormReason);
+            await OnCapsRejected.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, LegacyFormReason, ct), _logger);
             return;
         }
 
@@ -264,7 +297,7 @@ public sealed class EntityCapsManager
             return;
 
         if (VerificationFailure(info, ver, hash) is string reason)
-            OnCapsRejected?.Invoke(from, reason);
+            await OnCapsRejected.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, reason, ct), _logger);
 
         else
             lock (_lock)
@@ -272,7 +305,7 @@ public sealed class EntityCapsManager
                 _cache[cacheKey] = info;
             }
 
-        OnCapsDiscovered?.Invoke(from, info);
+        await OnCapsDiscovered.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, info, ct), _logger);
     }
 
     /// <summary>

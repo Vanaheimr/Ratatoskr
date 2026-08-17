@@ -64,7 +64,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var basket = new ConcurrentQueue<StreamError>();
-            client.OnStreamError += e => basket.Enqueue(e);
+            client.OnStreamError += (timestamp, sender, e, ct) => { basket.Enqueue(e); return Task.CompletedTask; };
 
             return basket;
 
@@ -164,10 +164,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var rawFrames = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal))
                     rawFrames.Enqueue(x);
+
+                return Task.CompletedTask;
+
             };
 
             var errors = ErrorBasket(alice);
@@ -324,7 +327,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var acknowledgements = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<",         StringComparison.Ordinal) &&
                     x.Contains("<a ",           StringComparison.Ordinal) &&
@@ -332,6 +335,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 {
                     acknowledgements.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync("<r xmlns='urn:xmpp:sm:3'/>");
@@ -456,13 +462,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<",             StringComparison.Ordinal) &&
                     x.Contains("id='afterwards'",       StringComparison.Ordinal))
                 {
                     replies.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync("   ");
@@ -510,13 +519,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<",                    StringComparison.Ordinal) &&
                     x.Contains("id='still-here'",             StringComparison.Ordinal))
                 {
                     replies.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync("<presence><show>away</show></presence>");

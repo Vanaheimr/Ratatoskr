@@ -53,7 +53,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client     = await ConnectClientAsync(localPart);
             var presences  = new ConcurrentQueue<String>();
 
-            client.OnPresenceChanged += (from, type) => presences.Enqueue($"{from}|{type}");
+            client.OnPresenceChanged += (timestamp, sender, from, type, ct) => { presences.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
 
             return (client, presences);
 

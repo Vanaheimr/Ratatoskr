@@ -28,9 +28,129 @@ using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnXMPPConnection...Delegate
+
+/// <summary>A chat message arrived, fully assembled.</summary>
+public delegate Task OnXMPPConnectionMessageDelegate                    (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         XMPPMessage        Message,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>A contact's presence changed.</summary>
+public delegate Task OnXMPPConnectionPresenceDelegate                   (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             From,
+                                                                         String             Type,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0085: a contact is typing, or has stopped.</summary>
+public delegate Task OnXMPPConnectionChatStateDelegate                  (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             From,
+                                                                         ChatState          State,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0184: a message we sent was delivered.</summary>
+public delegate Task OnXMPPConnectionReceiptReceivedDelegate            (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             From,
+                                                                         String             MessageId,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0280: a message was mirrored from or to another device of our own.</summary>
+public delegate Task OnXMPPConnectionCarbonMessageDelegate              (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         CarbonMessage      Carbon,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0060: something happened at a node we subscribe to.</summary>
+public delegate Task OnXMPPConnectionPubSubEventDelegate                (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         PubSubEvent        Event,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0060, section 8.6.1: someone applies for a subscription to a node of our own.</summary>
+public delegate Task OnXMPPConnectionPubSubSubscriptionRequestDelegate  (DateTimeOffset                  Timestamp,
+                                                                         XMPPConnection                  Sender,
+                                                                         PubSubSubscribeAuthorization    Request,
+                                                                         CancellationToken               CancellationToken);
+
+/// <summary>Raw XML, inbound and outbound - for debug displays.</summary>
+public delegate Task OnXMPPConnectionRawXmlDelegate                     (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             XML,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>Something went wrong; it has already been logged.</summary>
+public delegate Task OnXMPPConnectionErrorDelegate                      (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             Message,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>A stanza claiming to be somebody it is not was thrown away.</summary>
+public delegate Task OnXMPPConnectionSpoofingAttemptDelegate            (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             Details,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>The connection state has changed.</summary>
+public delegate Task OnXMPPConnectionStateChangedDelegate               (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         ConnectionState    OldState,
+                                                                         ConnectionState    NewState,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0333: a chat marker was received.</summary>
+public delegate Task OnXMPPConnectionChatMarkerDelegate                 (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         ChatMarker         Marker,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0115: the capabilities of a peer were determined.</summary>
+public delegate Task OnXMPPConnectionCapsDiscoveredDelegate             (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             From,
+                                                                         DiscoInfo          Info,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>
+/// RFC 6120, section 8.3: a stanza was refused. <paramref name="From"/> is the
+/// sender of the error and null when it came from one's own server.
+/// </summary>
+public delegate Task OnXMPPConnectionStanzaErrorDelegate                (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String?            From,
+                                                                         StanzaError        Error,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>RFC 6120, section 4.9: the server ended the stream with an error.</summary>
+public delegate Task OnXMPPConnectionStreamErrorDelegate                (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         StreamError        Error,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0384: a peer published a different set of devices.</summary>
+public delegate Task OnXMPPConnectionOmemoDeviceListChangedDelegate     (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         String             BareJid,
+                                                                         OmemoDeviceList    Devices,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>XEP-0384: a message that arrived encrypted, already decrypted.</summary>
+public delegate Task OnXMPPConnectionEncryptedMessageDelegate           (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         XMPPMessage        Message,
+                                                                         OmemoDecrypted     Omemo,
+                                                                         CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XMPP over WebSocket (RFC 7395) with auto-reconnect.
@@ -484,7 +604,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     public bool ClientIsActive { get; private set; } = true;
 
     // Core Managers
-    public Roster Roster { get; } = new();
+    public Roster Roster { get; }
     public ReceiptTracker Receipts { get; }
     public CarbonManager? Carbons { get; private set; }
     public PubSubManager? PubSub { get; private set; }
@@ -514,12 +634,12 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// the caller set the time of day itself and could not possibly know that a
     /// different one stood in the stanza (see D59).
     /// </remarks>
-    public event Action<XMPPMessage>? OnMessage;
-    public event Action<string, string>? OnPresence;
-    public event Action<string, ChatState>? OnChatState;
-    public event Action<string, string>? OnReceiptReceived;
-    public event Action<CarbonMessage>? OnCarbonMessage;
-    public event Action<PubSubEvent>? OnPubSubEvent;
+    public event OnXMPPConnectionMessageDelegate? OnMessage;
+    public event OnXMPPConnectionPresenceDelegate? OnPresence;
+    public event OnXMPPConnectionChatStateDelegate? OnChatState;
+    public event OnXMPPConnectionReceiptReceivedDelegate? OnReceiptReceived;
+    public event OnXMPPConnectionCarbonMessageDelegate? OnCarbonMessage;
+    public event OnXMPPConnectionPubSubEventDelegate? OnPubSubEvent;
 
     /// <summary>
     /// Someone applies for a subscription to a node of our own (XEP-0060,
@@ -531,29 +651,29 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// the report - a client that agreed of its own accord would decide about
     /// someone else's access by a rule nobody has seen.
     /// </remarks>
-    public event Action<PubSubSubscribeAuthorization>? OnPubSubSubscriptionRequest;
-    public event Action<string>? OnRawXml;
-    public event Action<string>? OnError;
-    public event Action<string>? OnSpoofingAttempt;
-    public event Action<ConnectionState, ConnectionState>? OnStateChanged;
+    public event OnXMPPConnectionPubSubSubscriptionRequestDelegate? OnPubSubSubscriptionRequest;
+    public event OnXMPPConnectionRawXmlDelegate? OnRawXml;
+    public event OnXMPPConnectionErrorDelegate? OnError;
+    public event OnXMPPConnectionSpoofingAttemptDelegate? OnSpoofingAttempt;
+    public event OnXMPPConnectionStateChangedDelegate? OnStateChanged;
 
     // Events - Advanced
-    public event Action<ChatMarker>? OnChatMarker;
-    public event Action<string, DiscoInfo>? OnCapsDiscovered;
+    public event OnXMPPConnectionChatMarkerDelegate? OnChatMarker;
+    public event OnXMPPConnectionCapsDiscoveredDelegate? OnCapsDiscovered;
 
     /// <summary>
     /// RFC 6120, section 8.3: A stanza was refused by the peer. The first
     /// parameter is the sender of the error; it is null when the error came
     /// from one's own server.
     /// </summary>
-    public event Action<string?, StanzaError>? OnStanzaError;
+    public event OnXMPPConnectionStanzaErrorDelegate? OnStanzaError;
 
     /// <summary>
     /// RFC 6120, section 4.9: The server ended the stream with an error.
     /// Whether a reconnect follows is said by
     /// <see cref="StreamError.IsRecoverable"/>.
     /// </summary>
-    public event Action<StreamError>? OnStreamError;
+    public event OnXMPPConnectionStreamErrorDelegate? OnStreamError;
 
     #endregion
 
@@ -634,13 +754,23 @@ public sealed class XMPPConnection : IAsyncDisposable
         _loggerFactory  = LoggerFactory;
         _logger         = CreateLogger<XMPPConnection>();
 
+        Roster          = new Roster(LoggerFactory);
+
         Receipts        = new ReceiptTracker(CreateLogger<ReceiptTracker>());
-        Receipts.OnReceiptReceived += (msgId, from) => OnReceiptReceived?.Invoke(from, msgId);
+        Receipts.OnReceiptReceived += async (timestamp, sender, messageId, from, ct) =>
+            await OnReceiptReceived.InvokeAllAsync(handler => handler(timestamp, this, from, messageId, ct), _logger);
 
     }
 
     #endregion
 
+
+    /// <summary>
+    /// The token that dies with this connection - for raising events on
+    /// paths that carry none of their own.
+    /// </summary>
+    private CancellationToken ConnectionToken
+        => _cts?.Token ?? CancellationToken.None;
 
     private ILogger CreateLogger<T>()
     {
@@ -815,7 +945,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // Clear away the remains of a previous connection before a new one comes into being.
         await ShutdownConnectionAsync();
 
-        SetState(ConnectionState.Connecting);
+        await SetStateAsync(ConnectionState.Connecting);
 
         await DiscoverEndpointAsync(ct);
 
@@ -1134,7 +1264,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (!ClientIsActive && SupportsClientStateIndication)
                 await SendAsync(ClientStateIndication.InactiveXml);
 
-            SetState(ConnectionState.Connected);
+            await SetStateAsync(ConnectionState.Connected);
             _reconnectAttempts = 0;
             _logger.LogInformation("Online");
 
@@ -1149,17 +1279,17 @@ public sealed class XMPPConnection : IAsyncDisposable
         {
             // Auth errors are permanent - no reconnect makes sense
             _lastConnectError = ex;
-            SetState(ConnectionState.Disconnected);
+            await SetStateAsync(ConnectionState.Disconnected);
             _logger.LogError(ex, "Authentication error");
-            OnError?.Invoke($"Authentication error: {ex.Message}");
+            await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Authentication error: {ex.Message}", ct), _logger);
             // NO reconnect on auth errors!
         }
         catch (Exception ex)
         {
             _lastConnectError = ex;
-            SetState(ConnectionState.Disconnected);
+            await SetStateAsync(ConnectionState.Disconnected);
             _logger.LogError(ex, "Connection error");
-            OnError?.Invoke($"Connection error: {ex.Message}");
+            await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Connection error: {ex.Message}", ct), _logger);
 
             if (!_intentionalDisconnect)
             {
@@ -1251,7 +1381,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         if (name == "resumed")
         {
-            StreamManagement.ProcessResumed(answer.ToString());
+            await StreamManagement.ProcessResumedAsync(answer.ToString(), ct);
             _logger.LogInformation("Stream resumed as {FullJid}", FullJid);
             return true;
         }
@@ -1265,7 +1395,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         // Together with the frame: a <failed h='…'/> names the state of the old
         // stream, and what the server has processed is not lost.
-        StreamManagement.ProcessFailed(answer.ToString());
+        await StreamManagement.ProcessFailedAsync(answer.ToString(), ct);
 
         return false;
 
@@ -1291,27 +1421,34 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (StreamManagement is null)
         {
             StreamManagement = new StreamManagementManager(xml => SendAsync(xml), CreateLogger<StreamManagementManager>());
-            StreamManagement.OnAckReceived += count =>
-                _logger.LogTrace("Stream management: {Count} stanzas acknowledged", count);
+            StreamManagement.OnAckReceived += (timestamp, sender, acknowledged, ct) => {
+                _logger.LogTrace("Stream management: {Count} stanzas acknowledged", acknowledged);
+                return Task.CompletedTask;
+            };
         }
 
-        Carbons = new CarbonManager(BareJid);
-        Carbons.OnCarbonReceived += c => OnCarbonMessage?.Invoke(c);
-        Carbons.OnParseError     += msg => OnError?.Invoke($"[Carbon] {msg}");
+        Carbons = new CarbonManager(BareJid, CreateLogger<CarbonManager>());
+        Carbons.OnCarbonReceived += async (timestamp, sender, carbon, ct) =>
+            await OnCarbonMessage.InvokeAllAsync(handler => handler(timestamp, this, carbon, ct), _logger);
+        Carbons.OnParseError     += async (timestamp, sender, reason, ct) =>
+            await OnError.InvokeAllAsync(handler => handler(timestamp, this, $"[Carbon] {reason}", ct), _logger);
 
         PubSub = new PubSubManager($"pubsub.{_domain}", CreateLogger<PubSubManager>());
-        PubSub.OnEvent += e => OnPubSubEvent?.Invoke(e);
+        PubSub.OnEvent += async (timestamp, sender, pubSubEvent, ct) =>
+            await OnPubSubEvent.InvokeAllAsync(handler => handler(timestamp, this, pubSubEvent, ct), _logger);
 
         // XEP-0199: Ping Manager
-        Ping = new PingManager(xml => SendAsync(xml), BareJid);
-        Ping.OnPingTimeout += target => OnError?.Invoke($"Ping timeout: {target}");
+        Ping = new PingManager(xml => SendAsync(xml), BareJid, CreateLogger<PingManager>());
+        Ping.OnPingTimeout += async (timestamp, sender, target, ct) =>
+            await OnError.InvokeAllAsync(handler => handler(timestamp, this, $"Ping timeout: {target}", ct), _logger);
 
         // XEP-0030: Service Discovery
-        Disco = new DiscoManager(xml => SendAsync(xml), BareJid);
+        Disco = new DiscoManager(xml => SendAsync(xml), BareJid, CreateLogger<DiscoManager>());
 
         // XEP-0115: Entity Capabilities
-        EntityCaps = new EntityCapsManager(Disco);
-        EntityCaps.OnCapsDiscovered += (from, info) => OnCapsDiscovered?.Invoke(from, info);
+        EntityCaps = new EntityCapsManager(Disco, CreateLogger<EntityCapsManager>());
+        EntityCaps.OnCapsDiscovered += async (timestamp, sender, from, info, ct) =>
+            await OnCapsDiscovered.InvokeAllAsync(handler => handler(timestamp, this, from, info, ct), _logger);
 
     }
 
@@ -1336,7 +1473,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             )
         );
 
-        SetState(ConnectionState.Reconnecting);
+        await SetStateAsync(ConnectionState.Reconnecting);
         _logger.LogInformation("Reconnect attempt {Attempt}/{Max} in {Seconds:F1}s ...",
                                _reconnectAttempts, MaxReconnectAttempts, delay.TotalSeconds);
 
@@ -1352,18 +1489,18 @@ public sealed class XMPPConnection : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Reconnect failed");
-            OnError?.Invoke($"Reconnect failed: {ex.Message}");
+            await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Reconnect failed: {ex.Message}", ct), _logger);
         }
     }
 
-    private void SetState(ConnectionState newState)
+    private async Task SetStateAsync(ConnectionState newState)
     {
         var oldState = State;
         if (oldState != newState)
         {
             State = newState;
             _logger.LogDebug("Connection state: {OldState} -> {NewState}", oldState, newState);
-            OnStateChanged?.Invoke(oldState, newState);
+            await OnStateChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, oldState, newState, ConnectionToken), _logger);
         }
     }
 
@@ -1456,7 +1593,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
 
         _logger.LogTrace(">>> {Xml}", xml);
-        OnRawXml?.Invoke($">>> {xml}");
+        await OnRawXml.InvokeAllAsync(handler => handler(Timestamp.Now, this, $">>> {xml}", ConnectionToken), _logger);
 
     }
 
@@ -1537,7 +1674,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// Compared bare, as everywhere in this house: a request to a full JID may
     /// be answered by the same account, and that is a person, not a stranger.
     /// </remarks>
-    private bool TryCompleteIq(string id, XElement element, String? from)
+    private async Task<bool> TryCompleteIqAsync(string id, XElement element, String? from, CancellationToken CancellationToken = default)
     {
 
         PendingIq?  pending;
@@ -1572,8 +1709,9 @@ public sealed class XMPPConnection : IAsyncDisposable
             _logger.LogWarning("IQ '{Id}' was answered by {From}, but {Asked} was asked",
                                id, from ?? "an unnamed sender", asked);
 
-            OnSpoofingAttempt?.Invoke($"IQ '{id}' answered by {from ?? "an unnamed sender"} " +
-                                      $"instead of {asked}");
+            await OnSpoofingAttempt.InvokeAllAsync(handler => handler(Timestamp.Now, this,
+                                                                   $"IQ '{id}' answered by {from ?? "an unnamed sender"} " +
+                                                                   $"instead of {asked}", CancellationToken), _logger);
 
             return false;
 
@@ -1665,7 +1803,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var xml = sb.ToString();
         _logger.LogTrace("<<< {Xml}", xml);
-        OnRawXml?.Invoke($"<<< {xml}");
+        await OnRawXml.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"<<< {xml}", ct), _logger);
         NoteInboundStanza(xml);
         return xml;
     }
@@ -1728,9 +1866,9 @@ public sealed class XMPPConnection : IAsyncDisposable
                 if (!string.IsNullOrEmpty(stanza))
                 {
                     _logger.LogTrace("<<< {Xml}", stanza);
-                    OnRawXml?.Invoke($"<<< {stanza}");
+                    await OnRawXml.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"<<< {stanza}", ct), _logger);
                     NoteInboundStanza(stanza);
-                    ProcessStanza(stanza);
+                    await ProcessStanzaAsync(stanza, ct);
                 }
             }
         }
@@ -1741,12 +1879,12 @@ public sealed class XMPPConnection : IAsyncDisposable
         catch (WebSocketException ex)
         {
             _logger.LogError(ex, "WebSocket error");
-            OnError?.Invoke($"WebSocket error: {ex.Message}");
+            await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"WebSocket error: {ex.Message}", ConnectionToken), _logger);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Receive error");
-            OnError?.Invoke($"Receive error: {ex.Message}");
+            await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Receive error: {ex.Message}", ConnectionToken), _logger);
         }
 
         // A loop of an already superseded connection must not trigger a
@@ -1764,13 +1902,13 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (_fatalStreamError)
         {
             _logger.LogDebug("No reconnect after a non-recoverable stream error");
-            SetState(ConnectionState.Disconnected);
+            await SetStateAsync(ConnectionState.Disconnected);
             return;
         }
 
         if (!_intentionalDisconnect && State == ConnectionState.Connected)
         {
-            SetState(ConnectionState.Disconnected);
+            await SetStateAsync(ConnectionState.Disconnected);
             _ = Task.Run(() => TryReconnectAsync(CancellationToken.None));
         }
     }
@@ -1820,7 +1958,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Keepalive error");
-            OnError?.Invoke($"Keepalive error: {ex.Message}");
+            await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Keepalive error: {ex.Message}", ConnectionToken), _logger);
         }
     }
 
@@ -1844,7 +1982,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// says nothing about who sent it - which is the point for anything testing
     /// a stanza that lies about its sender.
     /// </summary>
-    internal void ProcessStanza(string stanza)
+    internal async Task ProcessStanzaAsync(string stanza, CancellationToken CancellationToken = default)
     {
         try
         {
@@ -1865,9 +2003,9 @@ public sealed class XMPPConnection : IAsyncDisposable
                 _logger.LogWarning("The stanza is not well-formed XML: {Reason}", ex.Message);
 
                 if (StreamError.TryParse(stanza, out var rawStreamError) && rawStreamError is not null)
-                    ProcessStreamError(rawStreamError);
+                    await ProcessStreamErrorAsync(rawStreamError, CancellationToken);
                 else
-                    OnError?.Invoke($"The stanza is not well-formed XML: {ex.Message}");
+                    await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"The stanza is not well-formed XML: {ex.Message}", CancellationToken), _logger);
 
                 return;
             }
@@ -1879,26 +2017,26 @@ public sealed class XMPPConnection : IAsyncDisposable
             {
 
                 case "message":
-                    ProcessMessage(element);
+                    await ProcessMessageAsync(element, CancellationToken);
                     return;
 
                 case "presence":
-                    ProcessPresence(element);
+                    await ProcessPresenceAsync(element, CancellationToken);
                     return;
 
                 case "iq":
-                    ProcessIq(element);
+                    await ProcessIqAsync(element, CancellationToken);
                     return;
 
                 case "close":
                     _logger.LogWarning("Stream closed by the server");
-                    OnError?.Invoke("Stream closed by the server");
+                    await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, "Stream closed by the server", CancellationToken), _logger);
                     return;
 
                 // RFC 6120, section 4.9: a stream error. After it the stream is dead.
                 case "error" when ns == StreamNamespace:
                     if (StreamError.TryParse(stanza, out var streamError) && streamError is not null)
-                        ProcessStreamError(streamError);
+                        await ProcessStreamErrorAsync(streamError, CancellationToken);
                     return;
 
                 // XEP-0198: stream management. Now checked through the
@@ -1908,7 +2046,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                     return;
 
                 case "a" when ns == StreamManagementNamespace:
-                    StreamManagement?.ProcessAck(stanza);
+                    if (StreamManagement is not null)
+                        await StreamManagement.ProcessAckAsync(stanza, CancellationToken);
                     return;
 
                 case "r" when ns == StreamManagementNamespace:
@@ -1916,11 +2055,13 @@ public sealed class XMPPConnection : IAsyncDisposable
                     return;
 
                 case "resumed" when ns == StreamManagementNamespace:
-                    StreamManagement?.ProcessResumed(stanza);
+                    if (StreamManagement is not null)
+                        await StreamManagement.ProcessResumedAsync(stanza, CancellationToken);
                     return;
 
                 case "failed" when ns == StreamManagementNamespace:
-                    StreamManagement?.ProcessFailed(stanza);
+                    if (StreamManagement is not null)
+                        await StreamManagement.ProcessFailedAsync(stanza, CancellationToken);
                     return;
 
                 default:
@@ -1932,7 +2073,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Stanza processing failed");
-            OnError?.Invoke($"Stanza processing failed: {ex.Message}");
+            await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Stanza processing failed: {ex.Message}", CancellationToken), _logger);
         }
     }
 
@@ -1942,7 +2083,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// with everything else it would run into the same refusal and produce a
     /// loop.
     /// </summary>
-    private void ProcessStreamError(StreamError streamError)
+    private async Task ProcessStreamErrorAsync(StreamError streamError, CancellationToken CancellationToken = default)
     {
 
         if (streamError.IsRecoverable)
@@ -1957,12 +2098,12 @@ public sealed class XMPPConnection : IAsyncDisposable
             _fatalStreamError = true;
         }
 
-        OnStreamError?.Invoke(streamError);
-        OnError?.Invoke($"Stream error: {streamError}");
+        await OnStreamError.InvokeAllAsync(handler => handler(Timestamp.Now, this, streamError, CancellationToken), _logger);
+        await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Stream error: {streamError}", CancellationToken), _logger);
 
     }
 
-    private void ProcessMessage(XElement element)
+    private async Task ProcessMessageAsync(XElement element, CancellationToken CancellationToken = default)
     {
         var from = element.Attr("from") ?? "unknown";
         var to = element.Attr("to") ?? FullJid;
@@ -1979,7 +2120,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             _logger.LogDebug("Message to {From} refused: {Error}", from, parsed);
 
-            OnStanzaError?.Invoke(from, parsed);
+            await OnStanzaError.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, parsed, CancellationToken), _logger);
             return;
 
         }
@@ -2004,7 +2145,8 @@ public sealed class XMPPConnection : IAsyncDisposable
             element.Attr("from") is not null)
         {
 
-            PubSub?.ProcessEvent(element, from, PubSub.PubSubService);
+            if (PubSub is not null)
+                await PubSub.ProcessEventAsync(element, from, PubSub.PubSubService, CancellationToken);
 
             _ = ProcessPepEventAsync(element, from);
 
@@ -2047,7 +2189,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                                    "only the service hosting a node asks that",
                                    from, application!.NodeId);
 
-                OnSpoofingAttempt?.Invoke($"PubSub subscription request from {from}, which hosts no node");
+                await OnSpoofingAttempt.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"PubSub subscription request from {from}, which hosts no node", CancellationToken), _logger);
 
                 return;
 
@@ -2055,7 +2197,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             _logger.LogInformation("PubSub: {Who} applies for {Node}", application!.SubscriberJid, application.NodeId);
 
-            OnPubSubSubscriptionRequest?.Invoke(application);
+            await OnPubSubSubscriptionRequest.InvokeAllAsync(handler => handler(Timestamp.Now, this, application, CancellationToken), _logger);
 
             return;
 
@@ -2098,7 +2240,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         {
             if (Carbons != null)
             {
-                var result = Carbons.ProcessCarbon(element, from);
+                var result = await Carbons.ProcessCarbonAsync(element, from, CancellationToken);
 
                 switch (result)
                 {
@@ -2107,12 +2249,12 @@ public sealed class XMPPConnection : IAsyncDisposable
 
                     case CarbonResult.SpoofingDetected:
                         _logger.LogWarning("Carbon spoofing from {From}", from);
-                        OnSpoofingAttempt?.Invoke($"Carbon spoofing from {from}");
+                        await OnSpoofingAttempt.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Carbon spoofing from {from}", CancellationToken), _logger);
                         return;
 
                     case CarbonResult.ParseError:
                         _logger.LogError("Carbon parse error from {From}", from);
-                        OnError?.Invoke($"Carbon parse error from {from}");
+                        await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Carbon parse error from {from}", CancellationToken), _logger);
                         return;
 
                     case CarbonResult.NotACarbon:
@@ -2140,13 +2282,13 @@ public sealed class XMPPConnection : IAsyncDisposable
                 _logger.LogWarning("Chat marker spoofing: {From} marks {Id}, which was not sent there",
                                    from, chatMarker.MessageId);
 
-                OnSpoofingAttempt?.Invoke($"Chat marker from {from} for a message that was not sent there");
+                await OnSpoofingAttempt.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Chat marker from {from} for a message that was not sent there", CancellationToken), _logger);
 
                 return;
 
             }
 
-            OnChatMarker?.Invoke(chatMarker);
+            await OnChatMarker.InvokeAllAsync(handler => handler(Timestamp.Now, this, chatMarker, CancellationToken), _logger);
             return;
 
         }
@@ -2155,8 +2297,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         var receiptId = ReceiptBuilder.ExtractReceiptId(element);
         if (receiptId != null)
         {
-            if (!Receipts.ProcessReceipt(receiptId, from))
-                OnSpoofingAttempt?.Invoke($"Receipt spoofing: {receiptId} from {from}");
+            if (!await Receipts.ProcessReceiptAsync(receiptId, from, CancellationToken))
+                await OnSpoofingAttempt.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Receipt spoofing: {receiptId} from {from}", CancellationToken), _logger);
             return;
         }
 
@@ -2164,7 +2306,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         var chatState = ChatStateExtensions.ParseChatState(element);
         if (chatState.HasValue)
         {
-            OnChatState?.Invoke(from, chatState.Value);
+            await OnChatState.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, chatState.Value, CancellationToken), _logger);
         }
 
         // An ordinary message. Only direct children: a forwarded message in
@@ -2184,15 +2326,18 @@ public sealed class XMPPConnection : IAsyncDisposable
                                ? stamp.ToLocalTime().DateTime
                                : received;
 
-            OnMessage?.Invoke(new XMPPMessage(from,
-                                              to,
-                                              body,
-                                              msgId,
-                                              written,
-                                              messageType,
-                                              received,
-                                              heldBy,
-                                              MessageCorrection.ReplacedId(element)));
+            await OnMessage.InvokeAllAsync(handler => handler(Timestamp.Now,
+                                                           this,
+                                                           new XMPPMessage(from,
+                                                                           to,
+                                                                           body,
+                                                                           msgId,
+                                                                           written,
+                                                                           messageType,
+                                                                           received,
+                                                                           heldBy,
+                                                                           MessageCorrection.ReplacedId(element)),
+                                                           CancellationToken), _logger);
 
             // Answered of its own accord is only where an answer belongs. A
             // shout is not to be acknowledged, and into a room least of all -
@@ -2214,7 +2359,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
     }
 
-    private void ProcessPresence(XElement element)
+    private async Task ProcessPresenceAsync(XElement element, CancellationToken CancellationToken = default)
     {
         var from = element.Attr("from") ?? "unknown";
         var type = element.Attr("type") ?? "available";
@@ -2231,14 +2376,14 @@ public sealed class XMPPConnection : IAsyncDisposable
 
             _logger.LogDebug("Presence from/to {From} refused: {Error}", from, parsed);
 
-            OnStanzaError?.Invoke(from, parsed);
+            await OnStanzaError.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, parsed, CancellationToken), _logger);
             return;
 
         }
 
         if (type == "subscribe")
         {
-            Roster.RaiseSubscriptionRequest(from, element.ChildValue("status") ?? "");
+            await Roster.RaiseSubscriptionRequestAsync(from, element.ChildValue("status") ?? "", CancellationToken);
         }
 
         // RFC 6121, section 3: state changes, not presence. They previously ran
@@ -2247,14 +2392,14 @@ public sealed class XMPPConnection : IAsyncDisposable
         // <presence type='unsubscribed'/> that made the contact online.
         else if (type is "subscribed" or "unsubscribed" or "unsubscribe")
         {
-            Roster.ProcessSubscriptionChange(from, type);
+            await Roster.ProcessSubscriptionChangeAsync(from, type, CancellationToken);
         }
 
         else
         {
             var show = element.ChildValue("show");
             var status = element.ChildValue("status");
-            Roster.UpdatePresence(from, type, show, status);
+            await Roster.UpdatePresenceAsync(from, type, show, status, CancellationToken);
 
             // XEP-0115: Entity Capabilities
             // IMPORTANT: skip our own presences - we know our caps already!
@@ -2281,10 +2426,10 @@ public sealed class XMPPConnection : IAsyncDisposable
             }
         }
 
-        OnPresence?.Invoke(from, type);
+        await OnPresence.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, type, CancellationToken), _logger);
     }
 
-    private void ProcessIq(XElement element)
+    private async Task ProcessIqAsync(XElement element, CancellationToken CancellationToken = default)
     {
         var type = element.Attr("type");
         var id = element.Attr("id");
@@ -2308,7 +2453,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // the id goes before everything else - before the error path too,
         // because for the waiting party an 'error' is just as much an answer as
         // a 'result'.
-        if (id is not null && type is "result" or "error" && TryCompleteIq(id, element, from))
+        if (id is not null && type is "result" or "error" && await TryCompleteIqAsync(id, element, from, CancellationToken))
             return;
 
         // RFC 6120, section 8.3: An iq 'error' is not an answer with content but
@@ -2347,14 +2492,14 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (id != null)
             {
                 if (id.StartsWith("ping-"))
-                    claimed = Ping?.ProcessError(id, parsed, from) == true;
+                    claimed = Ping is not null && await Ping.ProcessErrorAsync(id, parsed, from, CancellationToken);
 
                 else if (id.StartsWith("disco-info-") || id.StartsWith("disco-items-"))
-                    claimed = Disco?.ProcessError(id, parsed, from) == true;
+                    claimed = Disco is not null && await Disco.ProcessErrorAsync(id, parsed, from, CancellationToken);
             }
 
             if (!claimed)
-                OnStanzaError?.Invoke(from, parsed);
+                await OnStanzaError.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, parsed, CancellationToken), _logger);
 
             return;
 
@@ -2368,7 +2513,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                 // XEP-0199: ping answer
                 if (id.StartsWith("ping-"))
                 {
-                    Ping?.ProcessPong(id, from);
+                    if (Ping is not null)
+                        await Ping.ProcessPongAsync(id, from, CancellationToken);
                     return;
                 }
 
@@ -2463,7 +2609,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                 if (!IsAuthorizedRosterPush(from))
                 {
                     _logger.LogWarning("Roster push from the unauthorised sender {From} discarded", from);
-                    OnSpoofingAttempt?.Invoke($"Roster push spoofing from {from}");
+                    await OnSpoofingAttempt.InvokeAllAsync(handler => handler(Timestamp.Now, this, $"Roster push spoofing from {from}", CancellationToken), _logger);
 
                     // Deliberately without an answer. RFC 6121, section 2.1.6
                     // permits that explicitly: the client may "refuse to return
@@ -2474,7 +2620,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                     return;
                 }
 
-                ProcessRosterPush(element);
+                await ProcessRosterPushAsync(element, CancellationToken);
                 _ = SendAsync($"<iq type='result' id='{id}'/>");
                 return;
             }
@@ -2483,7 +2629,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         // PubSub event (can come as a message or an iq)
         if (element.Child(PubSubManager.EventNamespace, "event") is not null && from != null)
         {
-            PubSub?.ProcessEvent(element, from, PubSub.PubSubService);
+            if (PubSub is not null)
+                await PubSub.ProcessEventAsync(element, from, PubSub.PubSubService, CancellationToken);
 
             // XEP-0384, section 5.2: The device list comes over the same route
             // but demands an answer - if one's own device is missing from it, it
@@ -2644,7 +2791,8 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// on the server, customary - did not fit that and the push was discarded
     /// silently. Groups it did not read at all.
     /// </summary>
-    private void ProcessRosterPush(XElement element)
+    private async Task ProcessRosterPushAsync(XElement           element,
+                                              CancellationToken  CancellationToken   = default)
     {
 
         var query = element.Child("query");
@@ -2661,9 +2809,9 @@ public sealed class XMPPConnection : IAsyncDisposable
                 continue;
 
             if (itemElement.Attr("subscription") == "remove")
-                Roster.RemoveItem(jid);
+                await Roster.RemoveItemAsync(jid, CancellationToken);
             else
-                Roster.ProcessRosterItem(ToRosterItem(itemElement, jid));
+                await Roster.ProcessRosterItemAsync(ToRosterItem(itemElement, jid), CancellationToken);
 
         }
 
@@ -3329,7 +3477,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// Someone else's device list has arrived - through PEP, without anyone
     /// having asked.
     /// </summary>
-    public event Action<string, OmemoDeviceList>? OnOmemoDeviceListChanged;
+    public event OnXMPPConnectionOmemoDeviceListChangedDelegate? OnOmemoDeviceListChanged;
 
     /// <summary>
     /// One's own device identifier, as soon as it is settled - on it hangs the
@@ -3366,7 +3514,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (payload is null || !OmemoDeviceList.TryRead(payload, out var list) || list is null)
             return;
 
-        OnOmemoDeviceListChanged?.Invoke(JidUtilities.Bare(from), list);
+        await OnOmemoDeviceListChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, JidUtilities.Bare(from), list, ConnectionToken), _logger);
 
         if (OmemoDeviceId is not UInt32 own ||
             !string.Equals(JidUtilities.Bare(from), BareJid, StringComparison.OrdinalIgnoreCase) ||
@@ -3388,7 +3536,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>
     /// A message that arrived encrypted - already decrypted.
     /// </summary>
-    public event Action<XMPPMessage, OmemoDecrypted>? OnEncryptedMessage;
+    public event OnXMPPConnectionEncryptedMessageDelegate? OnEncryptedMessage;
 
     /// <summary>
     /// XEP-0384: Switches OMEMO on - key material from the store, device list
@@ -3427,22 +3575,29 @@ public sealed class XMPPConnection : IAsyncDisposable
         // being told - and this is the one failure that has no symptom on this
         // side. A lost connection needs no token here: the send throws or the
         // IQ times out, and both land in the catch below.
-        Omemo.OnBundleChanged += () => _ = Task.Run(async () =>
+        Omemo.OnBundleChanged += (timestamp, sender, cancellationToken) =>
         {
 
-            try
+            _ = Task.Run(async () =>
             {
 
-                if (!await PublishOmemoBundleAsync(Omemo.Identity.DeviceId, Omemo.Identity.Bundle()))
-                    _logger.LogWarning("OMEMO: the refilled bundle was not accepted by the server");
+                try
+                {
 
-            }
-            catch (Exception e)
-            {
-                _logger.LogWarning("OMEMO: the refilled bundle could not be published: {Reason}", e.Message);
-            }
+                    if (!await PublishOmemoBundleAsync(Omemo.Identity.DeviceId, Omemo.Identity.Bundle()))
+                        _logger.LogWarning("OMEMO: the refilled bundle was not accepted by the server");
 
-        });
+                }
+                catch (Exception e)
+                {
+                    _logger.LogWarning("OMEMO: the refilled bundle could not be published: {Reason}", e.Message);
+                }
+
+            });
+
+            return Task.CompletedTask;
+
+        };
 
         OmemoDeviceId = Omemo.Identity.DeviceId;
 
@@ -3502,7 +3657,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// Takes an encrypted message in.
     /// </summary>
     /// <returns>true when it was processed - then it no longer goes the ordinary way.</returns>
-    private bool TryProcessEncrypted(XElement element, string from)
+    private bool TryProcessEncrypted(XElement element, string from, CancellationToken CancellationToken = default)
     {
 
         if (Omemo is null || !OmemoEncryptedElement.TryRead(element, out var encrypted))
@@ -3523,14 +3678,17 @@ public sealed class XMPPConnection : IAsyncDisposable
             if (body is null)
                 return;
 
-            OnEncryptedMessage?.Invoke(
-                new XMPPMessage(from,
-                                element.Attr("to") ?? FullJid,
-                                body,
-                                element.Attr("id"),
-                                DateTime.Now,
-                                MessageType.Chat),
-                decrypted);
+            await OnEncryptedMessage.InvokeAllAsync(handler => handler(
+                                                            Timestamp.Now,
+                                                            this,
+                                                            new XMPPMessage(from,
+                                                                            element.Attr("to") ?? FullJid,
+                                                                            body,
+                                                                            element.Attr("id"),
+                                                                            DateTime.Now,
+                                                                            MessageType.Chat),
+                                                            decrypted,
+                                                            CancellationToken), _logger);
 
         });
 
@@ -3639,7 +3797,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         // Replace and do not add to: the result is the complete roster
         // (RFC 6121, section 2.1.4). Whoever only merges here keeps a contact
         // the server has long stopped carrying.
-        Roster.ReplaceAll(state);
+        await Roster.ReplaceAllAsync(state);
 
         // The version belongs to exactly this state and is therefore only taken
         // over after that state has been merged in.
@@ -4689,7 +4847,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         await ShutdownConnectionAsync();
 
-        SetState(ConnectionState.Disconnected);
+        await SetStateAsync(ConnectionState.Disconnected);
 
     }
 

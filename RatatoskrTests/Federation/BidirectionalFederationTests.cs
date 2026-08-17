@@ -181,8 +181,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atJuliet = new List<String>();
             var atAlice  = new List<String>();
 
-            juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
-            alice.OnMessage  += m => atAlice.Add(m.Body ?? "");
+            juliet.OnMessage += (timestamp, sender, m, ct) => { atJuliet.Add(m.Body ?? ""); return Task.CompletedTask; };
+            alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m.Body ?? ""); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(juliet.BareJid, "There");
             await WaitFor(() => atJuliet.Count > 0, "the message at Juliet's");
@@ -229,8 +229,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atJuliet = new List<String>();
             var atAlice  = new List<String>();
 
-            juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
-            alice.OnMessage  += m => atAlice.Add(m.Body ?? "");
+            juliet.OnMessage += (timestamp, sender, m, ct) => { atJuliet.Add(m.Body ?? ""); return Task.CompletedTask; };
+            alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m.Body ?? ""); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(juliet.BareJid, "There");
             await WaitFor(() => atJuliet.Count > 0, "the message at Juliet's");
@@ -273,7 +273,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             _left.GetAccount(alice.BareJid)!.SetRosterEntry(new RosterEntry(juliet.BareJid, null, "both"));
 
             var atJuliet = new List<String>();
-            juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
+            juliet.OnMessage += (timestamp, sender, m, ct) => { atJuliet.Add(m.Body ?? ""); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(juliet.BareJid, "There");
 
@@ -345,8 +345,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 var atJuliet = new List<String>();
                 var atAlice  = new List<String>();
 
-                juliet.OnMessage += m => atJuliet.Add(m.Body ?? "");
-                alice.OnMessage  += m => atAlice.Add(m.Body ?? "");
+                juliet.OnMessage += (timestamp, sender, m, ct) => { atJuliet.Add(m.Body ?? ""); return Task.CompletedTask; };
+                alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m.Body ?? ""); return Task.CompletedTask; };
 
                 // First farther, then left - the order is the core of the test.
                 await third.SendMessageAsync(juliet.BareJid, "from farther");

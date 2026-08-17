@@ -88,7 +88,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = CreateClient("alice", maxReconnectAttempts: 0);
 
             var reported = new ConcurrentQueue<String>();
-            client.OnError += m => reported.Enqueue(m);
+            client.OnError += (timestamp, sender, m, ct) => { reported.Enqueue(m); return Task.CompletedTask; };
 
             var clock   = Stopwatch.StartNew();
             var attempt = FailingConnectAsync(client);
@@ -138,7 +138,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = CreateClient("alice", maxReconnectAttempts: 0);
 
             var reported = new ConcurrentQueue<String>();
-            client.OnError += m => reported.Enqueue(m);
+            client.OnError += (timestamp, sender, m, ct) => { reported.Enqueue(m); return Task.CompletedTask; };
 
             var attempt = FailingConnectAsync(client);
             var finished  = await Task.WhenAny(attempt, Task.Delay(TimeSpan.FromSeconds(40)));

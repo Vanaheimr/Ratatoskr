@@ -210,7 +210,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob    = Create(_right, "bob");
             var inbox  = new ConcurrentQueue<XMPPMessage>();
 
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await bob.ConnectAsync();
 
@@ -265,10 +265,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob        = Create(_right, "bob");
             var rawFrames  = new ConcurrentQueue<String>();
 
-            bob.Connection.OnRawXml += x =>
+            bob.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.Contains("Out of the store", StringComparison.Ordinal))
                     rawFrames.Enqueue(x);
+
+                return Task.CompletedTask;
+
             };
 
             await bob.ConnectAsync();
@@ -314,8 +317,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob    = new ConcurrentQueue<XMPPMessage>();
             var errors   = new ConcurrentQueue<(String? From, StanzaError Error)>();
 
-            bob.OnMessage                  += m => atBob.Enqueue(m);
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue((from, e));
+            bob.OnMessage                  += (timestamp, sender, m, ct) => { atBob.Enqueue(m); return Task.CompletedTask; };
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue((from, e)); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<message to='{Bob}' type='groupchat' id='across-the-border'>" +
@@ -368,7 +371,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             _right.AddAccount("bob");
 
             var errors = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(Bob, "Does not arrive");
 
@@ -410,7 +413,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             _right.AddAccount("bob");
 
             var atAlice = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => atAlice.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { atAlice.Enqueue(e); return Task.CompletedTask; };
 
             const String errorBody = "<error type='cancel'>" +
                                      "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
@@ -455,7 +458,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var secondDevice  = Create(_right, "bob", "SecondDevice", priority: -1);
             var inbox         = new ConcurrentQueue<XMPPMessage>();
 
-            secondDevice.OnMessage += m => inbox.Enqueue(m);
+            secondDevice.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await secondDevice.ConnectAsync();
 
@@ -515,7 +518,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob    = Create(_right, "bob", "New");
             var inbox  = new ConcurrentQueue<XMPPMessage>();
 
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await bob.ConnectAsync();
 
@@ -598,22 +601,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atTheMobile   = new ConcurrentQueue<String>();
             var atTheDesktop  = new ConcurrentQueue<String>();
 
-            mobile.Connection.OnRawXml += x =>
+            mobile.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("urn:xmpp:ping", StringComparison.Ordinal))
                 {
                     atTheMobile.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
-            desktop.Connection.OnRawXml += x =>
+            desktop.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("urn:xmpp:ping", StringComparison.Ordinal))
                 {
                     atTheDesktop.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await mobile.ConnectAsync();
@@ -622,8 +631,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var replies = new ConcurrentQueue<String>();
             var errors  = new ConcurrentQueue<StanzaError>();
 
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
-            alice.Connection.OnRawXml      += x =>
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
+            alice.Connection.OnRawXml      += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("<iq",              StringComparison.Ordinal) &&
@@ -631,6 +640,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 {
                     replies.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync(
@@ -689,7 +701,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("type='result'",         StringComparison.Ordinal) &&
@@ -697,6 +709,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 {
                     replies.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync(
@@ -742,13 +757,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("to-the-server", StringComparison.Ordinal))
                 {
                     replies.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync(
@@ -794,13 +812,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("what-can-you-do", StringComparison.Ordinal))
                 {
                     replies.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync(
@@ -841,7 +862,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectAsync(_left, "alice");
 
             var errors = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<iq type='get' id='does-not-know-it' to='{_right.Domain}'>" +
@@ -878,13 +899,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("no-question", StringComparison.Ordinal))
                 {
                     replies.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync(
@@ -938,8 +962,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atAlice = new ConcurrentQueue<(String From, String? Type)>();
             var atBob   = new ConcurrentQueue<(String From, String? Type)>();
 
-            alice.Connection.OnPresence += (from, type) => atAlice.Enqueue((from, type));
-            bob.Connection.OnPresence   += (from, type) => atBob.Enqueue((from, type));
+            alice.Connection.OnPresence += (timestamp, sender, from, type, ct) => { atAlice.Enqueue((from, type)); return Task.CompletedTask; };
+            bob.Connection.OnPresence   += (timestamp, sender, from, type, ct) => { atBob.Enqueue((from, type)); return Task.CompletedTask; };
 
             await alice.SendRawAsync($"<presence to='{Bob}' type='probe'/>");
 
@@ -988,7 +1012,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             _right.GetAccount(Bob)!.SetRosterEntry(new RosterEntry(Alice, null, "to"));
 
             var atAlice = new ConcurrentQueue<(String From, String? Type)>();
-            alice.Connection.OnPresence += (from, type) => atAlice.Enqueue((from, type));
+            alice.Connection.OnPresence += (timestamp, sender, from, type, ct) => { atAlice.Enqueue((from, type)); return Task.CompletedTask; };
 
             await alice.SendRawAsync($"<presence to='{Bob}' type='probe'/>");
 
@@ -1047,7 +1071,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob        = Create(_right, "bob");
             var presences  = new ConcurrentQueue<String>();
 
-            bob.Connection.OnPresence += (from, show) => presences.Enqueue(from);
+            bob.Connection.OnPresence += (timestamp, sender, from, show, ct) => { presences.Enqueue(from); return Task.CompletedTask; };
 
             await bob.ConnectAsync();
             await alice.SetPresenceAsync("dnd", "Please do not disturb");
@@ -1090,22 +1114,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atAlice = new ConcurrentQueue<String>();
             var atBob   = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='foreign-type'", StringComparison.Ordinal))
                 {
                     atAlice.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
-            bob.Connection.OnRawXml += x =>
+            bob.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='foreign-type'", StringComparison.Ordinal))
                 {
                     atBob.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync(
@@ -1164,22 +1194,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atAlice = new ConcurrentQueue<String>();
             var atBob   = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
                     atAlice.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
-            bob.Connection.OnRawXml += x =>
+            bob.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
                     atBob.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await _right.AcceptFromRemoteAsync(
@@ -1246,22 +1282,28 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atAlice = new ConcurrentQueue<String>();
             var atBob   = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
                     atAlice.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
-            bob.Connection.OnRawXml += x =>
+            bob.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
                     atBob.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             var verdict = await _right.AcceptFromRemoteAsync(
@@ -1322,13 +1364,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var atBob = new ConcurrentQueue<String>();
 
-            bob.Connection.OnRawXml += x =>
+            bob.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
                     atBob.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             var verdict = await _right.AcceptFromRemoteAsync(
@@ -1366,13 +1411,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var atAlice = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("id='from-over-there'", StringComparison.Ordinal))
                 {
                     atAlice.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             var verdict = await _right.AcceptFromRemoteAsync(

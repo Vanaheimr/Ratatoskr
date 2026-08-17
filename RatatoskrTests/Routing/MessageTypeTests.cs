@@ -126,7 +126,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.FullJid!, "From the room", MessageType.GroupChat);
 
@@ -171,7 +171,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bobSession = Server.SessionOf(bob.FullJid!)!;
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             // By hand, because SendMessageAsync asks for no acknowledgement of
             // its own accord for a room - here the recipient is precisely the
@@ -225,7 +225,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bobSession = Server.SessionOf(bob.FullJid!)!;
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<message to='{bob.FullJid}' type='headline' id='shout-1'>" +

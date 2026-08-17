@@ -66,7 +66,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob    = await ConnectClientAsync("bob");
 
             var refused = new List<String>();
-            bob.Connection.EntityCaps!.OnCapsRejected += (from, reason) => refused.Add(reason);
+            bob.Connection.EntityCaps!.OnCapsRejected += (timestamp, sender, from, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             var aliceNode = alice.Connection.EntityCaps!.Node;
             var aliceVer  = alice.Connection.EntityCaps!.CalculateVerificationString();
@@ -143,7 +143,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectClientAsync("bob");
 
             var refused = new List<String>();
-            bob.Connection.EntityCaps!.OnCapsRejected += (from, reason) => refused.Add(reason);
+            bob.Connection.EntityCaps!.OnCapsRejected += (timestamp, sender, from, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             var key = $"{alice.Connection.EntityCaps!.Node}#{newVer}";
 
@@ -216,7 +216,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectClientAsync("bob");
 
             var refused = new List<String>();
-            bob.Connection.EntityCaps!.OnCapsRejected += (from, reason) => refused.Add(reason);
+            bob.Connection.EntityCaps!.OnCapsRejected += (timestamp, sender, from, reason, ct) => { refused.Add(reason); return Task.CompletedTask; };
 
             var key = $"{alice.Connection.EntityCaps!.Node}#{newVer}";
 

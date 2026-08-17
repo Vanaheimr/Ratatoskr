@@ -635,10 +635,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             OmemoDeviceList? received = null;
             String?          fromWhom = null;
 
-            bob.Connection.OnOmemoDeviceListChanged += (from, list) =>
+            bob.Connection.OnOmemoDeviceListChanged += (timestamp, sender, from, list, ct) =>
             {
                 fromWhom = from;
                 received = list;
+
+                return Task.CompletedTask;
+
             };
 
             await alice.Connection.PublishOmemoDeviceListAsync(
@@ -685,7 +688,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             bob.Connection.OmemoDeviceId = 9999;
 
             var received = false;
-            bob.Connection.OnOmemoDeviceListChanged += (_, _) => received = true;
+            bob.Connection.OnOmemoDeviceListChanged += (timestamp, sender, _, _, ct) => { received = true; return Task.CompletedTask; };
 
             await alice.Connection.PublishOmemoDeviceListAsync(
                       new OmemoDeviceList([new OmemoDevice(1234)]));

@@ -171,7 +171,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello over TCP!");
 
@@ -199,8 +199,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob    = new List<XMPPMessage>();
             var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => atBob.Add(m);
-            alice.OnMessage  += m => atAlice.Add(m);
+            bob.OnMessage    += (timestamp, sender, m, ct) => { atBob.Add(m); return Task.CompletedTask; };
+            alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Question");
             await WaitFor(() => atBob.Count > 0, "the question at Bob's");
@@ -224,7 +224,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "one");
             await WaitFor(() => received.Count == 1, "the first message");
@@ -269,7 +269,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             var longBody = String.Concat(Enumerable.Repeat("Long message. ", 4000));
 
@@ -292,7 +292,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectAsync(_left, "alice");
             var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => errors.Add(e);
+            alice.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync("who@faraway.example", "Hello?");
 
@@ -352,7 +352,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             using var client = new TcpClient();
             await client.ConnectAsync(System.Net.IPAddress.Loopback, _rightLinks.Port);
@@ -447,7 +447,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             using var client = new TcpClient();
             await client.ConnectAsync(System.Net.IPAddress.Loopback, _rightLinks.Port);

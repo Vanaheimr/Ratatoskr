@@ -286,7 +286,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(alice.Connection.BoundInline, Is.True, "The premise.");
 
             XMPPMessage? arrived = null;
-            bob.OnMessage += m => arrived = m;
+            bob.OnMessage += (timestamp, sender, m, ct) => { arrived = m; return Task.CompletedTask; };
 
             await alice.Connection.SendMessageAsync($"bob@{Server.Domain}", "over an inline binding");
 

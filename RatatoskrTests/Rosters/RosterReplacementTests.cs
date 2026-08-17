@@ -67,10 +67,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var count = 0;
 
-            client.Connection.OnStateChanged += (oldState, newState) =>
+            client.Connection.OnStateChanged += (timestamp, sender, oldState, newState, ct) =>
             {
                 if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref count);
+
+                return Task.CompletedTask;
+
             };
 
             return () => Volatile.Read(ref count);
@@ -123,7 +126,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "Precondition: both contacts are there.");
 
             var removed = new List<String>();
-            client.Connection.Roster.OnItemRemoved += jid => removed.Add(jid);
+            client.Connection.Roster.OnItemRemoved += (timestamp, sender, jid, ct) => { removed.Add(jid); return Task.CompletedTask; };
 
             await ReconnectAround(client,
                                   () => Server.GetAccount(client.BareJid)!
@@ -236,24 +239,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// remove.
         /// </summary>
         [Test]
-        public void ReplaceAll_UpdatesKeepsAndRemoves()
+        public async Task ReplaceAll_UpdatesKeepsAndRemoves()
         {
 
             var roster = new Roster();
 
-            roster.ProcessRosterItem(new RosterItem("bob@example.com")   { Name = "Bob"   });
-            roster.ProcessRosterItem(new RosterItem("carol@example.com") { Name = "Carol" });
+            await roster.ProcessRosterItemAsync(new RosterItem("bob@example.com")   { Name = "Bob"   });
+            await roster.ProcessRosterItemAsync(new RosterItem("carol@example.com") { Name = "Carol" });
 
             var removed   = new List<String>();
             var added   = new List<String>();
             var changed  = new List<String>();
 
-            roster.OnItemRemoved += jid  => removed.Add(jid);
-            roster.OnItemAdded   += item => added.Add(item.Jid);
-            roster.OnItemUpdated += item => changed.Add(item.Jid);
+            roster.OnItemRemoved += (timestamp, sender, jid, ct)  => { removed.Add(jid); return Task.CompletedTask; };
+            roster.OnItemAdded   += (timestamp, sender, item, ct) => { added.Add(item.Jid); return Task.CompletedTask; };
+            roster.OnItemUpdated += (timestamp, sender, item, ct) => { changed.Add(item.Jid); return Task.CompletedTask; };
 
             // Bob stays (with a new name), Carol falls away, Dave comes along.
-            roster.ReplaceAll([
+            await roster.ReplaceAllAsync([
                 new RosterItem("bob@example.com")  { Name = "Robert" },
                 new RosterItem("dave@example.com") { Name = "Dave"   }
             ]);
@@ -290,14 +293,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// to go.
         /// </remarks>
         [Test]
-        public void ReplaceAll_WithAnEmptyListClearsTheRoster()
+        public async Task ReplaceAll_WithAnEmptyListClearsTheRoster()
         {
 
             var roster = new Roster();
 
-            roster.ProcessRosterItem(new RosterItem("bob@example.com"));
+            await roster.ProcessRosterItemAsync(new RosterItem("bob@example.com"));
 
-            roster.ReplaceAll([]);
+            await roster.ReplaceAllAsync([]);
 
             Assert.That(roster.Items, Is.Empty);
 

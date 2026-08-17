@@ -70,14 +70,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new List<String>();
 
-            void Collect(String xml)
+            Task Collect(DateTimeOffset     timestamp,
+                         XMPPConnection     sender,
+                         String             xml,
+                         CancellationToken  ct)
             {
+
                 if (xml.StartsWith("<<< ", StringComparison.Ordinal) &&
                     xml.Contains($"id='{id}'", StringComparison.Ordinal))
                 {
                     lock (replies)
                         replies.Add(xml[4..]);
                 }
+
+                return Task.CompletedTask;
+
             }
 
             client.Connection.OnRawXml += Collect;
@@ -109,7 +116,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var events = new List<String>();
 
-            client.Connection.OnRawXml += xml =>
+            client.Connection.OnRawXml += (timestamp, sender, xml, ct) =>
             {
                 if (xml.StartsWith("<<< ", StringComparison.Ordinal) &&
                     xml.Contains(PubSubManager.EventNamespace, StringComparison.Ordinal))
@@ -117,6 +124,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                     lock (events)
                         events.Add(xml[4..]);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             return events;
@@ -347,7 +357,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var frames = new List<String>();
 
-            client.Connection.OnRawXml += xml =>
+            client.Connection.OnRawXml += (timestamp, sender, xml, ct) =>
             {
                 if (xml.StartsWith("<<< ", StringComparison.Ordinal) &&
                     xml.Contains(contains, StringComparison.Ordinal))
@@ -355,6 +365,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                     lock (frames)
                         frames.Add(xml[4..]);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             return frames;

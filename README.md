@@ -348,17 +348,34 @@ await using var client = new XMPPClient(
                              "wss://xmpp.example.com:5443/ws",
                              loggerFactory);
 
-client.OnMessage += msg =>
-    Console.WriteLine($"{msg.FromBareJid}: {msg.Body}");
+client.OnMessage += (timestamp, sender, message, ct) =>
+{
+    Console.WriteLine($"{message.FromBareJid}: {message.Body}");
+    return Task.CompletedTask;
+};
 
-client.OnSubscriptionRequest += async (from, status) =>
+client.OnSubscriptionRequest += async (timestamp, sender, from, status, ct) =>
     await client.AcceptSubscriptionAsync(from);
 
 await client.ConnectAsync();
 
-client.SetChatPartner("contact@example.com");
+await client.SetChatPartnerAsync("contact@example.com");
 await client.SendMessageAsync("Hello!");
 ```
+
+Every event is a **named delegate that returns `Task`**, in the shape
+`(DateTimeOffset Timestamp, TSender Sender, …, CancellationToken)`. That is not
+decoration. The alternative for a handler that wants to await anything - store
+the message, answer it, forward it, which is most of what one does - is
+`async void`, and an exception in an `async void` lambda has no caller left to
+catch it by the time it is thrown: it goes to the thread pool and ends the
+process. A handler that returns a `Task` can simply be `async`, as the second
+one above is.
+
+Handlers are called one after another, in the order subscribed, and each is
+wrapped separately: a subscriber that throws is logged and the ones behind it
+still run. Nothing comes back out into the connection - one debug display
+tripping over a null does not end somebody's session.
 
 The `ILoggerFactory` is optional; without it everything falls back to
 `NullLogger` and nothing is logged. Log levels: `Information` for connection
@@ -719,7 +736,12 @@ real `XMPPClient` instances to log in at the same time and talk to each other:
 var alice = await ConnectClientAsync("alice");
 var bob   = await ConnectClientAsync("bob");
 
-bob.OnMessage += m => Console.WriteLine($"{m.FromBareJid}: {m.Body}");
+bob.OnMessage += (timestamp, sender, m, ct) =>
+{
+    Console.WriteLine($"{m.FromBareJid}: {m.Body}");
+    return Task.CompletedTask;
+};
+
 await alice.SendMessageAsync(bob.BareJid, "Hello Bob!");
 ```
 

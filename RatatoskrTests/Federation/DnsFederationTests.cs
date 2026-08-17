@@ -242,7 +242,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello over DNS!");
 
@@ -273,8 +273,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob    = new List<XMPPMessage>();
             var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => atBob.Add(m);
-            alice.OnMessage  += m => atAlice.Add(m);
+            bob.OnMessage    += (timestamp, sender, m, ct) => { atBob.Add(m); return Task.CompletedTask; };
+            alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Question");
             await WaitFor(() => atBob.Count > 0, "the question at Bob");
@@ -306,7 +306,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectAsync(_left, "alice");
             var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => errors.Add(e);
+            alice.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync("who@nobody.example", "Hello?");
 

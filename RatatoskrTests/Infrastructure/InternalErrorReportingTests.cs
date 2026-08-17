@@ -179,13 +179,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = CreateClient("alice", maxReconnectAttempts: 0);
 
             var errors = new ConcurrentQueue<StreamError>();
-            alice.OnStreamError += e => errors.Enqueue(e);
+            alice.OnStreamError += (timestamp, sender, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             var rawFrames = new ConcurrentQueue<String>();
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal))
                     rawFrames.Enqueue(x);
+
+                return Task.CompletedTask;
+
             };
 
             await alice.ConnectAsync();
@@ -253,7 +256,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectClientAsync("bob");
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             Server.FailFrameHandling = true;
 
@@ -418,7 +421,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             MakeContacts("alice", "bob");
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "A quite ordinary run");
             await WaitFor(() => !inbox.IsEmpty, "the message");

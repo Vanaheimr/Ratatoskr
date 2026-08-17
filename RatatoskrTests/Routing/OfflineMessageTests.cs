@@ -73,7 +73,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var inbox    = new ConcurrentQueue<XMPPMessage>();
 
             client.Connection.PresencePriority  = priority;
-            client.OnMessage                   += m => inbox.Enqueue(m);
+            client.OnMessage                   += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             return (client, inbox);
 
@@ -244,7 +244,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             var errors = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<message to='{Bob}' type='chat' id='typing'>" +
@@ -771,10 +771,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived      = new ConcurrentQueue<String>();
             var bob          = CreateClient("bob");
 
-            bob.Connection.OnRawXml += xml =>
+            bob.Connection.OnRawXml += (timestamp, sender, xml, ct) =>
             {
                 if (xml.Contains("with-stamp", StringComparison.Ordinal))
                     arrived.Enqueue(xml);
+
+                return Task.CompletedTask;
+
             };
 
             await bob.ConnectAsync();
@@ -824,7 +827,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             var errors = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(Bob, "Does not arrive");
 
@@ -871,7 +874,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bob");
 
             var errors = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(Bob, "The first one");
             await WaitForTheStore(Bob, 1);
@@ -926,7 +929,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "the carbons on both resources");
 
             var carbons = new ConcurrentQueue<CarbonMessage>();
-            desktop.OnCarbonMessage += c => carbons.Enqueue(c);
+            desktop.OnCarbonMessage += (timestamp, sender, c, ct) => { carbons.Enqueue(c); return Task.CompletedTask; };
 
             await mobile.SendMessageAsync(Bob, "For later");
 
@@ -1144,13 +1147,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var replies   = new ConcurrentQueue<String>();
             var id        = $"disco-{storeOfflineMessages}";
 
-            client.Connection.OnRawXml += xml =>
+            client.Connection.OnRawXml += (timestamp, sender, xml, ct) =>
             {
                 if (xml.Contains("<<<", StringComparison.Ordinal) &&
                     xml.Contains(id,    StringComparison.Ordinal))
                 {
                     replies.Enqueue(xml);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await client.SendRawAsync(

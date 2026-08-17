@@ -21,9 +21,23 @@ using System.Xml.Linq;
 
 using Microsoft.Extensions.Logging;
 
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnOmemoBundleChangedDelegate
+
+/// <summary>
+/// XEP-0384: our own bundle has changed and belongs published anew.
+/// </summary>
+public delegate Task OnOmemoBundleChangedDelegate(DateTimeOffset     Timestamp,
+                                                  OmemoManager       Sender,
+                                                  CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// What came out of the encryption for a single device.
@@ -114,7 +128,7 @@ public sealed class OmemoManager
     /// has been filled back up. Whoever listens has the connection and can
     /// publish; this class has a store and no server.
     /// </remarks>
-    public event Action? OnBundleChanged;
+    public event OnOmemoBundleChangedDelegate? OnBundleChanged;
 
     #endregion
 
@@ -591,8 +605,13 @@ public sealed class OmemoManager
             // Outside the lock and not awaited: publishing is a round trip to
             // the server, and a message being decrypted is not going to wait on
             // it. Whoever listens decides what it costs.
+            //
+            // The discarded task is deliberate and safe, which with a Task it
+            // would otherwise not be: the invoker catches and logs every
+            // handler itself, so this task cannot fault and there is no
+            // unobserved exception to come back later.
             if (spent)
-                OnBundleChanged?.Invoke();
+                _ = OnBundleChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, CancellationToken.None), _logger);
 
             return (plaintext, check);
 

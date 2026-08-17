@@ -19,9 +19,35 @@
 
 using System.Xml.Linq;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnCarbon...Delegate
+
+/// <summary>
+/// A message was mirrored from or to another device of our own.
+/// </summary>
+public delegate Task OnCarbonReceivedDelegate   (DateTimeOffset     Timestamp,
+                                                 CarbonManager      Sender,
+                                                 CarbonMessage      Carbon,
+                                                 CancellationToken  CancellationToken);
+
+/// <summary>
+/// A carbon arrived that could not be taken apart.
+/// </summary>
+public delegate Task OnCarbonParseErrorDelegate (DateTimeOffset     Timestamp,
+                                                 CarbonManager      Sender,
+                                                 String             Reason,
+                                                 CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XEP-0280: Message carbons - mirrors messages onto all of one's own devices.
@@ -35,17 +61,20 @@ public sealed class CarbonManager
     /// <summary>The namespace of XEP-0297, in which the message sits.</summary>
     public const string ForwardNamespace = "urn:xmpp:forward:0";
 
-    private readonly string _myBareJid;
+    private readonly string   _myBareJid;
+    private readonly ILogger  _logger;
     private bool _enabled;
 
     public bool IsEnabled => _enabled;
 
-    public event Action<CarbonMessage>? OnCarbonReceived;
-    public event Action<string>? OnParseError;
+    public event OnCarbonReceivedDelegate?    OnCarbonReceived;
+    public event OnCarbonParseErrorDelegate?  OnParseError;
 
-    public CarbonManager(string myBareJid)
+    public CarbonManager(string    myBareJid,
+                         ILogger?  logger   = null)
     {
-        _myBareJid = JidUtilities.Bare(myBareJid);
+        _myBareJid  = JidUtilities.Bare(myBareJid);
+        _logger     = logger ?? NullLogger.Instance;
     }
 
     public void SetEnabled(bool enabled) => _enabled = enabled;
@@ -58,7 +87,9 @@ public sealed class CarbonManager
     /// extensions know a <c>&lt;received/&gt;</c>. With the namespace at the
     /// element the distinction is possible directly and without side effects.
     /// </summary>
-    public CarbonResult ProcessCarbon(XElement message, string from)
+    public async Task<CarbonResult> ProcessCarbonAsync(XElement           message,
+                                                       string             from,
+                                                       CancellationToken  CancellationToken   = default)
     {
 
         // CRITICAL SPOOFING PROTECTION:
@@ -77,7 +108,7 @@ public sealed class CarbonManager
 
         if (inner is null)
         {
-            OnParseError?.Invoke("carbon without an embedded message");
+            await OnParseError.InvokeAllAsync(handler => handler(Timestamp.Now, this, "carbon without an embedded message", CancellationToken), _logger);
             return CarbonResult.ParseError;
         }
 
@@ -86,15 +117,17 @@ public sealed class CarbonManager
 
         if (originalFrom is null && originalTo is null)
         {
-            OnParseError?.Invoke("could not extract from/to out of the carbon");
+            await OnParseError.InvokeAllAsync(handler => handler(Timestamp.Now, this, "could not extract from/to out of the carbon", CancellationToken), _logger);
             return CarbonResult.ParseError;
         }
 
-        OnCarbonReceived?.Invoke(new CarbonMessage(isSent,
-                                                   originalFrom ?? "",
-                                                   originalTo   ?? "",
-                                                   inner.ChildValue("body"),
-                                                   inner.Attr("id")));
+        var carbon = new CarbonMessage(isSent,
+                                       originalFrom ?? "",
+                                       originalTo   ?? "",
+                                       inner.ChildValue("body"),
+                                       inner.Attr("id"));
+
+        await OnCarbonReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, carbon, CancellationToken), _logger);
 
         return CarbonResult.Success;
 

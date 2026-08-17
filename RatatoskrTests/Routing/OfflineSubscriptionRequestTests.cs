@@ -68,7 +68,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client  = CreateClient(localPart);
             var arrived = new List<(String, String?)>();
 
-            client.OnSubscriptionRequest += (from, status) => arrived.Add((from, status));
+            client.OnSubscriptionRequest += (timestamp, sender, from, status, ct) => { arrived.Add((from, status)); return Task.CompletedTask; };
 
             return (client, arrived);
 

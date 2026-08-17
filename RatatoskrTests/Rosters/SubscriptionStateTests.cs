@@ -239,7 +239,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             String? requested = null;
-            client.OnSubscriptionRequest += (from, _) => requested = from;
+            client.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requested = from; return Task.CompletedTask; };
 
             await session.SendAsync($"<presence from='{Bob}' to='{client.FullJid}' type='subscribe'/>");
 

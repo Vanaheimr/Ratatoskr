@@ -61,7 +61,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var basket = new ConcurrentQueue<(String, String?)>();
-            client.Connection.OnPresence += (from, type) => basket.Enqueue((from, type));
+            client.Connection.OnPresence += (timestamp, sender, from, type, ct) => { basket.Enqueue((from, type)); return Task.CompletedTask; };
 
             return basket;
 
@@ -362,7 +362,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             // And with that her right to ask has expired.
             var errors = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<iq type='get' id='after-the-sign-off' to='{bob.FullJid}'>" +

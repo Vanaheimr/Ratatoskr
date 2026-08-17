@@ -78,7 +78,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client    = PreparedClient();
             var received  = new List<XMPPMessage>();
 
-            client.OnMessage += m => received.Add(m);
+            client.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await client.ConnectAsync();
 
@@ -108,7 +108,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client     = PreparedClient();
             var presences  = new List<String>();
 
-            client.OnPresenceChanged += (from, type) => presences.Add(from);
+            client.OnPresenceChanged += (timestamp, sender, from, type, ct) => { presences.Add(from); return Task.CompletedTask; };
 
             await client.ConnectAsync();
 
@@ -264,7 +264,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // question.
             client.Connection.MaxReconnectAttempts = 0;
 
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await FailingConnectAsync(client);
 

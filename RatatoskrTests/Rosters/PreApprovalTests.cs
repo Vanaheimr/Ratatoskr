@@ -98,7 +98,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var atBob = new List<String>();
-            bob.OnPresenceChanged += (from, type) => atBob.Add($"{from}/{type}");
+            bob.OnPresenceChanged += (timestamp, sender, from, type, ct) => { atBob.Add($"{from}/{type}"); return Task.CompletedTask; };
 
             await alice.PreApproveContactAsync(Bob);
 
@@ -136,7 +136,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requestsAtAlice = new List<String>();
-            alice.OnSubscriptionRequest += (from, _) => requestsAtAlice.Add(from);
+            alice.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requestsAtAlice.Add(from); return Task.CompletedTask; };
 
             await alice.PreApproveContactAsync(Bob);
             await WaitFor(() => IsPreApproved(Alice, Bob), "the pre-approval");
@@ -179,7 +179,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(Bob, "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob");
@@ -216,7 +216,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(Bob, "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob");
@@ -266,7 +266,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => !IsPreApproved(Alice, Bob), "the taking back");
 
             var requests = new List<String>();
-            alice.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            alice.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             // Without the pre-approval Bob's request has to land at Alice
             // again.

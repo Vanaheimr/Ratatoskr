@@ -59,7 +59,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob",   createAccount: false);
 
             var seen = new List<ChatMarker>();
-            alice.Connection.OnChatMarker += marker => { lock (seen) seen.Add(marker); };
+            alice.Connection.OnChatMarker += (timestamp, sender, marker, ct) => { lock (seen) seen.Add(marker);  return Task.CompletedTask; };
 
             var id = await alice.Connection.SendMessageAsync($"bob@{Server.Domain}",
                                                              "have you read this?",
@@ -124,8 +124,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             ChatMarker? seen      = null;
             String?     spoofing  = null;
 
-            alice.Connection.OnChatMarker      += marker  => seen     = marker;
-            alice.Connection.OnSpoofingAttempt += message => spoofing = message;
+            alice.Connection.OnChatMarker      += (timestamp, sender, marker, ct)  => { seen     = marker; return Task.CompletedTask; };
+            alice.Connection.OnSpoofingAttempt += (timestamp, sender, message, ct) => { spoofing = message; return Task.CompletedTask; };
 
             var id = await alice.Connection.SendMessageAsync($"bob@{Server.Domain}",
                                                              "for Bob only",
@@ -172,11 +172,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             PubSubSubscribeAuthorization? asked     = null;
             String?                       spoofing  = null;
 
-            alice.Connection.OnPubSubSubscriptionRequest += a => asked    = a;
-            alice.Connection.OnSpoofingAttempt           += m => spoofing = m;
+            alice.Connection.OnPubSubSubscriptionRequest += (timestamp, sender, a, ct) => { asked    = a; return Task.CompletedTask; };
+            alice.Connection.OnSpoofingAttempt           += (timestamp, sender, m, ct) => { spoofing = m; return Task.CompletedTask; };
 
             // A form built the way the service builds one - and sent by a user.
-            alice.Connection.ProcessStanza(
+            await alice.Connection.ProcessStanzaAsync(
                 $"<message from='mallory@{Server.Domain}' to='{alice.FullJid}'>" +
                   "<x xmlns='jabber:x:data' type='form'>" +
                     "<field var='FORM_TYPE' type='hidden'>" +
@@ -214,9 +214,9 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice = await ConnectClientAsync("alice");
 
             PubSubSubscribeAuthorization? asked = null;
-            alice.Connection.OnPubSubSubscriptionRequest += a => asked = a;
+            alice.Connection.OnPubSubSubscriptionRequest += (timestamp, sender, a, ct) => { asked = a; return Task.CompletedTask; };
 
-            alice.Connection.ProcessStanza(
+            await alice.Connection.ProcessStanzaAsync(
                 $"<message from='pubsub.{Server.Domain}' to='{alice.FullJid}'>" +
                   "<x xmlns='jabber:x:data' type='form'>" +
                     "<field var='FORM_TYPE' type='hidden'>" +

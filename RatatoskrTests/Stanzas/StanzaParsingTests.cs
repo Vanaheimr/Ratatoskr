@@ -60,7 +60,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             XMPPMessage? received = null;
-            client.OnMessage += m => received = m;
+            client.OnMessage += (timestamp, sender, m, ct) => { received = m; return Task.CompletedTask; };
 
             await session.SendAsync(stanza);
 

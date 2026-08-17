@@ -101,7 +101,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (alice, bob) = TwoParties();
 
             var announced = 0;
-            bob.OnBundleChanged += () => Interlocked.Increment(ref announced);
+            bob.OnBundleChanged += (timestamp, sender, ct) => { Interlocked.Increment(ref announced); return Task.CompletedTask; };
 
             var before = bob.Identity.AvailablePreKeys;
 

@@ -47,7 +47,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
             var alerts = new List<String>();
 
-            client.OnSpoofingAttempt += m => { lock (alerts) alerts.Add(m); };
+            client.OnSpoofingAttempt += (timestamp, sender, m, ct) => { lock (alerts) alerts.Add(m);  return Task.CompletedTask; };
 
             await Server.PushAsync(client.FullJid,
                 "<iq type='set' id='spoof-1' from='evil@example.com'>" +

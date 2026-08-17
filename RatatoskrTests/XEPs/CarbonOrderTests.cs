@@ -59,13 +59,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             String? spoofing  = null;
             var     decrypted = false;
 
-            alice.Connection.OnSpoofingAttempt  += message => spoofing  = message;
-            alice.Connection.OnEncryptedMessage += (_, _)   => decrypted = true;
+            alice.Connection.OnSpoofingAttempt  += (timestamp, sender, message, ct) => { spoofing  = message; return Task.CompletedTask; };
+            alice.Connection.OnEncryptedMessage += (timestamp, sender, _, _, ct)   => { decrypted = true; return Task.CompletedTask; };
 
             // A stranger's stanza, built the way a carbon is built, with an
             // <encrypted/> that parses. Everything about it is in order except
             // the one thing that matters: it did not come from our own account.
-            alice.Connection.ProcessStanza(
+            await alice.Connection.ProcessStanzaAsync(
                 $"<message from='mallory@{Server.Domain}' to='{alice.FullJid}'>" +
                   $"<received xmlns='{CarbonManager.Namespace}'>" +
                     "<forwarded xmlns='urn:xmpp:forward:0'>" +

@@ -235,10 +235,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob                   = await ConnectClientAsync("bob", createAccount: false);
 
             var signOffs = 0;
-            bob.OnPresenceChanged += (from, type) =>
+            bob.OnPresenceChanged += (timestamp, sender, from, type, ct) =>
             {
                 if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
                     Interlocked.Increment(ref signOffs);
+
+                return Task.CompletedTask;
+
             };
 
             // The client sends the first presence during the setup already;
@@ -282,10 +285,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob                   = await ConnectClientAsync("bob", createAccount: false);
 
             var signOffs = 0;
-            bob.OnPresenceChanged += (from, type) =>
+            bob.OnPresenceChanged += (timestamp, sender, from, type, ct) =>
             {
                 if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
                     Interlocked.Increment(ref signOffs);
+
+                return Task.CompletedTask;
+
             };
 
             // The client sends the first presence during the setup already;
@@ -385,10 +391,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob                   = await ConnectClientAsync("bob", createAccount: false);
 
             var signOffs = 0;
-            bob.OnPresenceChanged += (from, type) =>
+            bob.OnPresenceChanged += (timestamp, sender, from, type, ct) =>
             {
                 if (type == "unavailable" && from.StartsWith($"alice@{Server.Domain}", StringComparison.Ordinal))
                     Interlocked.Increment(ref signOffs);
+
+                return Task.CompletedTask;
+
             };
 
             // The client sends the first presence during the setup already;
@@ -492,10 +501,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // what the mutation creating the manager afresh at every setup got
             // past at first.
             var reconnected = 0;
-            alice.OnStateChanged += (_, newState) =>
+            alice.OnStateChanged += (timestamp, sender, _, newState, ct) =>
             {
                 if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref reconnected);
+
+                return Task.CompletedTask;
+
             };
 
             await KillAndAwaitParked(session);
@@ -550,7 +562,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "a promised resumption");
 
             var arrived = new List<String>();
-            alice.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
+            alice.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
             // The connection is dead, the server does not know it yet: what it
             // sends now goes into the buffer.
@@ -662,7 +674,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "a promised resumption");
 
             var arrived = new List<String>();
-            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
+            bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
             await alice.SendMessageAsync($"bob@{Server.Domain}", "Only once");
 
@@ -673,10 +685,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "Nothing outstanding - then there would be nothing to get wrong when resuming.");
 
             var reconnected = 0;
-            alice.OnStateChanged += (_, newState) =>
+            alice.OnStateChanged += (timestamp, sender, _, newState, ct) =>
             {
                 if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref reconnected);
+
+                return Task.CompletedTask;
+
             };
 
             await KillAndAwaitParked(session);
@@ -785,7 +800,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "a promised resumption");
 
             var arrived = new List<String>();
-            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
+            bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
             var openBefore = alice.StreamManagement!.UnackedCount;
 
@@ -803,10 +818,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.SwallowClientStanzas = false;
 
             var reconnected = 0;
-            alice.OnStateChanged += (_, newState) =>
+            alice.OnStateChanged += (timestamp, sender, _, newState, ct) =>
             {
                 if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref reconnected);
+
+                return Task.CompletedTask;
+
             };
 
             await KillAndAwaitParked(session);
@@ -980,7 +998,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "a promised resumption");
 
             var arrived = new List<String>();
-            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
+            bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
             await alice.SendMessageAsync($"bob@{Server.Domain}", "Handled");
 
@@ -1047,11 +1065,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var oldResumeId = alice.StreamManagement!.ResumeId;
 
-            List<String>? lost = null;
-            alice.StreamManagement.OnStanzasLost += list => lost = list;
+            IReadOnlyList<String>? lost = null;
+            alice.StreamManagement.OnStanzasLost += (timestamp, sender, list, ct) => { lost = list; return Task.CompletedTask; };
 
             var arrived = new List<String>();
-            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
+            bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
             await alice.SendMessageAsync($"bob@{Server.Domain}", "Handled");
 

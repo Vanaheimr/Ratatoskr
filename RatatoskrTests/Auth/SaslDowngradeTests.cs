@@ -88,10 +88,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var count = 0;
 
-            client.Connection.OnStateChanged += (oldState, newState) =>
+            client.Connection.OnStateChanged += (timestamp, sender, oldState, newState, ct) =>
             {
                 if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref count);
+
+                return Task.CompletedTask;
+
             };
 
             return () => Volatile.Read(ref count);
@@ -122,7 +125,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "Precondition: the first login must have run over SCRAM-SHA-256.");
 
             var errors = new List<String>();
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             // From now on the server offers nothing but PLAIN.
             Server.OfferedSaslMechanisms.Clear();
@@ -174,7 +177,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await client.ConnectAsync();
 
             var errors = new List<String>();
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             Server.OfferedSaslMechanisms.Clear();
             Server.OfferedSaslMechanisms.Add("PLAIN");
@@ -221,7 +224,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var reconnects   = CountReconnects(client);
 
             var errors = new List<String>();
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             client.KillConnection();
 
@@ -313,7 +316,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             client.Connection.MinimumSaslMechanism   = "SCRAM-SHA-256";
 
             var errors = new List<String>();
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await FailingConnectAsync(client);
 

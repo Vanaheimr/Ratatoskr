@@ -229,7 +229,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello over the real wire!");
 
@@ -261,8 +261,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob    = new List<XMPPMessage>();
             var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => atBob.Add(m);
-            alice.OnMessage  += m => atAlice.Add(m);
+            bob.OnMessage    += (timestamp, sender, m, ct) => { atBob.Add(m); return Task.CompletedTask; };
+            alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Question");
             await WaitFor(() => atBob.Count > 0, "the question at Bob's");
@@ -300,7 +300,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "one");
             await WaitFor(() => received.Count == 1, "the first message");
@@ -343,7 +343,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectAsync(_left, "alice");
             var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => errors.Add(e);
+            alice.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync("who@faraway.example", "Hello?");
 
@@ -376,7 +376,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await using var evil = new Impostor();
             await evil.ConnectAsync(_rightLinks, _right);
@@ -437,7 +437,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await using var evil = new Impostor();
             await evil.ConnectAsync(_rightLinks, _right);
@@ -499,7 +499,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var received = new List<XMPPMessage>();
             var refused  = new List<(String Peer, String Reason)>();
 
-            bob.OnMessage                  += m => received.Add(m);
+            bob.OnMessage                  += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
             _right.OnRemoteStanzaRejected += (peer, reason) => refused.Add((peer, reason));
 
             // left.example builds up regularly (the connection therefore

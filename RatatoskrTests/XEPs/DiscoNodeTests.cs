@@ -106,13 +106,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var nodeAttribute = node is not null ? $" node='{node}'" : "";
             var replies       = new ConcurrentQueue<String>();
 
-            client.Connection.OnRawXml += xml =>
+            client.Connection.OnRawXml += (timestamp, sender, xml, ct) =>
             {
                 if (xml.Contains("<<<", StringComparison.Ordinal) &&
                     xml.Contains(id,    StringComparison.Ordinal))
                 {
                     replies.Enqueue(xml);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await client.SendRawAsync(
@@ -347,13 +350,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var replies = new ConcurrentQueue<String>();
 
-            client.Connection.OnRawXml += xml =>
+            client.Connection.OnRawXml += (timestamp, sender, xml, ct) =>
             {
                 if (xml.Contains("<<<",           StringComparison.Ordinal) &&
                     xml.Contains("node-beside",  StringComparison.Ordinal))
                 {
                     replies.Enqueue(xml);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await client.SendRawAsync(

@@ -112,7 +112,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             client.Connection.ServerCertificateValidator = (_, _, _, _) => false;
 
             var errors = new List<String>();
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await FailingConnectAsync(client);
 

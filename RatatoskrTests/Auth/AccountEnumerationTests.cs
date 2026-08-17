@@ -242,7 +242,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectClientAsync();
             var errors  = new List<String>();
 
-            alice.Connection.OnStanzaError += (from, e) => { lock (errors) errors.Add($"{from}|{e.Condition}"); };
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { lock (errors) errors.Add($"{from}|{e.Condition}");  return Task.CompletedTask; };
 
             await alice.SendMessageAsync($"bob@{Server.Domain}",    "To an account that exists");
             await alice.SendMessageAsync($"nobody@{Server.Domain}", "To one that does not");
@@ -292,7 +292,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectClientAsync();
             var errors  = new List<String>();
 
-            alice.Connection.OnStanzaError += (from, e) => { lock (errors) errors.Add(e.Condition); };
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { lock (errors) errors.Add(e.Condition);  return Task.CompletedTask; };
 
             await alice.SendMessageAsync($"bob@{Server.Domain}",    "Will be stored");
             await alice.SendMessageAsync($"nobody@{Server.Domain}", "Will be discarded");
@@ -330,7 +330,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectClientAsync();
             var errors  = new List<String>();
 
-            alice.Connection.OnStanzaError += (from, e) => { lock (errors) errors.Add(e.Condition); };
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { lock (errors) errors.Add(e.Condition);  return Task.CompletedTask; };
 
             await alice.SendMessageAsync($"bob@{Server.Domain}",    "Does not fit any more");
             await alice.SendMessageAsync($"nobody@{Server.Domain}", "Does not fit either");

@@ -156,7 +156,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
 
@@ -195,7 +195,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob's");
@@ -239,7 +239,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob's");
@@ -249,7 +249,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                           "the 'from' half at Bob's");
 
             var seen = new List<String>();
-            alice.OnPresenceChanged += (from, _) => seen.Add(from);
+            alice.OnPresenceChanged += (timestamp, sender, from, _, ct) => { seen.Add(from); return Task.CompletedTask; };
 
             await bob.SetPresenceAsync();
 
@@ -286,10 +286,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             var seen = new List<String>();
-            alice.OnPresenceChanged += (from, _) => seen.Add(from);
+            alice.OnPresenceChanged += (timestamp, sender, from, _, ct) => { seen.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob's");
@@ -323,7 +323,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
             await WaitFor(() => requests.Count > 0, "the first request at Bob's");
@@ -363,7 +363,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var requests = new List<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Add(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(bob.BareJid, "Bob");
             await WaitFor(() => requests.Count > 0, "the request at Bob's");
@@ -446,7 +446,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var requests = new List<String>();
 
             await ConnectAsync(_right, "bob",
-                               bob => bob.OnSubscriptionRequest += (from, _) => requests.Add(from));
+                               bob => bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Add(from); return Task.CompletedTask; });
 
             await WaitFor(() => requests.Count > 0, "the handed-over request at Bob's");
 

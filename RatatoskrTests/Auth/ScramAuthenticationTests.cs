@@ -199,7 +199,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client  = SingleAttemptClient(password: "wrong");
             var errors  = new List<String>();
 
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await FailingConnectAsync(client);
 
@@ -226,7 +226,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             client.Connection.MaxReconnectAttempts = 0;
 
             var errors = new List<String>();
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await FailingConnectAsync(client);
 
@@ -294,7 +294,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client  = SingleAttemptClient();
             var errors  = new List<String>();
 
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await FailingConnectAsync(client);
 
@@ -327,7 +327,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client  = SingleAttemptClient();
             var errors  = new List<String>();
 
-            client.OnError += e => errors.Add(e);
+            client.OnError += (timestamp, sender, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await FailingConnectAsync(client);
 

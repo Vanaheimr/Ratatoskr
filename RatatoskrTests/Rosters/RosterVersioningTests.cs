@@ -68,10 +68,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var count = 0;
 
-            client.Connection.OnStateChanged += (oldState, newState) =>
+            client.Connection.OnStateChanged += (timestamp, sender, oldState, newState, ct) =>
             {
                 if (newState == ConnectionState.Connected)
                     Interlocked.Increment(ref count);
+
+                return Task.CompletedTask;
+
             };
 
             return () => Volatile.Read(ref count);

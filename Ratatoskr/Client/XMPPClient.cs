@@ -20,9 +20,150 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnXMPPClient...Delegate
+
+/// <summary>A chat message was received.</summary>
+public delegate Task OnXMPPClientMessageDelegate                    (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     XMPPMessage        Message,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>
+/// XEP-0384: a message that arrived encrypted, already decrypted - together
+/// with the rating of the sending device.
+/// </summary>
+public delegate Task OnXMPPClientEncryptedMessageDelegate           (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     XMPPMessage        Message,
+                                                                     OmemoDecrypted     Omemo,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>XEP-0280: a message was mirrored from or to another device of our own.</summary>
+public delegate Task OnXMPPClientCarbonMessageDelegate              (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     CarbonMessage      Carbon,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>XEP-0085: a contact changed their typing state.</summary>
+public delegate Task OnXMPPClientChatStateDelegate                  (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             From,
+                                                                     ChatState          State,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>XEP-0333: a chat marker was received.</summary>
+public delegate Task OnXMPPClientChatMarkerDelegate                 (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     ChatMarker         Marker,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>XEP-0184: a sent message was delivered.</summary>
+public delegate Task OnXMPPClientReceiptReceivedDelegate            (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             From,
+                                                                     String             MessageId,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>Presence change of a contact.</summary>
+public delegate Task OnXMPPClientPresenceChangedDelegate            (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             From,
+                                                                     String             Type,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>XEP-0060: PubSub event from the service.</summary>
+public delegate Task OnXMPPClientPubSubEventDelegate                (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     PubSubEvent        Event,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>XEP-0060, section 8.6.1: someone applies for a subscription to a node of our own.</summary>
+public delegate Task OnXMPPClientPubSubSubscriptionRequestDelegate  (DateTimeOffset                Timestamp,
+                                                                     XMPPClient                    Sender,
+                                                                     PubSubSubscribeAuthorization  Request,
+                                                                     CancellationToken             CancellationToken);
+
+/// <summary>A new contact request.</summary>
+public delegate Task OnXMPPClientSubscriptionRequestDelegate        (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             From,
+                                                                     String             Status,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>A contact was added to the roster.</summary>
+public delegate Task OnXMPPClientRosterItemAddedDelegate            (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     RosterItem         Item,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>A contact was removed from the roster.</summary>
+public delegate Task OnXMPPClientRosterItemRemovedDelegate          (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             BareJid,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>XEP-0115: the capabilities of a peer were determined.</summary>
+public delegate Task OnXMPPClientCapsDiscoveredDelegate             (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             From,
+                                                                     DiscoInfo          Info,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>The connection state has changed.</summary>
+public delegate Task OnXMPPClientStateChangedDelegate               (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     ConnectionState    OldState,
+                                                                     ConnectionState    NewState,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>An error occurred (already logged).</summary>
+public delegate Task OnXMPPClientErrorDelegate                      (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             Message,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>A spoofing attempt was fended off (already logged).</summary>
+public delegate Task OnXMPPClientSpoofingAttemptDelegate            (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             Details,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>
+/// RFC 6120, section 8.3: a stanza was refused. <paramref name="From"/> is the
+/// sender of the error and null on an error from one's own server.
+/// </summary>
+public delegate Task OnXMPPClientStanzaErrorDelegate                (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String?            From,
+                                                                     StanzaError        Error,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>RFC 6120, section 4.9: the server ended the stream with an error.</summary>
+public delegate Task OnXMPPClientStreamErrorDelegate                (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     StreamError        Error,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>Raw XML, inbound and outbound - for debug displays.</summary>
+public delegate Task OnXMPPClientRawXmlDelegate                     (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String             XML,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>The current chat partner was switched or reset.</summary>
+public delegate Task OnXMPPClientChatPartnerChangedDelegate         (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     String?            ChatPartner,
+                                                                     CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// Application-facing XMPP client.
@@ -44,7 +185,7 @@ public sealed class XMPPClient : IAsyncDisposable
     private readonly XMPPConnection _connection;
     private readonly ILogger _logger;
     private readonly List<string> _pendingSubscriptions = [];
-    private readonly object _pendingLock = new();
+    private readonly Lock _pendingLock = new();
 
     /// <summary>
     /// Valid values for the &lt;show/&gt; element (RFC 6121, section 4.7.2.1).
@@ -95,7 +236,8 @@ public sealed class XMPPClient : IAsyncDisposable
     /// note would be wrong after every change of subject - and wrong in such a
     /// way that the correction ends up with the previous conversation partner.
     /// </remarks>
-    private readonly Dictionary<string, string> _lastSentTo = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _lastSentTo     = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock                       _lastSentToLock = new();
 
     /// <summary>
     /// Contact requests not answered yet, in order of arrival.
@@ -129,77 +271,77 @@ public sealed class XMPPClient : IAsyncDisposable
     #region Events
 
     /// <summary>A chat message was received.</summary>
-    public event Action<XMPPMessage>? OnMessage;
+    public event OnXMPPClientMessageDelegate? OnMessage;
 
     /// <summary>
     /// XEP-0384: a message that arrived encrypted, already decrypted - together
     /// with the rating of the sending device.
     /// </summary>
-    public event Action<XMPPMessage, OmemoDecrypted>? OnEncryptedMessage;
+    public event OnXMPPClientEncryptedMessageDelegate? OnEncryptedMessage;
 
     /// <summary>XEP-0280: A message was mirrored from/to another device of our own.</summary>
-    public event Action<CarbonMessage>? OnCarbonMessage;
+    public event OnXMPPClientCarbonMessageDelegate? OnCarbonMessage;
 
     /// <summary>XEP-0085: A contact changed their typing state.</summary>
-    public event Action<string, ChatState>? OnChatState;
+    public event OnXMPPClientChatStateDelegate? OnChatState;
 
     /// <summary>XEP-0333: A chat marker was received.</summary>
-    public event Action<ChatMarker>? OnChatMarker;
+    public event OnXMPPClientChatMarkerDelegate? OnChatMarker;
 
     /// <summary>XEP-0184: A sent message was delivered.</summary>
-    public event Action<string, string>? OnReceiptReceived; // from, messageId
+    public event OnXMPPClientReceiptReceivedDelegate? OnReceiptReceived;
 
     /// <summary>Presence change of a contact.</summary>
-    public event Action<string, string>? OnPresenceChanged; // from, type
+    public event OnXMPPClientPresenceChangedDelegate? OnPresenceChanged;
 
     /// <summary>XEP-0060: PubSub event from the service.</summary>
-    public event Action<PubSubEvent>? OnPubSubEvent;
+    public event OnXMPPClientPubSubEventDelegate? OnPubSubEvent;
 
     /// <summary>
     /// XEP-0060, section 8.6.1: Someone applies for a subscription to a node of
     /// our own - answered with
     /// <see cref="PubSubAnswerSubscriptionRequestAsync"/>.
     /// </summary>
-    public event Action<PubSubSubscribeAuthorization>? OnPubSubSubscriptionRequest;
+    public event OnXMPPClientPubSubSubscriptionRequestDelegate? OnPubSubSubscriptionRequest;
 
     /// <summary>A new contact request; afterwards it lies in <see cref="PendingSubscriptions"/>.</summary>
-    public event Action<string, string>? OnSubscriptionRequest; // from, status
+    public event OnXMPPClientSubscriptionRequestDelegate? OnSubscriptionRequest;
 
     /// <summary>A contact was added to the roster.</summary>
-    public event Action<RosterItem>? OnRosterItemAdded;
+    public event OnXMPPClientRosterItemAddedDelegate? OnRosterItemAdded;
 
     /// <summary>A contact was removed from the roster.</summary>
-    public event Action<string>? OnRosterItemRemoved;
+    public event OnXMPPClientRosterItemRemovedDelegate? OnRosterItemRemoved;
 
     /// <summary>XEP-0115: The capabilities of a peer were determined.</summary>
-    public event Action<string, DiscoInfo>? OnCapsDiscovered;
+    public event OnXMPPClientCapsDiscoveredDelegate? OnCapsDiscovered;
 
     /// <summary>The connection state has changed.</summary>
-    public event Action<ConnectionState, ConnectionState>? OnStateChanged;
+    public event OnXMPPClientStateChangedDelegate? OnStateChanged;
 
     /// <summary>An error occurred (already logged).</summary>
-    public event Action<string>? OnError;
+    public event OnXMPPClientErrorDelegate? OnError;
 
     /// <summary>A spoofing attempt was fended off (already logged).</summary>
-    public event Action<string>? OnSpoofingAttempt;
+    public event OnXMPPClientSpoofingAttemptDelegate? OnSpoofingAttempt;
 
     /// <summary>
     /// RFC 6120, section 8.3: A stanza was refused. The first parameter is the
     /// sender of the error, null on an error from one's own server.
     /// </summary>
-    public event Action<string?, StanzaError>? OnStanzaError;
+    public event OnXMPPClientStanzaErrorDelegate? OnStanzaError;
 
     /// <summary>
     /// RFC 6120, section 4.9: The server ended the stream with an error. If it
     /// is not recoverable, the reconnect is omitted.
     /// </summary>
-    public event Action<StreamError>? OnStreamError;
+    public event OnXMPPClientStreamErrorDelegate? OnStreamError;
 
     /// <summary>Raw XML, inbound and outbound - for debug displays.</summary>
-    public event Action<string>? OnRawXml;
+    public event OnXMPPClientRawXmlDelegate? OnRawXml;
 
     /// <summary>The current chat partner was switched or reset.</summary>
-    public event Action<string?>? OnChatPartnerChanged;
+    public event OnXMPPClientChatPartnerChangedDelegate? OnChatPartnerChanged;
 
     #endregion
 
@@ -249,15 +391,33 @@ public sealed class XMPPClient : IAsyncDisposable
 
     }
 
+    /// <summary>
+    /// Passes the connection's events on as the client's own.
+    /// </summary>
+    /// <remarks>
+    /// Every one of these is awaited, and that is the whole point of the
+    /// exercise. While both sides were <c>Action</c>, a handler that wanted to
+    /// do something asynchronous - answer, store, forward - had only
+    /// <c>async void</c>, and an exception in an <c>async void</c> lambda has
+    /// no caller left to catch it by the time it is thrown: it goes to the
+    /// thread pool and ends the process.
+    ///
+    /// Converting only this class would not have helped. The forwarding itself
+    /// would then have been the <c>async void</c> - the same hole, one layer
+    /// further in, and harder to see. So the chain is awaited the whole way,
+    /// from the receive loop up to here.
+    /// </remarks>
     private void WireUpConnection()
     {
 
-        _connection.OnMessage += message =>
+        _connection.OnMessage += async (timestamp, sender, message, ct) =>
         {
+
             if (!string.IsNullOrEmpty(message.MessageId))
                 LastReceivedMessageId = message.MessageId;
 
-            OnMessage?.Invoke(message);
+            await OnMessage.InvokeAllAsync(handler => handler(timestamp, this, message, ct), _logger);
+
         };
 
         // XEP-0384: A decrypted message goes the same way as every other one -
@@ -267,58 +427,78 @@ public sealed class XMPPClient : IAsyncDisposable
         // Both, because both are needed: a user interface that does not know
         // OMEMO shows the message anyway; one that knows it can add which
         // device it came from and whether that device is confirmed.
-        _connection.OnEncryptedMessage += (message, omemo) =>
+        _connection.OnEncryptedMessage += async (timestamp, sender, message, omemo, ct) =>
         {
 
             if (!string.IsNullOrEmpty(message.MessageId))
                 LastReceivedMessageId = message.MessageId;
 
-            OnEncryptedMessage?.Invoke(message, omemo);
-            OnMessage?.Invoke(message);
+            await OnEncryptedMessage.InvokeAllAsync(handler => handler(timestamp, this, message, omemo, ct), _logger);
+            await OnMessage.         InvokeAllAsync(handler => handler(timestamp, this, message,        ct), _logger);
 
         };
 
-        _connection.OnCarbonMessage   += c            => OnCarbonMessage?.Invoke(c);
-        _connection.OnChatState       += (from, s)    => OnChatState?.Invoke(from, s);
-        _connection.OnChatMarker      += m            => OnChatMarker?.Invoke(m);
-        _connection.OnReceiptReceived += (from, id)   => OnReceiptReceived?.Invoke(from, id);
-        _connection.OnPresence        += (from, type) => OnPresenceChanged?.Invoke(from, type);
-        _connection.OnPubSubEvent     += e            => OnPubSubEvent?.Invoke(e);
-        _connection.OnPubSubSubscriptionRequest
-                                      += a            => OnPubSubSubscriptionRequest?.Invoke(a);
-        _connection.OnCapsDiscovered  += (from, info) => OnCapsDiscovered?.Invoke(from, info);
-        _connection.OnStateChanged    += (o, n)       => OnStateChanged?.Invoke(o, n);
-        _connection.OnRawXml          += xml          => OnRawXml?.Invoke(xml);
+        _connection.OnCarbonMessage += async (timestamp, sender, carbon, ct)
+            => await OnCarbonMessage.InvokeAllAsync(handler => handler(timestamp, this, carbon, ct), _logger);
 
-        _connection.OnError += msg =>
+        _connection.OnChatState += async (timestamp, sender, from, state, ct)
+            => await OnChatState.InvokeAllAsync(handler => handler(timestamp, this, from, state, ct), _logger);
+
+        _connection.OnChatMarker += async (timestamp, sender, marker, ct)
+            => await OnChatMarker.InvokeAllAsync(handler => handler(timestamp, this, marker, ct), _logger);
+
+        _connection.OnReceiptReceived += async (timestamp, sender, from, messageId, ct)
+            => await OnReceiptReceived.InvokeAllAsync(handler => handler(timestamp, this, from, messageId, ct), _logger);
+
+        _connection.OnPresence += async (timestamp, sender, from, type, ct)
+            => await OnPresenceChanged.InvokeAllAsync(handler => handler(timestamp, this, from, type, ct), _logger);
+
+        _connection.OnPubSubEvent += async (timestamp, sender, pubSubEvent, ct)
+            => await OnPubSubEvent.InvokeAllAsync(handler => handler(timestamp, this, pubSubEvent, ct), _logger);
+
+        _connection.OnPubSubSubscriptionRequest += async (timestamp, sender, request, ct)
+            => await OnPubSubSubscriptionRequest.InvokeAllAsync(handler => handler(timestamp, this, request, ct), _logger);
+
+        _connection.OnCapsDiscovered += async (timestamp, sender, from, info, ct)
+            => await OnCapsDiscovered.InvokeAllAsync(handler => handler(timestamp, this, from, info, ct), _logger);
+
+        _connection.OnStateChanged += async (timestamp, sender, oldState, newState, ct)
+            => await OnStateChanged.InvokeAllAsync(handler => handler(timestamp, this, oldState, newState, ct), _logger);
+
+        _connection.OnRawXml += async (timestamp, sender, xml, ct)
+            => await OnRawXml.InvokeAllAsync(handler => handler(timestamp, this, xml, ct), _logger);
+
+        _connection.OnError += async (timestamp, sender, message, ct)
+            => await OnError.InvokeAllAsync(handler => handler(timestamp, this, message, ct), _logger);
+
+        _connection.OnSpoofingAttempt += async (timestamp, sender, details, ct) =>
         {
-            OnError?.Invoke(msg);
+            _logger.LogWarning("Spoofing attempt fended off: {Details}", details);
+            await OnSpoofingAttempt.InvokeAllAsync(handler => handler(timestamp, this, details, ct), _logger);
         };
 
-        _connection.OnSpoofingAttempt += msg =>
-        {
-            _logger.LogWarning("Spoofing attempt fended off: {Details}", msg);
-            OnSpoofingAttempt?.Invoke(msg);
-        };
-
-        _connection.OnStanzaError += (from, error) =>
+        _connection.OnStanzaError += async (timestamp, sender, from, error, ct) =>
         {
             _logger.LogInformation("Stanza refused by {From}: {Error}", from ?? "(server)", error);
-            OnStanzaError?.Invoke(from, error);
+            await OnStanzaError.InvokeAllAsync(handler => handler(timestamp, this, from, error, ct), _logger);
         };
 
-        _connection.OnStreamError += error =>
+        _connection.OnStreamError += async (timestamp, sender, error, ct) =>
         {
             _logger.LogWarning("Stream error: {Error} (recoverable: {Recoverable})",
                                error, error.IsRecoverable);
-            OnStreamError?.Invoke(error);
+            await OnStreamError.InvokeAllAsync(handler => handler(timestamp, this, error, ct), _logger);
         };
 
-        _connection.Roster.OnItemAdded   += item => OnRosterItemAdded?.Invoke(item);
-        _connection.Roster.OnItemRemoved += jid  => OnRosterItemRemoved?.Invoke(jid);
+        _connection.Roster.OnItemAdded += async (timestamp, sender, item, ct)
+            => await OnRosterItemAdded.InvokeAllAsync(handler => handler(timestamp, this, item, ct), _logger);
 
-        _connection.Roster.OnSubscriptionRequest += (from, status) =>
+        _connection.Roster.OnItemRemoved += async (timestamp, sender, bareJid, ct)
+            => await OnRosterItemRemoved.InvokeAllAsync(handler => handler(timestamp, this, bareJid, ct), _logger);
+
+        _connection.Roster.OnSubscriptionRequest += async (timestamp, sender, from, status, ct) =>
         {
+
             var bare = JidUtilities.Bare(from);
 
             lock (_pendingLock)
@@ -328,7 +508,9 @@ public sealed class XMPPClient : IAsyncDisposable
             }
 
             _logger.LogInformation("Contact request from {From}", bare);
-            OnSubscriptionRequest?.Invoke(bare, status);
+
+            await OnSubscriptionRequest.InvokeAllAsync(handler => handler(timestamp, this, bare, status, ct), _logger);
+
         };
 
     }
@@ -381,8 +563,10 @@ public sealed class XMPPClient : IAsyncDisposable
     /// Sets the current chat partner. null ends the chat without sending
     /// &lt;gone/&gt; - use <see cref="LeaveChatAsync"/> for that.
     /// </summary>
-    public void SetChatPartner(string? jid)
+    public async Task SetChatPartnerAsync(string?            jid,
+                                          CancellationToken  CancellationToken   = default)
     {
+
         var normalized = string.IsNullOrWhiteSpace(jid) ? null : jid.Trim();
 
         if (string.Equals(CurrentChatPartner, normalized, StringComparison.OrdinalIgnoreCase))
@@ -390,7 +574,9 @@ public sealed class XMPPClient : IAsyncDisposable
 
         CurrentChatPartner = normalized;
         _logger.LogDebug("Chat partner: {Partner}", normalized ?? "(none)");
-        OnChatPartnerChanged?.Invoke(normalized);
+
+        await OnChatPartnerChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, normalized, CancellationToken), _logger);
+
     }
 
     /// <summary>
@@ -405,7 +591,7 @@ public sealed class XMPPClient : IAsyncDisposable
             return null;
 
         await _connection.SendChatStateAsync(partner, ChatState.Gone);
-        SetChatPartner(null);
+        await SetChatPartnerAsync(null);
 
         return partner;
     }
@@ -435,7 +621,7 @@ public sealed class XMPPClient : IAsyncDisposable
 
         // For a later correction (XEP-0308). What is never corrected gets
         // remembered too - the price is one entry per conversation partner.
-        lock (_lastSentTo)
+        lock (_lastSentToLock)
             _lastSentTo[JidUtilities.Bare(to)] = id;
 
         return id;
@@ -469,13 +655,13 @@ public sealed class XMPPClient : IAsyncDisposable
 
         string? previous;
 
-        lock (_lastSentTo)
+        lock (_lastSentToLock)
             if (!_lastSentTo.TryGetValue(bare, out previous))
                 return null;
 
         var id = await _connection.SendMessageAsync(recipient, body, corrects: previous);
 
-        lock (_lastSentTo)
+        lock (_lastSentToLock)
             _lastSentTo[bare] = id;
 
         return id;

@@ -65,7 +65,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client     = await ConnectClientAsync(localPart);
             var presences  = new ConcurrentQueue<String>();
 
-            client.OnPresenceChanged += (from, type) => presences.Enqueue($"{from}|{type}");
+            client.OnPresenceChanged += (timestamp, sender, from, type, ct) => { presences.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
 
             return (client, presences);
 
@@ -82,7 +82,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Enqueue(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(Bob, "Bob");
 
@@ -141,7 +141,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Enqueue(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(Bob, "Bob");
 
@@ -193,7 +193,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (alice, bob) = await HandshakeAsync();
 
             var atAlices = new ConcurrentQueue<String>();
-            alice.OnPresenceChanged += (from, type) => atAlices.Enqueue($"{from}|{type}");
+            alice.OnPresenceChanged += (timestamp, sender, from, type, ct) => { atAlices.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
 
             await bob.SetPresenceAsync("away", "Later");
 
@@ -224,10 +224,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Enqueue(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
 
             var atAlices = new ConcurrentQueue<String>();
-            alice.OnPresenceChanged += (from, type) => atAlices.Enqueue($"{from}|{type}");
+            alice.OnPresenceChanged += (timestamp, sender, from, type, ct) => { atAlices.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
 
             await alice.AddContactAsync(Bob, "Bob");
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
@@ -260,7 +260,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var requests = new ConcurrentQueue<String>();
-            bob.OnSubscriptionRequest += (from, _) => requests.Enqueue(from);
+            bob.OnSubscriptionRequest += (timestamp, sender, from, _, ct) => { requests.Enqueue(from); return Task.CompletedTask; };
 
             await alice.AddContactAsync(Bob, "Bob");
             await WaitFor(() => requests.Any(r => r.Equals(Alice, StringComparison.OrdinalIgnoreCase)),
@@ -296,7 +296,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (alice, bob) = await HandshakeAsync();
 
             var atAlices = new ConcurrentQueue<String>();
-            alice.OnPresenceChanged += (from, type) => atAlices.Enqueue($"{from}|{type}");
+            alice.OnPresenceChanged += (timestamp, sender, from, type, ct) => { atAlices.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
 
             await bob.SendRawAsync($"<presence to='{Alice}' type='unsubscribed'/>");
 

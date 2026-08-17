@@ -20,9 +20,28 @@
 using System.Text;
 using System.Xml.Linq;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnDiscoQueryErrorDelegate
+
+/// <summary>
+/// XEP-0030: a disco query was declined.
+/// </summary>
+public delegate Task OnDiscoQueryErrorDelegate(DateTimeOffset     Timestamp,
+                                               DiscoManager       Sender,
+                                               String             QueryId,
+                                               StanzaError        Error,
+                                               CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XEP-0030: Service Discovery - queries features and sub-units of other
@@ -55,7 +74,8 @@ public sealed class DiscoManager
     /// </remarks>
     private readonly Dictionary<string, (TaskCompletionSource<DiscoInfo?> Tcs, string Target)> _infoQueries = new();
     private readonly Dictionary<string, (TaskCompletionSource<DiscoItems?> Tcs, string Target)> _itemsQueries = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
+    private readonly ILogger _logger;
     private int _counter;
 
     /// <summary>
@@ -63,7 +83,7 @@ public sealed class DiscoManager
     /// then delivers null - unlike with a timeout, however, it is known here
     /// why.
     /// </summary>
-    public event Action<string, StanzaError>? OnQueryError;
+    public event OnDiscoQueryErrorDelegate? OnQueryError;
 
     // local features that we support
     public List<DiscoIdentity> LocalIdentities { get; } = [
@@ -124,10 +144,13 @@ public sealed class DiscoManager
     /// is recognised as such; without it the comparison is narrower, never
     /// wider.
     /// </param>
-    public DiscoManager(Func<string, Task> sendStanza, string? ownBareJid = null)
+    public DiscoManager(Func<string, Task>  sendStanza,
+                        string?             ownBareJid   = null,
+                        ILogger?            logger       = null)
     {
         _sendStanza  = sendStanza;
         _ownBareJid  = ownBareJid;
+        _logger      = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -232,7 +255,10 @@ public sealed class DiscoManager
     /// finds nothing and delivered an empty but successful result - a declined
     /// query was not to be told apart from an entity without features.
     /// </summary>
-    public bool ProcessError(string id, StanzaError error, string? from = null)
+    public async Task<bool> ProcessErrorAsync(string             id,
+                                              StanzaError        error,
+                                              string?            from                = null,
+                                              CancellationToken  CancellationToken   = default)
     {
 
         TryClaim(_infoQueries,  id, from, out var infoTcs);
@@ -244,7 +270,7 @@ public sealed class DiscoManager
         infoTcs?.TrySetResult(null);
         itemsTcs?.TrySetResult(null);
 
-        OnQueryError?.Invoke(id, error);
+        await OnQueryError.InvokeAllAsync(handler => handler(Timestamp.Now, this, id, error, CancellationToken), _logger);
 
         return true;
 

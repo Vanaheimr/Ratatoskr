@@ -67,7 +67,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         {
 
             var basket = new ConcurrentQueue<StanzaError>();
-            client.Connection.OnStanzaError += (from, e) => basket.Enqueue(e);
+            client.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { basket.Enqueue(e); return Task.CompletedTask; };
 
             return basket;
 
@@ -79,13 +79,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var basket = new ConcurrentQueue<String>();
 
-            client.Connection.OnRawXml += x =>
+            client.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<",              StringComparison.Ordinal) &&
                     x.Contains($"id='{id}'",         StringComparison.Ordinal))
                 {
                     basket.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             return basket;
@@ -268,13 +271,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var inbox = new ConcurrentQueue<String>();
 
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<",         StringComparison.Ordinal) &&
                     x.Contains("bad-request",   StringComparison.Ordinal))
                 {
                     inbox.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync("<iq><ping xmlns='urn:xmpp:ping'/></iq>");

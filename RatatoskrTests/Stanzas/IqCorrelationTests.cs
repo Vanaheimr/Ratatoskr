@@ -84,15 +84,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync();
 
             String? spoofing = null;
-            client.Connection.OnSpoofingAttempt += message => spoofing = message;
+            client.Connection.OnSpoofingAttempt += (timestamp, sender, message, ct) => { spoofing = message; return Task.CompletedTask; };
 
             var asked = "bob@far.example";
 
-            client.Connection.OnRawXml += line => {
+            client.Connection.OnRawXml += async (timestamp, sender, line, ct) => {
                 if (line.StartsWith(">>>") && line.Contains("id='pep-1'"))
-                    client.Connection.ProcessStanza(
+                    await client.Connection.ProcessStanzaAsync(
                         $"<iq type='result' id='pep-1' from='mallory@{Server.Domain}' " +
-                        $"to='{client.FullJid}'/>");
+                        $"to='{client.FullJid}'/>", ct);
             };
 
             var fetched = await client.Connection.FetchOmemoBundleAsync(asked, 4711)

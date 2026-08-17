@@ -589,7 +589,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
 
             var reported = new List<PubSubEvent>();
-            alice.OnPubSubEvent += e => { lock (reported) reported.Add(e); };
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { lock (reported) reported.Add(e);  return Task.CompletedTask; };
 
             Assert.That(await bob.PubSubPublishAsync(Node, "2", Payload("rain"), bob.BareJid), Is.True);
 
@@ -627,7 +627,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.PubSubUnsubscribeAsync(Node, BobsJid, sub!.SubId), Is.True);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await Server.SessionOf(alice.FullJid)!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
@@ -703,7 +703,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "And on asking again the same has to come out.");
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             Assert.That(await bob.PubSubPublishAsync(Node, "2", Payload("quiet"), bob.BareJid), Is.True);
 
@@ -1555,7 +1555,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             Assert.That(await bob.PubSubPublishAsync(Node, "2", Payload("rain"), bob.BareJid), Is.True);
 
@@ -1589,7 +1589,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await Server.SessionOf(alice.FullJid)!.SendAsync(
                 $"<message from='carol@{Server.Domain}' type='headline' to='{alice.FullJid}'>" +
@@ -1626,7 +1626,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await Server.SessionOf(alice.FullJid)!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
@@ -1794,7 +1794,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             var removed = await bob.PubSubRemoveSubscriberAsync(Node, alice.BareJid, service: BobsJid);
 
@@ -1842,7 +1842,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var second = await alice.PubSubSubscribeAsync(Node, BobsJid);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             var removed = await bob.PubSubRemoveSubscriberAsync(Node, alice.BareJid,
                                                                 first!.SubId, BobsJid);
@@ -1913,7 +1913,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await Server.SessionOf(alice.FullJid)!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +
@@ -1955,7 +1955,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             var back = await bob.PubSubRetractAsync(Node, "1", BobsJid);
 
@@ -2002,7 +2002,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             Assert.That(await bob.PubSubRetractAsync(Node, "1", BobsJid), Is.True);
 
@@ -2085,14 +2085,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         Is.True);
 
             PubSubSubscribeAuthorization? application = null;
-            bob.OnPubSubSubscriptionRequest += a => application = a;
+            bob.OnPubSubSubscriptionRequest += (timestamp, sender, a, ct) => { application = a; return Task.CompletedTask; };
 
             var alice = await ConnectClientAsync("alice");
 
             // Collect them all instead of keeping the last: after the grant
             // comes the first delivery, and that would overwrite it.
             var events = new List<PubSubEvent>();
-            alice.OnPubSubEvent += events.Add;
+            alice.OnPubSubEvent += (timestamp, sender, pubSubEvent, ct) => { events.Add(pubSubEvent); return Task.CompletedTask; };
 
             var requested = await alice.PubSubSubscribeAsync(Node, BobsJid);
 
@@ -2160,12 +2160,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         Is.True);
 
             PubSubSubscribeAuthorization? application = null;
-            bob.OnPubSubSubscriptionRequest += a => application = a;
+            bob.OnPubSubSubscriptionRequest += (timestamp, sender, a, ct) => { application = a; return Task.CompletedTask; };
 
             var alice = await ConnectClientAsync("alice");
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await alice.PubSubSubscribeAsync(Node, BobsJid);
 
@@ -2209,7 +2209,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                         "On an open node there is nothing to approve.");
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             // A grant for an application there never was.
             await Server.SessionOf(alice.FullJid)!.SendAsync(
@@ -2264,7 +2264,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.PubSubSubscribeAsync(Node, BobsJid), Is.Not.Null);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             var deleted = await bob.PubSubDeleteNodeAsync(Node, BobsJid);
 
@@ -2307,7 +2307,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var sub = await alice.PubSubSubscribeAsync(Node, BobsJid);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             var purged = await bob.PubSubPurgeNodeAsync(Node, BobsJid);
 
@@ -2389,7 +2389,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(atCarol, Is.Not.Null);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await bob.PubSubDeleteNodeAsync(Node, BobsJid);
 
@@ -2457,7 +2457,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var sub   = await alice.PubSubSubscribeAsync(Node, BobsJid);
 
             PubSubEvent? reported = null;
-            alice.OnPubSubEvent += e => reported = e;
+            alice.OnPubSubEvent += (timestamp, sender, e, ct) => { reported = e; return Task.CompletedTask; };
 
             await Server.SessionOf(alice.FullJid)!.SendAsync(
                 $"<message from='{BobsJid}' type='headline' to='{alice.FullJid}'>" +

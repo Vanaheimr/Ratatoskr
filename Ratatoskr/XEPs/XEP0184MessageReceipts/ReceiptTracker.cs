@@ -20,9 +20,25 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnReceiptReceivedDelegate
+
+/// <summary>
+/// XEP-0184: a message we sent has been delivered.
+/// </summary>
+public delegate Task OnReceiptReceivedDelegate(DateTimeOffset     Timestamp,
+                                               ReceiptTracker     Sender,
+                                               String             MessageId,
+                                               String             From,
+                                               CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XEP-0184: Follows sent messages up to the delivery receipt and checks
@@ -31,7 +47,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 public sealed class ReceiptTracker
 {
     private readonly Dictionary<string, PendingReceipt> _pending = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly ILogger _logger;
 
     /// <summary>
@@ -56,7 +72,7 @@ public sealed class ReceiptTracker
     /// </summary>
     private const int MaxRemembered = 1000;
 
-    public event Action<string, string>? OnReceiptReceived; // messageId, from
+    public event OnReceiptReceivedDelegate? OnReceiptReceived;
 
     public ReceiptTracker(ILogger? logger = null)
     {
@@ -110,7 +126,9 @@ public sealed class ReceiptTracker
     /// <summary>
     /// Processes an incoming receipt with spoofing protection
     /// </summary>
-    public bool ProcessReceipt(string receiptId, string from)
+    public async Task<bool> ProcessReceiptAsync(string             receiptId,
+                                                string             from,
+                                                CancellationToken  CancellationToken   = default)
     {
         var bareFrom = JidUtilities.Bare(from);
 
@@ -133,7 +151,7 @@ public sealed class ReceiptTracker
             _pending.Remove(receiptId);
         }
 
-        OnReceiptReceived?.Invoke(receiptId, from);
+        await OnReceiptReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, receiptId, from, CancellationToken), _logger);
         return true;
     }
 

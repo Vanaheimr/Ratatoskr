@@ -71,10 +71,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             XMPPMessage?    received  = null;
             OmemoDecrypted? info      = null;
 
-            bob.OnEncryptedMessage += (message, omemo) =>
+            bob.OnEncryptedMessage += (timestamp, sender, message, omemo, ct) =>
             {
                 received = message;
                 info     = omemo;
+
+                return Task.CompletedTask;
+
             };
 
             const String secret = "Shall we meet at eight?";
@@ -147,7 +150,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await bob.EnableOmemoAsync();
 
             var atBob = new List<String>();
-            bob.OnEncryptedMessage += (n, _) => { lock (atBob) atBob.Add(n.Body); };
+            bob.OnEncryptedMessage += (timestamp, sender, n, _, ct) => { lock (atBob) atBob.Add(n.Body);  return Task.CompletedTask; };
 
             await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
             await WaitFor(() => { lock (atBob) return atBob.Count == 1; }, "the first message");
@@ -201,10 +204,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await bob.EnableOmemoAsync();
 
             String? atTheSecond = null;
-            alicesSecond.OnEncryptedMessage += (n, _) => atTheSecond = n.Body;
+            alicesSecond.OnEncryptedMessage += (timestamp, sender, n, _, ct) => { atTheSecond = n.Body; return Task.CompletedTask; };
 
             var arrived = false;
-            bob.OnEncryptedMessage += (_, _) => arrived = true;
+            bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
             await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "written to Bob");
 
@@ -267,7 +270,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await bob.EnableOmemoAsync();
 
             OmemoDecrypted? info = null;
-            bob.OnEncryptedMessage += (_, o) => info = o;
+            bob.OnEncryptedMessage += (timestamp, sender, _, o, ct) => { info = o; return Task.CompletedTask; };
 
             await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "signed from the inside");
 
@@ -317,7 +320,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await mallory.EnableOmemoAsync();
 
             var atBob = 0;
-            bob.OnEncryptedMessage += (_, _) => Interlocked.Increment(ref atBob);
+            bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { Interlocked.Increment(ref atBob); return Task.CompletedTask; };
 
             // One message to both - both get their entry.
             System.Xml.Linq.XNamespace client = "jabber:client";
@@ -367,8 +370,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob    = new List<String>();
             var atAlice  = new List<String>();
 
-            bob.OnEncryptedMessage    += (n, _) => { lock (atBob)   atBob.Add(n.Body); };
-            alice.OnEncryptedMessage  += (n, _) => { lock (atAlice) atAlice.Add(n.Body); };
+            bob.OnEncryptedMessage    += (timestamp, sender, n, _, ct) => { lock (atBob)   atBob.Add(n.Body);  return Task.CompletedTask; };
+            alice.OnEncryptedMessage  += (timestamp, sender, n, _, ct) => { lock (atAlice) atAlice.Add(n.Body);  return Task.CompletedTask; };
 
             for (var i = 0; i < 3; i++)
             {
@@ -419,7 +422,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await bob.EnableOmemoAsync();
 
             var arrived = false;
-            bob.OnEncryptedMessage += (_, _) => arrived = true;
+            bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
             await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "Hello");
             await WaitFor(() => arrived, "the message at Bob");
@@ -475,7 +478,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await bob.EnableOmemoAsync();
 
             var arrived = false;
-            bob.OnEncryptedMessage += (_, _) => arrived = true;
+            bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
             // The first message makes Bob's device known at Alice.
             await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
@@ -577,7 +580,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var before = bobsStore.LoadIdentity()!.PreKeys.Select(pk => pk.Id).ToHashSet();
 
             var arrived = false;
-            bob.OnEncryptedMessage += (_, _) => arrived = true;
+            bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
             await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "the first");
             await WaitFor(() => arrived, "the message at Bob");
@@ -634,7 +637,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                                        OmemoIdentity.Create().PublicIdentityKey);
 
             var arrived = false;
-            bob.OnEncryptedMessage += (_, _) => arrived = true;
+            bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
             var skipped = await alice.SendEncryptedMessageAsync($"bob@{Server.Domain}", "secret");
 

@@ -107,19 +107,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             var errors = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => errors.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { errors.Enqueue(e); return Task.CompletedTask; };
 
             var rawFrames = new ConcurrentQueue<String>();
-            alice.Connection.OnRawXml += x =>
+            alice.Connection.OnRawXml += (timestamp, sender, x, ct) =>
             {
                 if (x.StartsWith("<<<", StringComparison.Ordinal) &&
                     x.Contains("to-the-account", StringComparison.Ordinal))
                 {
                     rawFrames.Enqueue(x);
                 }
+
+                return Task.CompletedTask;
+
             };
 
             await alice.SendRawAsync(
@@ -169,7 +172,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<message to='{bob.FullJid}' type='groupchat' id='to-the-resource'>" +
@@ -209,8 +212,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atTheMobile  = new ConcurrentQueue<XMPPMessage>();
             var atTheDesktop = new ConcurrentQueue<XMPPMessage>();
 
-            mobile.OnMessage  += m => atTheMobile.Enqueue(m);
-            desktop.OnMessage += m => atTheDesktop.Enqueue(m);
+            mobile.OnMessage  += (timestamp, sender, m, ct) => { atTheMobile.Enqueue(m); return Task.CompletedTask; };
+            desktop.OnMessage += (timestamp, sender, m, ct) => { atTheDesktop.Enqueue(m); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<message to='{mobile.BareJid}' type='headline' id='notice'>" +
@@ -258,7 +261,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var secondDevice = await ResourceAsync("bob", "SecondDevice", -1);
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            secondDevice.OnMessage += m => inbox.Enqueue(m);
+            secondDevice.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<message to='{secondDevice.BareJid}' type='chat' id='to-the-account'>" +
@@ -298,10 +301,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob");
 
             var atBob = new ConcurrentQueue<StanzaError>();
-            bob.Connection.OnStanzaError += (from, e) => atBob.Enqueue(e);
+            bob.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { atBob.Enqueue(e); return Task.CompletedTask; };
 
             var atAlice = new ConcurrentQueue<StanzaError>();
-            alice.Connection.OnStanzaError += (from, e) => atAlice.Enqueue(e);
+            alice.Connection.OnStanzaError += (timestamp, sender, from, e, ct) => { atAlice.Enqueue(e); return Task.CompletedTask; };
 
             const String errorBody = "<error type='cancel'>" +
                                      "<service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +

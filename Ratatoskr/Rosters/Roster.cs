@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2010-2026 GraphDefined GmbH <achim.friedland@graphdefined.com>
  * This file is part of Ratatoskr <https://www.github.com/Vanaheimr/Ratatoskr>
  *
@@ -15,65 +15,193 @@
  * limitations under the License.
  */
 
+#region Usings
+
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+using org.GraphDefined.Vanaheimr.Illias;
+
+#endregion
+
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnRoster...Delegate
+
+/// <summary>
+/// A contact entered the roster.
+/// </summary>
+public delegate Task OnRosterItemAddedDelegate           (DateTimeOffset     Timestamp,
+                                                          Roster             Sender,
+                                                          RosterItem         Item,
+                                                          CancellationToken  CancellationToken);
+
+/// <summary>
+/// Something about a contact changed - name, groups, subscription or presence.
+/// </summary>
+public delegate Task OnRosterItemUpdatedDelegate         (DateTimeOffset     Timestamp,
+                                                          Roster             Sender,
+                                                          RosterItem         Item,
+                                                          CancellationToken  CancellationToken);
+
+/// <summary>
+/// A contact left the roster.
+/// </summary>
+public delegate Task OnRosterItemRemovedDelegate         (DateTimeOffset     Timestamp,
+                                                          Roster             Sender,
+                                                          String             BareJid,
+                                                          CancellationToken  CancellationToken);
+
+/// <summary>
+/// Someone asks to see our presence (RFC 6121, section 3.1).
+/// </summary>
+public delegate Task OnRosterSubscriptionRequestDelegate (DateTimeOffset     Timestamp,
+                                                          Roster             Sender,
+                                                          String             From,
+                                                          String             Status,
+                                                          CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// Roster manager with subscription handling
 /// </summary>
 public sealed class Roster
 {
-    private readonly Dictionary<string, RosterItem> _items = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _lock = new();
 
-    public string? Version { get; set; }
+    #region Data
 
-    public event Action<RosterItem>? OnItemAdded;
-    public event Action<RosterItem>? OnItemUpdated;
-    public event Action<string>? OnItemRemoved;
-    public event Action<string, string>? OnSubscriptionRequest;
+    private readonly Dictionary<String, RosterItem>  _items  = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock                            _lock   = new();
+    private readonly ILogger                         _logger;
+
+    #endregion
+
+    #region Properties
+
+    public String? Version { get; set; }
 
     public IReadOnlyCollection<RosterItem> Items
     {
         get { lock (_lock) return _items.Values.ToList(); }
     }
 
-    public RosterItem? GetItem(string jid)
+    #endregion
+
+    #region Events
+
+    /// <summary>A contact entered the roster.</summary>
+    public event OnRosterItemAddedDelegate?            OnItemAdded;
+
+    /// <summary>Something about a contact changed.</summary>
+    public event OnRosterItemUpdatedDelegate?          OnItemUpdated;
+
+    /// <summary>A contact left the roster.</summary>
+    public event OnRosterItemRemovedDelegate?          OnItemRemoved;
+
+    /// <summary>Someone asks to see our presence.</summary>
+    public event OnRosterSubscriptionRequestDelegate?  OnSubscriptionRequest;
+
+    #endregion
+
+    #region Constructor(s)
+
+    /// <summary>
+    /// Creates a new roster.
+    /// </summary>
+    /// <param name="LoggerFactory">
+    /// Optional; used for nothing but reporting a handler that threw.
+    /// </param>
+    public Roster(ILoggerFactory? LoggerFactory = null)
     {
-        var bareJid = JidUtilities.Bare(jid);
-        lock (_lock)
-        {
-            return _items.TryGetValue(bareJid, out var item) ? item : null;
-        }
+
+        _logger = LoggerFactory is not null
+                      ? LoggerFactory.CreateLogger<Roster>()
+                      : NullLogger<Roster>.Instance;
+
     }
 
-    public void ProcessRosterItem(RosterItem newItem)
+    #endregion
+
+
+    #region GetItem(Jid)
+
+    public RosterItem? GetItem(String Jid)
     {
-        var bareJid = JidUtilities.Bare(newItem.Jid);
+
+        var bareJid = JidUtilities.Bare(Jid);
+
+        lock (_lock)
+            return _items.TryGetValue(bareJid, out var item) ? item : null;
+
+    }
+
+    #endregion
+
+    #region ProcessRosterItemAsync(NewItem, CancellationToken = default)
+
+    /// <summary>
+    /// Takes over a contact from a roster push or result.
+    /// </summary>
+    /// <remarks>
+    /// Deciding and announcing are two steps, and they used to be one: the
+    /// event was raised while the lock was held. A handler that asks the roster
+    /// something then waits for a lock its own caller holds - and on a
+    /// re-entrant path that is a deadlock rather than a delay. Awaiting inside
+    /// a <c>lock</c> is not even expressible in C#, so the compiler now
+    /// enforces what the comment in <see cref="ReplaceAllAsync"/> always
+    /// claimed was the case.
+    /// </remarks>
+    public async Task ProcessRosterItemAsync(RosterItem         NewItem,
+                                             CancellationToken  CancellationToken   = default)
+    {
+
+        var         bareJid = JidUtilities.Bare(NewItem.Jid);
+        RosterItem  item;
+        Boolean     isNew;
 
         lock (_lock)
         {
+
             if (_items.TryGetValue(bareJid, out var existing))
             {
-                existing.Name = newItem.Name;
-                existing.Subscription = newItem.Subscription;
+
+                existing.Name          = NewItem.Name;
+                existing.Subscription  = NewItem.Subscription;
                 existing.Groups.Clear();
-                existing.Groups.AddRange(newItem.Groups);
-                OnItemUpdated?.Invoke(existing);
+                existing.Groups.AddRange(NewItem.Groups);
+
+                item   = existing;
+                isNew  = false;
+
             }
             else
             {
-                _items[bareJid] = newItem;
-                OnItemAdded?.Invoke(newItem);
+                _items[bareJid] = NewItem;
+                item   = NewItem;
+                isNew  = true;
             }
+
         }
+
+        if (isNew)
+            await OnItemAdded.  InvokeAllAsync(handler => handler(Timestamp.Now, this, item, CancellationToken), _logger);
+        else
+            await OnItemUpdated.InvokeAllAsync(handler => handler(Timestamp.Now, this, item, CancellationToken), _logger);
+
     }
+
+    #endregion
+
+    #region ReplaceAllAsync(Items, CancellationToken = default)
 
     /// <summary>
     /// RFC 6121, section 2.1.4: Takes the result of a roster request as the
     /// complete roster.
     /// </summary>
     /// <remarks>
-    /// The difference to <see cref="ProcessRosterItem"/> is the removal. A
+    /// The difference to <see cref="ProcessRosterItemAsync"/> is the removal. A
     /// roster result is not an addition but the state of things: whatever is
     /// not in it does not exist any more.
     ///
@@ -88,27 +216,32 @@ public sealed class Roster
     /// carries exactly the changed entries; treating it this way would delete
     /// the whole rest of the roster on every change.
     /// </remarks>
-    public void ReplaceAll(IEnumerable<RosterItem> items)
+    public async Task ReplaceAllAsync(IEnumerable<RosterItem>  Items,
+                                      CancellationToken        CancellationToken   = default)
     {
 
-        var fresh    = items.ToList();
-        var kept     = new HashSet<string>(fresh.Select(i => JidUtilities.Bare(i.Jid)),
-                                           StringComparer.OrdinalIgnoreCase);
+        var fresh  = Items.ToList();
+        var kept   = new HashSet<String>(fresh.Select(item => JidUtilities.Bare(item.Jid)),
+                                         StringComparer.OrdinalIgnoreCase);
 
-        List<string> dropped;
+        List<String> dropped;
 
         lock (_lock)
-            dropped = _items.Keys.Where(k => !kept.Contains(k)).ToList();
+            dropped = _items.Keys.Where(key => !kept.Contains(key)).ToList();
 
         // Outside the lock: both calls take it themselves, and the events are
         // not meant to run under it.
         foreach (var item in fresh)
-            ProcessRosterItem(item);
+            await ProcessRosterItemAsync(item, CancellationToken);
 
         foreach (var jid in dropped)
-            RemoveItem(jid);
+            await RemoveItemAsync(jid, CancellationToken);
 
     }
+
+    #endregion
+
+    #region ProcessSubscriptionChangeAsync(From, Type, CancellationToken = default)
 
     /// <summary>
     /// RFC 6121, section 3: Applies a subscription change that arrives as a
@@ -118,25 +251,30 @@ public sealed class Roster
     /// The authoritative state comes from the server as a roster push; these
     /// stanzas are the notification about it. Evaluating them here anyway keeps
     /// the roster right even when the push fails to arrive - above all it keeps
-    /// them away from <see cref="UpdatePresence"/>, where everything without
-    /// <c>type='unavailable'</c> counts as present.
+    /// them away from <see cref="UpdatePresenceAsync"/>, where everything
+    /// without <c>type='unavailable'</c> counts as present.
     ///
     /// An unknown contact is deliberately not created: entries come into being
     /// through the roster push, not through a presence.
     /// </remarks>
-    /// <param name="from">Sender of the stanza.</param>
-    /// <param name="type">subscribed, unsubscribed or unsubscribe.</param>
-    public void ProcessSubscriptionChange(string from, string type)
+    /// <param name="From">Sender of the stanza.</param>
+    /// <param name="Type">subscribed, unsubscribed or unsubscribe.</param>
+    /// <param name="CancellationToken">An optional token to cancel this request.</param>
+    public async Task ProcessSubscriptionChangeAsync(String             From,
+                                                     String             Type,
+                                                     CancellationToken  CancellationToken   = default)
     {
-        var bareJid = JidUtilities.Bare(from);
+
+        var          bareJid = JidUtilities.Bare(From);
+        RosterItem?  item;
 
         lock (_lock)
         {
-            if (!_items.TryGetValue(bareJid, out var item))
+
+            if (!_items.TryGetValue(bareJid, out item))
                 return;
 
-            item.Subscription = type switch
-            {
+            item.Subscription = Type switch {
                 "subscribed"    => item.Subscription.GrantTo(),
                 "unsubscribed"  => item.Subscription.RevokeTo(),
                 "unsubscribe"   => item.Subscription.RevokeFrom(),
@@ -147,98 +285,142 @@ public sealed class Roster
             // known would from now on grow arbitrarily old - the contact
             // therefore counts as offline instead of standing forever in the
             // last state seen.
-            if (type == "unsubscribed")
+            if (Type == "unsubscribed")
             {
                 item.Presence        = PresenceState.Offline;
                 item.PresenceStatus  = null;
             }
 
-            OnItemUpdated?.Invoke(item);
         }
+
+        await OnItemUpdated.InvokeAllAsync(handler => handler(Timestamp.Now, this, item, CancellationToken), _logger);
+
     }
 
-    public void RemoveItem(string jid)
-    {
-        var bareJid = JidUtilities.Bare(jid);
-        lock (_lock)
-        {
-            if (_items.Remove(bareJid))
-            {
-                OnItemRemoved?.Invoke(bareJid);
-            }
-        }
-    }
+    #endregion
 
-    public void RaiseSubscriptionRequest(string from, string status)
-    {
-        OnSubscriptionRequest?.Invoke(from, status);
-    }
+    #region RemoveItemAsync(Jid, CancellationToken = default)
 
-    public void UpdatePresence(string from, string type, string? show, string? status)
+    public async Task RemoveItemAsync(String             Jid,
+                                      CancellationToken  CancellationToken   = default)
     {
-        var bareJid = JidUtilities.Bare(from);
+
+        var      bareJid = JidUtilities.Bare(Jid);
+        Boolean  removed;
 
         lock (_lock)
+            removed = _items.Remove(bareJid);
+
+        if (removed)
+            await OnItemRemoved.InvokeAllAsync(handler => handler(Timestamp.Now, this, bareJid, CancellationToken), _logger);
+
+    }
+
+    #endregion
+
+    #region RaiseSubscriptionRequestAsync(From, Status, CancellationToken = default)
+
+    public Task RaiseSubscriptionRequestAsync(String             From,
+                                              String             Status,
+                                              CancellationToken  CancellationToken   = default)
+
+        => OnSubscriptionRequest.InvokeAllAsync(handler => handler(Timestamp.Now, this, From, Status, CancellationToken), _logger);
+
+    #endregion
+
+    #region UpdatePresenceAsync(From, Type, Show, Status, CancellationToken = default)
+
+    public async Task UpdatePresenceAsync(String             From,
+                                          String             Type,
+                                          String?            Show,
+                                          String?            Status,
+                                          CancellationToken  CancellationToken   = default)
+    {
+
+        var          bareJid = JidUtilities.Bare(From);
+        RosterItem?  item;
+
+        lock (_lock)
         {
-            if (!_items.TryGetValue(bareJid, out var item))
-            {
+
+            if (!_items.TryGetValue(bareJid, out item))
                 return;
-            }
 
-            if (type == "unavailable")
+            if (Type == "unavailable")
             {
-                item.Presence = PresenceState.Offline;
-                item.PresenceStatus = null;
+                item.Presence        = PresenceState.Offline;
+                item.PresenceStatus  = null;
             }
             else
             {
-                item.Presence = show switch
-                {
-                    "away" => PresenceState.Away,
-                    "chat" => PresenceState.Chat,
-                    "dnd" => PresenceState.Dnd,
-                    "xa" => PresenceState.Xa,
-                    _ => PresenceState.Available
+
+                item.Presence = Show switch {
+                    "away"  => PresenceState.Away,
+                    "chat"  => PresenceState.Chat,
+                    "dnd"   => PresenceState.Dnd,
+                    "xa"    => PresenceState.Xa,
+                    _       => PresenceState.Available
                 };
-                item.PresenceStatus = status;
+
+                item.PresenceStatus = Status;
+
             }
 
             item.LastSeen = DateTime.UtcNow;
-            OnItemUpdated?.Invoke(item);
+
         }
+
+        await OnItemUpdated.InvokeAllAsync(handler => handler(Timestamp.Now, this, item, CancellationToken), _logger);
+
     }
+
+    #endregion
+
+
+    #region GetOnlineContacts()
 
     public IEnumerable<RosterItem> GetOnlineContacts()
     {
+
         lock (_lock)
-        {
-            return _items.Values
-                .Where(i => i.Presence != PresenceState.Offline)
-                .OrderBy(i => i.DisplayName)
-                .ToList();
-        }
+            return _items.Values.
+                       Where  (item => item.Presence != PresenceState.Offline).
+                       OrderBy(item => item.DisplayName).
+                       ToList();
+
     }
 
-    public IEnumerable<RosterItem> GetByGroup(string group)
+    #endregion
+
+    #region GetByGroup(Group)
+
+    public IEnumerable<RosterItem> GetByGroup(String Group)
     {
+
         lock (_lock)
-        {
-            return _items.Values
-                .Where(i => i.Groups.Contains(group, StringComparer.OrdinalIgnoreCase))
-                .OrderBy(i => i.DisplayName)
-                .ToList();
-        }
+            return _items.Values.
+                       Where  (item => item.Groups.Contains(Group, StringComparer.OrdinalIgnoreCase)).
+                       OrderBy(item => item.DisplayName).
+                       ToList();
+
     }
 
-    public IEnumerable<string> GetGroups()
+    #endregion
+
+    #region GetGroups()
+
+    public IEnumerable<String> GetGroups()
     {
+
         lock (_lock)
-        {
-            return _items.Values
-                .SelectMany(i => i.Groups)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(g => g)
-                .ToList();
-        }
+            return _items.Values.
+                       SelectMany(item => item.Groups).
+                       Distinct  (StringComparer.OrdinalIgnoreCase).
+                       OrderBy   (group => group).
+                       ToList();
+
     }
+
+    #endregion
+
 }

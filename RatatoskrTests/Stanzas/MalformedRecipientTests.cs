@@ -238,7 +238,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob", createAccount: false);
 
             var arrived = new List<String>();
-            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
+            bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
             await alice.SendRawAsync(
                       $"<message to='bob@{Server.Domain}/' type='chat'><body>All the same</body></message>");
@@ -275,7 +275,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Server.AddAccount("bäcker");
 
             var arrived = new List<String>();
-            bob.OnMessage += m => { lock (arrived) arrived.Add(m.Body); };
+            bob.OnMessage += (timestamp, sender, m, ct) => { lock (arrived) arrived.Add(m.Body);  return Task.CompletedTask; };
 
             var session = Server.SessionOf(alice.FullJid)!;
             var before  = session.Sent.Count;

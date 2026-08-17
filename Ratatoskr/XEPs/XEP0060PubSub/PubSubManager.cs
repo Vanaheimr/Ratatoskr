@@ -22,9 +22,24 @@ using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnPubSubEventDelegate
+
+/// <summary>
+/// XEP-0060: something happened at a node we subscribe to.
+/// </summary>
+public delegate Task OnPubSubEventDelegate(DateTimeOffset     Timestamp,
+                                           PubSubManager      Sender,
+                                           PubSubEvent        Event,
+                                           CancellationToken  CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XEP-0060: Manages PubSub subscriptions and processes incoming events.
@@ -55,10 +70,10 @@ public sealed class PubSubManager
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _pubsubService;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly ILogger _logger;
 
-    public event Action<PubSubEvent>? OnEvent;
+    public event OnPubSubEventDelegate? OnEvent;
 
     public PubSubManager(string pubsubService = "pubsub", ILogger? logger = null)
     {
@@ -71,7 +86,10 @@ public sealed class PubSubManager
     /// <summary>
     /// Processes an incoming PubSub event message with spoofing protection
     /// </summary>
-    public bool ProcessEvent(XElement stanza, string from, string expectedPubSubJid)
+    public async Task<bool> ProcessEventAsync(XElement           stanza,
+                                              string             from,
+                                              string             expectedPubSubJid,
+                                              CancellationToken  CancellationToken   = default)
     {
 
         var eventElement = stanza.Child(EventNamespace, "event");
@@ -112,7 +130,7 @@ public sealed class PubSubManager
                         retractEvent.RetractedIds.Add(retractId);
                 }
 
-                OnEvent?.Invoke(retractEvent);
+                await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, retractEvent, CancellationToken), _logger);
                 return true;
 
             }
@@ -137,7 +155,7 @@ public sealed class PubSubManager
 
             }
 
-            OnEvent?.Invoke(itemsEvent);
+            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, itemsEvent, CancellationToken), _logger);
             return true;
 
         }
@@ -147,7 +165,7 @@ public sealed class PubSubManager
         // publication comes to the same address.
         if (eventElement.Child(EventNamespace, "purge") is not null)
         {
-            OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.Purge, subId));
+            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.Purge, subId), CancellationToken), _logger);
             return true;
         }
 
@@ -162,7 +180,7 @@ public sealed class PubSubManager
 
             RemoveSubscriptionsOf(nodeId, from);
 
-            OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.Delete, subId));
+            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.Delete, subId), CancellationToken), _logger);
 
             return true;
 
@@ -196,8 +214,10 @@ public sealed class PubSubManager
                     return false;
                 }
 
-                OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.SubscriptionApproved,
-                                                report.Attr("subid")));
+                var approved = new PubSubEvent(nodeId, PubSubEventType.SubscriptionApproved,
+                                               report.Attr("subid"));
+
+                await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, approved, CancellationToken), _logger);
 
                 return true;
 
@@ -217,7 +237,7 @@ public sealed class PubSubManager
             // notifications that do not come any more.
             RemoveSubscription(nodeId, ended);
 
-            OnEvent?.Invoke(new PubSubEvent(nodeId, PubSubEventType.SubscriptionEnded, ended));
+            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.SubscriptionEnded, ended), CancellationToken), _logger);
 
             return true;
 

@@ -53,9 +53,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client = await ConnectClientAsync("alice", maxReconnectAttempts: 0);
 
             var ended = false;
-            client.Connection.OnStateChanged += (_, now) => {
+            client.Connection.OnStateChanged += (timestamp, sender, _, now, ct) => {
                 if (now != ConnectionState.Connected)
                     ended = true;
+
+                return Task.CompletedTask;
+
             };
 
             // Base64 of "\0alice\0wrong" - a PLAIN attempt that cannot succeed.

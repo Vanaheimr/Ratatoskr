@@ -186,13 +186,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// nothing was sent, seven are acknowledged.
         /// </remarks>
         [Test]
-        public void LastAcknowledged_IsTheirNumber_NotOurs()
+        public async Task LastAcknowledged_IsTheirNumber_NotOurs()
         {
 
             var manager = new StreamManagementManager(_ => Task.CompletedTask);
 
             manager.ProcessEnabled("<enabled xmlns='urn:xmpp:sm:3'/>");
-            manager.ProcessAck("<a xmlns='urn:xmpp:sm:3' h='7'/>");
+            await manager.ProcessAckAsync("<a xmlns='urn:xmpp:sm:3' h='7'/>");
 
             Assert.Multiple(() =>
             {

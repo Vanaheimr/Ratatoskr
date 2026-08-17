@@ -22,9 +22,39 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using org.GraphDefined.Vanaheimr.Illias;
+
 #endregion
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
+
+#region (delegate) OnStream...Delegate
+
+/// <summary>
+/// XEP-0198: the server acknowledged stanzas we had sent.
+/// </summary>
+public delegate Task OnStreamAckReceivedDelegate(DateTimeOffset           Timestamp,
+                                                 StreamManagementManager  Sender,
+                                                 UInt32                   Acknowledged,
+                                                 CancellationToken        CancellationToken);
+
+/// <summary>
+/// XEP-0198: the resume failed and these stanzas never arrived.
+/// </summary>
+public delegate Task OnStanzasLostDelegate      (DateTimeOffset           Timestamp,
+                                                 StreamManagementManager  Sender,
+                                                 IReadOnlyList<String>    Stanzas,
+                                                 CancellationToken        CancellationToken);
+
+/// <summary>
+/// XEP-0198: the previous stream was picked up again.
+/// </summary>
+public delegate Task OnStreamResumedDelegate    (DateTimeOffset           Timestamp,
+                                                 StreamManagementManager  Sender,
+                                                 CancellationToken        CancellationToken);
+
+#endregion
+
 
 /// <summary>
 /// XEP-0198: Stream Management - counts stanzas, collects acks and makes stream
@@ -75,9 +105,9 @@ public sealed class StreamManagementManager
     /// </remarks>
     public uint LastAcknowledged { get { lock (_lock) return _lastAcked; } }
 
-    public event Action<uint>? OnAckReceived;
-    public event Action<List<string>>? OnStanzasLost;
-    public event Action? OnResumed;
+    public event OnStreamAckReceivedDelegate? OnAckReceived;
+    public event OnStanzasLostDelegate? OnStanzasLost;
+    public event OnStreamResumedDelegate? OnResumed;
 
     public StreamManagementManager(Func<string, Task> sendStanza, ILogger? logger = null)
     {
@@ -178,17 +208,18 @@ public sealed class StreamManagementManager
     /// <summary>
     /// Processes <c>&lt;resumed/&gt;</c>
     /// </summary>
-    public void ProcessResumed(string xml)
+    public async Task ProcessResumedAsync(string             xml,
+                                          CancellationToken  CancellationToken   = default)
     {
         var hMatch = Regex.Match(xml, @"h=['""](\d+)['""]");
         if (hMatch.Success)
         {
-            ProcessAck(uint.Parse(hMatch.Groups[1].Value));
+            await ProcessAckAsync(uint.Parse(hMatch.Groups[1].Value), CancellationToken);
         }
 
         _enabled = true;
         _logger.LogInformation("Stream resumed");
-        OnResumed?.Invoke();
+        await OnResumed.InvokeAllAsync(handler => handler(Timestamp.Now, this, CancellationToken), _logger);
     }
 
     /// <summary>
@@ -198,7 +229,8 @@ public sealed class StreamManagementManager
     /// The frame itself, if at hand - it can carry an <c>h</c>. Without it, it
     /// stays at "everything pending is lost".
     /// </param>
-    public void ProcessFailed(string? xml = null)
+    public async Task ProcessFailedAsync(string?            xml                 = null,
+                                         CancellationToken  CancellationToken   = default)
     {
         // Holds for both: a refused negotiation and a failed resume.
         _negotiation?.TrySetResult(false);
@@ -217,7 +249,7 @@ public sealed class StreamManagementManager
         // modulo arithmetic of the overflowing counter stands there, and two
         // conceptions of the same computation are one too many.
         if (xml is not null)
-            ProcessAck(xml);
+            await ProcessAckAsync(xml, CancellationToken);
 
         List<string> lost;
         lock (_lock)
@@ -232,7 +264,7 @@ public sealed class StreamManagementManager
         if (lost.Count > 0)
         {
             _logger.LogWarning("Stream resume failed - {LostCount} stanzas lost", lost.Count);
-            OnStanzasLost?.Invoke(lost);
+            await OnStanzasLost.InvokeAllAsync(handler => handler(Timestamp.Now, this, lost, CancellationToken), _logger);
         }
     }
 
@@ -311,12 +343,13 @@ public sealed class StreamManagementManager
     /// <summary>
     /// Processes <c>&lt;a/&gt;</c> (ack) from the server
     /// </summary>
-    public void ProcessAck(string xml)
+    public async Task ProcessAckAsync(string             xml,
+                                      CancellationToken  CancellationToken   = default)
     {
         var hMatch = Regex.Match(xml, @"h=['""](\d+)['""]");
         if (hMatch.Success)
         {
-            ProcessAck(uint.Parse(hMatch.Groups[1].Value));
+            await ProcessAckAsync(uint.Parse(hMatch.Groups[1].Value), CancellationToken);
         }
     }
 
@@ -333,7 +366,8 @@ public sealed class StreamManagementManager
     internal static bool IsAcknowledged(uint seq, uint h)
         => unchecked(h - seq) < 0x8000_0000u;
 
-    private void ProcessAck(uint h)
+    private async Task ProcessAckAsync(uint               h,
+                                       CancellationToken  CancellationToken   = default)
     {
         uint acked = 0;
 
@@ -349,7 +383,7 @@ public sealed class StreamManagementManager
 
         if (acked > 0)
         {
-            OnAckReceived?.Invoke(acked);
+            await OnAckReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, acked, CancellationToken), _logger);
         }
     }
 

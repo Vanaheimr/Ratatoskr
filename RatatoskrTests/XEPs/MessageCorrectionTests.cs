@@ -147,7 +147,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob", createAccount: false);
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             var first = await alice.SendMessageAsync($"bob@{Server.Domain}", "Until this evening");
 
@@ -208,7 +208,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectClientAsync("bob", createAccount: false);
 
             var inbox = new ConcurrentQueue<XMPPMessage>();
-            bob.OnMessage += m => inbox.Enqueue(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { inbox.Enqueue(m); return Task.CompletedTask; };
 
             var bob_jid = $"bob@{Server.Domain}";
 

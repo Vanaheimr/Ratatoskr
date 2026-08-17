@@ -154,7 +154,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var disco = Disco();
             var query = disco.QueryInfoAsync("somebody@far.example");
 
-            Assert.That(disco.ProcessError("disco-info-1",
+            Assert.That(await disco.ProcessErrorAsync("disco-info-1",
                                            new StanzaError(StanzaErrorType.Cancel, "remote-server-not-found"),
                                            "example.org"),
                         Is.True, "The own domain stands in for whoever could not be reached.");
@@ -178,13 +178,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var ping = Ping();
             var task = ping.PingAsync(Bob);
 
+            // Outside the Assert.Multiple, because that one takes a synchronous
+            // lambda and the answer now has to be awaited.
+            var believed = await ping.ProcessPongAsync("ping-1", "mallory@example.com");
+
             Assert.Multiple(() =>
             {
-                Assert.That(ping.ProcessPong("ping-1", "mallory@example.com"), Is.False);
-                Assert.That(task.IsCompleted,                                 Is.False);
+                Assert.That(believed,          Is.False);
+                Assert.That(task.IsCompleted,  Is.False);
             });
 
-            Assert.That(ping.ProcessPong("ping-1", Bob), Is.True);
+            Assert.That(await ping.ProcessPongAsync("ping-1", Bob), Is.True);
             Assert.That(await task.WaitAsync(TimeSpan.FromSeconds(3)), Is.Not.Null);
 
         }
@@ -205,7 +209,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var ping = Ping();
             var task = ping.PingAsync();
 
-            Assert.That(ping.ProcessPong("ping-1", null), Is.True);
+            Assert.That(await ping.ProcessPongAsync("ping-1", null), Is.True);
             Assert.That(await task.WaitAsync(TimeSpan.FromSeconds(3)), Is.Not.Null);
 
         }

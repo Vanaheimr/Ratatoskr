@@ -72,7 +72,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             ChatState? reported = null;
-            client.OnChatState += (_, state) => reported = state;
+            client.OnChatState += (timestamp, sender, _, state, ct) => { reported = state; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat' id='cs1'>" +
@@ -101,7 +101,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             ChatState? reported = null;
-            client.OnChatState += (_, state) => reported = state;
+            client.OnChatState += (timestamp, sender, _, state, ct) => { reported = state; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat' id='cs2'>" +
@@ -132,7 +132,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             ChatState? reported = null;
-            client.OnChatState += (_, state) => reported = state;
+            client.OnChatState += (timestamp, sender, _, state, ct) => { reported = state; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat'>" +
@@ -168,7 +168,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             ChatMarker? reported = null;
-            client.OnChatMarker += marker => reported = marker;
+            client.OnChatMarker += (timestamp, sender, marker, ct) => { reported = marker; return Task.CompletedTask; };
 
             var id = await client.Connection.SendMessageAsync(Bob, "markable", markable: true);
 
@@ -201,7 +201,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             ChatMarker? reported = null;
-            client.OnChatMarker += marker => reported = marker;
+            client.OnChatMarker += (timestamp, sender, marker, ct) => { reported = marker; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<message from='{Bob}/x' to='{client.FullJid}' type='chat' id='cm2'>" +
@@ -290,7 +290,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var (client, session) = await ConnectedPairAsync();
 
             CarbonMessage? reported = null;
-            client.OnCarbonMessage += carbon => reported = carbon;
+            client.OnCarbonMessage += (timestamp, sender, carbon, ct) => { reported = carbon; return Task.CompletedTask; };
 
             await session.SendAsync(
                 $"<message xmlns='jabber:client' from='{client.BareJid}' to='{client.FullJid}'>" +

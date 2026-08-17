@@ -55,7 +55,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client  = await ConnectClientAsync();
             var errors  = new List<(String? From, StanzaError Error)>();
 
-            client.OnStanzaError += (from, error) => errors.Add((from, error));
+            client.OnStanzaError += (timestamp, sender, from, error, ct) => { errors.Add((from, error)); return Task.CompletedTask; };
 
             await client.SendMessageAsync("bob@elsewhere.example", "Hello?");
 
@@ -152,8 +152,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var received  = new List<String>();
             var errors     = new List<StanzaError>();
 
-            bob.OnMessage       += m => received.Add(m.Body);
-            alice.OnStanzaError += (_, e) => errors.Add(e);
+            bob.OnMessage       += (timestamp, sender, m, ct) => { received.Add(m.Body); return Task.CompletedTask; };
+            alice.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello Bob!");
 
@@ -185,7 +185,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var client  = await ConnectClientAsync();
             var errors  = new List<StanzaError>();
 
-            client.OnStanzaError += (_, e) => errors.Add(e);
+            client.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await client.SendMessageAsync($"nobody@{Server.Domain}", "Hello?");
 

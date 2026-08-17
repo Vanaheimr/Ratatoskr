@@ -154,7 +154,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello across the border!");
 
@@ -186,8 +186,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob    = new List<XMPPMessage>();
             var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => atBob.Add(m);
-            alice.OnMessage  += m => atAlice.Add(m);
+            bob.OnMessage    += (timestamp, sender, m, ct) => { atBob.Add(m); return Task.CompletedTask; };
+            alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Question");
             await WaitFor(() => atBob.Count > 0, "the question at Bob's");
@@ -222,7 +222,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             MakeContacts(alice, bob);
 
             var seen = new List<(String From, String Type)>();
-            bob.OnPresenceChanged += (from, type) => seen.Add((from, type));
+            bob.OnPresenceChanged += (timestamp, sender, from, type, ct) => { seen.Add((from, type)); return Task.CompletedTask; };
 
             await alice.SetPresenceAsync();
 
@@ -253,7 +253,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // No MakeContacts: the two do not know each other.
 
             var seen = new List<String>();
-            bob.OnPresenceChanged += (from, _) => seen.Add(from);
+            bob.OnPresenceChanged += (timestamp, sender, from, _, ct) => { seen.Add(from); return Task.CompletedTask; };
 
             await alice.SetPresenceAsync();
 
@@ -287,7 +287,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var received = new List<XMPPMessage>();
             var refused  = new List<(String Peer, String Reason)>();
 
-            bob.OnMessage                  += m => received.Add(m);
+            bob.OnMessage                  += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
             _right.OnRemoteStanzaRejected += (peer, reason) => refused.Add((peer, reason));
 
             // left.example claims to speak for a third domain.
@@ -352,7 +352,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var alice   = await ConnectAsync(_left, "alice");
             var errors  = new List<StanzaError>();
 
-            alice.OnStanzaError += (_, e) => errors.Add(e);
+            alice.OnStanzaError += (timestamp, sender, _, e, ct) => { errors.Add(e); return Task.CompletedTask; };
 
             await alice.SendMessageAsync("who@faraway.example", "Hello?");
 

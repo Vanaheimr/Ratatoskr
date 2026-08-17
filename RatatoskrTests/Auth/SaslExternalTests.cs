@@ -173,7 +173,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello by certificate!");
 
@@ -216,7 +216,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Hello by dialback!");
 
@@ -243,8 +243,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var atBob    = new List<XMPPMessage>();
             var atAlice  = new List<XMPPMessage>();
 
-            bob.OnMessage    += m => atBob.Add(m);
-            alice.OnMessage  += m => atAlice.Add(m);
+            bob.OnMessage    += (timestamp, sender, m, ct) => { atBob.Add(m); return Task.CompletedTask; };
+            alice.OnMessage  += (timestamp, sender, m, ct) => { atAlice.Add(m); return Task.CompletedTask; };
 
             await alice.SendMessageAsync(bob.BareJid, "Question");
             await WaitFor(() => atBob.Count > 0, "the question at Bob");
@@ -285,7 +285,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob = await ConnectAsync(_right, "bob");
 
             var received = new List<XMPPMessage>();
-            bob.OnMessage += m => received.Add(m);
+            bob.OnMessage += (timestamp, sender, m, ct) => { received.Add(m); return Task.CompletedTask; };
 
             // Only as a supplier of certificates: this server is called
             // impostor.example, and its certificate says so too.
