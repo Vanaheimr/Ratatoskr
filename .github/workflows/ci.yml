@@ -151,11 +151,16 @@ jobs:
       # where the setups that produce those far sides have always lived. So a
       # hosted runner can execute all of it.
       #
-      # Expect 1204 tests, and the two legs owe different numbers, which is the
+      # Expect 1226 tests, and the two legs owe different numbers, which is the
       # one thing worth reading carefully here:
       #
-      #   windows-latest       1201 passed, 3 skipped
-      #   debian-13-container  1203 passed, 1 skipped
+      #   windows-latest       1223 passed, 3 skipped
+      #   debian-13-container  1225 passed, 1 skipped
+      #
+      # Measured at 7d96f3c, on both legs. The revision is named because naming
+      # it costs nothing and does not rot: it cannot keep these numbers current,
+      # but it lets a reader see how far behind they are without first having to
+      # learn the history of the suite.
       #
       # The one skip both legs share is a property that exists only in STARTTLS
       # operation, and the fixture is parameterised over the TLS modes, so it
