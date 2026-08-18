@@ -542,8 +542,16 @@ The counts move with the suite and are worth keeping current rather than round:
 the passing figure stood at 1110 until XEP-0454 arrived, at 1119 until the
 security review was worked through, at 1163 until XEP-0474 came in, at 1171
 until channel binding did, at 1181 until SASL2, at 1188 until the upgrade
-tasks and at 1194 until Bind 2, and a figure nobody updates stops being a check
-and becomes decoration.
+tasks, at 1194 until Bind 2 and at 1201 until the JID became a type, and a
+figure nobody updates stops being a check and becomes decoration.
+
+The step from 1201 is the one to read carefully, because it is the one where
+that happened. The JID conversion is what the entry names, and it is not the
+whole cause: port allocation, deriving the salted password once instead of once
+per connection, and a pass over handlers that throw all landed in the same
+stretch. The figure was brought up to date at the end of it rather than at each
+of them, so it was right again when it was written down and stale in between —
+the mild version of the failure, and the one that is easy to repeat.
 
 Three tables in the source are **generated, not transcribed**:
 `tools/unicode/` and `tools/stringprep/` fetch the Unicode file resp. the RFC
