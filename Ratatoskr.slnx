@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Ratatoskr/Ratatoskr.csproj" />
+  <Project Path="RatatoskrTests/RatatoskrTests.csproj" />
+</Solution>
