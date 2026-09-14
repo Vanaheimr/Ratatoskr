@@ -82,11 +82,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             const String secret = "Shall we meet at eight?";
 
-            var skipped = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), secret);
+            var sent = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), secret);
 
-            Assert.That(skipped, Is.Empty,
+            Assert.That(sent.Skipped, Is.Empty,
                         "Not all devices could read along: " +
-                        String.Join(", ", skipped.Select(u => $"{u.Jid}/{u.DeviceId}: {u.Reason}")));
+                        String.Join(", ", sent.Skipped.Select(u => $"{u.Jid}/{u.DeviceId}: {u.Reason}")));
 
             await WaitFor(() => received is not null, "the decrypted message at Bob");
 
@@ -491,16 +491,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             arrived = false;
 
-            var skipped = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the second");
+            var sent = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "the second");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(skipped, Has.Count.EqualTo(1),
+                Assert.That(sent.Skipped, Has.Count.EqualTo(1),
                             "The refused device was not reported.");
 
-                Assert.That(skipped[0].DeviceId, Is.EqualTo(bob.Omemo.Identity.DeviceId));
-                Assert.That(skipped[0].Reason,   Does.Contain("refused"));
+                Assert.That(sent.Skipped[0].DeviceId, Is.EqualTo(bob.Omemo.Identity.DeviceId));
+                Assert.That(sent.Skipped[0].Reason,   Does.Contain("refused"));
+
+                // And the message reached nobody at all, which is a different
+                // thing from a device being missing and has to be tellable.
+                Assert.That(sent.Readable, Is.False);
 
             });
 
@@ -639,15 +643,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var arrived = false;
             bob.OnEncryptedMessage += (timestamp, sender, _, _, ct) => { arrived = true; return Task.CompletedTask; };
 
-            var skipped = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "secret");
+            var sent = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "secret");
 
             Assert.Multiple(() =>
             {
 
-                Assert.That(skipped, Has.Count.EqualTo(1),
+                Assert.That(sent.Skipped, Has.Count.EqualTo(1),
                             "The device with the changed key was not skipped.");
 
-                Assert.That(skipped[0].Reason, Does.Contain("identity key"));
+                Assert.That(sent.Skipped[0].Reason, Does.Contain("identity key"));
+                Assert.That(sent.Readable,          Is.False,
+                            "nobody on the far side can read it, which is not the same as a device missing");
 
             });
 
@@ -778,6 +784,81 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.That(reported, Is.False,
                         "a device writing with the key it is on file with is not a change");
+
+        }
+
+        #endregion
+
+        #region AnEncryptedMessage_IsAcknowledgedLikeAnyOther()
+
+        /// <summary>
+        /// An encrypted message gets its id back, its delivery receipt
+        /// (XEP-0184) and its received marker (XEP-0333) - and none of them is
+        /// taken for a forgery.
+        /// </summary>
+        /// <remarks>
+        /// <b>Three things were missing and they were one thing.</b> The
+        /// encrypted send built its own stanza: no id given back to the caller,
+        /// no receipt request on the wire, and - because the receiving branch
+        /// returns before the place that answers - nothing answering. So an
+        /// encrypted message looked to whoever wrote it exactly like one that
+        /// never arrived.
+        ///
+        /// The spoofing check is the assertion that makes this more than a
+        /// convenience. A receipt or a marker is only accepted for a message
+        /// the tracker knows went to that address; a message sent without
+        /// tracking turns its own honest acknowledgement into a reported
+        /// attack. That is the failure mode this asserts against, and it is why
+        /// <see cref="OnSpoofingAttempt"/> is watched rather than assumed.
+        /// </remarks>
+        [Test]
+        public async Task AnEncryptedMessage_IsAcknowledgedLikeAnyOther()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice = await ConnectClientAsync("alice", createAccount: false);
+            var bob   = await ConnectClientAsync("bob",   createAccount: false);
+
+            await alice.EnableOmemoAsync();
+            await bob.EnableOmemoAsync();
+
+            String? receiptFor  = null;
+            String? markerFor   = null;
+            String? spoofing    = null;
+
+            alice.OnReceiptReceived  += (timestamp, sender, from, id, ct) => { receiptFor = id;        return Task.CompletedTask; };
+            alice.OnChatMarker       += (timestamp, sender, marker,  ct)  => { markerFor  = marker.MessageId; return Task.CompletedTask; };
+            alice.OnSpoofingAttempt  += (timestamp, sender, details, ct)  => { spoofing   = details;   return Task.CompletedTask; };
+
+            var sent = await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Shall we meet at eight?");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(sent.MessageId, Is.Not.Null.And.Not.Empty,
+                            "without the id the sender cannot match any answer to this message");
+                Assert.That(sent.Readable,  Is.True);
+                Assert.That(sent.Skipped,   Is.Empty);
+
+                // The half that is easy to leave out and expensive to leave
+                // out: an answer is only accepted for a message the tracker
+                // knows went to that address.
+                Assert.That(alice.Connection.Receipts.WasSentTo(sent.MessageId, JID.Parse($"bob@{Server.Domain}")),
+                            Is.True,
+                            "the encrypted message was not tracked, so its own acknowledgement will be refused");
+
+            });
+
+            await WaitFor(() => receiptFor is not null, "the delivery receipt for the encrypted message");
+            await WaitFor(() => markerFor  is not null, "the received marker for the encrypted message");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(receiptFor, Is.EqualTo(sent.MessageId));
+                Assert.That(markerFor,  Is.EqualTo(sent.MessageId));
+                Assert.That(spoofing,   Is.Null,
+                            "the acknowledgement of our own message was reported as a forgery");
+            });
 
         }
 

@@ -96,6 +96,32 @@ public delegate Task OnOmemoIdentityChangedDelegate(DateTimeOffset        Timest
 public sealed record OmemoSkippedDevice(JID Jid, UInt32 DeviceId, String Reason);
 
 /// <summary>
+/// An encrypted message that has gone out.
+/// </summary>
+/// <param name="MessageId">
+/// The id of the stanza. <b>Not a detail:</b> a delivery receipt (XEP-0184) and
+/// a read marker (XEP-0333) are answers <i>about this message</i>, and a caller
+/// that does not know its id can neither match them nor correct it later.
+/// </param>
+/// <param name="Skipped">
+/// The devices that cannot read it - <b>empty means everyone can</b>.
+/// </param>
+/// <param name="Readable">
+/// Whether at least one device of the recipient got a key.
+/// </param>
+/// <remarks>
+/// <see cref="Readable"/> is kept apart from an empty <see cref="Skipped"/>,
+/// and the difference is the one that matters to whoever wrote the message: one
+/// device of four missing is a message that arrived, none of three is a message
+/// that went out and nobody can open. The second is what writing to somebody
+/// who does not do OMEMO at all looks like, and it has to be distinguishable
+/// from success.
+/// </remarks>
+public sealed record OmemoSent(String                             MessageId,
+                               IReadOnlyList<OmemoSkippedDevice>  Skipped,
+                               Boolean                            Readable);
+
+/// <summary>
 /// A decrypted message.
 /// </summary>
 /// <param name="Content">The content of the SCE envelope.</param>

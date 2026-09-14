@@ -916,11 +916,27 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>
     /// XEP-0384: Sends an encrypted message.
     /// </summary>
-    /// <returns>The devices that cannot read along - empty means: all can.</returns>
-    public Task<IReadOnlyList<OmemoSkippedDevice>> SendEncryptedMessageAsync(JID                to,
-                                                                            string             body,
-                                                                            CancellationToken  ct = default)
-        => _connection.SendEncryptedMessageAsync(to, body, ct);
+    /// <returns>
+    /// The id of the stanza, the devices that cannot read along - empty means
+    /// all can - and whether anybody on the far side can read it at all.
+    /// </returns>
+    public async Task<OmemoSent> SendEncryptedMessageAsync(JID                to,
+                                                           string             body,
+                                                           CancellationToken  ct = default)
+    {
+
+        var sent = await _connection.SendEncryptedMessageAsync(to, body, ct);
+
+        // The same bookkeeping a plain message gets: what was last written to
+        // this address is what a later correction (XEP-0308) names. Missing
+        // here until now, which made every encrypted message the one message
+        // that could not be corrected.
+        lock (_lastSentToLock)
+            _lastSentTo[to.Bare] = sent.MessageId;
+
+        return sent;
+
+    }
 
     /// <summary>
     /// XEP-0352: Is a human being looking right now?

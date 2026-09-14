@@ -1075,7 +1075,20 @@ distribution, session store, and the wiring.
   person unreachable through a single broken device; sending in the clear would
   be the worst answer, because the sender then believes they encrypted.
   `SendEncryptedMessageAsync` therefore returns the skipped devices along with
-  the reason, and the console shows them
+  the reason, and the console shows them. It also says whether *anybody* on the
+  far side can read it (`Readable`), which is a different question: one device
+  of four missing is a message that arrived, none of three is a message that
+  went out and nobody can open — and that second case is what writing to
+  somebody who does not do OMEMO looks like
+- **An encrypted message is an ordinary stanza in every other respect.** Same
+  id given back to the caller, same delivery receipt (XEP-0184), same marker
+  (XEP-0333), same chat state — both ways of sending build the stanza in one
+  place now, because they had drifted. The id was the expensive omission: an
+  answer is only accepted for a message the tracker knows was sent to that
+  address, so an untracked message turned its own honest read marker into a
+  reported spoofing attempt. The receiving side answers an encrypted message
+  too, which it did not — that branch returns before the place that used to do
+  it — so an encrypted message got its tick from nobody
 - **Without OMEMO switched on it throws**, rather than sending unencrypted
 - **Blind Trust Before Verification** as the default (`TrustNewDevicesBlindly`).
   A scheme that demands a fingerprint comparison before the first message does

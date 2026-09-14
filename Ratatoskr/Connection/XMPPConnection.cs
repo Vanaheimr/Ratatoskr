@@ -2330,7 +2330,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (Omemo is not null &&
             Carbons?.UnwrapVerified(element, from) is XElement wrapped &&
             JID.TryParse(wrapped.Attr("from"), out var innerSender) &&
-            TryProcessEncrypted(wrapped, innerSender))
+            TryProcessEncrypted(wrapped, innerSender, Answer: false))
         {
             return;
         }
@@ -3820,14 +3820,32 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// XEP-0384: Sends an encrypted message.
     /// </summary>
     /// <returns>
-    /// The devices skipped - <b>empty means: everyone reads along</b>.
+    /// The id of the stanza, the devices skipped, and whether anybody on the
+    /// far side can read it at all.
     /// </returns>
+    /// <remarks>
+    /// <b>The same stanza a plain message gets</b>, down to the receipt request
+    /// and the marker - see <see cref="SendMessageStanzaAsync"/>. It did not
+    /// use to be, and the difference was not cosmetic: without the id being
+    /// tracked, the read marker that comes back for this very message is
+    /// refused as a forgery.
+    ///
+    /// Addressed to the bare JID, unlike a plain message: OMEMO encrypts to
+    /// every device of the recipient, and the server is the one that hands it
+    /// to all of them.
+    ///
+    /// <b>No correction (XEP-0308) here.</b> A <c>&lt;replace/&gt;</c> beside
+    /// the <c>&lt;encrypted/&gt;</c> would say in the clear which message is
+    /// being rewritten, and inside the envelope no client would read it.
+    /// Nothing sends one yet; when something does, that is the question to
+    /// answer first.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// When OMEMO is not switched on. <b>Here it throws and does not send
     /// unencrypted:</b> whoever wanted to write encrypted and sends unencrypted
     /// has made the worst of all mistakes - and silently at that.
     /// </exception>
-    public async Task<IReadOnlyList<OmemoSkippedDevice>> SendEncryptedMessageAsync(
+    public async Task<OmemoSent> SendEncryptedMessageAsync(
         JID to, string body, CancellationToken ct = default)
     {
 
@@ -3843,24 +3861,34 @@ public sealed class XMPPConnection : IAsyncDisposable
         // A <store/> per XEP-0334, so that the storage keeps it: from the
         // outside this message looks like one without content, and a server
         // deciding by the <body/> would throw it away.
-        var stanza = new XElement(client + "message",
-                                  new XAttribute("to",   to.Bare.ToString()),
-                                  new XAttribute("type", "chat"),
-                                  new XAttribute("id",   GenerateMessageId()),
-                                  result.Element.ToXml(),
-                                  new XElement(XNamespace.Get("urn:xmpp:hints") + "store"));
+        var messageId = await SendMessageStanzaAsync(
+                                  to.Bare,
+                                  result.Element.ToXml().ToString(SaveOptions.DisableFormatting) +
+                                      "<store xmlns='urn:xmpp:hints'/>",
+                                  requestReceipt:  true,
+                                  markable:        true,
+                                  MessageType.Chat,
+                                  corrects:        null);
 
-        await SendAsync(stanza.ToString(SaveOptions.DisableFormatting));
-
-        return result.Skipped;
+        return new OmemoSent(
+                   messageId,
+                   result.Skipped,
+                   result.Element.Keys.ContainsKey(to.Bare)
+               );
 
     }
 
     /// <summary>
     /// Takes an encrypted message in.
     /// </summary>
+    /// <param name="Answer">
+    /// Whether to acknowledge it the way a plain message is acknowledged -
+    /// <b>false for a carbon</b>, which was addressed to another device of ours:
+    /// saying "delivered" for a delivery that happened somewhere else states
+    /// something untrue about where the message is.
+    /// </param>
     /// <returns>true when it was processed - then it no longer goes the ordinary way.</returns>
-    private bool TryProcessEncrypted(XElement element, JID from, CancellationToken CancellationToken = default)
+    private bool TryProcessEncrypted(XElement element, JID from, Boolean Answer = true, CancellationToken CancellationToken = default)
     {
 
         if (Omemo is null || !OmemoEncryptedElement.TryRead(element, out var encrypted))
@@ -3892,6 +3920,22 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                             MessageType.Chat),
                                                             decrypted,
                                                             CancellationToken), _logger);
+
+            // XEP-0184 and XEP-0333: the same answers a plain message gets.
+            // The sender asks for them on an encrypted stanza like on any
+            // other now, and this branch returns before the place that used to
+            // answer - so an encrypted message got its tick from nobody, which
+            // looked to whoever wrote it like a message that never arrived.
+            if (Answer && element.Attr("id") is String messageId)
+            {
+
+                if (ReceiptBuilder.HasReceiptRequest(element))
+                    _ = SendReceiptAsync(from, messageId);
+
+                if (ChatMarkers.IsMarkable(element))
+                    _ = SendChatMarkerAsync(from, messageId, ChatMarkerType.Received);
+
+            }
 
         });
 
@@ -4060,12 +4104,41 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// no answer is to be expected: in a room everyone present would get to see
     /// the acknowledgements, and a shout wants none.
     /// </param>
-    public async Task<string> SendMessageAsync(JID          to,
-                                               string       body,
-                                               bool         requestReceipt  = true,
-                                               bool         markable        = true,
-                                               MessageType  type            = MessageType.Chat,
-                                               string?      corrects        = null)
+    public Task<string> SendMessageAsync(JID          to,
+                                         string       body,
+                                         bool         requestReceipt  = true,
+                                         bool         markable        = true,
+                                         MessageType  type            = MessageType.Chat,
+                                         string?      corrects        = null)
+
+        => SendMessageStanzaAsync(to,
+                                  $"<body>{XmlEscaping.Escape(body)}</body>",
+                                  requestReceipt,
+                                  markable,
+                                  type,
+                                  corrects);
+
+    /// <summary>
+    /// The message stanza both ways of sending share: the id, the receipt
+    /// request, the marker, the chat state and the correction. Only the content
+    /// differs - a <c>&lt;body/&gt;</c> for a plain message, an
+    /// <c>&lt;encrypted/&gt;</c> for an OMEMO one.
+    /// </summary>
+    /// <remarks>
+    /// <b>One method, because two of them drifted.</b> The encrypted send was
+    /// written separately and had none of this: no id given back, no receipt
+    /// request, no marker, no chat state. The missing id was the expensive one -
+    /// a receipt or a marker is only accepted for a message the tracker knows
+    /// was sent to that address, so an untracked message turns its own honest
+    /// read marker into a reported spoofing attempt.
+    /// </remarks>
+    /// <param name="Content">The already serialised inside of the stanza.</param>
+    private async Task<string> SendMessageStanzaAsync(JID          to,
+                                                      string       Content,
+                                                      bool         requestReceipt,
+                                                      bool         markable,
+                                                      MessageType  type,
+                                                      string?      corrects)
     {
         var messageId = GenerateMessageId();
 
@@ -4073,7 +4146,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var sb = new StringBuilder();
         sb.Append($"<message to='{XmlEscaping.Escape(to.ToString())}'{typeAttr} id='{messageId}'>");
-        sb.Append($"<body>{XmlEscaping.Escape(body)}</body>");
+        sb.Append(Content);
 
         // XEP-0308: An id of its own and the full new text - the <replace/> only
         // names which message is being superseded. A recipient without this
