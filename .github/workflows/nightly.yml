@@ -117,10 +117,10 @@ jobs:
 
       # The same set the gate runs, and the same numbers it owes:
       #
-      #   windows-latest       1226 tests, 1223 passed, 3 skipped
-      #   debian-13-container  1226 tests, 1225 passed, 1 skipped
+      #   windows-latest       1229 tests, 1226 passed, 3 skipped
+      #   debian-13-container  1229 tests, 1228 passed, 1 skipped
       #
-      # Measured at 7d96f3c, as in the gate, and named there for the same
+      # Measured at ca8bce3, as in the gate, and named there for the same
       # reason.
       #
       # The shared skip is a property that only exists in STARTTLS operation;
