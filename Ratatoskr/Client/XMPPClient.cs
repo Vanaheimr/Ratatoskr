@@ -49,6 +49,15 @@ public delegate Task OnXMPPClientEncryptedMessageDelegate           (DateTimeOff
                                                                      CancellationToken  CancellationToken);
 
 /// <summary>
+/// XEP-0384: a known device reports with a different identity key - and its
+/// message was refused.
+/// </summary>
+public delegate Task OnXMPPClientOmemoIdentityChangedDelegate       (DateTimeOffset        Timestamp,
+                                                                     XMPPClient            Sender,
+                                                                     OmemoIdentityChanged  Change,
+                                                                     CancellationToken     CancellationToken);
+
+/// <summary>
 /// XEP-0280: a message was mirrored from or to another device of our own.
 /// </summary>
 public delegate Task OnXMPPClientCarbonMessageDelegate              (DateTimeOffset     Timestamp,
@@ -341,6 +350,20 @@ public sealed class XMPPClient : IAsyncDisposable
     public event OnXMPPClientEncryptedMessageDelegate? OnEncryptedMessage;
 
     /// <summary>
+    /// XEP-0384: a device that has written before reports with a different
+    /// identity key. <b>Its message was refused</b>, so nothing arrives on
+    /// <see cref="OnEncryptedMessage"/> for it.
+    /// </summary>
+    /// <remarks>
+    /// Whoever trusts new devices blindly - the default, and the only trust
+    /// model that gets used - is trading the first message for the promise that
+    /// a change afterwards is noticed. This is that promise. A user interface
+    /// that ignores it has taken the trade without paying for it: the device
+    /// simply stops arriving, and nothing says why.
+    /// </remarks>
+    public event OnXMPPClientOmemoIdentityChangedDelegate? OnOmemoIdentityChanged;
+
+    /// <summary>
     /// XEP-0280: A message was mirrored from/to another device of our own.
     /// </summary>
     public event OnXMPPClientCarbonMessageDelegate? OnCarbonMessage;
@@ -539,6 +562,9 @@ public sealed class XMPPClient : IAsyncDisposable
             await OnMessage.         InvokeAllAsync(handler => handler(timestamp, this, message,        ct), _logger);
 
         };
+
+        _connection.OnOmemoIdentityChanged += async (timestamp, sender, change, ct)
+            => await OnOmemoIdentityChanged.InvokeAllAsync(handler => handler(timestamp, this, change, ct), _logger);
 
         _connection.OnCarbonMessage += async (timestamp, sender, carbon, ct)
             => await OnCarbonMessage.InvokeAllAsync(handler => handler(timestamp, this, carbon, ct), _logger);

@@ -41,6 +41,53 @@ public delegate Task OnOmemoBundleChangedDelegate(DateTimeOffset     Timestamp,
 
 
 /// <summary>
+/// A device that has written before reports with a <b>different</b> identity
+/// key.
+/// </summary>
+/// <param name="Jid">Whom the device belongs to.</param>
+/// <param name="DeviceId">Which device.</param>
+/// <param name="KnownKey">The key on file, which stays on file.</param>
+/// <param name="OfferedKey">The key that has just turned up, and is refused.</param>
+/// <remarks>
+/// <b>There are exactly two explanations, and from here they look the same.</b>
+/// The human being has set their device up anew, or somebody is pushing in
+/// between. Which is why this is a report and not a decision: the message that
+/// carried it is refused, the old record stands, and whoever is listening gets
+/// to say so to somebody who can ask through another channel.
+///
+/// Both fingerprints travel with it, because the one question worth asking has
+/// to be askable: <i>is the key you have now the one I have on file?</i>
+/// </remarks>
+public sealed record OmemoIdentityChanged(JID     Jid,
+                                          UInt32  DeviceId,
+                                          Byte[]  KnownKey,
+                                          Byte[]  OfferedKey)
+{
+
+    /// <summary>
+    /// The fingerprint this device had - the one somebody may have compared.
+    /// </summary>
+    public String KnownFingerprint
+        => Convert.ToHexString(KnownKey).ToLowerInvariant();
+
+    /// <summary>
+    /// The fingerprint it reports with now.
+    /// </summary>
+    public String OfferedFingerprint
+        => Convert.ToHexString(OfferedKey).ToLowerInvariant();
+
+}
+
+/// <summary>
+/// XEP-0384: a known device reports with a different identity key - and its
+/// message was refused.
+/// </summary>
+public delegate Task OnOmemoIdentityChangedDelegate(DateTimeOffset        Timestamp,
+                                                    OmemoManager          Sender,
+                                                    OmemoIdentityChanged  Change,
+                                                    CancellationToken     CancellationToken);
+
+/// <summary>
 /// What came out of the encryption for a single device.
 /// </summary>
 /// <param name="Jid">Whom it belongs to.</param>
@@ -129,6 +176,26 @@ public sealed class OmemoManager
     /// publish; this class has a store and no server.
     /// </remarks>
     public event OnOmemoBundleChangedDelegate? OnBundleChanged;
+
+    /// <summary>
+    /// A known device reports with a different identity key.
+    /// </summary>
+    /// <remarks>
+    /// <b>The one alarm blind trust exists for, and until now it was a line in
+    /// a log.</b> Trusting a new device without a comparison is a deliberate
+    /// trade - a procedure that demands a fingerprint before the first message
+    /// does not get followed, and unused encryption protects nobody. What
+    /// carries that trade is the promise that a <i>change</i> afterwards is
+    /// noticed. The change was detected all along and the message correctly
+    /// refused; nothing said so outwards, so from the outside the device simply
+    /// went quiet, which is the shape of the failure this was meant to prevent.
+    ///
+    /// Raised on the path where the key is seen, which is the key exchange:
+    /// only a message that builds a session brings an identity key along at
+    /// all. Once per such message, and not once per conversation, so a listener
+    /// that wants to say it only once keeps that decision itself.
+    /// </remarks>
+    public event OnOmemoIdentityChangedDelegate? OnIdentityChanged;
 
     #endregion
 
@@ -574,9 +641,32 @@ public sealed class OmemoManager
 
             if (check == OmemoIdentityCheck.Changed)
             {
+
                 _logger?.LogWarning("OMEMO: {Jid}/{Device} reports with a different identity key",
                                     jid, deviceId);
+
+                // The old record is still on file - RecordIdentity leaves it
+                // standing on purpose - so the fingerprint somebody may once
+                // have compared can still be named beside the new one.
+                //
+                // Fire-and-forget, like the bundle below and for the same
+                // reason: a listener may put this in front of a human being,
+                // and the session gate is not the place to wait for that. The
+                // discarded task cannot fault - the invoker catches and logs
+                // every handler itself.
+                if (_store.KnownDevice(jid.ToString(), deviceId) is OmemoDeviceRecord onFile)
+                    _ = OnIdentityChanged.InvokeAllAsync(
+                            handler => handler(Timestamp.Now,
+                                               this,
+                                               new OmemoIdentityChanged(jid.Bare,
+                                                                        deviceId,
+                                                                        onFile.IdentityKey,
+                                                                        exchange.IdentityKey),
+                                               CancellationToken.None),
+                            _logger);
+
                 return (null, check);
+
             }
 
             var x3dh = X3DH.Accept(Identity,

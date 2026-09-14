@@ -1081,9 +1081,15 @@ distribution, session store, and the wiring.
   A scheme that demands a fingerprint comparison before the first message does
   not get used — and unused encryption protects nobody. Whoever has compared
   once notices every later change
-- **A changed identity key stops the message.** A freshly set up device and an
-  attacker cannot be told apart from the outside; that is not a decision a
-  program can make
+- **A changed identity key stops the message, and says so.** A freshly set up
+  device and an attacker cannot be told apart from the outside; that is not a
+  decision a program can make. So it is reported rather than decided: the
+  sender learns it through `OmemoEncryptionResult.Skipped`, the receiver
+  through `OnOmemoIdentityChanged`, which carries the fingerprint on file
+  beside the one that has just turned up. **The receiving half is new.** The
+  refusal there was correct from the start and was raised nowhere: the message
+  was dropped, and from outside that is indistinguishable from nobody writing —
+  which is precisely the failure blind trust is paid for with
 - The fingerprint is shown in groups of eight so a human does not lose their
   place while comparing
 

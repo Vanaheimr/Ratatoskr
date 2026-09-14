@@ -227,6 +227,31 @@ public static class OmemoStoreExtensions
 
     #endregion
 
+    #region KnownDevice(store, bareJid, deviceId)
+
+    /// <summary>
+    /// What is on file about a foreign device, or null when it has never been
+    /// here.
+    /// </summary>
+    /// <remarks>
+    /// The same lookup three methods below used to carry each for itself. It is
+    /// one method because the comparison has a rule in it that has to be the
+    /// same everywhere: a bare JID is compared case-insensitively (RFC 7622,
+    /// section 3.2, on the localpart of an address that was once typed by a
+    /// human being), and one of three copies quietly getting that wrong is a
+    /// device that counts as unknown on reading and as known on writing.
+    /// </remarks>
+    public static OmemoDeviceRecord? KnownDevice(this IOmemoStore  store,
+                                                 String            bareJid,
+                                                 UInt32            deviceId)
+
+        => store.KnownDevices()
+                .FirstOrDefault(device => device.DeviceId == deviceId &&
+                                          String.Equals(device.BareJid, bareJid,
+                                                        StringComparison.OrdinalIgnoreCase));
+
+    #endregion
+
     #region RecordIdentity(store, bareJid, deviceId, identityKey)
 
     /// <summary>
@@ -250,10 +275,7 @@ public static class OmemoStoreExtensions
                                                     Byte[]            identityKey)
     {
 
-        var known = store.KnownDevices()
-                           .FirstOrDefault(d => d.DeviceId == deviceId &&
-                                                String.Equals(d.BareJid, bareJid,
-                                                              StringComparison.OrdinalIgnoreCase));
+        var known = store.KnownDevice(bareJid, deviceId);
 
         if (known is null)
         {
@@ -283,11 +305,8 @@ public static class OmemoStoreExtensions
     /// unknown.
     /// </summary>
     public static OmemoTrust TrustOf(this IOmemoStore store, String bareJid, UInt32 deviceId)
-        => store.KnownDevices()
-                .FirstOrDefault(d => d.DeviceId == deviceId &&
-                                     String.Equals(d.BareJid, bareJid, StringComparison.OrdinalIgnoreCase))
-               ?.Trust
-           ?? OmemoTrust.Undecided;
+        => store.KnownDevice(bareJid, deviceId)?.Trust
+               ?? OmemoTrust.Undecided;
 
     /// <summary>
     /// Decides about a device.
@@ -305,10 +324,7 @@ public static class OmemoStoreExtensions
                                    OmemoTrust        trust)
     {
 
-        var known = store.KnownDevices()
-                           .FirstOrDefault(d => d.DeviceId == deviceId &&
-                                                String.Equals(d.BareJid, bareJid,
-                                                              StringComparison.OrdinalIgnoreCase));
+        var known = store.KnownDevice(bareJid, deviceId);
 
         if (known is null)
             return false;

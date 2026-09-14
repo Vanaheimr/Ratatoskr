@@ -657,6 +657,132 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AChangedIdentityKey_IsReportedToTheReceiver()
+
+        /// <summary>
+        /// The other side of the case above: the receiver is told, instead of
+        /// the device merely going quiet.
+        /// </summary>
+        /// <remarks>
+        /// <b>The refusal was right all along and said nothing outwards.</b>
+        /// A message whose key exchange brings a second key for a known device
+        /// is dropped - correctly, because a program cannot tell a new
+        /// installation from somebody pushing in between. But nothing was
+        /// raised, so a user interface saw exactly what it sees when nobody is
+        /// writing: silence. That is the failure blind trust is supposed to be
+        /// paid for with - trusting the first message is a trade against
+        /// noticing a change afterwards, and the noticing was not reaching
+        /// anybody.
+        ///
+        /// Both fingerprints are checked and not merely their difference: the
+        /// one on file is the one a human being may once have compared, and a
+        /// report that named the new key twice would look right and be useless.
+        /// </remarks>
+        [Test]
+        public async Task AChangedIdentityKey_IsReportedToTheReceiver()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice = await ConnectClientAsync("alice", createAccount: false);
+            var bob   = await ConnectClientAsync("bob",   createAccount: false);
+
+            await alice.EnableOmemoAsync();
+
+            // Bob has a different key on file for exactly the device Alice is
+            // about to write from. Alice herself knows nothing of it - her
+            // store is fresh - so she sends in good faith, which is what the
+            // case looks like from both ends.
+            var bobsStore  = new OmemoMemoryStore();
+            var onFile     = OmemoIdentity.Create().PublicIdentityKey;
+
+            bobsStore.RecordIdentity($"alice@{Server.Domain}",
+                                     alice.Omemo!.Identity.DeviceId,
+                                     onFile);
+
+            await bob.EnableOmemoAsync(bobsStore);
+
+            OmemoIdentityChanged? reported = null;
+            var arrived = false;
+
+            bob.OnOmemoIdentityChanged += (timestamp, sender, change, ct) => { reported = change; return Task.CompletedTask; };
+            bob.OnEncryptedMessage     += (timestamp, sender, _, _, ct)   => { arrived  = true;   return Task.CompletedTask; };
+
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Shall we meet at eight?");
+
+            await WaitFor(() => reported is not null, "the report of the changed identity key");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(reported!.Jid,       Is.EqualTo(JID.Parse($"alice@{Server.Domain}")));
+                Assert.That(reported.DeviceId,   Is.EqualTo(alice.Omemo.Identity.DeviceId));
+
+                Assert.That(reported.KnownFingerprint,
+                            Is.EqualTo(Convert.ToHexString(onFile).ToLowerInvariant()),
+                            "the fingerprint on file - the one somebody may have compared");
+
+                Assert.That(reported.OfferedFingerprint,
+                            Is.EqualTo(alice.Omemo.Fingerprint),
+                            "and the one the device reports with now");
+
+            });
+
+            // Reporting is not accepting: the message stays refused.
+            await WaitAgainst(() => arrived, "a message despite a changed IdentityKey");
+
+        }
+
+        #endregion
+
+        #region AKnownDeviceWithItsOwnKey_IsNotReported()
+
+        /// <summary>
+        /// And nothing is reported when nothing changed.
+        /// </summary>
+        /// <remarks>
+        /// Written because the test above would pass just as well if the report
+        /// were raised for every key exchange there is - and an alarm that goes
+        /// off on every first message is an alarm nobody reads.
+        /// </remarks>
+        [Test]
+        public async Task AKnownDeviceWithItsOwnKey_IsNotReported()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice = await ConnectClientAsync("alice", createAccount: false);
+            var bob   = await ConnectClientAsync("bob",   createAccount: false);
+
+            await alice.EnableOmemoAsync();
+
+            // The same setup as above, except that what Bob has on file is the
+            // key Alice really has.
+            var bobsStore = new OmemoMemoryStore();
+
+            bobsStore.RecordIdentity($"alice@{Server.Domain}",
+                                     alice.Omemo!.Identity.DeviceId,
+                                     alice.Omemo.Identity.PublicIdentityKey);
+
+            await bob.EnableOmemoAsync(bobsStore);
+
+            var reported = false;
+            var arrived  = false;
+
+            bob.OnOmemoIdentityChanged += (timestamp, sender, _, ct)    => { reported = true; return Task.CompletedTask; };
+            bob.OnEncryptedMessage     += (timestamp, sender, _, _, ct) => { arrived  = true; return Task.CompletedTask; };
+
+            await alice.SendEncryptedMessageAsync(JID.Parse($"bob@{Server.Domain}"), "Shall we meet at eight?");
+
+            await WaitFor(() => arrived, "the message at Bob");
+
+            Assert.That(reported, Is.False,
+                        "a device writing with the key it is on file with is not a change");
+
+        }
+
+        #endregion
+
         #region EnablingOmemo_KeepsAForeignEntryInTheOwnList()
 
         /// <summary>

@@ -183,6 +183,15 @@ public delegate Task OnXMPPConnectionEncryptedMessageDelegate           (DateTim
                                                                          OmemoDecrypted     Omemo,
                                                                          CancellationToken  CancellationToken);
 
+/// <summary>
+/// XEP-0384: a known device reports with a different identity key, and its
+/// message was refused.
+/// </summary>
+public delegate Task OnXMPPConnectionOmemoIdentityChangedDelegate       (DateTimeOffset        Timestamp,
+                                                                         XMPPConnection        Sender,
+                                                                         OmemoIdentityChanged  Change,
+                                                                         CancellationToken     CancellationToken);
+
 #endregion
 
 
@@ -3714,6 +3723,17 @@ public sealed class XMPPConnection : IAsyncDisposable
     public event OnXMPPConnectionEncryptedMessageDelegate? OnEncryptedMessage;
 
     /// <summary>
+    /// XEP-0384: a known device reports with a different identity key - and its
+    /// message was refused.
+    /// </summary>
+    /// <remarks>
+    /// Declared here and not only on the manager, because the manager exists
+    /// only while OMEMO is switched on, and a listener that had to subscribe
+    /// after every EnableOmemoAsync would sooner or later miss one.
+    /// </remarks>
+    public event OnXMPPConnectionOmemoIdentityChangedDelegate? OnOmemoIdentityChanged;
+
+    /// <summary>
     /// XEP-0384: Switches OMEMO on - key material from the store, device list
     /// and bundle published.
     /// </summary>
@@ -3773,6 +3793,14 @@ public sealed class XMPPConnection : IAsyncDisposable
             return Task.CompletedTask;
 
         };
+
+        // Straight on outwards. Nothing is decided here and nothing may be:
+        // the two explanations for a changed key cannot be told apart by a
+        // program, and this layer has no human being to ask.
+        Omemo.OnIdentityChanged += (timestamp, sender, change, cancellationToken)
+            => OnOmemoIdentityChanged.InvokeAllAsync(
+                   handler => handler(timestamp, this, change, cancellationToken),
+                   _logger);
 
         OmemoDeviceId = Omemo.Identity.DeviceId;
 
