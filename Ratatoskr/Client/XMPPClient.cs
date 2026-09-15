@@ -985,6 +985,19 @@ public sealed class XMPPClient : IAsyncDisposable
                ?? Task.FromResult(new MucJoinOutcome(null, null));
 
     /// <summary>
+    /// XEP-0045, section 10.1.2: accepts the default configuration of a room
+    /// that has just come into being.
+    /// </summary>
+    /// <remarks>
+    /// To be called after a join that reported <see cref="MucRoom.WasCreated"/>.
+    /// Until it is, the room is locked and nobody else can enter - a room only
+    /// its creator can see, with nothing anywhere saying so.
+    /// </remarks>
+    public Task<bool> CreateInstantRoomAsync(JID                room,
+                                             CancellationToken  cancellationToken = default)
+        => _connection.CreateInstantRoomAsync(room, cancellationToken);
+
+    /// <summary>
     /// XEP-0045, section 7.14: leaves a room.
     /// </summary>
     /// <returns>false when this client was not in that room.</returns>

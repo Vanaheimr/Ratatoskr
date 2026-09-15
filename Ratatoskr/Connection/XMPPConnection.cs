@@ -4618,6 +4618,46 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
+    /// <summary>
+    /// XEP-0045, section 10.1.2: accepts the default configuration of a room
+    /// that has just come into being.
+    /// </summary>
+    /// <remarks>
+    /// <b>A room that a join brought into being is locked</b> (section 10.1.2),
+    /// and stays locked until its owner configures it. Nobody else can enter in
+    /// the meantime - so a client that creates a room and then does nothing has
+    /// a room only it can see, and no error anywhere says so.
+    ///
+    /// The empty submit is the specification's way of saying "the defaults will
+    /// do", and it is the whole of the owner protocol this library speaks.
+    /// Everything else an owner can do - the configuration form, destroying a
+    /// room, the affiliation lists - is not here.
+    /// </remarks>
+    /// <returns>
+    /// Whether the service accepted it. False also for a timeout, and for the
+    /// refusal a service sends when the asker is not the owner.
+    /// </returns>
+    public async Task<bool> CreateInstantRoomAsync(JID                room,
+                                                   CancellationToken  CancellationToken = default)
+    {
+
+        var answer = await SendIqAsync(
+
+                         room.Bare,
+                         "set",
+
+                         new XElement(XName.Get("query", "http://jabber.org/protocol/muc#owner"),
+                             new XElement(XName.Get("x", "jabber:x:data"),
+                                 new XAttribute("type", "submit"))),
+
+                         CancellationToken
+
+                     );
+
+        return answer?.Attr("type") == "result";
+
+    }
+
     public async Task SendChatStateAsync(JID to, ChatState state)
     {
         await SendAsync($"<message to='{XmlEscaping.Escape(to.ToString())}' type='chat'>{state.ToXml()}</message>");
