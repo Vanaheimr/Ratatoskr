@@ -801,6 +801,16 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public MucManager? Muc { get; private set; }
 
+    /// <summary>
+    /// XEP-0313: the archive a server kept.
+    /// </summary>
+    /// <remarks>
+    /// Replaced on every reconnect like the other managers. Nothing of a query
+    /// survives that, which is right: a query is a question asked over one
+    /// connection, and an answer arriving over another belongs to nobody.
+    /// </remarks>
+    public MamManager? Mam { get; private set; }
+
     /// <summary>XEP-0045: this client is now in a room.</summary>
     public event OnRoomJoinedDelegate?       OnRoomJoined;
 
@@ -827,6 +837,9 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     /// <summary>XEP-0045: somebody we invited is not coming.</summary>
     public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
+
+    /// <summary>XEP-0313: one message out of an archive, as it arrives.</summary>
+    public event OnArchivedMessageDelegate?     OnArchivedMessage;
 
     #endregion
 
@@ -1650,11 +1663,20 @@ public sealed class XMPPConnection : IAsyncDisposable
         Muc.OnRoomSubject      += async (timestamp, sender, room, subject, by, ct)
             => await OnRoomSubject.    InvokeAllAsync(handler => handler(timestamp, sender, room, subject, by, ct), _logger);
 
+        // XEP-0313: the archive. Its results arrive as messages before the
+        // answer to the query does, so it has to exist before anything is asked.
+        Mam = new MamManager(BareJid,
+                             (to, type, payload, ct) => SendIqAsync(to, type, payload, ct),
+                             CreateLogger<MamManager>());
+
         Muc.OnRoomInvitation      += async (timestamp, sender, invitation, ct)
             => await OnRoomInvitation.    InvokeAllAsync(handler => handler(timestamp, sender, invitation, ct), _logger);
 
         Muc.OnInvitationDeclined  += async (timestamp, sender, declined, ct)
             => await OnInvitationDeclined.InvokeAllAsync(handler => handler(timestamp, sender, declined, ct), _logger);
+
+        Mam.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
+            => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
 
         // XEP-0115: Entity Capabilities
         EntityCaps = new EntityCapsManager(Disco, CreateLogger<EntityCapsManager>());
@@ -2476,6 +2498,17 @@ public sealed class XMPPConnection : IAsyncDisposable
             await OnStanzaError.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, parsed, CancellationToken), _logger);
             return;
 
+        }
+
+        // XEP-0313: a result out of an archive. Before everything below, and
+        // that order is the point: what arrives here is a message that really
+        // was sent once, so every branch further down would handle it
+        // correctly - and the conversation would fill up with its own history
+        // as if it were happening now.
+        if (Mam is not null &&
+            await Mam.ProcessMessageAsync(element, CancellationToken))
+        {
+            return;
         }
 
         // XEP-0045, section 7.2.16: the subject of a room. A message with a

@@ -412,6 +412,15 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>XEP-0045: somebody we invited is not coming.</summary>
     public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
 
+    /// <summary>
+    /// XEP-0313: one message out of an archive, as it arrives.
+    /// </summary>
+    /// <remarks>
+    /// For showing a long answer while it comes in. Ignoring it loses nothing -
+    /// the whole page comes back from the query as well.
+    /// </remarks>
+    public event OnArchivedMessageDelegate?     OnArchivedMessage;
+
     #endregion
 
     /// <summary>
@@ -643,6 +652,9 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnInvitationDeclined  += async (timestamp, sender, declined, ct)
             => await OnInvitationDeclined.InvokeAllAsync(handler => handler(timestamp, sender, declined, ct), _logger);
+
+        _connection.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
+            => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
 
         _connection.OnChatState += async (timestamp, sender, from, state, ct)
             => await OnChatState.InvokeAllAsync(handler => handler(timestamp, this, from, state, ct), _logger);
@@ -964,6 +976,71 @@ public sealed class XMPPClient : IAsyncDisposable
         return id;
 
     }
+
+    #region XEP-0313: the archive
+
+    /// <summary>
+    /// XEP-0313: asks an archive for a page of what it kept.
+    /// </summary>
+    /// <param name="archive">
+    /// Whose archive. Null is one's own server; a room's is asked by naming the
+    /// room.
+    /// </param>
+    /// <remarks>
+    /// The general form. <see cref="LastFromArchiveAsync"/> is the one an
+    /// interface usually wants.
+    /// </remarks>
+    public Task<ArchivePage?> QueryArchiveAsync(JID?               archive            = null,
+                                                JID?               with               = null,
+                                                DateTimeOffset?    start              = null,
+                                                DateTimeOffset?    end                = null,
+                                                Int32?             max                = null,
+                                                String?            before             = null,
+                                                String?            after              = null,
+                                                CancellationToken  cancellationToken  = default)
+
+        => _connection.Mam?.QueryAsync(archive, with, start, end, max, before, after, cancellationToken)
+               ?? Task.FromResult<ArchivePage?>(null);
+
+    /// <summary>
+    /// The end of a conversation, out of one's own archive.
+    /// </summary>
+    /// <remarks>
+    /// <b>The last page and not the first</b>, which is the one thing about
+    /// paging that is easy to get backwards: an archive counts from the
+    /// beginning, and what somebody opening a conversation wants to see is the
+    /// end of it. An empty <c>&lt;before/&gt;</c> is how XEP-0059 says that, and
+    /// it is different from leaving it out - which asks for the oldest messages
+    /// there are.
+    /// </remarks>
+    public Task<ArchivePage?> LastFromArchiveAsync(JID                with,
+                                                   Int32              howMany            = 20,
+                                                   CancellationToken  cancellationToken  = default)
+
+        => QueryArchiveAsync(with:              with,
+                             max:               howMany,
+                             before:            "",
+                             cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// What was said in a room before we walked in.
+    /// </summary>
+    /// <remarks>
+    /// The room's own archive, which is a different one from ours: we were not
+    /// there, so our server never saw any of it. This is the reason a room
+    /// without an archive is a room one enters blind - and, since D116, the
+    /// reason archiving is switched on in both test set-ups.
+    /// </remarks>
+    public Task<ArchivePage?> RoomHistoryAsync(JID                room,
+                                               Int32              howMany            = 20,
+                                               CancellationToken  cancellationToken  = default)
+
+        => QueryArchiveAsync(archive:           room.Bare,
+                             max:               howMany,
+                             before:            "",
+                             cancellationToken: cancellationToken);
+
+    #endregion
 
     #region XEP-0045: rooms
 
