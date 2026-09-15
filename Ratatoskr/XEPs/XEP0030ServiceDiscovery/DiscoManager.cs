@@ -119,7 +119,12 @@ public sealed class DiscoManager
         // that it may leave the quotation out - and whoever then leaves it out
         // has taken away what every other client here would have shown.
         "urn:xmpp:reply:0",
-        "urn:xmpp:fallback:0"
+        "urn:xmpp:fallback:0",
+
+        // XEP-0045, section 6.2: a client says it understands rooms, so that
+        // somebody who wants to invite it into one can find out beforehand
+        // whether the invitation will mean anything.
+        "http://jabber.org/protocol/muc"
     ];
 
     /// <summary>

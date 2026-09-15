@@ -785,6 +785,43 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </summary>
     public event OnXMPPConnectionStreamErrorDelegate? OnStreamError;
 
+    /// <summary>
+    /// XEP-0045: the rooms this client is in.
+    /// </summary>
+    /// <remarks>
+    /// Null until the connection has been built up, and <b>replaced on every
+    /// reconnect</b> along with the other managers. Which is why the events
+    /// below are re-raised here rather than subscribed to on the manager: a
+    /// handler hung on the manager is gone the first time the connection drops,
+    /// and gone quietly.
+    ///
+    /// The rooms do not survive a reconnect either, and that is not a gap but
+    /// the truth of it: the server dropped this client's presence, so it is in
+    /// no room any more. Whoever wants to be back in one has to enter it again.
+    /// </remarks>
+    public MucManager? Muc { get; private set; }
+
+    /// <summary>XEP-0045: this client is now in a room.</summary>
+    public event OnRoomJoinedDelegate?       OnRoomJoined;
+
+    /// <summary>XEP-0045: this client is out of a room - by choice or not.</summary>
+    public event OnRoomLeftDelegate?         OnRoomLeft;
+
+    /// <summary>XEP-0045: somebody entered a room.</summary>
+    public event OnOccupantDelegate?         OnOccupantJoined;
+
+    /// <summary>XEP-0045: somebody in a room changed - their role, their presence.</summary>
+    public event OnOccupantDelegate?         OnOccupantChanged;
+
+    /// <summary>XEP-0045: somebody left a room, or was removed from it.</summary>
+    public event OnOccupantDelegate?         OnOccupantLeft;
+
+    /// <summary>XEP-0045: somebody in a room is called something else now.</summary>
+    public event OnOccupantRenamedDelegate?  OnOccupantRenamed;
+
+    /// <summary>XEP-0045: the subject of a room.</summary>
+    public event OnRoomSubjectDelegate?      OnRoomSubject;
+
     #endregion
 
     #region Constructor(s)
@@ -1575,6 +1612,31 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         // XEP-0030: Service Discovery
         Disco = new DiscoManager(xml => SendAsync(xml), BareJid.ToString(), CreateLogger<DiscoManager>());
+
+        // XEP-0045: the rooms. Built here with the others, and asked before the
+        // roster ever sees a presence.
+        Muc = new MucManager(xml => SendAsync(xml), CreateLogger<MucManager>());
+
+        Muc.OnRoomJoined       += async (timestamp, sender, room, ct)
+            => await OnRoomJoined.     InvokeAllAsync(handler => handler(timestamp, sender, room, ct), _logger);
+
+        Muc.OnRoomLeft         += async (timestamp, sender, room, why, ct)
+            => await OnRoomLeft.       InvokeAllAsync(handler => handler(timestamp, sender, room, why, ct), _logger);
+
+        Muc.OnOccupantJoined   += async (timestamp, sender, room, occupant, why, ct)
+            => await OnOccupantJoined. InvokeAllAsync(handler => handler(timestamp, sender, room, occupant, why, ct), _logger);
+
+        Muc.OnOccupantChanged  += async (timestamp, sender, room, occupant, why, ct)
+            => await OnOccupantChanged.InvokeAllAsync(handler => handler(timestamp, sender, room, occupant, why, ct), _logger);
+
+        Muc.OnOccupantLeft     += async (timestamp, sender, room, occupant, why, ct)
+            => await OnOccupantLeft.   InvokeAllAsync(handler => handler(timestamp, sender, room, occupant, why, ct), _logger);
+
+        Muc.OnOccupantRenamed  += async (timestamp, sender, room, oldNick, newNick, isSelf, ct)
+            => await OnOccupantRenamed.InvokeAllAsync(handler => handler(timestamp, sender, room, oldNick, newNick, isSelf, ct), _logger);
+
+        Muc.OnRoomSubject      += async (timestamp, sender, room, subject, by, ct)
+            => await OnRoomSubject.    InvokeAllAsync(handler => handler(timestamp, sender, room, subject, by, ct), _logger);
 
         // XEP-0115: Entity Capabilities
         EntityCaps = new EntityCapsManager(Disco, CreateLogger<EntityCapsManager>());
@@ -2398,6 +2460,17 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         }
 
+        // XEP-0045, section 7.2.16: the subject of a room. A message with a
+        // <subject/> and no <body/>, which is the one thing a room says that is
+        // not a message. Everything a room says with a body travels the ordinary
+        // way from here on, so that it reaches a client knowing nothing of rooms
+        // as well.
+        if (Muc is not null &&
+            await Muc.ProcessMessageAsync(element, from, CancellationToken))
+        {
+            return;
+        }
+
         // XEP-0384: arrived encrypted.
         //
         // Before everything else, because what stands here cannot be seen from
@@ -2659,6 +2732,20 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
 
         var type = element.Attr("type") ?? "available";
+
+        // XEP-0045: a presence from a room is news about somebody in that room,
+        // not about a contact - and it has to be asked before everything below,
+        // because everything below ends in the roster.
+        //
+        // Including the refusal a line further on: a room that will not let this
+        // client in answers the join with type='error', and read as a contact's
+        // presence error that is a stanza error about a person who does not
+        // exist.
+        if (Muc is not null &&
+            await Muc.ProcessPresenceAsync(element, from, type, CancellationToken))
+        {
+            return;
+        }
 
         // RFC 6120, section 8.3: 'error' is not a presence state. Previously it
         // wandered through UpdatePresence into the roster, where the contact was

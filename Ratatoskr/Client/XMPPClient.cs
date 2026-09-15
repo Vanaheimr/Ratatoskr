@@ -370,6 +370,38 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     public event OnXMPPClientCarbonMessageDelegate? OnCarbonMessage;
 
+    #region XEP-0045: room events
+
+    /// <summary>XEP-0045: this client is now in a room.</summary>
+    public event OnRoomJoinedDelegate?       OnRoomJoined;
+
+    /// <summary>
+    /// XEP-0045: this client is out of a room.
+    /// </summary>
+    /// <remarks>
+    /// By choice or not - the <c>Why</c> carries the status codes that tell a
+    /// departure from a kick, a ban and a room shutting down. Without them all
+    /// four look the same.
+    /// </remarks>
+    public event OnRoomLeftDelegate?         OnRoomLeft;
+
+    /// <summary>XEP-0045: somebody entered a room.</summary>
+    public event OnOccupantDelegate?         OnOccupantJoined;
+
+    /// <summary>XEP-0045: somebody in a room changed.</summary>
+    public event OnOccupantDelegate?         OnOccupantChanged;
+
+    /// <summary>XEP-0045: somebody left a room, or was removed from it.</summary>
+    public event OnOccupantDelegate?         OnOccupantLeft;
+
+    /// <summary>XEP-0045: somebody in a room is called something else now.</summary>
+    public event OnOccupantRenamedDelegate?  OnOccupantRenamed;
+
+    /// <summary>XEP-0045: the subject of a room.</summary>
+    public event OnRoomSubjectDelegate?      OnRoomSubject;
+
+    #endregion
+
     /// <summary>
     /// XEP-0085: A contact changed their typing state.
     /// </summary>
@@ -570,6 +602,29 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnCarbonMessage += async (timestamp, sender, carbon, ct)
             => await OnCarbonMessage.InvokeAllAsync(handler => handler(timestamp, this, carbon, ct), _logger);
+
+        // XEP-0045: forwarded from the connection and not from the manager. The
+        // manager is replaced on every reconnect; the connection is not.
+        _connection.OnRoomJoined       += async (timestamp, sender, room, ct)
+            => await OnRoomJoined.     InvokeAllAsync(handler => handler(timestamp, sender, room, ct), _logger);
+
+        _connection.OnRoomLeft         += async (timestamp, sender, room, why, ct)
+            => await OnRoomLeft.       InvokeAllAsync(handler => handler(timestamp, sender, room, why, ct), _logger);
+
+        _connection.OnOccupantJoined   += async (timestamp, sender, room, occupant, why, ct)
+            => await OnOccupantJoined. InvokeAllAsync(handler => handler(timestamp, sender, room, occupant, why, ct), _logger);
+
+        _connection.OnOccupantChanged  += async (timestamp, sender, room, occupant, why, ct)
+            => await OnOccupantChanged.InvokeAllAsync(handler => handler(timestamp, sender, room, occupant, why, ct), _logger);
+
+        _connection.OnOccupantLeft     += async (timestamp, sender, room, occupant, why, ct)
+            => await OnOccupantLeft.   InvokeAllAsync(handler => handler(timestamp, sender, room, occupant, why, ct), _logger);
+
+        _connection.OnOccupantRenamed  += async (timestamp, sender, room, oldNick, newNick, isSelf, ct)
+            => await OnOccupantRenamed.InvokeAllAsync(handler => handler(timestamp, sender, room, oldNick, newNick, isSelf, ct), _logger);
+
+        _connection.OnRoomSubject      += async (timestamp, sender, room, subject, by, ct)
+            => await OnRoomSubject.    InvokeAllAsync(handler => handler(timestamp, sender, room, subject, by, ct), _logger);
 
         _connection.OnChatState += async (timestamp, sender, from, state, ct)
             => await OnChatState.InvokeAllAsync(handler => handler(timestamp, this, from, state, ct), _logger);
@@ -891,6 +946,80 @@ public sealed class XMPPClient : IAsyncDisposable
         return id;
 
     }
+
+    #region XEP-0045: rooms
+
+    /// <summary>
+    /// The rooms this client is in, or is entering.
+    /// </summary>
+    public IReadOnlyDictionary<JID, MucRoom> Rooms
+        => _connection.Muc?.Rooms ?? new Dictionary<JID, MucRoom>();
+
+    /// <summary>
+    /// The room with this address, or null.
+    /// </summary>
+    public MucRoom? Room(JID address)
+        => _connection.Muc?.Room(address);
+
+    /// <summary>
+    /// XEP-0045, section 7.2: enters a room.
+    /// </summary>
+    /// <param name="room">The bare address of the room.</param>
+    /// <param name="nick">The name to be known by in there.</param>
+    /// <param name="password">For a password-protected room.</param>
+    /// <param name="historyMaxStanzas">
+    /// How much of what was said before to send along; zero asks for none.
+    /// </param>
+    /// <returns>
+    /// The room, the refusal, or neither - see <see cref="MucJoinOutcome"/>.
+    /// Being refused from a room is an ordinary thing for a room to do, so it
+    /// comes back as an answer and not as an exception.
+    /// </returns>
+    public Task<MucJoinOutcome> JoinRoomAsync(JID                room,
+                                              string             nick,
+                                              string?            password           = null,
+                                              int?               historyMaxStanzas  = null,
+                                              CancellationToken  cancellationToken  = default)
+
+        => _connection.Muc?.JoinAsync(room, nick, password, historyMaxStanzas, cancellationToken)
+               ?? Task.FromResult(new MucJoinOutcome(null, null));
+
+    /// <summary>
+    /// XEP-0045, section 7.14: leaves a room.
+    /// </summary>
+    /// <returns>false when this client was not in that room.</returns>
+    public Task<bool> LeaveRoomAsync(JID room, string? status = null)
+        => _connection.Muc?.LeaveAsync(room, status) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 7.6: takes a different name in a room.
+    /// </summary>
+    /// <remarks>
+    /// Whether the room allows it comes back as a presence and not as a result -
+    /// the name may be taken, or reserved for somebody else.
+    /// </remarks>
+    public Task<bool> ChangeRoomNickAsync(JID room, string newNick)
+        => _connection.Muc?.ChangeNickAsync(room, newNick) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 7.2.16: sets the subject of a room.
+    /// </summary>
+    public Task<bool> SetRoomSubjectAsync(JID room, string subject)
+        => _connection.Muc?.SetSubjectAsync(room, subject) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// Says something in a room.
+    /// </summary>
+    /// <remarks>
+    /// To the bare address and as <c>groupchat</c>, which is what makes the room
+    /// hand it to everybody rather than to one occupant. A delivery receipt and
+    /// a chat marker are not requested and could not be: in a room everybody
+    /// present would see the acknowledgements.
+    /// </remarks>
+    public Task<string> SendRoomMessageAsync(JID room, string body)
+        => _connection.SendMessageAsync(room.Bare, body, type: MessageType.GroupChat);
+
+    #endregion
 
     /// <summary>
     /// XEP-0085: Sends a typing state to the current chat partner.
