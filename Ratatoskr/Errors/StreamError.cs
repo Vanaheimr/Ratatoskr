@@ -18,6 +18,7 @@
 #region Usings
 
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 #endregion
 
@@ -67,6 +68,42 @@ public sealed record StreamError(string   Condition,
     /// Reads a <c>&lt;stream:error/&gt;</c> frame.
     /// </summary>
     /// <returns>False if the stanza is not a stream error.</returns>
+    /// <summary>
+    /// A stream error out of the element the parser has already made of it.
+    /// </summary>
+    /// <remarks>
+    /// The way to prefer wherever the stanza is well-formed, and that is
+    /// everywhere except the one path where it was not. <see cref="TryParse"/>
+    /// searches the raw text, which has to guess at things an XML parser
+    /// knows - above all what a prefix is. Its pattern allows letters, digits,
+    /// hyphens and underscores, and an NCName may also contain a dot, so a
+    /// server that writes <c>&lt;a.b:error&gt;</c> sends something perfectly
+    /// legal that the pattern does not recognise.
+    ///
+    /// That was worth more than tidiness: the branch this replaces returned
+    /// without a word when the pattern did not match. After a stream error the
+    /// stream is dead, so of all the stanzas there are, this is the one that may
+    /// least be silently dropped - the application would go on waiting for a
+    /// connection that no longer exists.
+    /// </remarks>
+    public static StreamError From(XElement error)
+    {
+
+        var conditions = error.Elements().
+                               Where(child => child.Name.NamespaceName == Namespace).
+                               ToList();
+
+        var condition = conditions.FirstOrDefault(child => child.Name.LocalName != "text")?.
+                                   Name.LocalName ?? "undefined-condition";
+
+        var text      = conditions.FirstOrDefault(child => child.Name.LocalName == "text")?.
+                                   Value.Trim();
+
+        return new StreamError(condition,
+                               string.IsNullOrEmpty(text) ? null : text);
+
+    }
+
     public static bool TryParse(string stanza, out StreamError? error)
     {
 

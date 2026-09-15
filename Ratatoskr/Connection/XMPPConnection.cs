@@ -2285,10 +2285,15 @@ public sealed class XMPPConnection : IAsyncDisposable
                     await OnError.InvokeAllAsync(handler => handler(Timestamp.Now, this, "Stream closed by the server", CancellationToken), _logger);
                     return;
 
-                // RFC 6120, section 4.9: a stream error. After it the stream is dead.
+                // RFC 6120, section 4.9: a stream error. After it the stream is
+                // dead - which is why this one is read out of the parsed element
+                // and not out of the raw text. The text path used to return
+                // without a word whenever its pattern did not match, and a
+                // prefix containing a dot is enough for that: legal XML, legal
+                // XMPP, and a connection that is gone without anybody being
+                // told.
                 case "error" when ns == StreamNamespace:
-                    if (StreamError.TryParse(stanza, out var streamError) && streamError is not null)
-                        await ProcessStreamErrorAsync(streamError, CancellationToken);
+                    await ProcessStreamErrorAsync(StreamError.From(element), CancellationToken);
                     return;
 
                 // XEP-0198: stream management. Now checked through the

@@ -17,6 +17,8 @@
 
 #region Usings
 
+using System.Collections.Concurrent;
+
 using NUnit.Framework;
 
 using org.GraphDefined.Vanaheimr.Ratatoskr;
@@ -309,12 +311,43 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// lost. A reconnect would run into the same refusal, so it has to stay
         /// undone.
         /// </summary>
+        /// <remarks>
+        /// <b>This test has failed occasionally under load since D113, and it
+        /// carries its own diagnosis because of it.</b> It was reproduced in
+        /// D115 - three times in twenty-two runs beside a second suite - and the
+        /// signature is narrower than it looked: the report never arrives at
+        /// all. The reconnect, which is what the name of the test puts first,
+        /// was never the part that failed.
+        ///
+        /// What that still leaves open is *why* nothing arrives, and three
+        /// different causes fit the bare timeout equally well: the frame never
+        /// crossed the wire, it crossed and was not recognised, or the session
+        /// the error went to was no longer the client's. Roughly a hundred and
+        /// fifty further runs under four different kinds of load produced not
+        /// one failure, so the next occurrence may be a long way off - and it
+        /// has to be worth something when it comes.
+        ///
+        /// Hence the recording. It costs one subscription and a few strings on
+        /// a path that only runs when the test fails. That is D35's answer to
+        /// the flake of D34, and D55 is what it was worth: the question that
+        /// entry could not settle was settled in one attempt once the run said
+        /// what it had seen.
+        /// </remarks>
         [Test]
         public async Task FatalStreamError_IsReportedAndStopsReconnecting()
         {
 
             var client   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(100));
+            var jidAtStart = client.FullJid.ToString();
             var session  = await SessionOfAsync(client);
+
+            var inbound = new ConcurrentQueue<String>();
+            client.OnRawXml += (timestamp, sender, xml, ct) =>
+            {
+                if (xml.StartsWith("<<<", StringComparison.Ordinal))
+                    inbound.Enqueue(xml);
+                return Task.CompletedTask;
+            };
 
             StreamError? reported = null;
             client.OnStreamError += (timestamp, sender, error, ct) => { reported = error; return Task.CompletedTask; };
@@ -325,7 +358,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // Kill() stood behind this that did exactly that by hand.
             await session.SendStreamErrorAsync("conflict", "Resource assigned twice.");
 
-            await WaitFor(() => reported is not null, "the reported stream error");
+            var arrived = await XMPPServer.WaitUntilAsync(() => reported is not null);
+
+            Assert.That(arrived, Is.True,
+                        "The stream error was never reported. Which of the three it was:\n" +
+                        $"  Did anything with 'conflict' reach the client? " +
+                        inbound.Any(frame => frame.Contains("conflict", StringComparison.Ordinal)) + "\n" +
+                        $"  Is the session still the server's one for this client? " +
+                        ReferenceEquals(session, Server.SessionOf(client.FullJid.ToString())) + "\n" +
+                        $"  JID: {jidAtStart} at the start, {client.FullJid} now\n" +
+                        $"  State: {client.State}\n" +
+                        $"  Connections: {connectionsBefore} before, {Server.ConnectionCount} now\n" +
+                        $"  The server sent {session.Sent.Count} frames, the last three:\n" +
+                        "    " + String.Join("\n    ", session.Sent.TakeLast(3)) + "\n" +
+                        $"  The client received {inbound.Count} frames, the last three:\n" +
+                        "    " + String.Join("\n    ", inbound.TakeLast(3)));
 
             // Give the client time to attempt a reconnect - it must not make one.
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -338,6 +385,127 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 Assert.That(Server.ConnectionCount, Is.EqualTo(connectionsBefore),
                             "After a final stream error no reconnect may take place.");
+            });
+
+        }
+
+        #endregion
+
+        #region AStreamErrorWithAnUnusualPrefixIsStillReported()
+
+        /// <summary>
+        /// A prefix with a dot in it is legal, and used to make the error
+        /// disappear.
+        /// </summary>
+        /// <remarks>
+        /// <c>stream:</c> is customary and nothing more; any prefix bound to the
+        /// streams namespace does the job, and an NCName may contain a dot. The
+        /// branch that read the error out of the raw text allowed letters,
+        /// digits, hyphens and underscores - so <c>&lt;a.b:error&gt;</c> did not
+        /// match, and the branch <b>returned without a word</b>: no report, no
+        /// error, nothing in the log.
+        ///
+        /// Of all the stanzas there are, this is the one that may least be
+        /// dropped in silence. After a stream error the stream is dead, and an
+        /// application that is not told goes on waiting for a connection that no
+        /// longer exists - which is exactly the shape of the failure this
+        /// fixture has been chasing since D113, whether or not this is its
+        /// cause.
+        ///
+        /// It is read out of the parsed element now. The parser knows what a
+        /// prefix is; a pattern over the text has to guess.
+        /// </remarks>
+        [Test]
+        public async Task AStreamErrorWithAnUnusualPrefixIsStillReported()
+        {
+
+            var client   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(100));
+            var session  = await SessionOfAsync(client);
+
+            StreamError? reported = null;
+            client.OnStreamError += (timestamp, sender, error, ct) => { reported = error; return Task.CompletedTask; };
+
+            await session.SendAsync(
+                "<a.b:error xmlns:a.b='http://etherx.jabber.org/streams'>" +
+                    "<conflict xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>" +
+                    "<text xmlns='urn:ietf:params:xml:ns:xmpp-streams'>Prefix with a dot.</text>" +
+                "</a.b:error>");
+
+            await WaitFor(() => reported is not null,
+                          "the reported stream error with an unusual prefix");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(reported!.Condition, Is.EqualTo("conflict"));
+                Assert.That(reported!.Text,      Is.EqualTo("Prefix with a dot."));
+            });
+
+        }
+
+        #endregion
+
+        #region TheConditionIsFoundWhateverElseStandsBesideIt()
+
+        /// <summary>
+        /// RFC 6120, section 4.9.4: a stream error may carry an element of the
+        /// application's own beside the defined condition. The namespace is what
+        /// tells them apart.
+        /// </summary>
+        /// <remarks>
+        /// <b>Found as a surviving mutant in D115</b>, when the check was
+        /// dropped and every one of the other nine tests stayed green - all of
+        /// them send a stream error with nothing but the defined condition in
+        /// it, so taking the first child at all costs the same answer.
+        ///
+        /// It is not cosmetic. An application element read as the condition
+        /// gives a name <see cref="StreamError.IsRecoverable"/> has never heard
+        /// of, and that list answers <c>false</c> to everything it does not
+        /// know - deliberately, because a reconnect into an unknown refusal is a
+        /// loop. So the mistake does not show up as a wrong word in a log: a
+        /// <c>system-shutdown</c> the client should sit out becomes a
+        /// connection it never comes back from.
+        ///
+        /// The same holds for the <c>&lt;text/&gt;</c>, which is in the streams
+        /// namespace itself and is therefore no help at all in telling it from
+        /// the condition - only its name is.
+        ///
+        /// Both are put in front here for the same reason a test uses an emoji:
+        /// in the order RFC 6120 prints, a reading that looks at neither the
+        /// namespace nor the name gets the right answer anyway.
+        /// </remarks>
+        [Test]
+        public async Task TheConditionIsFoundWhateverElseStandsBesideIt()
+        {
+
+            var client   = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(100));
+            var session  = await SessionOfAsync(client);
+
+            StreamError? reported = null;
+            client.OnStreamError += (timestamp, sender, error, ct) => { reported = error; return Task.CompletedTask; };
+
+            await session.SendAsync(
+                "<stream:error xmlns:stream='http://etherx.jabber.org/streams'>" +
+                    "<text xmlns='urn:ietf:params:xml:ns:xmpp-streams'>Shutting down.</text>" +
+                    "<too-many-frobnicators xmlns='urn:example:errors'/>" +
+                    "<system-shutdown xmlns='urn:ietf:params:xml:ns:xmpp-streams'/>" +
+                "</stream:error>");
+
+            await WaitFor(() => reported is not null, "the reported stream error");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(reported!.Condition, Is.EqualTo("system-shutdown"),
+                            "Something standing beside the condition was taken for it - the " +
+                            "application's own element, or the text.");
+
+                Assert.That(reported!.Text, Is.EqualTo("Shutting down."),
+                            "The text did not survive being put first.");
+
+                Assert.That(reported!.IsRecoverable, Is.True,
+                            "A condition nobody knows counts as final, so this client would never " +
+                            "come back from a shutdown it was meant to sit out.");
+
             });
 
         }
