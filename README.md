@@ -94,6 +94,7 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0013 | Flexible Offline Message Retrieval | ⛔ | Listed as *Deprecated* by the XSF (version 1.3, 2021-05-04): "Implementation of the protocol described herein is not recommended." Offline storage stays with the automatic flush per RFC 6121 §8.5.2.2.1 and XEP-0160 — see the work plan of the XMPPConformanceTests project, D37 |
 | XEP-0030 | Service Discovery | ✅ | disco#info and disco#items, both queried and answered. The request's `node` is mirrored back per §3.2; only nodes that denote this entity are answered — the caps node with and without the current `#ver` (XEP-0115 §6.2). Every other one, including a stale `ver`, gets `<item-not-found/>` with the query echoed back. disco#items answers from `DiscoManager.LocalItems` (empty by default: a client has no sub-entities); a `node` there is a branch in the tree and is rejected. The test server keeps no nodes and rejects every one |
 | XEP-0045 | Multi-User Chat | ⚠️ | **The visiting half, and the moderator's.** Entering a room, being in it, following who else is, leaving — `JoinRoomAsync`, `LeaveRoomAsync`, `ChangeRoomNickAsync`, `SetRoomSubjectAsync`, `SendRoomMessageAsync`, and `CreateInstantRoomAsync` for the one step of the owner protocol without which a room a join created stays locked for everybody else. The status codes of section 15.6 are read, which is what tells a departure from a kick, a ban and a nickname change — four things that arrive as the same stanza. What is **not** here: the configuration form, moderating (kick, ban, voice), invitations, and the affiliation lists; and the rooms do not survive a reconnect, because after one this client is in none. Checked against Prosody's room service, see "A room is not a roster" below |
+| XEP-0313 | Message Archive Management | ⚠️ | **The asking half**, for one's own archive and for a room's: `LastFromArchiveAsync`, `RoomHistoryAsync`, `QueryArchiveAsync` with the filters of XEP-0004 and the paging of XEP-0059. The shape is the whole difficulty — **the results do not come back in the answer**, they arrive beforehand as ordinary-looking messages, and a client that hands those on replays its own history as new arrivals every time somebody opens a conversation. A result without a `<delay/>` is refused rather than filed under today; an empty `<before/>` is the last page and leaving it out is the first, which are both valid queries and only one of them is what opening a conversation wants. Not here: preferences (which conversations are archived), and the flipped-page order some servers offer |
 | XEP-0060 | Publish-Subscribe | ⚠️ | Incoming events are parsed, checked against spoofing, and carry their `SubID` from the SHIM header. Outgoing, every request is correlated with its reply: a subscription counts only after the service has confirmed it, `pending` is not a confirmation, several subscriptions to the same node stand side by side, and without a `subid` neither unsubscribing nor configuring happens when there are several. Per-subscription configuration (§6.3) and node configuration (§8.2) are read and set — only what the service confirmed is recorded, and `<create/>` sends its settings along, so the node is never briefly open in between. Affiliations are read and assigned (§5.7/§8.9); a list with one unreadable entry counts as unreadable as a whole. The owner sees the subscribers of their node (§8.8.1) and can remove them (§8.8.2) — remove only: a client that signs others up unasked has no name here. An unsubscription by the service (§8.8.4) strikes the subscription from our own bookkeeping; a confirmation by notification is accepted only if there is **an open request of our own** to match it (§8.6) — otherwise a service could sign the client up unasked. A `pending` is recorded but does not count as a subscription: "what did I apply for" and "am I subscribed" are two questions. As an owner, the client shows incoming requests and answers them (§8.6.1/§8.6.2). Nodes are deleted and purged (§8.4/§8.5) — **a deleted node takes the subscription to it along, a purged one does not** — and the strike-out is per service and not per name: `urn:xmpp:omemo:2:bundles` is called that at every account. Individual items are retracted (§7.2); incoming, the retraction is reported with the ids of the affected items and leaves the subscription standing. See the work plan of the XMPPConformanceTests project, D70–D90 |
 | XEP-0085 | Chat State Notifications | ✅ | Sending + receiving |
 | XEP-0115 | Entity Capabilities | ✅ | ver string per §5.1 in full, including `xml:lang` and XEP-0128 forms, checked against both vectors from §5.2 and §5.3; replies are verified per §5.4, otherwise no cache entry |
@@ -717,12 +718,12 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it — 1280 tests, of which the platform decides how many get an answer:
+all of it — 1290 tests, of which the platform decides how many get an answer:
 
 | Platform | passed | skipped |
 |----------|-------:|--------:|
-| Windows | 1277 | 3 |
-| Debian 13 | 1279 | 1 |
+| Windows | 1287 | 3 |
+| Debian 13 | 1289 | 1 |
 
 The skip both share checks a property which exists only in STARTTLS operation,
 and the fixture is parameterised over the TLS modes, so in the other one the
@@ -742,8 +743,9 @@ tasks, at 1194 until Bind 2, at 1201 until the JID became a type, at 1223 until
 the OMEMO work of 03c44d7 and ca8bce3, at 1226 until an IQ of one's own could be
 registered and sent, at 1231 until a message could answer a particular other one,
 at 1252 until a stream error could no longer go missing on the way, at 1254 until
-this client could enter a room and at 1271 until it could throw somebody out of
-one, and a figure nobody updates stops being a check and becomes decoration.
+this client could enter a room, at 1271 until it could throw somebody out of one
+and at 1277 until it could ask what was said before it arrived, and a figure
+nobody updates stops being a check and becomes decoration.
 
 The step from 1201 is the one to read carefully, because it is the one where
 that happened. The JID conversion is what the entry names, and it is not the
