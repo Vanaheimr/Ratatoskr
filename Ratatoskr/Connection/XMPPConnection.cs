@@ -192,6 +192,32 @@ public delegate Task OnXMPPConnectionOmemoIdentityChangedDelegate       (DateTim
                                                                          OmemoIdentityChanged  Change,
                                                                          CancellationToken     CancellationToken);
 
+/// <summary>
+/// Answers an IQ request this library does not implement itself.
+/// </summary>
+/// <param name="Request">
+/// The payload of the request - the single child of the <c>&lt;iq/&gt;</c>,
+/// which is what the handler was registered for.
+/// </param>
+/// <param name="From">
+/// Who is asking, or <c>null</c> when the request carries no <c>from</c> and
+/// therefore comes from one's own server (RFC 6120, section 8.1.1.1).
+/// </param>
+/// <returns>
+/// What belongs inside the <c>&lt;iq type='result'/&gt;</c>, or <c>null</c> for
+/// an empty result - which is the ordinary answer to a <c>set</c> that worked.
+/// </returns>
+/// <remarks>
+/// This is not an event, and the difference is the point: an event is told and
+/// several may listen, a request is answered and exactly one may. Throwing
+/// refuses with <c>&lt;internal-server-error/&gt;</c>; a refusal that means
+/// something else is the caller's to build, by returning the error payload
+/// their own protocol defines.
+/// </remarks>
+public delegate Task<XElement?> IqRequestHandlerDelegate                (XElement           Request,
+                                                                        JID?               From,
+                                                                        CancellationToken  CancellationToken);
+
 #endregion
 
 
@@ -341,6 +367,27 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </summary>
     private Exception? _lastConnectError;
     private readonly object _iqLock = new();
+
+    /// <summary>
+    /// Handlers for IQ requests this library does not implement itself, keyed by
+    /// the namespace and the element name of the payload.
+    /// </summary>
+    /// <remarks>
+    /// Everything above this point answers one named XEP, and what none of them
+    /// claims is refused with <c>&lt;service-unavailable/&gt;</c> - correct by
+    /// RFC 6120, section 8.4, and the reason this library could not carry a
+    /// protocol of somebody else's. An IQ is the natural shape for one: a
+    /// request with a payload and an answer that belongs to it, correlated by
+    /// id, with errors already defined.
+    ///
+    /// Separate from the pending answers above, and deliberately so. Those are
+    /// requests <i>this</i> side is waiting on, addressed by id and alive for
+    /// one exchange; these are standing offers to answer, addressed by what the
+    /// payload is called.
+    /// </remarks>
+    private readonly Dictionary<(String Namespace, String Element), IqRequestHandlerDelegate> _iqHandlers = new();
+
+    private readonly object _iqHandlerLock = new();
 
     /// <summary>
     /// The lower bound for the SASL negotiation. Belongs to the connection and
@@ -1681,6 +1728,127 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
+    #region IQs of one's own
+
+    /// <summary>
+    /// Registers a handler for IQ requests carrying <paramref name="Element"/>
+    /// in <paramref name="Namespace"/>.
+    /// </summary>
+    /// <param name="AnnounceInDisco">
+    /// Whether the namespace is added to the disco feature list. <b>Leave this
+    /// on unless there is a reason not to.</b> A handler that is not announced
+    /// works, and nobody ever reaches it: XEP-0030 is how the far side finds out
+    /// what may be asked here, and a peer that does not see the feature does not
+    /// send the request.
+    /// </param>
+    /// <returns>
+    /// False when something is already registered for that pair - an existing
+    /// handler is never replaced silently, because two parts of one program each
+    /// believing they answer is worse than one of them failing to register.
+    /// </returns>
+    /// <remarks>
+    /// <b>One thing this cannot do for the caller, and it matters.</b> The caps
+    /// hash of XEP-0115 is computed from the feature list, so a handler
+    /// registered here changes it - but the hash travels in presence, and peers
+    /// cache it by that hash. Registering after the presence has gone out leaves
+    /// every peer with the old list until the next one. XEP-0115, section 4.4
+    /// says to send presence again when the features change; whether that is
+    /// right for the caller depends on what else their presence says, so this
+    /// does not do it. Registering before connecting avoids the question
+    /// entirely, and is what a program with fixed extensions should do.
+    /// </remarks>
+    public Boolean RegisterIqHandler(String                    Namespace,
+                                     String                    Element,
+                                     IqRequestHandlerDelegate  Handler,
+                                     Boolean                   AnnounceInDisco = true)
+    {
+
+        lock (_iqHandlerLock)
+        {
+
+            if (!_iqHandlers.TryAdd((Namespace, Element), Handler))
+                return false;
+
+            if (AnnounceInDisco && Disco is not null && !Disco.LocalFeatures.Contains(Namespace))
+                Disco.LocalFeatures.Add(Namespace);
+
+            return true;
+
+        }
+
+    }
+
+    /// <summary>
+    /// Takes a handler back, and its feature announcement with it.
+    /// </summary>
+    public Boolean UnregisterIqHandler(String Namespace, String Element)
+    {
+
+        lock (_iqHandlerLock)
+        {
+
+            if (!_iqHandlers.Remove((Namespace, Element)))
+                return false;
+
+            // Only when no other element of the same namespace is still
+            // answered here: the feature names the namespace, not the element.
+            if (Disco is not null && !_iqHandlers.Keys.Any(key => key.Namespace == Namespace))
+                Disco.LocalFeatures.Remove(Namespace);
+
+            return true;
+
+        }
+
+    }
+
+    /// <summary>
+    /// Sends an IQ request of one's own and waits for the answer.
+    /// </summary>
+    /// <param name="To">
+    /// Whom to ask. Left out for a request to one's own server, which then
+    /// carries no <c>to</c> at all (RFC 6120, section 8.1.1.1).
+    /// </param>
+    /// <param name="Type">
+    /// <c>get</c> or <c>set</c>. Nothing else is a request.
+    /// </param>
+    /// <returns>
+    /// The whole answer stanza, or null on a timeout. An <c>&lt;iq
+    /// type='error'/&gt;</c> is an answer and comes back as one - the caller is
+    /// the only one who knows whether a refusal is a failure here.
+    /// </returns>
+    /// <remarks>
+    /// The same correlation every XEP in this library uses: the answer arrives
+    /// through the receive loop and is assigned by id, and only an answer from
+    /// the entity that was asked counts. That last part is not decoration - the
+    /// id is chosen here, it is short, and it stands in the stanza for anyone to
+    /// read.
+    /// </remarks>
+    public async Task<XElement?> SendIqAsync(JID?               To,
+                                             String             Type,
+                                             XElement           Payload,
+                                             CancellationToken  CancellationToken = default)
+    {
+
+        if (Type is not ("get" or "set"))
+            throw new ArgumentException("An IQ request is a 'get' or a 'set'; " +
+                                        $"'{Type}' is neither.", nameof(Type));
+
+        var id      = $"iq-{Interlocked.Increment(ref _messageIdCounter)}-{Guid.NewGuid():N}";
+        var toAttr  = To is not null ? $" to='{XmlEscaping.Escape(To.ToString())}'" : "";
+
+        return await SendIqAsync(
+                   id,
+                   $"<iq type='{Type}' id='{id}'{toAttr}>" +
+                   Payload.ToString(SaveOptions.DisableFormatting) +
+                   "</iq>",
+                   CancellationToken,
+                   To
+               );
+
+    }
+
+    #endregion
+
     /// <summary>
     /// Sends an IQ and waits for the answer with the same id.
     /// </summary>
@@ -2753,6 +2921,14 @@ public sealed class XMPPConnection : IAsyncDisposable
             return;
         }
 
+        // A handler of somebody else's, for a protocol this library does not
+        // know. Last before the refusal and not earlier: everything above
+        // implements a named XEP, and a registration must not be able to take
+        // one of those over.
+        if (type is "get" or "set" && id is not null &&
+            await DispatchToOwnHandlerAsync(element, id, from, CancellationToken))
+            return;
+
         // RFC 6120, section 8.2.3: An iq 'get' or 'set' MUST be followed by an
         // answer. Everything that nobody above has claimed is answered
         // conclusively here.
@@ -2832,6 +3008,75 @@ public sealed class XMPPConnection : IAsyncDisposable
                        "<error type='cancel'>" +
                        "<item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
                        "</error></iq>");
+
+    }
+
+    /// <summary>
+    /// Hands an IQ to a handler registered for its payload, and answers with
+    /// what comes back.
+    /// </summary>
+    /// <returns>
+    /// Whether a handler took it. False means nobody is registered, and the
+    /// caller falls through to <see cref="RespondUnhandledIq"/>.
+    /// </returns>
+    /// <remarks>
+    /// <b>A handler that throws does not go unanswered.</b> RFC 6120, section
+    /// 8.2.3 wants a result or an error for every request, and a peer left
+    /// waiting runs into its timeout - with a server that can cost the session.
+    /// So an exception becomes <c>&lt;internal-server-error/&gt;</c>, which is
+    /// what it is, and is logged here rather than swallowed.
+    ///
+    /// Only the first payload child is looked at. An IQ carries one (section
+    /// 8.2.3 again), and a second would be a stanza this side has no reading
+    /// for.
+    /// </remarks>
+    private async Task<Boolean> DispatchToOwnHandlerAsync(XElement           element,
+                                                          String             id,
+                                                          String?            from,
+                                                          CancellationToken  CancellationToken)
+    {
+
+        var payload = element.Elements().FirstOrDefault();
+
+        if (payload is null)
+            return false;
+
+        IqRequestHandlerDelegate? handler;
+
+        lock (_iqHandlerLock)
+            if (!_iqHandlers.TryGetValue((payload.Name.NamespaceName, payload.Name.LocalName), out handler))
+                return false;
+
+        // Without a 'from' the request came from one's own server; the answer
+        // then goes back there implicitly without a 'to' (section 8.1.1.1).
+        var toAttr = from != null ? $" to='{XmlEscaping.Escape(from)}'" : "";
+
+        try
+        {
+
+            JID.TryParse(from, out var sender);
+
+            var answer = await handler(payload, sender, CancellationToken);
+
+            await SendAsync($"<iq type='result' id='{XmlEscaping.Escape(id)}'{toAttr}>" +
+                            (answer?.ToString(SaveOptions.DisableFormatting) ?? "") +
+                            "</iq>");
+
+        }
+        catch (Exception e)
+        {
+
+            _logger.LogWarning("The handler for {{{Namespace}}}{Element} threw: {Reason}",
+                               payload.Name.NamespaceName, payload.Name.LocalName, e.Message);
+
+            await SendAsync($"<iq type='error' id='{XmlEscaping.Escape(id)}'{toAttr}>" +
+                             "<error type='cancel'>" +
+                             "<internal-server-error xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>" +
+                             "</error></iq>");
+
+        }
+
+        return true;
 
     }
 

@@ -17,6 +17,8 @@
 
 #region Usings
 
+using System.Xml.Linq;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -912,6 +914,64 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </param>
     public Task<bool> EnableOmemoAsync(IOmemoStore? store = null, CancellationToken ct = default)
         => _connection.EnableOmemoAsync(store ?? new OmemoMemoryStore(), ct);
+
+    #region IQs of one's own
+
+    /// <summary>
+    /// Registers a handler for IQ requests this library does not implement
+    /// itself - a protocol of one's own over the transport XMPP already has.
+    /// </summary>
+    /// <remarks>
+    /// <b>Register before connecting where the extensions are fixed.</b> The
+    /// feature list this adds to is what the caps hash of XEP-0115 is computed
+    /// from, and that hash travels in presence: a handler registered afterwards
+    /// is invisible to every peer that has already cached the old one, until the
+    /// next presence goes out. <see cref="XMPPConnection.RegisterIqHandler"/>
+    /// says why this does not send that presence itself.
+    /// </remarks>
+    public Boolean RegisterIqHandler(String                    Namespace,
+                                     String                    Element,
+                                     IqRequestHandlerDelegate  Handler,
+                                     Boolean                   AnnounceInDisco = true)
+
+        => _connection.RegisterIqHandler(Namespace, Element, Handler, AnnounceInDisco);
+
+    /// <summary>
+    /// Takes a handler back, and its feature announcement with it.
+    /// </summary>
+    public Boolean UnregisterIqHandler(String Namespace, String Element)
+        => _connection.UnregisterIqHandler(Namespace, Element);
+
+    /// <summary>
+    /// What this client tells the world it speaks (XEP-0030), including the
+    /// namespaces of handlers registered here.
+    /// </summary>
+    /// <remarks>
+    /// Read-only on purpose. A feature belongs to whatever answers it, so it is
+    /// added and withdrawn by <see cref="RegisterIqHandler"/> and
+    /// <see cref="UnregisterIqHandler"/> - a list anybody could append to would
+    /// let this client promise something nothing here answers, and the promise
+    /// is what a peer acts on.
+    /// </remarks>
+    public IReadOnlyList<String> AnnouncedFeatures
+        => _connection.Disco?.LocalFeatures ?? [];
+
+    /// <summary>
+    /// Sends an IQ request of one's own and waits for the answer.
+    /// </summary>
+    /// <returns>
+    /// The whole answer stanza, or null on a timeout. An <c>&lt;iq
+    /// type='error'/&gt;</c> comes back as an answer, because only the caller
+    /// knows whether a refusal is a failure for their protocol.
+    /// </returns>
+    public Task<XElement?> SendIqAsync(JID?               To,
+                                       String             Type,
+                                       XElement           Payload,
+                                       CancellationToken  CancellationToken = default)
+
+        => _connection.SendIqAsync(To, Type, Payload, CancellationToken);
+
+    #endregion
 
     /// <summary>
     /// XEP-0384: Sends an encrypted message.

@@ -116,6 +116,51 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0474 | SASL SCRAM Downgrade Protection | ✅ | Both sides, version 0.5.0. The server hashes the list it announced into the `h` attribute of its server-first-message; the client hashes the list that reached it and compares. Checked against the one vector the XEP publishes, which pins the octet sort order, both separators and the choice of hash in a single comparison — an implementation that only agrees with itself passes every test written from its own behaviour. The channel-binding types announced under XEP-0440 form the second half of the hashed string, so both ends have to agree about them too — leave them out and every channel-bound login fails looking like a forged announcement. Absence of `h` is not a failure — almost nothing implements this yet, including the ejabberd this was first pointed at — but it is reported rather than silently passed as success |
 | XEP-0352 | Client State Indication | ✅ | Both sides. The server announces `<csi/>` after login (§4.1) and does not answer `<active/>`/`<inactive/>` (§4.2). Only what will still be true later is held back: presence waits and **the latest per full JID supersedes the earlier ones** (§3); a message with a body, an `iq`, an error and every nonza go out at once; a chat state (XEP-0085) is dropped — delivered late it would not be delayed but wrong. What was held goes out **before** the stanza that flushes the buffer (RFC 6120 §10.1), and at the end of the connection into the buffer of unacked stanzas. Ceiling `MaxHeldWhileInactive` (default 100); on overflow the buffer goes out rather than anything being discarded. After a resumption "active" applies again (§5.2) — which is why the client re-declares itself after every handshake. In the console `/csi active|inactive` (D61) |
 
+## Protocols of one's own
+
+Everything above answers a named XEP. What none of them claims is refused with
+`<service-unavailable/>` — right by RFC 6120 §8.4, and final: until recently this
+library could not carry anybody else's protocol, because `SendIqAsync` was
+private and the incoming chain had no opening in it.
+
+An IQ is the natural shape for one. A request with a payload, an answer that
+belongs to it, correlation by id and errors already defined — a protocol outside
+the XEP catalogue needs none of that built again. What it needs is a way in:
+
+```csharp
+client.RegisterIqHandler("urn:example:measurements:1", "measure",
+                         async (request, from, ct) =>
+                             new XElement(XName.Get("result", "urn:example:measurements:1"),
+                                          new XAttribute("value", Read(request))));
+
+var answer = await client.SendIqAsync(peer, "get",
+                                      new XElement(XName.Get("measure", "urn:example:measurements:1")));
+```
+
+Registered by namespace **and** element name, and consulted last — after every
+implemented XEP, so a registration cannot take one of those over. Returning
+`null` answers with an empty `<iq type='result'/>`, which is the ordinary answer
+to a `set` that worked. Throwing answers `<internal-server-error/>`: RFC 6120
+§8.2.3 wants a result or an error for every request, and the failure that costs
+most is not the exception but the silence after it — the peer waits into its
+timeout, and against a server that can take the session with it.
+
+**Three things have to hold together, and the third is the one that gets
+forgotten.** The handler has to be reached, the request has to be sendable, and
+the namespace has to appear in the disco feature list — because XEP-0030 is how
+a peer learns what may be asked here. `RegisterIqHandler` adds it by default,
+and `AnnouncedFeatures` shows what is announced. A handler nobody is told about
+works perfectly and is never called, which looks exactly like the feature
+working, since nothing fails.
+
+One thing it deliberately does not do: send presence again. The caps hash of
+XEP-0115 is computed over that feature list and travels in presence, so a
+handler registered after the first presence has gone out is invisible to every
+peer that cached the old hash, until the next one. XEP-0115 §4.4 says to
+re-announce; whether that is right depends on what else the caller's presence
+says. **Register before connecting** and the question does not arise, which is
+what a program with fixed extensions should do anyway.
+
 ## RFC conformance
 
 ### RFC 6120 — XMPP Core
