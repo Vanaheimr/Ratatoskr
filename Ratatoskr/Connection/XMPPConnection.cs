@@ -2594,6 +2594,12 @@ public sealed class XMPPConnection : IAsyncDisposable
                                ? stamp.ToLocalTime().DateTime
                                : received;
 
+            // XEP-0461: which message this one answers - and XEP-0428: which
+            // part of the body is only the quotation of it, there for a client
+            // that cannot follow the reference.
+            var repliesTo  = MessageReply.RepliesTo(element);
+            var quoteRange = MessageReply.QuoteRangeIn(element, body);
+
             await OnMessage.InvokeAllAsync(handler => handler(Timestamp.Now,
                                                            this,
                                                            new XMPPMessage(from,
@@ -2604,7 +2610,16 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                            messageType,
                                                                            received,
                                                                            JID.TryParse(heldBy),
-                                                                           MessageCorrection.ReplacedId(element)),
+                                                                           MessageCorrection.ReplacedId(element),
+                                                                           repliesTo,
+                                                                           quoteRange,
+                                                                           StableIds.OriginId(element),
+
+                                                                           // Whose name is wanted here is the sender's
+                                                                           // domain - and for a room message the sender
+                                                                           // is the room, which is the entity whose
+                                                                           // number everybody present shares.
+                                                                           StableIds.StanzaId(element, from)),
                                                            CancellationToken), _logger);
 
             // Answered of its own accord is only where an answer belongs. A
@@ -4378,12 +4393,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// read marker into a reported spoofing attempt.
     /// </remarks>
     /// <param name="Content">The already serialised inside of the stanza.</param>
+    /// <param name="extras">
+    /// Further elements of the stanza, already serialised - the reference of
+    /// XEP-0461 and the marking of XEP-0428 are built by whoever also built the
+    /// body, because the offsets in the second only mean anything next to the
+    /// first.
+    /// </param>
     private async Task<string> SendMessageStanzaAsync(JID          to,
                                                       string       Content,
                                                       bool         requestReceipt,
                                                       bool         markable,
                                                       MessageType  type,
-                                                      string?      corrects)
+                                                      string?      corrects,
+                                                      string?      extras = null)
     {
         var messageId = GenerateMessageId();
 
@@ -4399,6 +4421,9 @@ public sealed class XMPPConnection : IAsyncDisposable
         // but complete.
         if (corrects is not null)
             sb.Append(MessageCorrection.ReplaceXml(corrects));
+
+        if (extras is not null)
+            sb.Append(extras);
 
         // What expects no answer gets none requested either.
         if (!type.ExpectsAReply())
@@ -4435,6 +4460,70 @@ public sealed class XMPPConnection : IAsyncDisposable
         // XEP-0198: the counting along happens centrally in SendAsync.
         await SendAsync(xml);
         return messageId;
+    }
+
+    /// <summary>
+    /// XEP-0461: Sends an answer to a particular message.
+    /// </summary>
+    /// <param name="to">Who the answer goes to.</param>
+    /// <param name="body">The answer.</param>
+    /// <param name="replyToId">
+    /// The name of the message being answered - not simply its <c>id</c>; see
+    /// <see cref="XMPPMessage.ReplyableId"/>, which works it out.
+    /// </param>
+    /// <param name="replyToAuthor">Who wrote that message, or null.</param>
+    /// <param name="quotedText">
+    /// Its text, when the answer is to carry it along as quoted lines for
+    /// clients that do not know the extension. Null leaves them out.
+    /// </param>
+    /// <param name="quotedAuthor">
+    /// Whose text that is, put above the quotation. Worth having in a room and
+    /// usually not between two people, where there is only one other person it
+    /// could be.
+    /// </param>
+    /// <remarks>
+    /// <b>The body is written here and not by the caller</b>, and that is the
+    /// whole reason this method exists rather than two parameters on
+    /// <see cref="SendMessageAsync"/>. The quotation and the offsets that say
+    /// where it ends have to agree exactly - in the counting of XEP-0426, after
+    /// the line endings have been settled. A caller who pastes the quotation
+    /// into the body themselves and passes a number alongside has two chances to
+    /// be right and takes both risks; here there is one text, and the number is
+    /// read off it.
+    /// </remarks>
+    public Task<string> SendReplyAsync(JID          to,
+                                       string       body,
+                                       string       replyToId,
+                                       JID?         replyToAuthor   = null,
+                                       string?      quotedText      = null,
+                                       string?      quotedAuthor    = null,
+                                       bool         requestReceipt  = true,
+                                       bool         markable        = true,
+                                       MessageType  type            = MessageType.Chat)
+    {
+
+        // Not a null check for its own sake: at this point the caller has
+        // claimed there is a message to answer. Sending a <reply id=''/> would
+        // put an answer to nothing on the wire, and the far side would have to
+        // decide what that means.
+        if (string.IsNullOrEmpty(replyToId))
+            throw new ArgumentException("A reply needs the message it answers.",
+                                        nameof(replyToId));
+
+        var composed = MessageReply.Compose(body,
+                                            replyToId,
+                                            replyToAuthor,
+                                            quotedText,
+                                            quotedAuthor);
+
+        return SendMessageStanzaAsync(to,
+                                      $"<body>{XmlEscaping.Escape(composed.Body)}</body>",
+                                      requestReceipt,
+                                      markable,
+                                      type,
+                                      corrects: null,
+                                      extras:   composed.Extras);
+
     }
 
     public async Task SendChatStateAsync(JID to, ChatState state)

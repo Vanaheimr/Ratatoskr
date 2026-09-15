@@ -50,21 +50,102 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// ordinary one. The <c>Body</c> is then, too, the complete new text and not
 /// the change to it.
 /// </param>
-public sealed record XMPPMessage(JID          From,
-                                 JID          To,
-                                 string       Body,
-                                 string?      MessageId,
-                                 DateTime     Timestamp,
-                                 MessageType  Type        = MessageType.Normal,
-                                 DateTime?    ReceivedAt  = null,
-                                 JID?         DelayedBy   = null,
-                                 string?      ReplacesId  = null)
+/// <param name="RepliesTo">
+/// XEP-0461: Which message this one answers - or null for one that answers
+/// none.
+/// </param>
+/// <param name="QuoteRange">
+/// XEP-0428: Which part of the <c>Body</c> is only there for a client that does
+/// not know XEP-0461 - the quoted lines. Null when the message brings none.
+///
+/// <b>The <c>Body</c> keeps them.</b> What came over the wire is what stands
+/// here; <see cref="Text"/> and <see cref="Quote"/> are the two views of it.
+/// Cutting at the parser would mean the one thing an interface may need most -
+/// the message exactly as it was sent - is the one thing it can no longer get.
+/// </param>
+/// <param name="OriginId">
+/// XEP-0359: The name the sender gave this message themselves, or null.
+/// </param>
+/// <param name="StanzaId">
+/// XEP-0359: The name the sender's own domain gave it - for a room message, the
+/// room's. Null when nobody assigned one.
+/// </param>
+public sealed record XMPPMessage(JID              From,
+                                 JID              To,
+                                 string           Body,
+                                 string?          MessageId,
+                                 DateTime         Timestamp,
+                                 MessageType      Type        = MessageType.Normal,
+                                 DateTime?        ReceivedAt  = null,
+                                 JID?             DelayedBy   = null,
+                                 string?          ReplacesId  = null,
+                                 MessageReplyTo?  RepliesTo   = null,
+                                 BodyRange?       QuoteRange  = null,
+                                 string?          OriginId    = null,
+                                 string?          StanzaId    = null)
 {
 
     /// <summary>
     /// Does this message correct an earlier one (XEP-0308)?
     /// </summary>
     public bool IsCorrection => ReplacesId is not null;
+
+    /// <summary>
+    /// Does this message answer an earlier one (XEP-0461)?
+    /// </summary>
+    public bool IsReply => RepliesTo is not null;
+
+    /// <summary>
+    /// The message without the quoted lines - what was actually written.
+    /// </summary>
+    /// <remarks>
+    /// The same as <see cref="Body"/> whenever nothing was marked as fallback,
+    /// so an interface can simply use this one and never think about it again.
+    /// That is the point of the property existing at all: the alternative is
+    /// every caller doing the arithmetic, and one of them getting it wrong.
+    /// </remarks>
+    public string Text
+
+        => QuoteRange is BodyRange range
+               ? Body.Remove(range.Start, range.Length)
+               : Body;
+
+    /// <summary>
+    /// The quoted lines, or null when the message carries none.
+    /// </summary>
+    /// <remarks>
+    /// Worth having even for a client that shows the answered message itself:
+    /// when that message is not to hand - it was written before this session,
+    /// or into a room this client was not in - the quotation is the only copy
+    /// of what is being answered.
+    /// </remarks>
+    public string? Quote
+
+        => QuoteRange is BodyRange range
+               ? Body.Substring(range.Start, range.Length)
+               : null;
+
+    /// <summary>
+    /// The name to use when answering this message - or null when there is
+    /// none to use.
+    /// </summary>
+    /// <remarks>
+    /// <b>In a room the <c>id</c> of the stanza must not be used</b> (XEP-0461,
+    /// section 4). Everyone present sees a different one: the room passes on
+    /// what the sender wrote, and what the sender wrote was for the sender. The
+    /// only name everybody shares is the room's own, and a room that assigns
+    /// none is a room in which nothing can be answered. Null says exactly that,
+    /// and it is better than an answer that points at somebody else's message
+    /// for every reader.
+    ///
+    /// Outside a room the sender's own name holds: their
+    /// <c>&lt;origin-id/&gt;</c> if they gave one, otherwise the <c>id</c>.
+    /// </remarks>
+    public string? ReplyableId
+
+        => Type == MessageType.GroupChat
+               ? StanzaId
+               : OriginId ?? MessageId;
 
     /// <summary>
     /// Sender without resource.

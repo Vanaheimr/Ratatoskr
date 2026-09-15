@@ -110,7 +110,16 @@ public sealed class DiscoManager
         // XEP-0308, section 4: without this announcement another side does not
         // know whether a correction arrives - and has to assume, to be on the
         // safe side, that it appears as a second message.
-        "urn:xmpp:message-correct:0"
+        "urn:xmpp:message-correct:0",
+
+        // XEP-0461 and XEP-0428, and the two belong together: the first says
+        // answers to a particular message are understood here, the second that
+        // the quoted lines they bring along will be recognised as the duplicate
+        // they are. A client that reads the first and not the second learns
+        // that it may leave the quotation out - and whoever then leaves it out
+        // has taken away what every other client here would have shown.
+        "urn:xmpp:reply:0",
+        "urn:xmpp:fallback:0"
     ];
 
     /// <summary>

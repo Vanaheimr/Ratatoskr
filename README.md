@@ -109,6 +109,10 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0384 | OMEMO Encryption | ✅ | Complete, `urn:xmpp:omemo:2` — see the "End-to-end encryption" section further down. Verified against the reference implementation python-omemo, in both directions (D69) |
 | XEP-0420 | Stanza Content Encryption | ✅ | The envelope that OMEMO encrypts: `<content/>` with the sender inside it and padding of random length |
 | XEP-0454 | OMEMO Media Sharing | ⚠️ | The receiving half, and nothing that touches the network: `AesGcmUrl` reads `aesgcm://host/path#[iv][key]`, hands out the `https` address the file lies at — without the fragment, which is the key — and decrypts the payload, tag checked. What is deliberately **not** here is the fetching: whether an incoming message may cause a request at all, how large a file may be, which addresses are refused. A library that downloads on its own gives that decision to whoever sent the message. The upload side (encrypting and offering a file) is missing entirely. IV of 12 bytes only — the older 16 byte form is refused with a reason rather than silently, since `AesGcm` takes no other nonce length |
+| XEP-0359 | Unique and Stable Stanza IDs | ⚠️ | **Read, not written.** `XMPPMessage.OriginId` and `.StanzaId` carry the names a message was given by its sender and by an archive; `ReplyableId` picks the one a reply may use. This client assigns none of its own: an `<origin-id/>` would repeat the `id` it just wrote, and a second copy of a number is not a second piece of knowledge. `urn:xmpp:sid:0` is therefore **not** announced — section 3 has that for entities that assign them |
+| XEP-0426 | Character Counting in Message Bodies | ✅ | `CharacterCounting`, and it is one screen of code that exists because .NET counts the other way. Offsets into a body are Unicode code points; `Length` gives UTF-16 units; the two agree for every ASCII text and part company at the first emoji. Conversion happens at the wire and nowhere else |
+| XEP-0428 | Fallback Indication | ✅ | Reading and writing, for one contiguous part of one `<body/>`. Missing offsets mean the whole body (section 3); offsets that cannot be read or run backwards mean **nothing is cut**, because hiding a piece of somebody's sentence costs more than showing a quotation twice. Several `<body/>` children and the `<subject/>` are not handled — a quotation is one piece at the front |
+| XEP-0461 | Message Replies | ✅ | Receiving: `RepliesTo` names the answered message, `Text` is the answer without the quoted lines and `Quote` is those lines on their own. Sending: `ReplyToAsync` answers a message that arrived, `SendReplyAsync` answers one by name. In a room the `id` of the stanza is refused (section 4) and the room's own name used. In the console `/re <text>`. Checked against slixmpp in both directions, which is the only way this one can be checked at all — servers pass it through without looking |
 | XEP-0388 | Extensible SASL Profile (SASL2) | ⚠️ | Both sides, and preferred over the RFC 6120 profile wherever a server offers it — the two are announced side by side, which is what the XEP asks for during the transition. `<authenticate/>` with the initial response as a child, `<challenge/>`/`<response/>`, `<success/>` with `<additional-data/>` and `<authorization-identifier/>`, `<failure/>` carrying an RFC 6120 condition inside the newer wrapper. **No stream restart** after success (§3.6), which is the round trip the profile saves and the one thing that deadlocks if either end gets it wrong. The `<continue/>`/`<next/>`/`<task-data/>` task flow is here too, carrying XEP-0480, and `<inline/>` carrying Bind 2 (XEP-0386). `UseSasl2` on the connection and `OfferSasl2` on the server turn it off, so the older profile stays exercised rather than rotting |
 | XEP-0480 | SASL Upgrade Tasks | ✅ | Both sides, version 0.2.0 — the answer to a migration that otherwise costs an outage. SCRAM material is derived through one hash and stored, so moving an account from SCRAM-SHA-1 to SCRAM-SHA-256 needs the password the server does not have; the usual answer is "set every password again", with everybody locked out in between. Here the client, which still has the password, derives the new SaltedPassword inside the login it has just completed, and the server keeps the two keys beside the ones it had. Nothing is taken away, so clients that have not been through it still get in. The upgrade may name a mechanism the server does **not** currently offer, and that is the point: the material has to be collected *before* the offer can change. What travels is password-equivalent for the new mechanism, so the client offers it only over TLS and only after the server's own signature has proved it knows the existing material — `PerformScramUpgrades` turns it off entirely |
 | XEP-0386 | Bind 2 | ⚠️ | Both sides, version 1.1.0. The resource is bound inside the SASL2 `<success/>` instead of by an `<iq/>` after it — one round trip fewer, and a change in who decides: RFC 6120 lets a client ask for a resource, XEP-0386 gives it no way to ask at all. It may offer a `<tag/>`, which the server carries in as a prefix of what it generates (`Ratatoskr/kZ8p…`), so `Resource` is **not** honoured on this path and the tag defaults to it as the nearest thing the extension allows. Note the resource then contains a `/`, which RFC 7622 permits — a JID is split at the *first* one. What is **not** here is the inline enabling of other features (`<enable/>` for carbons or stream management), so the nested `<inline/>` is not advertised and those are still negotiated afterwards: the round trip saved is the binding's alone |
@@ -160,6 +164,59 @@ peer that cached the old hash, until the next one. XEP-0115 §4.4 says to
 re-announce; whether that is right depends on what else the caller's presence
 says. **Register before connecting** and the question does not arise, which is
 what a program with fixed extensions should do anyway.
+
+## Answering one message rather than the last one
+
+A reply is two attributes and a quotation, and the quotation is the part worth
+reading about. The `<reply/>` names what is being answered; the body carries the
+old text as `> ` lines so that a client which has never heard of XEP-0461 shows
+something that reads; and XEP-0428 marks those lines as the duplicate they are,
+so that a client which *has* heard of it can hide them again.
+
+```csharp
+client.OnMessage += (t, s, message, ct) =>
+{
+    Console.WriteLine(message.Quote);   // what they were answering, or null
+    Console.WriteLine(message.Text);    // what they said
+    return Task.CompletedTask;
+};
+
+await client.ReplyToAsync(message, "Eight o'clock then");
+```
+
+**What is quoted is `Text` and not `Body`.** The body of an answer still holds
+the quotation it arrived with, so quoting that would carry the whole
+conversation forward one `>` deeper every turn.
+
+### The number beside it
+
+The `start` and `end` of XEP-0428 are counted in **Unicode code points**
+(XEP-0426). `string.Length` in .NET counts UTF-16 units. For every text anybody
+writes a test with, those are the same number:
+
+| text | code points | .NET `Length` |
+|---|---:|---:|
+| `> Yes\n` | 6 | 6 |
+| `> Sea 🌍 end\n` | 12 | 13 |
+| `> 👨‍👩‍👧\n` | 7 | 10 |
+
+An implementation that writes the second column cuts one character too many off
+every quotation containing an emoji — and nothing fails, nothing logs, and the
+answer simply arrives with its first letter missing. Two more things belong to
+the same arithmetic:
+
+- **Line endings are settled before counting.** An XML parser turns every
+  `CR LF` in text content into a single `LF` (XML 1.0 §2.11), so a quotation
+  written on Windows is one character shorter at the far end than it was here —
+  per line.
+- **The offsets are computed in one place**, `FallbackIndication.BodyXml`, from
+  the body and a range in .NET indices. A method that took the wire numbers
+  straight would be a method every call site can get wrong quietly.
+
+None of this can be checked by testing against ourselves, because both halves
+would be wrong the same way and agree perfectly. It is checked against slixmpp,
+whose Python strings are code points by nature — in `XMPPConformanceTests`,
+`ReplyOracleTests`.
 
 ## RFC conformance
 

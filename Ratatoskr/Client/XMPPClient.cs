@@ -799,6 +799,100 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// XEP-0461: Answers a message that arrived here.
+    /// </summary>
+    /// <param name="message">What is being answered.</param>
+    /// <param name="body">The answer.</param>
+    /// <param name="quote">
+    /// Carry the answered text along as quoted lines, so that a client which
+    /// does not know XEP-0461 still shows what this is about. On by default:
+    /// leaving it out saves a few hundred bytes and costs the other side the
+    /// message.
+    /// </param>
+    /// <returns>
+    /// The ID of the answer, or null - then there is nothing here that can be
+    /// answered. In a room that is a real case and not an error: without a name
+    /// from the room itself there is no reference everybody present would read
+    /// the same way.
+    /// </returns>
+    /// <remarks>
+    /// <b>What is quoted is <see cref="XMPPMessage.Text"/>, not
+    /// <see cref="XMPPMessage.Body"/></b>, and the difference is the whole
+    /// comfort of the thing. When the answered message was itself an answer,
+    /// its body still holds the quotation it came with - quoting that as well
+    /// would carry the entire conversation forward one <c>&gt;</c> deeper each
+    /// time. An answer quotes what was said, not what was quoted while saying
+    /// it.
+    /// </remarks>
+    public async Task<string?> ReplyToAsync(XMPPMessage  message,
+                                            string       body,
+                                            bool         quote = true)
+    {
+
+        var id = message.ReplyableId;
+
+        if (id is null)
+            return null;
+
+        var room = message.Type == MessageType.GroupChat;
+
+        // In a room the answer goes to the room, not to the occupant who is
+        // being answered - the reference is only worth anything to those who
+        // can see the message it names.
+        var to   = room ? message.From.Bare : message.From;
+
+        var sent = await _connection.SendReplyAsync(
+                             to,
+                             body,
+                             id,
+                             replyToAuthor:  message.From,
+                             quotedText:     quote ? message.Text : null,
+                             quotedAuthor:   room  ? message.From.Resourcepart : null,
+                             type:           room  ? MessageType.GroupChat : MessageType.Chat
+                         );
+
+        // For a later correction (XEP-0308): an answer is a message like any
+        // other, and whoever mistypes in one wants to correct it too.
+        lock (_lastSentToLock)
+            _lastSentTo[to.Bare] = sent;
+
+        return sent;
+
+    }
+
+    /// <summary>
+    /// XEP-0461: Answers a message by its name, for a caller that has one but
+    /// not the message.
+    /// </summary>
+    /// <remarks>
+    /// The way in for anything that keeps its own history - a stored
+    /// conversation, an archive. <see cref="ReplyToAsync"/> is the everyday
+    /// one; this is the same thing without the convenience of having the
+    /// message to hand.
+    /// </remarks>
+    public async Task<string> SendReplyAsync(JID      to,
+                                             string   body,
+                                             string   replyToId,
+                                             JID?     replyToAuthor  = null,
+                                             string?  quotedText     = null,
+                                             string?  quotedAuthor   = null)
+    {
+
+        var id = await _connection.SendReplyAsync(to,
+                                                  body,
+                                                  replyToId,
+                                                  replyToAuthor,
+                                                  quotedText,
+                                                  quotedAuthor);
+
+        lock (_lastSentToLock)
+            _lastSentTo[to.Bare] = id;
+
+        return id;
+
+    }
+
+    /// <summary>
     /// XEP-0085: Sends a typing state to the current chat partner.
     /// </summary>
     /// <returns>false when no chat partner is set.</returns>
