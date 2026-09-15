@@ -71,6 +71,67 @@ public sealed record MucUserInfo(MucOccupant?        Item,
 
 
 /// <summary>
+/// XEP-0045, section 7.8: somebody wants us in a room.
+/// </summary>
+/// <param name="Room">The room it is about.</param>
+/// <param name="From">
+/// Who is asking - and <b>in one of two shapes</b>, which is not a detail a
+/// client may skip over. See <see cref="FromAnOccupantAddress"/>.
+/// </param>
+/// <param name="Reason">Why, if they said.</param>
+/// <param name="Password">
+/// For a password-protected room, when the inviter passed it on. Without it an
+/// invitation into such a room is one nobody can act on.
+/// </param>
+/// <remarks>
+/// <b>The one thing a room says about a room one is not in.</b> Every other
+/// stanza from a room concerns somewhere this client already is, and is
+/// recognised by exactly that; an invitation has to be recognised without it,
+/// which is why it is looked for before the room table is asked at all.
+///
+/// The address to answer is <see cref="From"/> and not the room: a refusal goes
+/// to the person, through the room. A client that declines to the room declines
+/// to nobody.
+/// </remarks>
+public sealed record MucInvitation(JID      Room,
+                                   JID      From,
+                                   string?  Reason    = null,
+                                   string?  Password  = null)
+{
+
+    /// <summary>
+    /// Is the inviter named by their address <b>in the room</b> rather than by
+    /// their real one?
+    /// </summary>
+    /// <remarks>
+    /// <b>Measured, not assumed - and the two services differ.</b> XEP-0045
+    /// section 7.8.2 shows the inviter's real address in the example, and
+    /// ejabberd sends that. Prosody sends the occupant address,
+    /// <c>room@service/nick</c>, which tells the invitee who asked without
+    /// telling them who that is - the sensible thing for a semi-anonymous room,
+    /// and not what the example shows.
+    ///
+    /// Neither breaks anything: a refusal addressed either way reaches the
+    /// inviter, because the room routes it. What breaks is a client that
+    /// assumes one of them - it will either show a room address where a person
+    /// belongs, or treat a perfectly good invitation as malformed. So the shape
+    /// is reported rather than normalised: whoever wants a name takes
+    /// <c>From.Resourcepart</c> when this is true, and the localpart when it is
+    /// not.
+    /// </remarks>
+    public bool FromAnOccupantAddress
+        => From.Bare == Room;
+
+}
+
+
+/// <summary>
+/// XEP-0045, section 7.8.2: somebody we invited is not coming.
+/// </summary>
+public sealed record MucDecline(JID Room, JID From, string? Reason = null);
+
+
+/// <summary>
 /// XEP-0045: a room, and everybody in it.
 /// </summary>
 /// <remarks>
@@ -98,6 +159,16 @@ public static class MultiUserChat
     /// The namespace a room speaks in: roles, affiliations, status codes.
     /// </summary>
     public const string UserNamespace = "http://jabber.org/protocol/muc#user";
+
+    /// <summary>
+    /// The namespace a moderator or an admin asks in.
+    /// </summary>
+    public const string AdminNamespace = "http://jabber.org/protocol/muc#admin";
+
+    /// <summary>
+    /// The namespace an owner asks in.
+    /// </summary>
+    public const string OwnerNamespace = "http://jabber.org/protocol/muc#owner";
 
 
     #region Stanzas that go out
@@ -174,6 +245,111 @@ public static class MultiUserChat
                $"<subject>{XmlEscaping.Escape(subject)}</subject>" +
            "</message>";
 
+    /// <summary>
+    /// XEP-0045, section 8: changes what somebody may do while they are here.
+    /// </summary>
+    /// <param name="nick">Whom - by their name in this room.</param>
+    /// <param name="role">What they are to be. <c>None</c> is a kick.</param>
+    /// <param name="reason">Why, for the person and for everybody watching.</param>
+    /// <remarks>
+    /// <b>By nickname, and that is not an accident.</b> A role lasts for the
+    /// visit, and inside the visit the nickname is what identifies somebody -
+    /// it is also all a moderator is given in an ordinary room. An affiliation
+    /// outlives the visit and is therefore set by real address; see
+    /// <see cref="AffiliationQuery"/>, where that difference costs something.
+    /// </remarks>
+    public static XElement RoleQuery(string   nick,
+                                     MucRole  role,
+                                     string?  reason = null)
+    {
+
+        var item = new XElement(XName.Get("item", AdminNamespace),
+                       new XAttribute("nick", nick),
+                       new XAttribute("role", role.AsText()));
+
+        if (reason is not null)
+            item.Add(new XElement(XName.Get("reason", AdminNamespace), reason));
+
+        return new XElement(XName.Get("query", AdminNamespace), item);
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 9: changes what somebody is to the room, beyond this
+    /// visit.
+    /// </summary>
+    /// <param name="jid">
+    /// Whom - by their <b>real</b> address.
+    /// </param>
+    /// <param name="affiliation">
+    /// What they are to be. <c>Outcast</c> is a ban.
+    /// </param>
+    /// <param name="reason">Why.</param>
+    /// <remarks>
+    /// <b>The real address, and in an ordinary room one does not have it.</b> A
+    /// room is semi-anonymous by default and gives the real addresses of its
+    /// occupants to its moderators only - so a moderator can ban, and somebody
+    /// who is merely annoyed cannot. That is the protocol working as intended
+    /// and not a gap: an affiliation outlives the visit, so it has to name
+    /// somebody who exists outside it, and a nickname does not.
+    ///
+    /// Which is why a ban can fail for a reason that has nothing to do with
+    /// permissions: <see cref="MucOccupant.RealJid"/> is null, and there is
+    /// nothing to put here.
+    /// </remarks>
+    public static XElement AffiliationQuery(JID             jid,
+                                            MucAffiliation  affiliation,
+                                            string?         reason = null)
+    {
+
+        var item = new XElement(XName.Get("item", AdminNamespace),
+                       new XAttribute("jid",         jid.Bare.ToString()),
+                       new XAttribute("affiliation", affiliation.AsText()));
+
+        if (reason is not null)
+            item.Add(new XElement(XName.Get("reason", AdminNamespace), reason));
+
+        return new XElement(XName.Get("query", AdminNamespace), item);
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 7.8.1: asks somebody into a room, through the room.
+    /// </summary>
+    /// <remarks>
+    /// <b>Mediated and not direct</b>, which is the whole point of the detour:
+    /// the message goes to the room and the room passes it on. An invitation
+    /// that came from the room is one the room will honour - it can put the
+    /// invitee on the member list on the way - whereas one sent straight to the
+    /// person is a stranger's word about a room they have never heard of.
+    /// </remarks>
+    public static string InviteXml(JID room, JID who, string? reason = null)
+
+        => $"<message to='{XmlEscaping.Escape(room.Bare.ToString())}'>" +
+               $"<x xmlns='{UserNamespace}'>" +
+                   $"<invite to='{XmlEscaping.Escape(who.ToString())}'>" +
+                       (reason is not null ? $"<reason>{XmlEscaping.Escape(reason)}</reason>" : "") +
+                   "</invite>" +
+               "</x>" +
+           "</message>";
+
+    /// <summary>
+    /// XEP-0045, section 7.8.2: says no to an invitation.
+    /// </summary>
+    /// <remarks>
+    /// Also through the room, and addressed to the person who asked. A refusal
+    /// sent to the room itself is a refusal delivered to nobody.
+    /// </remarks>
+    public static string DeclineXml(JID room, JID inviter, string? reason = null)
+
+        => $"<message to='{XmlEscaping.Escape(room.Bare.ToString())}'>" +
+               $"<x xmlns='{UserNamespace}'>" +
+                   $"<decline to='{XmlEscaping.Escape(inviter.Bare.ToString())}'>" +
+                       (reason is not null ? $"<reason>{XmlEscaping.Escape(reason)}</reason>" : "") +
+                   "</decline>" +
+               "</x>" +
+           "</message>";
+
     #endregion
 
     #region Stanzas that come in
@@ -238,6 +414,60 @@ public static class MultiUserChat
                    actor is not null && JID.TryParse(actor.Attr("jid"), out var who) ? who : null
 
                );
+
+    }
+
+    /// <summary>
+    /// An invitation into a room, or null.
+    /// </summary>
+    /// <remarks>
+    /// The <c>from</c> of the stanza is the <b>room</b>; who is asking stands in
+    /// the <c>from</c> of the <c>&lt;invite/&gt;</c>, which the room fills in on
+    /// the way. Taking the stanza's sender for the inviter would answer every
+    /// refusal to the room, which forwards it to nobody.
+    /// </remarks>
+    public static MucInvitation? Invitation(XElement message)
+    {
+
+        var x = message.Child(UserNamespace, "x");
+
+        var invite = x?.Child(UserNamespace, "invite");
+
+        if (invite is null ||
+            !JID.TryParse(message.Attr("from"), out var room) ||
+            !JID.TryParse(invite.Attr("from"), out var from))
+        {
+            return null;
+        }
+
+        return new MucInvitation(
+                   room.Bare,
+                   from,
+                   invite.Child(UserNamespace, "reason")?.Value,
+                   x?.Child(UserNamespace, "password")?.Value
+               );
+
+    }
+
+    /// <summary>
+    /// A refusal of an invitation we sent, or null.
+    /// </summary>
+    public static MucDecline? Decline(XElement message)
+    {
+
+        var decline = message.Child(UserNamespace, "x")?.
+                              Child(UserNamespace, "decline");
+
+        if (decline is null ||
+            !JID.TryParse(message.Attr("from"), out var room) ||
+            !JID.TryParse(decline.Attr("from"), out var from))
+        {
+            return null;
+        }
+
+        return new MucDecline(room.Bare,
+                              from,
+                              decline.Child(UserNamespace, "reason")?.Value);
 
     }
 

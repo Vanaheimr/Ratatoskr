@@ -55,8 +55,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         private static readonly JID Room = JID.Parse("chat@conference.example");
 
-        private MucManager                _muc   = null!;
-        private ConcurrentQueue<String>   _sent  = null!;
+        private MucManager                 _muc     = null!;
+        private ConcurrentQueue<String>    _sent    = null!;
+        private ConcurrentQueue<XElement>  _asked   = null!;
+        private String                     _answer  = "result";
 
         #endregion
 
@@ -65,8 +67,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         [SetUp]
         public void SetUp()
         {
-            _sent  = new ConcurrentQueue<String>();
-            _muc   = new MucManager(xml => { _sent.Enqueue(xml); return Task.CompletedTask; });
+            _sent   = new ConcurrentQueue<String>();
+            _asked  = new ConcurrentQueue<XElement>();
+            _answer = "result";
+
+            _muc    = new MucManager(
+
+                          xml => { _sent.Enqueue(xml); return Task.CompletedTask; },
+
+                          // A room that answers whatever the test tells it to.
+                          // The refusal matters as much as the result here: not
+                          // being a moderator is the ordinary case, and a client
+                          // that reports it as success has thrown nobody out.
+                          (to, type, payload, ct) =>
+                          {
+                              _asked.Enqueue(payload);
+                              return Task.FromResult<XElement?>(
+                                         XElement.Parse($"<iq xmlns='jabber:client' type='{_answer}' from='{to}'/>"));
+                          }
+
+                      );
         }
 
         #endregion
@@ -636,6 +656,258 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(await _muc.ChangeNickAsync(Room, "other"),    Is.False);
                 Assert.That(await _muc.SetSubjectAsync(Room, "anything"), Is.False);
                 Assert.That(_sent.IsEmpty, Is.True, "Something was sent to a room nobody is in.");
+            });
+
+        }
+
+        #endregion
+
+        #region AKickIsARoleTakenAwayAndABanIsNot()
+
+        /// <summary>
+        /// XEP-0045 sections 8 and 9: the two halves, and why one needs a
+        /// nickname and the other an address.
+        /// </summary>
+        /// <remarks>
+        /// <b>A role lasts for the visit; an affiliation outlives it.</b> That
+        /// is not bookkeeping, it decides what each can be asked with: inside
+        /// the visit a nickname identifies somebody, and outside it identifies
+        /// nobody at all. So a kick names a nickname and a ban names a real
+        /// address - and in a semi-anonymous room only a moderator is given
+        /// one.
+        ///
+        /// Which means a ban can fail for a reason that has nothing to do with
+        /// permissions: there was nothing to name.
+        /// </remarks>
+        [Test]
+        public async Task AKickIsARoleTakenAwayAndABanIsNot()
+        {
+
+            await JoinAsync();
+
+            Assert.That(await _muc.KickAsync(Room, "bob", "Enough of that."), Is.True);
+            Assert.That(await _muc.BanAsync(Room, JID.Parse("bob@example.org"), "For good."), Is.True);
+
+            Assert.That(_asked.TryDequeue(out var kick), Is.True, "The kick was not asked for.");
+            Assert.That(_asked.TryDequeue(out var ban),  Is.True, "The ban was not asked for.");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(kick!.ToString(), Does.Contain("nick=\"bob\""),
+                            "A kick names the nickname - that is what identifies somebody inside " +
+                            "the visit.");
+
+                Assert.That(kick.ToString(), Does.Contain("role=\"none\""));
+
+                Assert.That(kick.ToString(), Does.Contain("Enough of that."));
+
+                Assert.That(ban!.ToString(), Does.Contain("jid=\"bob@example.org\""),
+                            "A ban names the real address - an affiliation outlives the visit, so " +
+                            "a nickname would identify nobody.");
+
+                Assert.That(ban.ToString(), Does.Contain("affiliation=\"outcast\""));
+
+            });
+
+        }
+
+        #endregion
+
+        #region ARefusedKickIsNotAKick()
+
+        /// <summary>
+        /// Not being a moderator is the ordinary case, not an exception.
+        /// </summary>
+        /// <remarks>
+        /// The answer to a kick is an IQ result or an IQ error, and a client
+        /// that does not look reports success for something that did not
+        /// happen - the person is still in the room and the interface says
+        /// otherwise.
+        /// </remarks>
+        [Test]
+        public async Task ARefusedKickIsNotAKick()
+        {
+
+            await JoinAsync();
+
+            _answer = "error";
+
+            Assert.Multiple(async () =>
+            {
+                Assert.That(await _muc.KickAsync(Room, "bob"), Is.False);
+                Assert.That(await _muc.SetRoleAsync(Room, "bob", MucRole.Visitor), Is.False);
+            });
+
+        }
+
+        #endregion
+
+        #region ModeratingARoomOneIsNotInDoesNothing()
+
+        /// <summary>
+        /// Nothing goes out for a room this client was never in.
+        /// </summary>
+        [Test]
+        public async Task ModeratingARoomOneIsNotInDoesNothing()
+        {
+
+            Assert.Multiple(async () =>
+            {
+                Assert.That(await _muc.KickAsync(Room, "bob"),                            Is.False);
+                Assert.That(await _muc.BanAsync(Room, JID.Parse("bob@example.org")),      Is.False);
+                Assert.That(await _muc.InviteAsync(Room, JID.Parse("bob@example.org")),   Is.False);
+                Assert.That(_asked.IsEmpty, Is.True, "A room nobody is in was asked something.");
+                Assert.That(_sent.IsEmpty,  Is.True, "Something was sent to a room nobody is in.");
+            });
+
+        }
+
+        #endregion
+
+        #region AnInvitationArrivesFromARoomNobodyIsIn()
+
+        /// <summary>
+        /// The one thing a room says about a room this client has not entered.
+        /// </summary>
+        /// <remarks>
+        /// <b>And therefore the one that the usual question cannot recognise.</b>
+        /// Everything else from a room is identified by asking whether we
+        /// entered it; for an invitation the answer is always no. Whoever asks
+        /// first and reads afterwards can never be invited anywhere.
+        ///
+        /// The <c>from</c> of the stanza is the room; who is asking stands in
+        /// the <c>&lt;invite/&gt;</c>. Taking the outer one for the inviter
+        /// addresses every refusal to the room, which forwards it to nobody.
+        /// </remarks>
+        [Test]
+        public async Task AnInvitationArrivesFromARoomNobodyIsIn()
+        {
+
+            MucInvitation? invitation = null;
+            _muc.OnRoomInvitation += (t, s, i, ct) => { invitation = i; return Task.CompletedTask; };
+
+            var from = JID.Parse(Room.ToString());
+
+            var handled = await _muc.ProcessMessageAsync(
+                XElement.Parse($"<message xmlns='jabber:client' from='{Room}' to='me@example/home'>" +
+                                   "<x xmlns='http://jabber.org/protocol/muc#user'>" +
+                                       "<invite from='alice@example.org/home'>" +
+                                           "<reason>Come along</reason>" +
+                                       "</invite>" +
+                                       "<password>sesame</password>" +
+                                   "</x>" +
+                               "</message>"), from);
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(handled, Is.True);
+
+                Assert.That(_muc.IsRoom(Room), Is.False,
+                            "Being invited is not being in the room.");
+
+                Assert.That(invitation, Is.Not.Null, "Nobody was told about the invitation.");
+
+                Assert.That(invitation!.Room, Is.EqualTo(Room));
+
+                Assert.That(invitation.From.ToString(), Is.EqualTo("alice@example.org/home"),
+                            "The room was taken for the inviter, so a refusal would go to nobody.");
+
+                Assert.That(invitation.Reason,   Is.EqualTo("Come along"));
+
+                Assert.That(invitation.Password, Is.EqualTo("sesame"),
+                            "Without the password an invitation into a protected room is one " +
+                            "nobody can act on.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AnInviterMayBeNamedEitherWay()
+
+        /// <summary>
+        /// The two real services name the inviter differently, and both have to
+        /// work.
+        /// </summary>
+        /// <remarks>
+        /// <b>Found against the far sides, not read out of the specification.</b>
+        /// XEP-0045 section 7.8.2 shows the inviter's real address, and ejabberd
+        /// sends that; Prosody sends the occupant address
+        /// <c>room@service/nick</c>, which says who asked without saying who
+        /// that is. For a semi-anonymous room the second is the more careful
+        /// answer and the first is what the example prints.
+        ///
+        /// Neither breaks a refusal - the room routes it either way. What
+        /// breaks is a client that assumes one of them, so the shape is
+        /// reported rather than normalised.
+        /// </remarks>
+        [Test]
+        public async Task AnInviterMayBeNamedEitherWay()
+        {
+
+            var seen = new ConcurrentQueue<MucInvitation>();
+            _muc.OnRoomInvitation += (t, s, i, ct) => { seen.Enqueue(i); return Task.CompletedTask; };
+
+            foreach (var inviter in new[] { "alice@example.org/home", $"{Room}/alice" })
+                await _muc.ProcessMessageAsync(
+                    XElement.Parse($"<message xmlns='jabber:client' from='{Room}' to='me@example/home'>" +
+                                       "<x xmlns='http://jabber.org/protocol/muc#user'>" +
+                                           $"<invite from='{inviter}'/>" +
+                                       "</x>" +
+                                   "</message>"), Room);
+
+            var both = seen.ToArray();
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(both, Has.Length.EqualTo(2), "One of the two forms was not recognised.");
+
+                Assert.That(both[0].FromAnOccupantAddress, Is.False);
+                Assert.That(both[0].From.Bare.ToString(),  Is.EqualTo("alice@example.org"));
+
+                Assert.That(both[1].FromAnOccupantAddress, Is.True,
+                            "An inviter named by their address in the room was taken for a real " +
+                            "address, so an interface would show a room where a person belongs.");
+
+                Assert.That(both[1].From.Resourcepart, Is.EqualTo("alice"),
+                            "In that shape the nickname is the only name there is.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region DecliningGoesToThePersonThroughTheRoom()
+
+        /// <summary>
+        /// A refusal is addressed to whoever asked, and travels through the
+        /// room.
+        /// </summary>
+        /// <remarks>
+        /// Declining is the one thing done for a room one is <b>not</b> in, so
+        /// it asks the room table nothing - it is what happens instead of
+        /// entering.
+        /// </remarks>
+        [Test]
+        public async Task DecliningGoesToThePersonThroughTheRoom()
+        {
+
+            Assert.That(await _muc.DeclineAsync(Room, JID.Parse("alice@example.org"), "Another time"),
+                        Is.True,
+                        "A room one is not in is exactly the case where declining happens.");
+
+            Assert.That(_sent.TryDequeue(out var message), Is.True);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(message, Does.Contain("to='chat@conference.example'"));
+                Assert.That(message, Does.Contain("<decline to='alice@example.org'>"));
+                Assert.That(message, Does.Contain("Another time"));
             });
 
         }

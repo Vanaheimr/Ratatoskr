@@ -400,6 +400,18 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>XEP-0045: the subject of a room.</summary>
     public event OnRoomSubjectDelegate?      OnRoomSubject;
 
+    /// <summary>
+    /// XEP-0045: somebody wants us in a room we are not in.
+    /// </summary>
+    /// <remarks>
+    /// The one thing a room says about a room this client has not entered. An
+    /// application that ignores it cannot be invited anywhere.
+    /// </remarks>
+    public event OnRoomInvitationDelegate?      OnRoomInvitation;
+
+    /// <summary>XEP-0045: somebody we invited is not coming.</summary>
+    public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
+
     #endregion
 
     /// <summary>
@@ -625,6 +637,12 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnRoomSubject      += async (timestamp, sender, room, subject, by, ct)
             => await OnRoomSubject.    InvokeAllAsync(handler => handler(timestamp, sender, room, subject, by, ct), _logger);
+
+        _connection.OnRoomInvitation      += async (timestamp, sender, invitation, ct)
+            => await OnRoomInvitation.    InvokeAllAsync(handler => handler(timestamp, sender, invitation, ct), _logger);
+
+        _connection.OnInvitationDeclined  += async (timestamp, sender, declined, ct)
+            => await OnInvitationDeclined.InvokeAllAsync(handler => handler(timestamp, sender, declined, ct), _logger);
 
         _connection.OnChatState += async (timestamp, sender, from, state, ct)
             => await OnChatState.InvokeAllAsync(handler => handler(timestamp, this, from, state, ct), _logger);
@@ -1019,6 +1037,78 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </summary>
     public Task<bool> SetRoomSubjectAsync(JID room, string subject)
         => _connection.Muc?.SetSubjectAsync(room, subject) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 9.2: throws somebody out of a room for this visit.
+    /// </summary>
+    /// <remarks>
+    /// They may come back: a kick takes away a role, and a role lasts only as
+    /// long as somebody is in the room. That is also why a nickname is enough
+    /// here and not enough for <see cref="BanFromRoomAsync"/>.
+    /// </remarks>
+    public Task<bool> KickFromRoomAsync(JID                room,
+                                        string             nick,
+                                        string?            reason             = null,
+                                        CancellationToken  cancellationToken  = default)
+        => _connection.Muc?.KickAsync(room, nick, reason, cancellationToken) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 9.1: keeps somebody out of a room for good.
+    /// </summary>
+    /// <remarks>
+    /// <b>Needs their real address</b>, which an ordinary room gives only to its
+    /// moderators - so this can fail for a reason that has nothing to do with
+    /// permissions. <see cref="MucOccupant.RealJid"/> being null is where that
+    /// shows, and there is nothing this library can do about it: an affiliation
+    /// outlives the visit, so it has to name somebody who exists outside it.
+    /// </remarks>
+    public Task<bool> BanFromRoomAsync(JID                room,
+                                       JID                jid,
+                                       string?            reason             = null,
+                                       CancellationToken  cancellationToken  = default)
+        => _connection.Muc?.BanAsync(room, jid, reason, cancellationToken) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 8: what somebody may do in a room while they are in it.
+    /// </summary>
+    public Task<bool> SetRoomRoleAsync(JID                room,
+                                       string             nick,
+                                       MucRole            role,
+                                       string?            reason             = null,
+                                       CancellationToken  cancellationToken  = default)
+        => _connection.Muc?.SetRoleAsync(room, nick, role, reason, cancellationToken) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 9: what somebody is to a room, beyond this visit.
+    /// </summary>
+    public Task<bool> SetRoomAffiliationAsync(JID                room,
+                                              JID                jid,
+                                              MucAffiliation     affiliation,
+                                              string?            reason             = null,
+                                              CancellationToken  cancellationToken  = default)
+        => _connection.Muc?.SetAffiliationAsync(room, jid, affiliation, reason, cancellationToken) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 7.8.1: asks somebody into a room, through the room.
+    /// </summary>
+    /// <remarks>
+    /// Through the room and not straight to the person: an invitation the room
+    /// forwarded is one the room will honour, and it can put the invitee on the
+    /// member list on the way. One sent directly is a stranger's word about a
+    /// room they have never heard of.
+    /// </remarks>
+    public Task<bool> InviteToRoomAsync(JID room, JID who, string? reason = null)
+        => _connection.Muc?.InviteAsync(room, who, reason) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 7.8.2: says no to an invitation.
+    /// </summary>
+    /// <remarks>
+    /// Addressed to whoever asked, sent through the room. A refusal sent to the
+    /// room itself is delivered to nobody.
+    /// </remarks>
+    public Task<bool> DeclineInvitationAsync(JID room, JID inviter, string? reason = null)
+        => _connection.Muc?.DeclineAsync(room, inviter, reason) ?? Task.FromResult(false);
 
     /// <summary>
     /// Says something in a room.

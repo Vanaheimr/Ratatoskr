@@ -822,6 +822,12 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>XEP-0045: the subject of a room.</summary>
     public event OnRoomSubjectDelegate?      OnRoomSubject;
 
+    /// <summary>XEP-0045: somebody wants us in a room we are not in.</summary>
+    public event OnRoomInvitationDelegate?      OnRoomInvitation;
+
+    /// <summary>XEP-0045: somebody we invited is not coming.</summary>
+    public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
+
     #endregion
 
     #region Constructor(s)
@@ -1615,7 +1621,13 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         // XEP-0045: the rooms. Built here with the others, and asked before the
         // roster ever sees a presence.
-        Muc = new MucManager(xml => SendAsync(xml), CreateLogger<MucManager>());
+        // The second delegate is the one moderating needs: a kick either happened
+        // or was refused, and that answer only exists as an IQ result or an IQ
+        // error. Everything else a client does with a room is announced rather
+        // than asked.
+        Muc = new MucManager(xml => SendAsync(xml),
+                             (to, type, payload, ct) => SendIqAsync(to, type, payload, ct),
+                             CreateLogger<MucManager>());
 
         Muc.OnRoomJoined       += async (timestamp, sender, room, ct)
             => await OnRoomJoined.     InvokeAllAsync(handler => handler(timestamp, sender, room, ct), _logger);
@@ -1637,6 +1649,12 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         Muc.OnRoomSubject      += async (timestamp, sender, room, subject, by, ct)
             => await OnRoomSubject.    InvokeAllAsync(handler => handler(timestamp, sender, room, subject, by, ct), _logger);
+
+        Muc.OnRoomInvitation      += async (timestamp, sender, invitation, ct)
+            => await OnRoomInvitation.    InvokeAllAsync(handler => handler(timestamp, sender, invitation, ct), _logger);
+
+        Muc.OnInvitationDeclined  += async (timestamp, sender, declined, ct)
+            => await OnInvitationDeclined.InvokeAllAsync(handler => handler(timestamp, sender, declined, ct), _logger);
 
         // XEP-0115: Entity Capabilities
         EntityCaps = new EntityCapsManager(Disco, CreateLogger<EntityCapsManager>());

@@ -62,6 +62,18 @@ public delegate Task OnOccupantRenamedDelegate   (DateTimeOffset     Timestamp,
                                                   Boolean            IsSelf,
                                                   CancellationToken  CancellationToken);
 
+/// <summary>XEP-0045: somebody wants us in a room we are not in.</summary>
+public delegate Task OnRoomInvitationDelegate    (DateTimeOffset     Timestamp,
+                                                  MucManager         Sender,
+                                                  MucInvitation      Invitation,
+                                                  CancellationToken  CancellationToken);
+
+/// <summary>XEP-0045: somebody we invited is not coming.</summary>
+public delegate Task OnInvitationDeclinedDelegate(DateTimeOffset     Timestamp,
+                                                  MucManager         Sender,
+                                                  MucDecline         Decline,
+                                                  CancellationToken  CancellationToken);
+
 /// <summary>XEP-0045: the subject of a room.</summary>
 public delegate Task OnRoomSubjectDelegate       (DateTimeOffset     Timestamp,
                                                   MucManager         Sender,
@@ -123,6 +135,19 @@ public sealed class MucManager
     #region Data
 
     private readonly Func<string, Task>                                  _send;
+
+    /// <summary>
+    /// The way to ask a room something and hear an answer.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <c>_send</c> because moderating is the one half of this
+    /// extension that is a request rather than an announcement: a kick either
+    /// happened or was refused, and the difference arrives as an IQ result or an
+    /// IQ error. Everything else a client does with a room is a presence or a
+    /// message, which nobody answers.
+    /// </remarks>
+    private readonly Func<JID, string, XElement, CancellationToken, Task<XElement?>>?  _ask;
+
     private readonly ILogger                                             _logger;
     private readonly Dictionary<JID, MucRoom>                            _rooms    = [];
     private readonly Dictionary<JID, TaskCompletionSource<MucJoinOutcome>>  _joining = [];
@@ -144,15 +169,19 @@ public sealed class MucManager
     public event OnOccupantDelegate?         OnOccupantLeft;
     public event OnOccupantRenamedDelegate?  OnOccupantRenamed;
     public event OnRoomSubjectDelegate?      OnRoomSubject;
+    public event OnRoomInvitationDelegate?      OnRoomInvitation;
+    public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
 
     #endregion
 
     #region Constructor
 
-    public MucManager(Func<string, Task>  sendStanza,
-                      ILogger?            logger = null)
+    public MucManager(Func<string, Task>                                                 sendStanza,
+                      Func<JID, string, XElement, CancellationToken, Task<XElement?>>?   askRoom = null,
+                      ILogger?                                                           logger  = null)
     {
         _send    = sendStanza;
+        _ask     = askRoom;
         _logger  = logger ?? NullLogger.Instance;
     }
 
@@ -337,6 +366,130 @@ public sealed class MucManager
 
     #endregion
 
+    #region Moderating, and inviting
+
+    /// <summary>
+    /// XEP-0045, section 8: changes what somebody may do while they are here.
+    /// </summary>
+    /// <param name="nick">Whom - by their name in this room.</param>
+    /// <param name="role">
+    /// <see cref="MucRole.None"/> removes them from the room; see
+    /// <see cref="KickAsync"/>, which is the same thing under the name people
+    /// look for.
+    /// </param>
+    /// <returns>
+    /// Whether the service did it. False for a refusal - not being a moderator
+    /// is the usual one - and for no answer at all.
+    /// </returns>
+    public async Task<bool> SetRoleAsync(JID                room,
+                                         string             nick,
+                                         MucRole            role,
+                                         string?            reason             = null,
+                                         CancellationToken  cancellationToken  = default)
+    {
+
+        if (_ask is null || Room(room) is null)
+            return false;
+
+        var answer = await _ask(room.Bare, "set",
+                                MultiUserChat.RoleQuery(nick, role, reason),
+                                cancellationToken);
+
+        return answer?.Attr("type") == "result";
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 9: changes what somebody is to the room, beyond this
+    /// visit.
+    /// </summary>
+    /// <param name="jid">
+    /// Whom - by their <b>real</b> address, which an ordinary room does not
+    /// give out. See <see cref="MultiUserChat.AffiliationQuery"/>.
+    /// </param>
+    public async Task<bool> SetAffiliationAsync(JID                room,
+                                                JID                jid,
+                                                MucAffiliation     affiliation,
+                                                string?            reason             = null,
+                                                CancellationToken  cancellationToken  = default)
+    {
+
+        if (_ask is null || Room(room) is null)
+            return false;
+
+        var answer = await _ask(room.Bare, "set",
+                                MultiUserChat.AffiliationQuery(jid, affiliation, reason),
+                                cancellationToken);
+
+        return answer?.Attr("type") == "result";
+
+    }
+
+    /// <summary>
+    /// Throws somebody out of the room for this visit (section 9.2).
+    /// </summary>
+    /// <remarks>
+    /// They may come back. A kick is a role taken away, and a role only lasts
+    /// as long as somebody is in the room - which is exactly the difference
+    /// from <see cref="BanAsync"/>, and the reason a kick needs only a
+    /// nickname.
+    /// </remarks>
+    public Task<bool> KickAsync(JID                room,
+                                string             nick,
+                                string?            reason             = null,
+                                CancellationToken  cancellationToken  = default)
+
+        => SetRoleAsync(room, nick, MucRole.None, reason, cancellationToken);
+
+    /// <summary>
+    /// Keeps somebody out of the room for good (section 9.1).
+    /// </summary>
+    /// <remarks>
+    /// <b>Needs their real address</b>, and in a semi-anonymous room only a
+    /// moderator is given it. So a ban can fail for a reason that has nothing to
+    /// do with permissions - there was nothing to name - and
+    /// <see cref="MucOccupant.RealJid"/> being null is where that shows.
+    /// </remarks>
+    public Task<bool> BanAsync(JID                room,
+                               JID                jid,
+                               string?            reason             = null,
+                               CancellationToken  cancellationToken  = default)
+
+        => SetAffiliationAsync(room, jid, MucAffiliation.Outcast, reason, cancellationToken);
+
+    /// <summary>
+    /// XEP-0045, section 7.8.1: asks somebody into a room, through the room.
+    /// </summary>
+    /// <returns>false when this client is not in that room.</returns>
+    public async Task<bool> InviteAsync(JID room, JID who, string? reason = null)
+    {
+
+        if (Room(room) is null)
+            return false;
+
+        await _send(MultiUserChat.InviteXml(room, who, reason));
+        return true;
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 7.8.2: says no to an invitation.
+    /// </summary>
+    /// <remarks>
+    /// The one thing here that is done for a room one is <b>not</b> in - so
+    /// unlike everything else it asks the room table nothing. Declining is
+    /// what happens instead of entering.
+    /// </remarks>
+    public async Task<bool> DeclineAsync(JID room, JID inviter, string? reason = null)
+    {
+
+        await _send(MultiUserChat.DeclineXml(room, inviter, reason));
+        return true;
+
+    }
+
+    #endregion
+
     #region What comes back
 
     /// <summary>
@@ -486,6 +639,29 @@ public sealed class MucManager
                                                 JID                from,
                                                 CancellationToken  cancellationToken = default)
     {
+
+        // Before the room table, and that is the whole difficulty of it: an
+        // invitation is the one thing a room says about a room this client is
+        // not in, so the question everything else here is recognised by -
+        // "have we entered this one" - answers no for the very message that
+        // matters.
+        if (MultiUserChat.Invitation(message) is MucInvitation invitation)
+        {
+
+            await OnRoomInvitation.InvokeAllAsync(handler => handler(Timestamp.Now, this, invitation,
+                                                                     cancellationToken), _logger);
+            return true;
+
+        }
+
+        if (MultiUserChat.Decline(message) is MucDecline declined)
+        {
+
+            await OnInvitationDeclined.InvokeAllAsync(handler => handler(Timestamp.Now, this, declined,
+                                                                         cancellationToken), _logger);
+            return true;
+
+        }
 
         var room = Room(from);
 
