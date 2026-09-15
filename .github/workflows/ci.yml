@@ -151,13 +151,13 @@ jobs:
       # where the setups that produce those far sides have always lived. So a
       # hosted runner can execute all of it.
       #
-      # Expect 1255 tests, and the two legs owe different numbers, which is the
+      # Expect 1257 tests, and the two legs owe different numbers, which is the
       # one thing worth reading carefully here:
       #
-      #   windows-latest       1252 passed, 3 skipped
-      #   debian-13-container  1254 passed, 1 skipped
+      #   windows-latest       1254 passed, 3 skipped
+      #   debian-13-container  1256 passed, 1 skipped
       #
-      # Measured at 112ce3c, on both legs. The revision is named because naming
+      # Measured at b2caf44, on both legs. The revision is named because naming
       # it costs nothing and does not rot: it cannot keep these numbers current,
       # but it lets a reader see how far behind they are without first having to
       # learn the history of the suite.

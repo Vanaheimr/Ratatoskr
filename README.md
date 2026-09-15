@@ -623,12 +623,12 @@ RatatoskrTests/
 foreign implementation — Prosody, ejabberd and python-omemo as a reference —
 lives in the XMPPConformanceTests project, where the setups that produce those
 far sides have always lived. A checkout of this repository alone therefore runs
-all of it — 1255 tests, of which the platform decides how many get an answer:
+all of it — 1257 tests, of which the platform decides how many get an answer:
 
 | Platform | passed | skipped |
 |----------|-------:|--------:|
-| Windows | 1252 | 3 |
-| Debian 13 | 1254 | 1 |
+| Windows | 1254 | 3 |
+| Debian 13 | 1256 | 1 |
 
 The skip both share checks a property which exists only in STARTTLS operation,
 and the fixture is parameterised over the TLS modes, so in the other one the
@@ -646,8 +646,9 @@ security review was worked through, at 1163 until XEP-0474 came in, at 1171
 until channel binding did, at 1181 until SASL2, at 1188 until the upgrade
 tasks, at 1194 until Bind 2, at 1201 until the JID became a type, at 1223 until
 the OMEMO work of 03c44d7 and ca8bce3, at 1226 until an IQ of one's own could be
-registered and sent and at 1231 until a message could answer a particular other
-one, and a figure nobody updates stops being a check and becomes decoration.
+registered and sent, at 1231 until a message could answer a particular other one
+and at 1252 until a stream error could no longer go missing on the way, and a
+figure nobody updates stops being a check and becomes decoration.
 
 The step from 1201 is the one to read carefully, because it is the one where
 that happened. The JID conversion is what the entry names, and it is not the
