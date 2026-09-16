@@ -1048,6 +1048,51 @@ public sealed class XMPPClient : IAsyncDisposable
 
     }
 
+    #region XEP-0084: avatars
+
+    /// <summary>
+    /// XEP-0084: publishes a picture - the data first, then what it is.
+    /// </summary>
+    /// <remarks>
+    /// The order is not a detail: the metadata is what subscribers are told,
+    /// and the first thing they do on being told is fetch the data by id.
+    /// </remarks>
+    public Task<AvatarInfo?> PublishAvatarAsync(Byte[]             image,
+                                                String             type,
+                                                Int32?             width   = null,
+                                                Int32?             height  = null,
+                                                CancellationToken  ct      = default)
+        => _connection.PublishAvatarAsync(image, type, width, height, ct);
+
+    /// <summary>
+    /// XEP-0084, section 4: takes the picture down.
+    /// </summary>
+    public Task<Boolean> RemoveAvatarAsync(CancellationToken ct = default)
+        => _connection.RemoveAvatarAsync(ct);
+
+    /// <summary>
+    /// XEP-0084: what somebody says their picture is - without the picture.
+    /// </summary>
+    /// <remarks>
+    /// An empty list is an answer (no avatar); null is not (the question could
+    /// not be asked). A caller choosing between a placeholder and a retry needs
+    /// the difference.
+    /// </remarks>
+    public Task<IReadOnlyList<AvatarInfo>?> FetchAvatarInfoAsync(JID                bareJid,
+                                                                 CancellationToken  ct = default)
+        => _connection.FetchAvatarInfoAsync(bareJid, ct);
+
+    /// <summary>
+    /// XEP-0084: fetches the picture itself, checked against the id it was
+    /// fetched under.
+    /// </summary>
+    public Task<Avatar?> FetchAvatarAsync(JID                bareJid,
+                                          AvatarInfo         info,
+                                          CancellationToken  ct = default)
+        => _connection.FetchAvatarAsync(bareJid, info, ct);
+
+    #endregion
+
     /// <summary>
     /// XEP-0454 and XEP-0363: sends a file the storage service cannot read.
     /// </summary>

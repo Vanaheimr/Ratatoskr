@@ -175,6 +175,20 @@ public delegate Task OnXMPPConnectionOmemoDeviceListChangedDelegate     (DateTim
                                                                          CancellationToken  CancellationToken);
 
 /// <summary>
+/// XEP-0084: somebody's picture changed, or was taken down.
+/// </summary>
+/// <param name="Avatars">
+/// What was announced. <b>An empty list means the picture was removed</b> -
+/// which is not the same as never having heard of one, and a client that
+/// confuses them keeps showing a face somebody took down.
+/// </param>
+public delegate Task OnXMPPConnectionAvatarChangedDelegate              (DateTimeOffset             Timestamp,
+                                                                         XMPPConnection             Sender,
+                                                                         JID                        BareJid,
+                                                                         IReadOnlyList<AvatarInfo>  Avatars,
+                                                                         CancellationToken          CancellationToken);
+
+/// <summary>
 /// XEP-0384: a message that arrived encrypted, already decrypted.
 /// </summary>
 public delegate Task OnXMPPConnectionEncryptedMessageDelegate           (DateTimeOffset     Timestamp,
@@ -4075,6 +4089,33 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
+    /// <summary>
+    /// Fetches the newest item of a PEP node, whatever it is called.
+    /// </summary>
+    /// <remarks>
+    /// For the nodes whose item id is not known beforehand. XEP-0084's metadata
+    /// node is one: its item is named after the picture, so asking for it by
+    /// name would mean knowing the answer before asking.
+    /// </remarks>
+    private async Task<XElement?> FetchPepLatestAsync(JID                bareJid,
+                                                      String             node,
+                                                      CancellationToken  ct)
+    {
+
+        var id       = $"pep-{Interlocked.Increment(ref _pepCounter)}";
+        var response = await SendIqAsync(id, OmemoPep.FetchIq(id, bareJid.ToString(), node), ct,
+                                         expectedFrom: bareJid);
+
+        if (response is null || response.Attr("type") != "result")
+            return null;
+
+        return response.Child(OmemoPep.PubSubNamespace, "pubsub")
+                      ?.Child(OmemoPep.PubSubNamespace, "items")
+                      ?.Elements().LastOrDefault(e => e.Name.LocalName == "item")
+                      ?.Elements().FirstOrDefault();
+
+    }
+
     private async Task<XElement?> FetchPepAsync(JID                bareJid,
                                                 string             node,
                                                 string             itemId,
@@ -4127,6 +4168,18 @@ public sealed class XMPPConnection : IAsyncDisposable
         var items = stanza.Child("http://jabber.org/protocol/pubsub#event", "event")
                          ?.Child("http://jabber.org/protocol/pubsub#event", "items");
 
+        // XEP-0084: somebody's picture changed. The metadata node is the one
+        // that gets pushed - a few bytes saying what the picture is - and the
+        // picture itself is fetched by id, by whoever does not have it. That
+        // split is the whole design: three hundred contacts and a new
+        // photograph is three hundred short notices, not three hundred
+        // photographs.
+        if (items?.Attr("node") == UserAvatar.MetadataNode)
+        {
+            await ProcessAvatarEventAsync(items, from);
+            return;
+        }
+
         if (items?.Attr("node") != OmemoDeviceList.Node)
             return;
 
@@ -4149,6 +4202,173 @@ public sealed class XMPPConnection : IAsyncDisposable
         await PublishOmemoDeviceListAsync(list.With(new OmemoDevice(own)));
 
     }
+
+    #region XEP-0084: avatars
+
+    /// <summary>
+    /// XEP-0084: somebody's picture changed - or was taken down.
+    /// </summary>
+    /// <remarks>
+    /// <b>The picture is not here.</b> What arrives is what was announced, and
+    /// fetching the bytes is a second round trip that only makes sense for a
+    /// client that does not already have this id - which is what the id is for.
+    /// An empty list means the avatar was removed, which is a different thing
+    /// from never having heard of one.
+    /// </remarks>
+    public event OnXMPPConnectionAvatarChangedDelegate? OnAvatarChanged;
+
+    /// <summary>
+    /// XEP-0084: a metadata item arrived through PEP.
+    /// </summary>
+    private async Task ProcessAvatarEventAsync(XElement items, String from)
+    {
+
+        var payload = items.Elements().FirstOrDefault(e => e.Name.LocalName == "item")
+                          ?.Elements().FirstOrDefault();
+
+        if (payload is null)
+            return;
+
+        // Three cases and not two, and this used to have two.
+        //
+        // An empty <metadata/> means the picture was taken down and has to
+        // travel as something: a node left alone goes on announcing the old
+        // picture, so removal cannot arrive as silence. An item with entries
+        // means a new picture. And an item that is neither - a payload from
+        // some other namespace, or a <metadata/> whose entries are all
+        // unreadable - means nothing is known, and the right answer is to
+        // leave whatever is on the screen alone.
+        //
+        // The first version of this said exactly that in a comment and did not
+        // do it: both branches ended at an empty list, so an unreadable item
+        // arrived as "this person has no picture". A mutation that removed the
+        // distinction survived the whole suite, which is how it came out - the
+        // distinction was not there to remove.
+        var removed = UserAvatar.IsNoAvatar(payload);
+        var infos   = removed ? [] : UserAvatar.InfosIn(payload);
+
+        if (!removed && infos.Count == 0)
+        {
+            _logger.LogDebug("XEP-0084: an announcement from {From} that says nothing", from);
+            return;
+        }
+
+        await OnAvatarChanged.InvokeAllAsync(
+                  handler => handler(Timestamp.Now, this,
+                                     JID.Parse(JID.BareTextOf(from)), infos, ConnectionToken),
+                  _logger);
+
+    }
+
+    /// <summary>
+    /// XEP-0084: publishes a picture - the data first, then what it is.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="type">Its media type.</param>
+    /// <remarks>
+    /// <b>The order is not a detail.</b> The metadata is what everybody
+    /// subscribed is told, and the first thing a client does on being told is
+    /// fetch the data by id. Publishing the metadata first means every
+    /// subscriber asks for a picture that is not there yet - and a client that
+    /// caches the miss shows nothing until the next change.
+    ///
+    /// Both have to succeed. A data item without metadata is a picture nobody
+    /// is told about, which is only wasted space; metadata without data is the
+    /// case above, so the metadata is not sent when the data did not go.
+    /// </remarks>
+    public async Task<AvatarInfo?> PublishAvatarAsync(Byte[]             image,
+                                                      String             type,
+                                                      Int32?             width   = null,
+                                                      Int32?             height  = null,
+                                                      CancellationToken  ct      = default)
+    {
+
+        var info = UserAvatar.Describe(image, type, width, height);
+
+        if (!await PublishPepAsync(UserAvatar.DataNode, info.Id, UserAvatar.DataItem(image), ct))
+        {
+            _logger.LogWarning("XEP-0084: the picture itself could not be published; " +
+                               "the announcement is left unsent");
+            return null;
+        }
+
+        return await PublishPepAsync(UserAvatar.MetadataNode, info.Id,
+                                     UserAvatar.MetadataItem(info), ct)
+                   ? info
+                   : null;
+
+    }
+
+    /// <summary>
+    /// XEP-0084, section 4: takes the picture down.
+    /// </summary>
+    /// <remarks>
+    /// An empty <c>&lt;metadata/&gt;</c>, and the data node is left alone -
+    /// which is what the specification asks for. Retracting the data as well
+    /// would be tidier and would break every client that is still showing the
+    /// old picture from its cache while it works out what happened.
+    /// </remarks>
+    public Task<Boolean> RemoveAvatarAsync(CancellationToken ct = default)
+
+        => PublishPepAsync(UserAvatar.MetadataNode, "remove", UserAvatar.NoAvatarItem(), ct);
+
+    /// <summary>
+    /// XEP-0084: fetches what somebody says their picture is.
+    /// </summary>
+    /// <remarks>
+    /// An empty list is an answer - that person has no avatar - and null is
+    /// not: null says the question could not be asked. A caller deciding
+    /// whether to show a placeholder or to try again needs the difference.
+    /// </remarks>
+    public async Task<IReadOnlyList<AvatarInfo>?> FetchAvatarInfoAsync(JID                bareJid,
+                                                                       CancellationToken  ct = default)
+    {
+
+        var content = await FetchPepLatestAsync(bareJid, UserAvatar.MetadataNode, ct);
+
+        if (content is null)
+            return null;
+
+        return UserAvatar.IsNoAvatar(content)
+                   ? []
+                   : UserAvatar.InfosIn(content);
+
+    }
+
+    /// <summary>
+    /// XEP-0084: fetches the picture itself.
+    /// </summary>
+    /// <remarks>
+    /// <b>The bytes are checked against the id they were fetched under</b>, and
+    /// come back null when they do not hash to it. Not because that makes the
+    /// picture trustworthy - the publisher controls both nodes - but because the
+    /// id is what everything downstream caches by: bytes filed under an id they
+    /// do not hash to would be shown for every later avatar that really has it.
+    /// </remarks>
+    public async Task<Avatar?> FetchAvatarAsync(JID                bareJid,
+                                                AvatarInfo         info,
+                                                CancellationToken  ct = default)
+    {
+
+        var content = await FetchPepAsync(bareJid, UserAvatar.DataNode, info.Id, ct);
+
+        if (content is null)
+            return null;
+
+        var image = UserAvatar.DataIn(content, info);
+
+        if (image is null)
+        {
+            _logger.LogWarning("XEP-0084: the picture {Id} of {Jid} is not the one that was announced",
+                               info.Id, bareJid);
+            return null;
+        }
+
+        return new Avatar(info, image);
+
+    }
+
+    #endregion
 
     /// <summary>
     /// XEP-0384: the OMEMO manager, as soon as it is switched on.

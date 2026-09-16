@@ -126,6 +126,17 @@ public sealed class DiscoManager
         // whether the invitation will mean anything.
         "http://jabber.org/protocol/muc",
 
+        // XEP-0084 over XEP-0163, and the "+notify" is the whole of it: a
+        // server pushes a PEP node to a contact only if that contact's caps
+        // say they want it. Without this line nothing here would ever learn
+        // that somebody changed their picture - not through an error, but
+        // through silence, which is the harder kind to notice.
+        //
+        // Only the metadata node. The data node is fetched by id, by whoever
+        // does not have it; being pushed the picture itself would defeat the
+        // split the extension is built around.
+        "urn:xmpp:avatar:metadata+notify",
+
         // XEP-0066, and only this one of the two: it says a message about a
         // file will be recognised as one rather than shown as a line of text.
         //
