@@ -125,9 +125,11 @@ public sealed record MucJoinOutcome(MucRoom? Room, StanzaError? Refusal)
 /// has entered - which is why the rooms are held here and asked before the
 /// roster ever sees the stanza.
 ///
-/// What is implemented is the visiting half of XEP-0045: entering, being there,
-/// following who else is, and leaving. Configuring rooms, moderating them and
-/// inviting people are not - see the README for what that leaves out.
+/// What is implemented is entering a room, being there, following who else is,
+/// leaving, moderating (D117) and, since D125, the part of the owner protocol
+/// that decides whether a room can be encrypted in at all:
+/// <c>muc#roomconfig_whois</c>. Destroying a room and the affiliation lists are
+/// not here - see the README for what that leaves out.
 /// </remarks>
 public sealed class MucManager
 {
@@ -675,6 +677,48 @@ public sealed class MucManager
         }
 
         var room = Room(from);
+
+        // XEP-0045, section 10.2.1: the room's configuration changed. It comes
+        // as a message carrying nothing but status codes, which is why a client
+        // watching presences for what a room is never hears about it - ours did
+        // not until the OMEMO-in-rooms lane went looking.
+        //
+        // 172 and 322 are the two that change what this client may do: whether
+        // the room names its occupants decides whether anything in it can be
+        // encrypted at all. 104 says something else changed and does not say
+        // what.
+        if (room is not null &&
+            message.Child("body")    is null &&
+            message.Child("subject") is null &&
+            MultiUserChat.UserInfo(message) is MucUserInfo info &&
+            info.Status.Count > 0)
+        {
+
+            if (info.Has(MucStatus.NowNonAnonymous))
+                room.IsNonAnonymous = true;
+
+            if (info.Has(MucStatus.SemiAnonymous))
+                room.IsNonAnonymous = false;
+
+            if (info.Has(MucStatus.NowNonAnonymous) ||
+                info.Has(MucStatus.SemiAnonymous)   ||
+                info.Has(MucStatus.ConfigurationChanged))
+            {
+
+                _logger.LogDebug("XEP-0045: {Room} was reconfigured ({Codes})",
+                                 room.Address, String.Join(", ", info.Status));
+
+                // Deliberately no re-join and no re-query. A service is not
+                // obliged to send the occupants again - Prosody does not - so
+                // whoever was already in the room stays nameless until they
+                // send a presence of their own. Papering over that with a
+                // re-join would throw everybody's view of the room away to
+                // fetch something the specification never promised.
+                return true;
+
+            }
+
+        }
 
         if (room is null || !MultiUserChat.IsSubjectChange(message))
             return false;

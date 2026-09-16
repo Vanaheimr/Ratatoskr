@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2010-2026 GraphDefined GmbH <achim.friedland@graphdefined.com>
  * This file is part of Ratatoskr <https://www.github.com/Vanaheimr/Ratatoskr>
  *
@@ -170,6 +170,40 @@ public static class MultiUserChat
     /// </summary>
     public const string OwnerNamespace = "http://jabber.org/protocol/muc#owner";
 
+    /// <summary>
+    /// The configuration field that decides who may see the real addresses of
+    /// the occupants (section 10.2.1, and the registry at
+    /// <c>muc#roomconfig</c>).
+    /// </summary>
+    /// <remarks>
+    /// <c>anyone</c> or <c>moderators</c>, and the default of every service is
+    /// <c>moderators</c> - a semi-anonymous room. <b>It is the one setting
+    /// end-to-end encryption in a room stands or falls by</b>: OMEMO encrypts to
+    /// the devices of a real address, and in a semi-anonymous room a participant
+    /// has nothing but nicknames. See <see cref="OmemoRooms"/>.
+    /// </remarks>
+    public const string WhoIsField      = "muc#roomconfig_whois";
+
+    /// <summary>
+    /// The value of <see cref="WhoIsField"/> that makes a room non-anonymous.
+    /// </summary>
+    public const string WhoIsAnyone     = "anyone";
+
+    /// <summary>
+    /// The value of <see cref="WhoIsField"/> every service starts with.
+    /// </summary>
+    public const string WhoIsModerators = "moderators";
+
+    /// <summary>
+    /// Whether the room outlives the last occupant leaving (section 10.2.1).
+    /// </summary>
+    public const string PersistentField = "muc#roomconfig_persistentroom";
+
+    /// <summary>
+    /// Whether only members may enter (section 10.2.1).
+    /// </summary>
+    public const string MembersOnlyField = "muc#roomconfig_membersonly";
+
 
     #region Stanzas that go out
 
@@ -310,6 +344,106 @@ public static class MultiUserChat
             item.Add(new XElement(XName.Get("reason", AdminNamespace), reason));
 
         return new XElement(XName.Get("query", AdminNamespace), item);
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 10.2: asks a room for its configuration form.
+    /// </summary>
+    /// <remarks>
+    /// An empty <c>&lt;query/&gt;</c> in the owner namespace, sent as an
+    /// <c>iq get</c>. What comes back is a data form (XEP-0004) whose fields
+    /// are the room's settings, and which fields a service offers is the
+    /// service's business - there is no fixed list.
+    /// </remarks>
+    public static XElement ConfigQuery()
+
+        => new (XName.Get("query", OwnerNamespace));
+
+    /// <summary>
+    /// XEP-0045, section 10.2: the changed configuration, going back.
+    /// </summary>
+    /// <param name="form">
+    /// The form that came back from <see cref="ConfigQuery"/>, with the wanted
+    /// values written into it.
+    /// </param>
+    /// <remarks>
+    /// <b>The whole form goes back, not the fields that changed</b>, and that is
+    /// the one thing about section 10.2 that is easy to get wrong in a way
+    /// nothing complains about. A configuration form is a state and not a patch:
+    /// a submit carrying only <c>muc#roomconfig_whois</c> tells the service that
+    /// every other field is now unset, and a service that takes it at its word
+    /// quietly resets the room - the password, the member list, whether it
+    /// persists. The answer is still <c>result</c>.
+    ///
+    /// So <see cref="ConfigWith"/> takes the form apart and puts it back
+    /// together rather than building a new one.
+    /// </remarks>
+    public static XElement ConfigSubmit(XElement form)
+
+        => new (XName.Get("query", OwnerNamespace), form);
+
+    /// <summary>
+    /// The same form with some fields given other values.
+    /// </summary>
+    /// <param name="form">The form as the service sent it.</param>
+    /// <param name="values">
+    /// What to change, by field name - <c>muc#roomconfig_whois</c> and the like.
+    /// A field the form does not have is <b>not</b> added: a service that does
+    /// not offer a setting does not have it, and inventing the field would ask
+    /// for something that does not exist.
+    /// </param>
+    /// <param name="Missing">
+    /// The names that were asked for and are not in the form. A caller that
+    /// wanted a room to stop being anonymous needs to know that the room was
+    /// never asked.
+    /// </param>
+    /// <remarks>
+    /// Everything else travels unchanged, including the fields this library has
+    /// never heard of: what is not understood here is still part of the room's
+    /// state, and dropping it would be the reset described on
+    /// <see cref="ConfigSubmit"/>.
+    ///
+    /// The <c>type</c> attributes go, as XEP-0004 section 3.2 asks of a submit -
+    /// they describe how a form is drawn and mean nothing on the way back - and
+    /// so do the labels. What stays is <c>var</c> and the values.
+    /// </remarks>
+    public static XElement ConfigWith(XElement                            form,
+                                      IReadOnlyDictionary<string, string> values,
+                                      out IReadOnlyList<string>           Missing)
+    {
+
+        XNamespace ns = DataForm.Namespace;
+
+        var submit  = new XElement(ns + "x", new XAttribute("type", "submit"));
+        var seen    = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var field in DataForm.Fields(form))
+        {
+
+            var name = field.Attr("var");
+
+            if (name is null)
+                continue;
+
+            seen.Add(name);
+
+            var copy = new XElement(ns + "field", new XAttribute("var", name));
+
+            if (values.TryGetValue(name, out var wanted))
+                copy.Add(new XElement(ns + "value", wanted));
+
+            else
+                foreach (var value in field.Children(DataForm.Namespace, "value"))
+                    copy.Add(new XElement(ns + "value", value.Value));
+
+            submit.Add(copy);
+
+        }
+
+        Missing = [.. values.Keys.Where(name => !seen.Contains(name))];
+
+        return submit;
 
     }
 

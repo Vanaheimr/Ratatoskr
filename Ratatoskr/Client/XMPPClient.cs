@@ -1369,6 +1369,70 @@ public sealed class XMPPClient : IAsyncDisposable
     public Task<string> SendRoomMessageAsync(JID room, string body)
         => _connection.SendMessageAsync(room.Bare, body, type: MessageType.GroupChat);
 
+    /// <summary>
+    /// XEP-0384 in a room: says something only the people in it can read.
+    /// </summary>
+    /// <remarks>
+    /// <b>Possible only in a non-anonymous room</b>, and the result says so
+    /// rather than this throwing: one encrypts to real addresses and a
+    /// semi-anonymous room hands out nicknames. <see cref="CannotEncryptInRoom"/>
+    /// asks the same question beforehand, which is what a client draws its lock
+    /// from; <see cref="MakeRoomNonAnonymousAsync"/> is what changes it.
+    /// </remarks>
+    public Task<OmemoRoomSent> SendEncryptedRoomMessageAsync(JID                room,
+                                                             string             body,
+                                                             CancellationToken  ct = default)
+        => _connection.SendEncryptedRoomMessageAsync(room, body, ct);
+
+    /// <summary>
+    /// Why this room cannot carry an encrypted message, or null when it can.
+    /// </summary>
+    /// <remarks>
+    /// Phrased as the reason and not as a Boolean on purpose: a lock that is
+    /// greyed out and says nothing is a client telling somebody that encryption
+    /// is impossible without telling them it is one setting away.
+    /// </remarks>
+    public string? CannotEncryptInRoom(JID room)
+
+        => _connection.Muc?.Room(room) is MucRoom joined
+               ? OmemoRooms.WhyNot(joined)
+               : $"{room.Bare} has not been entered";
+
+    /// <summary>
+    /// XEP-0045, section 10.2: changes some settings of a room.
+    /// </summary>
+    /// <remarks>
+    /// The whole form is fetched, changed and sent back - see
+    /// <see cref="XMPPConnection.ConfigureRoomAsync"/> for why the shorter way
+    /// resets a room.
+    /// </remarks>
+    public Task<bool> ConfigureRoomAsync(JID                                  room,
+                                         IReadOnlyDictionary<string, string>  values,
+                                         CancellationToken                    ct = default)
+        => _connection.ConfigureRoomAsync(room, values, ct);
+
+    /// <summary>
+    /// XEP-0045, section 10.2.1: makes a room show everybody's real address,
+    /// which is what end-to-end encryption in it needs.
+    /// </summary>
+    /// <remarks>
+    /// <b>It changes the room for everybody in it.</b> From then on every
+    /// occupant can see who every other occupant really is - which is the price
+    /// of being able to encrypt to them.
+    /// </remarks>
+    public Task<bool> MakeRoomNonAnonymousAsync(JID                room,
+                                                CancellationToken  ct = default)
+        => _connection.MakeRoomNonAnonymousAsync(room, ct);
+
+    /// <summary>
+    /// XEP-0045, section 10.2: what a room is set to, as the service reports
+    /// it - or null when it will not say, which it does to anybody but the
+    /// owner.
+    /// </summary>
+    public Task<XElement?> FetchRoomConfigAsync(JID                room,
+                                                CancellationToken  ct = default)
+        => _connection.FetchRoomConfigAsync(room, ct);
+
     #endregion
 
     /// <summary>

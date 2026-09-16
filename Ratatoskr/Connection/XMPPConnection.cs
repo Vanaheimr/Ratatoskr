@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2010-2026 GraphDefined GmbH <achim.friedland@graphdefined.com>
  * This file is part of Ratatoskr <https://www.github.com/Vanaheimr/Ratatoskr>
  *
@@ -2564,6 +2564,17 @@ public sealed class XMPPConnection : IAsyncDisposable
             return;
         }
 
+        // XEP-0384 in a room, and it has to come before the ordinary encrypted
+        // branch below: that one takes the address on the stanza for the
+        // sender, and a room's address is the occupant address. Looking up an
+        // OMEMO session under room@service would find nothing, every time, and
+        // report every line in the room as unreadable.
+        if (Muc is not null && OmemoRooms.IsEncryptedGroupChat(element))
+        {
+            TryProcessEncryptedGroupChat(element, from);
+            return;
+        }
+
         // XEP-0384: arrived encrypted.
         //
         // Before everything else, because what stands here cannot be seen from
@@ -4537,6 +4548,163 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// XEP-0384 in a room: says something that only the people in it can read.
+    /// </summary>
+    /// <remarks>
+    /// <b>The room must be non-anonymous, and this refuses rather than
+    /// improvising.</b> One encrypts to the devices of a real address, and a
+    /// semi-anonymous room gives a participant nothing but nicknames - so there
+    /// is no set of recipients to compute. <see cref="OmemoRooms"/> carries the
+    /// reasoning; <see cref="MakeRoomNonAnonymousAsync"/> is what changes it,
+    /// and it changes the room for everybody in it.
+    ///
+    /// <b>No receipt and no marker</b>, unlike the one-to-one case above. In a
+    /// room every occupant would answer, so asking twenty people to confirm
+    /// delivery produces twenty stanzas everybody present sees - and the plain
+    /// <see cref="XMPPClient.SendRoomMessageAsync"/> has said the same since
+    /// D116.
+    ///
+    /// The <c>&lt;store/&gt;</c> hint stays, and for the same reason as
+    /// one-to-one: from the outside this message has no content, and an archive
+    /// deciding by the <c>&lt;body/&gt;</c> would drop it. In a room that is
+    /// worse than it sounds - what a room archives is what somebody joining
+    /// later is shown.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// When OMEMO is not switched on - it will not fall back to sending in the
+    /// clear, here least of all.
+    /// </exception>
+    public async Task<OmemoRoomSent> SendEncryptedRoomMessageAsync(
+        JID room, string body, CancellationToken ct = default)
+    {
+
+        if (Omemo is null)
+            throw new InvalidOperationException(
+                      "OMEMO is not switched on. This message will not be sent unencrypted - " +
+                      "that would be the worst of all mistakes, and a silent one.");
+
+        if (Muc?.Room(room) is not MucRoom joined)
+            return new OmemoRoomSent(null, [], [], $"{room.Bare} has not been entered");
+
+        // The refusal names who is missing; Skipped is about devices, and no
+        // device was even reached for.
+        if (OmemoRooms.WhyNot(joined) is String why)
+            return new OmemoRoomSent(null, [], [], why);
+
+        var recipients = OmemoRooms.RecipientsOf(joined);
+
+        XNamespace client = "jabber:client";
+
+        var result = await Omemo.EncryptAsync(recipients.Jids,
+                                              [new XElement(client + "body", body)]);
+
+        var messageId = await SendMessageStanzaAsync(
+                                  room.Bare,
+                                  result.Element.ToXml().ToString(SaveOptions.DisableFormatting) +
+                                      "<store xmlns='urn:xmpp:hints'/>",
+                                  requestReceipt:  false,
+                                  markable:        false,
+                                  MessageType.GroupChat,
+                                  corrects:        null);
+
+        return new OmemoRoomSent(messageId, recipients.Jids, result.Skipped, null);
+
+    }
+
+    /// <summary>
+    /// Takes an encrypted message out of a room in.
+    /// </summary>
+    /// <remarks>
+    /// Apart from <see cref="TryProcessEncrypted"/> because the sender has to
+    /// be looked up before anything is attempted, and because two of the three
+    /// outcomes here are not failures:
+    ///
+    /// <list type="bullet">
+    /// <item><b>Our own line, coming back.</b> A room sends every message to
+    ///       everybody, the sender included, and an OMEMO element carries no key
+    ///       for the device that made it - a device cannot keep a ratchet with
+    ///       itself. So every line this client writes in a room returns as one
+    ///       it cannot read. Silently dropped: it is not a failure, it is the
+    ///       protocol.</item>
+    /// <item><b>A sender the room will not name.</b> In a semi-anonymous room
+    ///       nobody but a moderator learns who an occupant is, and one cannot
+    ///       look up a session for a nickname. Reported once, as a notice - not
+    ///       as an error, because nothing is broken: the room is simply not one
+    ///       this can be done in.</item>
+    /// <item><b>A message from somebody we can name.</b> Decrypted against
+    ///       their real address, and the envelope inside is compared with it -
+    ///       see <see cref="OmemoRooms"/> for why that comparison is what makes
+    ///       this safe at all.</item>
+    /// </list>
+    ///
+    /// Nothing is acknowledged either way. In a room a receipt would be seen by
+    /// everybody present, which is what <see cref="XMPPClient.SendRoomMessageAsync"/>
+    /// has said since D116.
+    /// </remarks>
+    private void TryProcessEncryptedGroupChat(XElement           element,
+                                              JID                from,
+                                              CancellationToken  CancellationToken = default)
+    {
+
+        if (Omemo is null || !OmemoEncryptedElement.TryRead(element, out var encrypted))
+            return;
+
+        if (Muc?.Room(from) is not MucRoom room)
+        {
+            _logger.LogDebug("OMEMO: an encrypted message from {From}, which is no room we are in", from);
+            return;
+        }
+
+        if (OmemoRooms.IsOwnReflection(room, from))
+            return;
+
+        if (OmemoRooms.SenderOf(room, from) is not JID sender)
+        {
+            _logger.LogInformation(
+                "OMEMO: {From} wrote encrypted and the room does not say who that is. A " +
+                "semi-anonymous room cannot carry this - see muc#roomconfig_whois.", from);
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+
+            var decrypted = await Omemo.DecryptAsync(encrypted!, sender);
+
+            if (decrypted is null)
+                return;
+
+            var body = decrypted.Content
+                                .FirstOrDefault(e => e.Name.LocalName == "body")
+                               ?.Value;
+
+            if (body is null)
+                return;
+
+            await OnEncryptedMessage.InvokeAllAsync(handler => handler(
+                                                            Timestamp.Now,
+                                                            this,
+                                                            // The occupant address and not the real
+                                                            // one: in a room a message comes from
+                                                            // somebody's place in it, and a client
+                                                            // showing the real address would put a
+                                                            // name on screen that the room shows
+                                                            // nowhere else. Who it really is stands
+                                                            // in the decrypted result.
+                                                            new XMPPMessage(from,
+                                                                            JID.TryParse(element.Attr("to")) ?? FullJid,
+                                                                            body,
+                                                                            element.Attr("id"),
+                                                                            DateTime.Now,
+                                                                            MessageType.GroupChat),
+                                                            decrypted,
+                                                            CancellationToken), _logger);
+
+        });
+
+    }
+
+    /// <summary>
     /// Takes an encrypted message in.
     /// </summary>
     /// <param name="Answer">
@@ -5039,6 +5207,109 @@ public sealed class XMPPConnection : IAsyncDisposable
         return answer?.Attr("type") == "result";
 
     }
+
+    #region XEP-0045, section 10.2: configuring a room
+
+    /// <summary>
+    /// XEP-0045, section 10.2: asks a room what it is set to.
+    /// </summary>
+    /// <returns>
+    /// The data form (XEP-0004), or null when the service refused - which it
+    /// does to anybody who is not the owner.
+    /// </returns>
+    public async Task<XElement?> FetchRoomConfigAsync(JID                room,
+                                                      CancellationToken  CancellationToken = default)
+    {
+
+        var answer = await SendIqAsync(room.Bare, "get",
+                                       MultiUserChat.ConfigQuery(),
+                                       CancellationToken);
+
+        if (answer?.Attr("type") != "result")
+        {
+            _logger.LogDebug("XEP-0045: {Room} would not hand out its configuration", room);
+            return null;
+        }
+
+        return answer.Child(MultiUserChat.OwnerNamespace, "query")
+                    ?.Child(DataForm.Namespace, "x");
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 10.2: changes some settings of a room and leaves the
+    /// rest alone.
+    /// </summary>
+    /// <param name="values">
+    /// The settings to change, by field name -
+    /// <see cref="MultiUserChat.WhoIsField"/> and the like.
+    /// </param>
+    /// <remarks>
+    /// <b>Fetch, change, send the whole thing back.</b> Two round trips where
+    /// one looks enough, and the one is wrong: a configuration form is the
+    /// room's entire state, so a submit carrying only the changed field tells
+    /// the service every other setting is now unset. A service that believes it
+    /// resets the password, the member list and whether the room persists - and
+    /// answers <c>result</c>, because nothing about the request was malformed.
+    /// </remarks>
+    /// <returns>
+    /// Whether the room is now set the way it was asked for. <b>False when a
+    /// field was not in the form</b>, and that case is worth the separate
+    /// thought: a service that does not offer a setting has not refused
+    /// anything, so the submit would succeed and the caller would believe a
+    /// room is non-anonymous when nobody ever asked it to be. Nothing is sent
+    /// then.
+    /// </returns>
+    public async Task<bool> ConfigureRoomAsync(JID                                  room,
+                                               IReadOnlyDictionary<string, string>  values,
+                                               CancellationToken                    CancellationToken = default)
+    {
+
+        var form = await FetchRoomConfigAsync(room, CancellationToken);
+
+        if (form is null)
+            return false;
+
+        var submit = MultiUserChat.ConfigWith(form, values, out var missing);
+
+        if (missing.Count > 0)
+        {
+            _logger.LogWarning("XEP-0045: {Room} offers no {Fields}, so it was left as it was",
+                               room, String.Join(", ", missing));
+            return false;
+        }
+
+        var answer = await SendIqAsync(room.Bare, "set",
+                                       MultiUserChat.ConfigSubmit(submit),
+                                       CancellationToken);
+
+        return answer?.Attr("type") == "result";
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 10.2.1: makes a room show everybody's real address.
+    /// </summary>
+    /// <remarks>
+    /// The one configuration this library has a reason of its own to make, and
+    /// the reason is <see cref="OmemoRooms"/>: in a semi-anonymous room a
+    /// participant sees nicknames, and one cannot encrypt to a nickname.
+    ///
+    /// <b>It changes what the room is, for everybody in it and from now on.</b>
+    /// Whoever is in that room can see who everybody else really is - which is
+    /// the price of being able to encrypt to them, and is not a price a client
+    /// may pay on somebody's behalf without saying so.
+    /// </remarks>
+    public Task<bool> MakeRoomNonAnonymousAsync(JID                room,
+                                                CancellationToken  CancellationToken = default)
+
+        => ConfigureRoomAsync(room,
+                              new Dictionary<string, string> {
+                                  { MultiUserChat.WhoIsField, MultiUserChat.WhoIsAnyone }
+                              },
+                              CancellationToken);
+
+    #endregion
 
     public async Task SendChatStateAsync(JID to, ChatState state)
     {

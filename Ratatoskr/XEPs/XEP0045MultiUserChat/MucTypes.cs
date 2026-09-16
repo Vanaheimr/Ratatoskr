@@ -180,6 +180,27 @@ public static class MucStatus
     /// <summary>Removed because the room became semi-anonymous.</summary>
     public const int SemiAnonymous = 322;
 
+    /// <summary>
+    /// The room's configuration changed (section 10.2.1). What changed is not
+    /// said - only that what a client knows about the room is now old.
+    /// </summary>
+    public const int ConfigurationChanged = 104;
+
+    /// <summary>
+    /// The room has become non-anonymous (section 10.2.1).
+    /// </summary>
+    /// <remarks>
+    /// <b>Arrives as a message and not as a presence</b>, which is what makes
+    /// it easy to miss: a client watching only presences for what a room is
+    /// goes on believing the room hides everybody. Ours did until this lane.
+    ///
+    /// And it says the room changed, not that anybody's address has arrived:
+    /// a service is not obliged to send the occupants again, and Prosody does
+    /// not. Whoever was already in the room stays nameless until they send a
+    /// presence of their own - see <see cref="OmemoRooms"/>.
+    /// </remarks>
+    public const int NowNonAnonymous = 172;
+
     /// <summary>Removed because the service is shutting down.</summary>
     public const int Shutdown = 332;
 
