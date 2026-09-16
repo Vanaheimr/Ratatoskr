@@ -1049,6 +1049,48 @@ public sealed class XMPPClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// XEP-0454 and XEP-0363: sends a file the storage service cannot read.
+    /// </summary>
+    /// <remarks>
+    /// <b>The encryption is against the storage, not against the
+    /// conversation.</b> The key travels in the URL fragment to whoever is being
+    /// sent the file, so anybody who can read the message can read the file -
+    /// and if that message went in the clear, so did the key. Worth saying
+    /// plainly, because <c>aesgcm://</c> in a body looks like more than it is:
+    /// what it buys is that the host holding the bytes is not among the readers.
+    /// </remarks>
+    public async Task<FileSent> SendEncryptedFileAsync(JID                to,
+                                                       Stream             content,
+                                                       String             filename,
+                                                       MessageType        type  = MessageType.Chat,
+                                                       CancellationToken  ct    = default)
+    {
+
+        if (_connection.Upload is null)
+            return new FileSent(new UploadOutcome(null), null);
+
+        var encrypted = await _connection.Upload.UploadEncryptedAsync(content, filename,
+                                                                      CancellationToken: ct);
+
+        if (encrypted.Url is null)
+            return new FileSent(encrypted.Upload, null);
+
+        var messageId = await _connection.SendFileMessageAsync(to, encrypted.Url, type, ct);
+
+        lock (_lastSentToLock)
+            _lastSentTo[to.Bare] = messageId;
+
+        return new FileSent(encrypted.Upload with { Url = encrypted.Url }, messageId);
+
+    }
+
+    /// <summary>
+    /// XEP-0454: fetches an encrypted file and decrypts it.
+    /// </summary>
+    public Task<Byte[]?> DownloadEncryptedFileAsync(Uri url, CancellationToken ct = default)
+        => _connection.Upload?.DownloadEncryptedAsync(url, ct) ?? Task.FromResult<Byte[]?>(null);
+
+    /// <summary>
     /// Fetches a file somebody was told about.
     /// </summary>
     /// <remarks>

@@ -130,6 +130,30 @@ public sealed record FileSent(UploadOutcome Upload, String? MessageId)
 
 #endregion
 
+#region (record) EncryptedUpload
+
+/// <summary>
+/// XEP-0454 over XEP-0363: how sending an encrypted file ended.
+/// </summary>
+/// <param name="Url">
+/// The <c>aesgcm://</c> address, key and all - or null when nothing was stored.
+/// </param>
+/// <param name="Upload">What the upload underneath did.</param>
+/// <remarks>
+/// Both, because only the second says <em>why</em> when the first is null: a
+/// refused slot and a refused PUT are different faults and are fixed in
+/// different places.
+/// </remarks>
+public sealed record EncryptedUpload(Uri? Url, UploadOutcome Upload)
+{
+
+    /// <summary>Is the file up?</summary>
+    public Boolean Uploaded => Url is not null;
+
+}
+
+#endregion
+
 
 /// <summary>
 /// XEP-0363: asking for somewhere to put a file.

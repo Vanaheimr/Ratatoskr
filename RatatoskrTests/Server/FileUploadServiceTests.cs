@@ -495,6 +495,143 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region 9. A file the server cannot read, all the way to somebody else
+
+        /// <summary>
+        /// XEP-0454 over XEP-0363 over XEP-0066, end to end in one process.
+        /// </summary>
+        /// <remarks>
+        /// <b>The encryption is against the storage and not against the
+        /// conversation</b>, and this round is arranged so that the difference
+        /// is visible. The server holds bytes it cannot read - checked by
+        /// fetching them without the key - and the recipient reads them without
+        /// asking the server anything, because the key came to them in the
+        /// message.
+        ///
+        /// Which is also the limit, and it is worth being plain about: whoever
+        /// can read the message can read the file. If that message went in the
+        /// clear, so did the key. What <c>aesgcm://</c> buys is that the host
+        /// holding the bytes is not among the readers - no more and no less.
+        /// </remarks>
+        [Test]
+        public async Task AFileTheServerCannotReadReachesSomebodyElse()
+        {
+
+            var alice = await ConnectAsync();
+
+            server.AddAccount("bob");
+
+            var bobConnection = new XMPPConnection(
+                                    JID.Parse($"bob@{server.Domain}"),
+                                    "pw",
+                                    server.Uri
+                                ) {
+                                    KeepaliveEnabled            = false,
+                                    MaxReconnectAttempts        = 0,
+                                    ServerCertificateValidator  = server.IsOwnCertificate
+                                };
+
+            var bob = new XMPPClient(bobConnection);
+
+            try
+            {
+
+                await bob.ConnectAsync();
+
+                XMPPMessage? heard = null;
+                bob.OnMessage += (t, s, m, ct) => { if (m.IsFile) heard = m; return Task.CompletedTask; };
+
+                var secret = Encoding.UTF8.GetBytes("Nicht für den Server: äöüß 🎺");
+
+                using var stream = new MemoryStream(secret);
+
+                var sent = await alice.SendEncryptedFileAsync(bob.BareJid, stream, "passport.png");
+
+                Assert.That(sent.Sent, Is.True,
+                            $"Nothing was sent: {sent.Upload.Refusal}, HTTP {sent.Upload.HttpStatus}");
+
+                var until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                while (heard is null && DateTime.UtcNow < until)
+                    await Task.Delay(50);
+
+                Assert.That(heard, Is.Not.Null, "No message about a file reached the other side.");
+
+                Assert.That(AesGcmUrl.IsAesGcmUrl(heard!.FileUrl!), Is.True,
+                            "What arrived is a plain address, so the recipient would fetch the " +
+                            "ciphertext and show it as the file.");
+
+                // What the server is holding, asked for without the key - and
+                // from the service's own store rather than over HTTP, so there
+                // is no chance of the check accidentally measuring the download.
+                var stored = await bob.DownloadFileAsync(AesGcmUrl.ToHttps(heard.FileUrl!));
+
+                Assert.Multiple(() =>
+                {
+
+                    Assert.That(stored, Is.Not.Null, "The ciphertext cannot be fetched at all.");
+
+                    Assert.That(stored!, Is.Not.EqualTo(secret),
+                                "The server is holding the plaintext, so nothing was encrypted.");
+
+                });
+
+                var read = await bob.DownloadEncryptedFileAsync(heard.FileUrl!);
+
+                Assert.That(read, Is.EqualTo(secret),
+                            "The recipient could not read the file that was sent to them.");
+
+            }
+            finally
+            {
+                try { await bob.DisposeAsync(); } catch { }
+            }
+
+        }
+
+        /// <summary>
+        /// A ciphertext that was changed on the way does not come back as a file.
+        /// </summary>
+        /// <remarks>
+        /// <b>The storage host is the party the encryption is against</b>, so
+        /// the interesting case is that host handing back something other than
+        /// what it was given. Without the tag being checked the caller takes it
+        /// for the received file; with it, the answer is null.
+        ///
+        /// Null and not an exception: a caller cannot be asked to tell a
+        /// cryptographic failure from a timeout in a catch block, and the two
+        /// mean entirely different things about what to do next.
+        /// </remarks>
+        [Test]
+        public async Task ATamperedFileDoesNotComeBack()
+        {
+
+            var alice  = await ConnectAsync();
+            var secret = SomeBytes(256);
+
+            using var stream = new MemoryStream(secret);
+
+            var encrypted = await alice.Connection.Upload!.UploadEncryptedAsync(stream, "x.bin");
+
+            Assert.That(encrypted.Uploaded, Is.True);
+
+            // The same address with one bit of the key turned over - which is
+            // what a host handing back a different file looks like from here.
+            var fragment = encrypted.Url!.Fragment.TrimStart('#');
+            var material = Convert.FromHexString(fragment);
+
+            material[^1] ^= 0x01;
+
+            var forged = new UriBuilder(encrypted.Url) {
+                             Fragment = Convert.ToHexString(material).ToLowerInvariant()
+                         }.Uri;
+
+            Assert.That(await alice.DownloadEncryptedFileAsync(forged), Is.Null,
+                        "A file that did not authenticate was handed back as the file.");
+
+        }
+
+        #endregion
+
     }
 
 }

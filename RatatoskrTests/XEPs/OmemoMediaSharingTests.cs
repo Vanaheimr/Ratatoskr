@@ -232,6 +232,124 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region TheWritingHalf_IsReadBackByPlainAesGcm()
+
+        /// <summary>
+        /// What <see cref="AesGcmUrl.Encrypt"/> writes, plain AES-GCM reads.
+        /// </summary>
+        /// <remarks>
+        /// <b>Deliberately not decrypted with <see cref="AesGcmUrl.Decrypt"/>.</b>
+        /// That would be the same code agreeing with itself about the one thing
+        /// at issue - where the tag goes - and it would pass just as happily if
+        /// both halves put it at the front. Here the payload is taken apart by
+        /// hand, the way the local <c>Encrypt</c> helper below builds it: the
+        /// last sixteen bytes are the tag, everything before it is the
+        /// ciphertext.
+        ///
+        /// The real second opinion is in the conformance suite, where pyca reads
+        /// it. This is the cheap version of the same question, and it runs
+        /// without a far side.
+        /// </remarks>
+        [Test]
+        public void TheWritingHalf_IsReadBackByPlainAesGcm()
+        {
+
+            var content    = Encoding.UTF8.GetBytes("was der Server nicht lesen soll: äöüß 🎺");
+
+            var encrypted  = AesGcmUrl.Encrypt(content);
+
+            Assert.That(encrypted.Payload.Length, Is.EqualTo(content.Length + AesGcm.TagByteSizes.MaxSize),
+                        "The stored file is not the ciphertext plus a 16 byte tag.");
+
+            var tagLength   = AesGcm.TagByteSizes.MaxSize;
+            var ciphertext  = encrypted.Payload[..^tagLength];
+            var tag         = encrypted.Payload[^tagLength..];
+            var plaintext   = new Byte[ciphertext.Length];
+
+            using (var aes = new AesGcm(encrypted.Key, tagLength))
+                aes.Decrypt(encrypted.Nonce, ciphertext, tag, plaintext);
+
+            Assert.That(plaintext, Is.EqualTo(content));
+
+        }
+
+        #endregion
+
+        #region TheUrlCarriesIvThenKey()
+
+        /// <summary>
+        /// The fragment is IV first, key after - and reads back as it was written.
+        /// </summary>
+        /// <remarks>
+        /// The contested convention, and the one a client can hold the other way
+        /// round while being perfectly consistent with itself. Checked through
+        /// <see cref="AesGcmUrl.TryParse"/> because that is the shape a
+        /// recipient meets, and against the raw hex as well, so a reading and a
+        /// writing that are wrong in the same direction cannot cover for one
+        /// another.
+        /// </remarks>
+        [Test]
+        public void TheUrlCarriesIvThenKey()
+        {
+
+            var encrypted = AesGcmUrl.Encrypt(Encoding.UTF8.GetBytes("x"));
+
+            var url = AesGcmUrl.ToAesGcm(new Uri("https://files.example.org/upload/e2ee.bin"),
+                                         encrypted.Key,
+                                         encrypted.Nonce);
+
+            var fragment = url.Fragment.TrimStart('#');
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(url.Scheme, Is.EqualTo(AesGcmUrl.Scheme));
+
+                Assert.That(fragment,
+                            Is.EqualTo(Convert.ToHexString(encrypted.Nonce).ToLowerInvariant() +
+                                       Convert.ToHexString(encrypted.Key).  ToLowerInvariant()),
+                            "The fragment is not IV followed by key, in lower-case hex.");
+
+                Assert.That(AesGcmUrl.TryParse(url, out var key, out var nonce, out var problem),
+                            Is.True, $"Our own fragment could not be read back: {problem}");
+
+                Assert.That(key,   Is.EqualTo(encrypted.Key));
+                Assert.That(nonce, Is.EqualTo(encrypted.Nonce));
+
+                Assert.That(AesGcmUrl.ToHttps(url).AbsoluteUri,
+                            Is.EqualTo("https://files.example.org/upload/e2ee.bin"),
+                            "The way back to the plain address does not lead where the file was put.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AKeyLengthNobodyReadsBack_IsRefused()
+
+        /// <summary>
+        /// 32 bytes or 16, and nothing else.
+        /// </summary>
+        /// <remarks>
+        /// Not because AES would mind - it takes 24 as well - but because
+        /// <see cref="AesGcmUrl.TryParse"/> reads back only those two, and a
+        /// writer that produced something its own reader refuses would be
+        /// writing files nobody can open. Refused at the writing end, where it
+        /// costs nothing, rather than discovered at the reading end by somebody
+        /// else.
+        /// </remarks>
+        [Test]
+        public void AKeyLengthNobodyReadsBack_IsRefused()
+        {
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => AesGcmUrl.Encrypt(Encoding.UTF8.GetBytes("x"), KeyLength: 24));
+
+        }
+
+        #endregion
+
         #region (private) Encrypt(Content, out Key, out Nonce)
 
         /// <summary>

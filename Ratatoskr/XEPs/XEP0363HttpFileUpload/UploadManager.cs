@@ -21,6 +21,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Security;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Xml.Linq;
 
@@ -494,6 +495,131 @@ public sealed class UploadManager : IDisposable
         return (Int32) status is >= 200 and < 300
                    ? new UploadOutcome(outcome.Slot.GetUrl)
                    : new UploadOutcome(null, HttpStatus: status);
+
+    }
+
+    #endregion
+
+    #region UploadEncryptedAsync(Content, Filename, ...)
+
+    /// <summary>
+    /// XEP-0454: encrypts a file, puts the ciphertext up and gives back the
+    /// address with the key on it.
+    /// </summary>
+    /// <param name="Content">The file, in the clear.</param>
+    /// <param name="Filename">
+    /// What it is called here. <b>It does not travel</b> - see the remarks.
+    /// </param>
+    /// <returns>
+    /// An <c>aesgcm://</c> address, or what stood in the way. The key is in its
+    /// fragment, which is the one part of a URL that is never sent to a host.
+    /// </returns>
+    /// <remarks>
+    /// <b>What the storage service is told, and what it is not.</b> It gets the
+    /// ciphertext and its length, and that is nearly all there is to give away.
+    /// Three things are deliberately withheld:
+    ///
+    /// <list type="bullet">
+    ///   <item><b>the name.</b> A file called <c>scan-of-my-passport.png</c>
+    ///         says most of what the encryption was for. What is uploaded is a
+    ///         random name;</item>
+    ///   <item><b>the type.</b> <c>application/octet-stream</c>, which is not a
+    ///         polite fiction but the truth: what is being stored <em>is</em>
+    ///         opaque bytes;</item>
+    ///   <item><b>the extension.</b> Kept off the uploaded name for the same
+    ///         reason as the type. The recipient does not need it - the message
+    ///         carries the address and their client reads the file itself, and
+    ///         a file type that has to be guessed from a name was never a
+    ///         guess worth trusting.</item>
+    /// </list>
+    ///
+    /// What is <em>not</em> hidden is the size, near enough. Padding it would be
+    /// a decision with a cost, and one this library should not take on a
+    /// caller's behalf without being asked.
+    ///
+    /// The plaintext is read into memory in one piece, because AES-GCM's tag
+    /// covers the whole file: nothing may be handed on before the last byte has
+    /// been read anyway.
+    /// </remarks>
+    public async Task<EncryptedUpload> UploadEncryptedAsync(Stream             Content,
+                                                            String             Filename,
+                                                            JID?               Service            = null,
+                                                            CancellationToken  CancellationToken  = default)
+    {
+
+        using var buffer = new MemoryStream();
+
+        await Content.CopyToAsync(buffer, CancellationToken);
+
+        var encrypted = AesGcmUrl.Encrypt(buffer.ToArray());
+
+        using var payload = new MemoryStream(encrypted.Payload);
+
+        var outcome = await UploadAsync(
+                          payload,
+                          encrypted.Payload.LongLength,
+
+                          // Sixteen random bytes and no extension: the service
+                          // is storing bytes and has no business knowing whose
+                          // or what.
+                          Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
+
+                          "application/octet-stream",
+                          Service,
+                          CancellationToken
+                      );
+
+        return outcome.Url is null
+                   ? new EncryptedUpload(null, outcome)
+                   : new EncryptedUpload(
+                         AesGcmUrl.ToAesGcm(outcome.Url, encrypted.Key, encrypted.Nonce),
+                         outcome
+                     );
+
+    }
+
+    #endregion
+
+    #region DownloadEncryptedAsync(URL, CancellationToken = default)
+
+    /// <summary>
+    /// XEP-0454: fetches what is behind an <c>aesgcm://</c> address and
+    /// decrypts it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The tag is checked, and the check is the throw.</b> Without it the
+    /// storage host could hand back anything it liked and the caller would take
+    /// it for the file that was sent - which is precisely the party the
+    /// encryption is against. A file that does not authenticate comes back as
+    /// null rather than as bytes.
+    /// </remarks>
+    public async Task<Byte[]?> DownloadEncryptedAsync(Uri                URL,
+                                                      CancellationToken  CancellationToken = default)
+    {
+
+        if (!AesGcmUrl.TryParse(URL, out var key, out var nonce, out var problem))
+        {
+            _logger.LogDebug("{Url} cannot be read: {Problem}", URL, problem);
+            return null;
+        }
+
+        var payload = await DownloadAsync(AesGcmUrl.ToHttps(URL), CancellationToken);
+
+        if (payload is null)
+            return null;
+
+        try
+        {
+            return AesGcmUrl.Decrypt(payload, key!, nonce!);
+        }
+        catch (CryptographicException e)
+        {
+            // Not "the download failed". The bytes arrived and are not the ones
+            // that were sent - which is either damage or somebody, and a caller
+            // that cannot tell this from a timeout will retry a lie.
+            _logger.LogWarning(e, "The file at {Url} did not authenticate", URL);
+            return null;
+        }
 
     }
 

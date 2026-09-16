@@ -23,6 +23,29 @@ using System.Security.Cryptography;
 
 namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 
+
+#region (record) EncryptedFile
+
+/// <summary>
+/// XEP-0454: a file ready to be stored, and the key that is not stored with it.
+/// </summary>
+/// <param name="Payload">
+/// What goes to the upload service: ciphertext followed by the authentication
+/// tag.
+/// </param>
+/// <param name="Key">The key. It travels to the recipient and nowhere else.</param>
+/// <param name="Nonce">The 12 byte IV, which travels with the key.</param>
+/// <remarks>
+/// The three are kept apart on purpose. <see cref="Payload"/> is the only part
+/// that may be handed to anything that stores or transmits it; the other two go
+/// into a URL fragment, which is the one piece of a URL that is never sent to
+/// the host.
+/// </remarks>
+public sealed record EncryptedFile(Byte[] Payload, Byte[] Key, Byte[] Nonce);
+
+#endregion
+
+
 /// <summary>
 /// XEP-0454: a shared file whose key travels in the URL.
 /// </summary>
@@ -33,12 +56,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// receives the message receives the key: the encryption protects the file
 /// against the storage, not against the conversation.
 ///
-/// <b>What is here and what is not.</b> This reads the URL and decrypts the
-/// payload, and it does not fetch anything. Fetching is a decision an
-/// application has to make and a library must not make for it: whether an
-/// incoming message may cause a request at all, how large a file may be, how
-/// long it may take, which addresses are refused. A protocol library that
-/// downloads on its own hands that decision to whoever sends the message.
+/// <b>What is here and what is not.</b> This encrypts and decrypts, reads and
+/// writes the URL, and it does not fetch or store anything. Moving the bytes is
+/// a decision an application has to make and a library must not make for it:
+/// whether an incoming message may cause a request at all, how large a file may
+/// be, how long it may take, which addresses are refused. A protocol library
+/// that downloads on its own hands that decision to whoever sends the message.
 ///
 /// The IV is 12 bytes as everybody sends it, and 16 in an older reading of the
 /// XEP. Only 12 can be used here, because AES-GCM in .NET takes no other nonce
@@ -162,6 +185,105 @@ public static class AesGcmUrl
                Fragment  = "",
                Port      = URL.IsDefaultPort ? -1 : URL.Port
            }.Uri;
+
+    #endregion
+
+    #region Encrypt(Plaintext, KeyLength = 32)
+
+    /// <summary>
+    /// Encrypts a file and draws the key it travels with.
+    /// </summary>
+    /// <param name="Plaintext">The file.</param>
+    /// <param name="KeyLength">32 bytes, or 16 for an equally usable shorter key.</param>
+    /// <remarks>
+    /// <b>The key and the nonce are drawn here and cannot be passed in, and that
+    /// is the one thing this method is strict about.</b> AES-GCM forgives
+    /// nothing about a repeated nonce under the same key: two files encrypted
+    /// with the same pair hand anybody who has both the difference of their
+    /// plaintexts, and - worse, because it is silent - the material to forge an
+    /// authentication tag that the receiving side will accept. An overload
+    /// taking a nonce would be used to encrypt two versions of the same picture,
+    /// which is exactly the case that loses everything.
+    ///
+    /// Every file therefore gets a new key as well as a new nonce. Reusing the
+    /// key across files would be safe with fresh nonces and is still not done:
+    /// the key travels in the URL to whoever is being sent the file, so a key
+    /// shared between files is a second file handed to whoever was sent the
+    /// first.
+    ///
+    /// What comes back is the payload exactly as it has to be stored -
+    /// ciphertext followed by the 16 byte tag, which is what
+    /// <see cref="AesGcm"/> writes and what XEP-0454 prescribes.
+    /// </remarks>
+    public static EncryptedFile Encrypt(ReadOnlySpan<Byte>  Plaintext,
+                                        Int32               KeyLength = 32)
+    {
+
+        if (KeyLength is not (16 or 32))
+            throw new ArgumentOutOfRangeException(
+                      nameof(KeyLength),
+                      "XEP-0454 travels a 32 byte key, or a 16 byte one; nothing else is read back.");
+
+        var key         = RandomNumberGenerator.GetBytes(KeyLength);
+        var nonce       = RandomNumberGenerator.GetBytes(NonceLength);
+
+        var tagLength   = AesGcm.TagByteSizes.MaxSize;
+        var payload     = new Byte[Plaintext.Length + tagLength];
+
+        using var aes = new AesGcm(key, tagLength);
+
+        aes.Encrypt(nonce,
+                    Plaintext,
+                    payload.AsSpan(0, Plaintext.Length),
+                    payload.AsSpan(Plaintext.Length));
+
+        return new EncryptedFile(payload, key, nonce);
+
+    }
+
+    #endregion
+
+    #region ToAesGcm(URL, Key, Nonce)
+
+    /// <summary>
+    /// The address to send somebody: where the file lies, with the key on it.
+    /// </summary>
+    /// <param name="URL">Where the ciphertext was stored - the <c>https</c> address.</param>
+    /// <remarks>
+    /// The inverse of <see cref="ToHttps"/>, and the fragment is why the scheme
+    /// changes at all: <c>aesgcm://</c> is not a transport but a mark saying
+    /// "there is a key on the end of this, and it is not to be sent to the
+    /// host". No HTTP client would send a fragment anyway; the scheme is what
+    /// stops a program from treating the address as an ordinary link and
+    /// handing it somewhere it does not belong.
+    ///
+    /// Lower-case hex, because that is what is sent. The XEP says hex and
+    /// nothing about case - <see cref="TryParse"/> therefore reads either, and
+    /// writing the common one keeps us out of the corner where a stricter
+    /// reader lives.
+    /// </remarks>
+    public static Uri ToAesGcm(Uri     URL,
+                               Byte[]  Key,
+                               Byte[]  Nonce)
+    {
+
+        if (Nonce.Length != NonceLength)
+            throw new ArgumentException(
+                      $"The nonce has to be {NonceLength} bytes; this one is {Nonce.Length}.",
+                      nameof(Nonce));
+
+        var material = new Byte[Nonce.Length + Key.Length];
+
+        Nonce.CopyTo(material, 0);
+        Key.  CopyTo(material, Nonce.Length);
+
+        return new UriBuilder(URL) {
+                   Scheme    = Scheme,
+                   Fragment  = Convert.ToHexString(material).ToLowerInvariant(),
+                   Port      = URL.IsDefaultPort ? -1 : URL.Port
+               }.Uri;
+
+    }
 
     #endregion
 

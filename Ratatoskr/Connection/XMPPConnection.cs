@@ -4681,19 +4681,40 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (outcome.Url is null)
             return new FileSent(outcome, null);
 
-        var messageId = await SendMessageStanzaAsync(
-                                  to,
-                                  $"<body>{XmlEscaping.Escape(outcome.Url.AbsoluteUri)}</body>" +
-                                  OutOfBandData.Xml(outcome.Url).ToString(SaveOptions.DisableFormatting),
-                                  requestReceipt:  false,
-                                  markable:        false,
-                                  type:            type,
-                                  corrects:        null
-                              );
+        var messageId = await SendFileMessageAsync(to, outcome.Url, type, cancellationToken);
 
         return new FileSent(outcome, messageId);
 
     }
+
+    /// <summary>
+    /// XEP-0066: says where a file is, and says it twice.
+    /// </summary>
+    /// <remarks>
+    /// Split out from <see cref="SendFileAsync"/> because XEP-0454 needs the
+    /// same message for a different address: there the upload and the address
+    /// that is sent are not the same thing at all - the ciphertext goes to an
+    /// <c>https</c> URL and what travels is the <c>aesgcm://</c> one, key and
+    /// all.
+    ///
+    /// The address goes into the body <em>and</em> into an
+    /// <c>&lt;x xmlns='jabber:x:oob'/&gt;</c> - see <see cref="OutOfBandData"/>
+    /// for why both, and why they have to agree.
+    /// </remarks>
+    public Task<String> SendFileMessageAsync(JID                to,
+                                             Uri                url,
+                                             MessageType        type               = MessageType.Chat,
+                                             CancellationToken  cancellationToken  = default)
+
+        => SendMessageStanzaAsync(
+               to,
+               $"<body>{XmlEscaping.Escape(url.AbsoluteUri)}</body>" +
+               OutOfBandData.Xml(url).ToString(SaveOptions.DisableFormatting),
+               requestReceipt:  false,
+               markable:        false,
+               type:            type,
+               corrects:        null
+           );
 
     /// <summary>
     /// XEP-0461: Sends an answer to a particular message.
