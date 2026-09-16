@@ -110,7 +110,7 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0333 | Chat Markers | ✅ | Sending + receiving, namespace-checked against confusion with XEP-0184 |
 | XEP-0384 | OMEMO Encryption | ✅ | Complete, `urn:xmpp:omemo:2` — see the "End-to-end encryption" section further down. Verified against the reference implementation python-omemo, in both directions (D69) |
 | XEP-0420 | Stanza Content Encryption | ✅ | The envelope that OMEMO encrypts: `<content/>` with the sender inside it and padding of random length |
-| XEP-0363 | HTTP File Upload | ⚠️ | **The asking half**, and it is the only way to send anything that is not text. `SendFileAsync` finds the service (the server itself first, then its items — both Prosody and ejabberd put it on a component, and neither would be found by a client that only asks the host), requests a slot, does the PUT and sends the address; `DownloadFileAsync` fetches one. Three decisions are not the caller's: **redirects are not followed** (the PUT carries a header the service dictated at an address it invented — a 307 would repeat both somewhere nobody vouched for), the certificate is judged exactly as the stream's is, and the `Content-Length` comes from the size that was *promised* and not from the stream. Of the headers a service names, only `Authorization`, `Cookie` and `Expires` are ever sent, and none whose value carries a line break (§5). Not here: the serving half — handing out slots and taking files is a service, not a client |
+| XEP-0363 | HTTP File Upload | ⚠️ | **The asking half**, and it is the only way to send anything that is not text. `SendFileAsync` finds the service (the server itself first, then its items — both Prosody and ejabberd put it on a component, and neither would be found by a client that only asks the host), requests a slot, does the PUT and sends the address; `DownloadFileAsync` fetches one. Three decisions are not the caller's: **redirects are not followed** (the PUT carries a header the service dictated at an address it invented — a 307 would repeat both somewhere nobody vouched for), the certificate is judged exactly as the stream's is, and the `Content-Length` comes from the size that was *promised* and not from the stream. Of the headers a service names, only `Authorization`, `Cookie` and `Expires` are ever sent, and none whose value carries a line break (§5). **And the serving half since D120**: the test server offers `upload.<domain>`, announced through `disco#items`, and serves the files at `/upload` on the same listener the XMPP WebSocket uses — which is what the transport moved onto Hermod's HTTP server for. A slot there is a capability and is treated as one: thirty-two random bytes, good once, for the announced size, for five minutes, and nothing about the account is asked at the HTTP end. What comes back out is served with `nosniff`, a content policy and a download disposition for anything but pictures, sound, film and plain text — an upload service hands out strangers' files under its own name, which makes an uploaded page a script on its own origin. Switched off by default (`OfferFileUploads`), because a server that takes files keeps them |
 | XEP-0066 | Out of Band Data | ⚠️ | The half XEP-0363 needs: a message whose body *is* an address, with an `<x xmlns='jabber:x:oob'/>` beside it saying so. `XMPPMessage.FileUrl` and `.IsFile` on the way in, written on the way out by `SendFileAsync`. **The attachment has to agree with the body** or nothing is read — a message that shows one address and opens another needs no server's help and any contact can send one. Only a direct child counts (D59), so a forwarded or archived message's attachment is not this message's. The IQ half of XEP-0066 (offering a file directly) is not implemented |
 | XEP-0454 | OMEMO Media Sharing | ⚠️ | The receiving half, and nothing that touches the network: `AesGcmUrl` reads `aesgcm://host/path#[iv][key]`, hands out the `https` address the file lies at — without the fragment, which is the key — and decrypts the payload, tag checked. What is deliberately **not** here is the fetching: whether an incoming message may cause a request at all, how large a file may be, which addresses are refused. A library that downloads on its own gives that decision to whoever sent the message. The upload side (encrypting and offering a file) is missing entirely. IV of 12 bytes only — the older 16 byte form is refused with a reason rather than silently, since `AesGcm` takes no other nonce length |
 | XEP-0359 | Unique and Stable Stanza IDs | ⚠️ | **Read, not written.** `XMPPMessage.OriginId` and `.StanzaId` carry the names a message was given by its sender and by an archive; `ReplyableId` picks the one a reply may use. This client assigns none of its own: an `<origin-id/>` would repeat the `id` it just wrote, and a second copy of a number is not a second piece of knowledge. `urn:xmpp:sid:0` is therefore **not** announced — section 3 has that for entities that assign them |
@@ -1041,6 +1041,28 @@ var connection = new XMPPConnection(JID.Parse(jid), password, Server.Uri)
 
 A validator that just returns `true` would be shorter — but it would take the
 authentication out of TLS and let the tests pass against a foreign peer too.
+
+### One listener, two paths
+
+Since D120 the test server does not run a WebSocket server of its own. It runs
+Hermod's HTTP server and lends one path to the WebSocket:
+
+| path | what speaks there |
+|---|---|
+| `/xmpp` | XMPP over WebSocket (RFC 7395). Was `/ws/`, which names the transport rather than the protocol — the wrong half to name on a server that now serves two things |
+| `/upload` | XEP-0363, when `OfferFileUploads` is on |
+
+`Server.Uri` says which, so nothing outside had to be told.
+
+**What the move cost is worth writing down: three faults in Hermod, none of
+them visible until something was hung off it.** A WebSocket connection that was
+closed left its pending read in place until the next ping — ten seconds in
+which a server that had just thrown somebody off still believed they were
+connected. And `TcpClient.GetStream()` hands out a `NetworkStream` that does
+*not* own the socket, so nothing was closing the connection: after an upgrade
+the far side noticed nothing at all, and after any `Connection: close` a second
+request on the same client hung until its hundred-second timeout. All three
+were found by tests that had nothing to do with either change.
 
 ### The server's events
 

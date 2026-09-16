@@ -125,6 +125,57 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         #region Data
 
         private readonly XMPPWebSocketServer _webSocketServer;
+
+        /// <summary>
+        /// The listener. One port, one certificate, several paths.
+        /// </summary>
+        /// <remarks>
+        /// <b>The WebSocket does not listen any more</b> - this does, and lends
+        /// the path <c>/xmpp</c> to it (RFC 7395). The reason is XEP-0363: an
+        /// upload service serves its files over HTTP, and a client that has been
+        /// told one address should not have to be told a second one for the
+        /// files that address talks about.
+        /// </remarks>
+        private readonly HTTPServer _httpServer;
+
+        private HTTPAPI? _httpApi;
+
+        /// <summary>
+        /// The path the XMPP WebSocket is served at (RFC 7395).
+        /// </summary>
+        /// <remarks>
+        /// RFC 7395 lays down no path at all - it is found through XEP-0156, or
+        /// told to the user. <c>/xmpp</c> because that is what is spoken there;
+        /// the old one was <c>/ws/</c>, which says which transport rather than
+        /// which protocol, and on a server that now serves two things at two
+        /// paths that is the wrong half to name.
+        /// </remarks>
+        public const String WebSocketPath = "/xmpp";
+
+        /// <summary>
+        /// XEP-0363: where a file can be put so that it can be sent.
+        /// </summary>
+        /// <remarks>
+        /// <b>The reason the transport moved.</b> The slot is asked for over the
+        /// stream at <c>/xmpp</c> and the file goes over HTTP at
+        /// <c>/upload</c> - one listener, one certificate, one port. A client
+        /// that has been told one address should not need a second one for the
+        /// files that address talks about.
+        ///
+        /// Switched off by default. A server that hands out upload slots takes
+        /// files and keeps them, and that is not something to start doing
+        /// because somebody built a test server.
+        /// </remarks>
+        public ServerUploadService? Upload { get; private set; }
+
+        /// <summary>
+        /// Switches the upload service on before <see cref="Start"/>.
+        /// </summary>
+        /// <remarks>
+        /// Before the start and not after, because the address it hands out has
+        /// to know the port, and the port is only settled by the bind.
+        /// </remarks>
+        public Boolean OfferFileUploads { get; set; }
         private readonly IXMPPAccountStore _accountStore;
         private readonly CancellationTokenSource _cts = new();
         private readonly Dictionary<String, XMPPAccount> _accounts = new(StringComparer.OrdinalIgnoreCase);
@@ -191,7 +242,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// <summary>
         /// The WebSocket URI for the client.
         /// </summary>
-        public URL Uri => URL.Parse($"{(Certificate is not null ? "wss" : "ws")}://localhost:{Port}/ws/");
+        public URL Uri => URL.Parse($"{(Certificate is not null ? "wss" : "ws")}://localhost:{Port}{WebSocketPath}");
 
         /// <summary>
         /// The number of all connections ever accepted.
@@ -849,11 +900,41 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 _accounts[account.BareJid] = account;
             }
 
-            _webSocketServer = new XMPPWebSocketServer(this, IPPort.Parse(Port), Certificate);
+            // Built without a port and never started: it accepts nothing of its
+            // own any more. What is used of it is the protocol - the handshake,
+            // the framing, the events below - which the HTTP server borrows for
+            // one path.
+            _webSocketServer = new XMPPWebSocketServer(this, IPPort.Parse(0), null);
 
             _webSocketServer.OnNewWebSocketConnection  += OnConnectionOpenedAsync;
             _webSocketServer.OnCloseMessageReceived    += OnCloseFrameReceivedAsync;
             _webSocketServer.OnTCPConnectionClosed     += OnConnectionClosedAsync;
+
+            // The certificate goes on the listener now, because that is what
+            // does the TLS. RFC 6120, section 5: XMPP belongs over TLS - without
+            // a selector the listener stays in the clear, which is what the
+            // tests that drive this server in plain text rely on.
+            _httpServer = new HTTPServer(
+                              TCPPort:                    IPPort.Parse(Port),
+                              ServerCertificateSelector:  Certificate is not null
+                                                              ? (_, _) => Certificate
+                                                              : null,
+                              AutoStart:                  false
+                          );
+
+            var api = _httpServer.AddHTTPAPI();
+
+            api.AddHandler(
+                HTTPMethod.GET,
+                HTTPPath.Parse(WebSocketPath),
+                HTTPDelegate: WebSocketUpgrade.For(_webSocketServer)
+            );
+
+            // XEP-0363. Registered whether or not the service is switched on,
+            // and refusing when it is not: a path that exists and says no is
+            // distinguishable from one that was never there, and the difference
+            // is what tells a misconfiguration from a client fault.
+            _httpApi = api;
 
             OnInstanceCreated?.Invoke(this);
 
@@ -1107,13 +1188,37 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         public void Start()
         {
 
-            _webSocketServer.Start().GetAwaiter().GetResult();
+            _httpServer.Start().GetAwaiter().GetResult();
 
             // The port is only settled by the bind, and only now: constructed
             // with 0, this is where the operating system's choice becomes
             // knowable. Read back rather than guessed at, so that Uri names the
             // socket that is actually listening.
-            Port = _webSocketServer.TCPPort.ToUInt16();
+            Port = _httpServer.TCPPort.ToUInt16();
+
+            // XEP-0363: only now, because the address the service hands out has
+            // to name the port the operating system actually gave us.
+            if (OfferFileUploads && _httpApi is not null)
+            {
+
+                Upload = new ServerUploadService(
+                             JID.Parse(Domain),
+                             URL.Parse($"{(Certificate is not null ? "https" : "http")}://localhost:{Port}")
+                         );
+
+                _httpApi.AddHandler(
+                    HTTPMethod.PUT,
+                    HTTPPath.Parse(ServerUploadService.Path + "/{slot}/{filename}"),
+                    HTTPDelegate: request => Task.FromResult(Upload.HandlePut(request))
+                );
+
+                _httpApi.AddHandler(
+                    HTTPMethod.GET,
+                    HTTPPath.Parse(ServerUploadService.Path + "/{slot}/{filename}"),
+                    HTTPDelegate: request => Task.FromResult(Upload.HandleGet(request))
+                );
+
+            }
 
             // XEP-0198, section 5: the deadline of the preserved streams
             // expires in real time, not at the next access - otherwise a
@@ -1365,6 +1470,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             XMPPSession? session;
 
+
             lock (_lock)
                 session = _sessions.FirstOrDefault(s => ReferenceEquals(s.Connection, connection));
 
@@ -1535,6 +1641,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // For the sign-off, in whose sequence this function sits, the
             // distinction is already made anyway - TryMarkUnavailable further
             // below refuses a never-available session of its own accord.
+
             if (session.FullJid is null)
                 return false;
 
@@ -2812,6 +2919,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 await HandlePepAsync(session, frame, id, type, to))
             {
                 return;
+            }
+
+            // XEP-0363: the upload service is a component - its own domain
+            // beside the host - so its address is not ours and the routing
+            // below would send it away. Asked before that, and only when the
+            // service is switched on: otherwise upload.<domain> is a name like
+            // any other and gets the ordinary answer for a domain that is not
+            // served here.
+            if (Upload is not null &&
+                to is not null &&
+                String.Equals(to, Upload.Address.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+
+                if (Upload.Answer(frame, id, type, session.FullJid) is { } uploadAnswer)
+                    await session.SendAsync(uploadAnswer);
+
+                return;
+
             }
 
             // Directed at another entity? Then forward it.
@@ -4414,6 +4539,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         "</query></iq>";
 
             }
+
+            // XEP-0030, section 4: what this server carries beside itself.
+            //
+            // Until XEP-0363 there was nothing, and the query was not answered
+            // at all - which is the one combination there must not be, because
+            // disco#info above announces disco#items. A client looking for an
+            // upload service walks exactly this list (XEP-0363, section 4), so
+            // a server that carries one and says nothing is a server whose
+            // service cannot be found except by guessing at the name.
+            if (frame.Contains(DiscoManager.ItemsNamespace, StringComparison.Ordinal) && type == "get")
+                return $"<iq type='result' id='{id}' from='{Domain}'>" +
+                       $"<query xmlns='{DiscoManager.ItemsNamespace}'>" +
+                       (Upload is not null
+                            ? $"<item jid='{Upload.Address}' name='HTTP File Upload'/>"
+                            : "") +
+                        "</query></iq>";
 
             // Unknown requests get an error (section 8.4), and that even when
             // nobody is listening: rule 3 knows no third possibility beside
@@ -6822,7 +6963,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             lock (_lock)
                 _resumable.Clear();
 
-            try { await _webSocketServer.Shutdown(Wait: true); }
+            try { await _httpServer.Stop(); }
             catch { }
 
             _cts.Dispose();
