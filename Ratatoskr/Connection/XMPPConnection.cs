@@ -865,6 +865,9 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>XEP-0045: somebody we invited is not coming.</summary>
     public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
 
+    /// <summary>XEP-0045: a room would not pass an invitation of ours on.</summary>
+    public event OnInvitationRefusedDelegate?   OnInvitationRefused;
+
     /// <summary>XEP-0313: one message out of an archive, as it arrives.</summary>
     public event OnArchivedMessageDelegate?     OnArchivedMessage;
 
@@ -1702,6 +1705,9 @@ public sealed class XMPPConnection : IAsyncDisposable
         Muc.OnInvitationDeclined  += async (timestamp, sender, declined, ct)
             => await OnInvitationDeclined.InvokeAllAsync(handler => handler(timestamp, sender, declined, ct), _logger);
 
+        Muc.OnInvitationRefused   += async (timestamp, sender, refusal, ct)
+            => await OnInvitationRefused. InvokeAllAsync(handler => handler(timestamp, sender, refusal, ct), _logger);
+
         Mam.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
             => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
 
@@ -2538,6 +2544,20 @@ public sealed class XMPPConnection : IAsyncDisposable
             _logger.LogDebug("Message to {From} refused: {Error}", from, parsed);
 
             await OnStanzaError.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, parsed, CancellationToken), _logger);
+
+            // XEP-0045, section 7.8.1: and if it was an invitation, say so
+            // again in words that name the person. Beside the general event
+            // rather than instead of it - whoever listens for refused stanzas
+            // keeps hearing about this one too.
+            //
+            // D129: without this a room that will not pass an invitation on is
+            // indistinguishable from a room that refused an ordinary message,
+            // while the caller of InviteToRoomAsync has already been told the
+            // invitation went. That is the sender seeing a lock and the room
+            // seeing silence, one lane over from where D127 found it.
+            if (Muc is not null)
+                await Muc.ProcessRefusalAsync(element, parsed, CancellationToken);
+
             return;
 
         }

@@ -945,6 +945,140 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ARefusedInvitationNamesThePersonWhoWasNeverAsked()
+
+        /// <summary>
+        /// XEP-0045, section 7.8.1: the room would not pass it on.
+        /// </summary>
+        /// <remarks>
+        /// <b>An invitation is a message and a message has no answer</b>, so the
+        /// only sign that one failed is the stanza coming back. Until D129
+        /// nothing looked: the refusal arrived as an ordinary message error, was
+        /// reported as one, and the caller of <c>InviteToRoomAsync</c> had
+        /// already been told true. Found against ejabberd, whose default room
+        /// has <c>muc#roomconfig_allowinvites</c> at 0 and lets nobody but the
+        /// owner ask anybody in.
+        ///
+        /// What is carried out of it is the <c>to</c> of the invite. The room
+        /// and the reason are on the stanza anyway; the person who was never
+        /// asked exists nowhere else.
+        /// </remarks>
+        [Test]
+        public async Task ARefusedInvitationNamesThePersonWhoWasNeverAsked()
+        {
+
+            MucInviteRefused? refusal = null;
+            _muc.OnInvitationRefused += (t, s, r, ct) => { refusal = r; return Task.CompletedTask; };
+
+            var handled = await _muc.ProcessRefusalAsync(
+                XElement.Parse($"<message xmlns='jabber:client' type='error' from='{Room}' to='me@example/home'>" +
+                                   "<x xmlns='http://jabber.org/protocol/muc#user'>" +
+                                       "<invite to='alice@example.org'>" +
+                                           "<reason>Come along</reason>" +
+                                       "</invite>" +
+                                   "</x>" +
+                                   "<error type='auth'><forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" +
+                               "</message>"),
+                new StanzaError(StanzaErrorType.Auth, "forbidden"));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(handled, Is.True);
+
+                Assert.That(refusal, Is.Not.Null,
+                            "Nobody was told, so the sender goes on believing the invitation went.");
+
+                Assert.That(refusal!.Room, Is.EqualTo(Room));
+
+                Assert.That(refusal.Who.ToString(), Is.EqualTo("alice@example.org"),
+                            "The refusal named no person, so nothing can be said about who was " +
+                            "not invited.");
+
+                Assert.That(refusal.Error.Condition, Is.EqualTo("forbidden"));
+
+            });
+
+        }
+
+        #endregion
+
+        #region AnInvitationIsNotItsOwnRefusal()
+
+        /// <summary>
+        /// The same element, both ways round.
+        /// </summary>
+        /// <remarks>
+        /// <b>A room forwarding an invitation and a room throwing one back send
+        /// the same <c>&lt;invite/&gt;</c>.</b> The difference is the
+        /// <c>type</c> on the message and nothing else, so both halves have to
+        /// be checked or each would answer the other's stanza.
+        ///
+        /// The expensive direction is the second: an error taken for an
+        /// invitation would tell somebody they had been asked into a room at
+        /// the very moment their own invitation was refused.
+        /// </remarks>
+        [Test]
+        public async Task AnInvitationIsNotItsOwnRefusal()
+        {
+
+            var forwarded = XElement.Parse($"<message xmlns='jabber:client' from='{Room}' to='me@example/home'>" +
+                                               "<x xmlns='http://jabber.org/protocol/muc#user'>" +
+                                                   "<invite from='alice@example.org/home' to='bob@example.org'/>" +
+                                               "</x>" +
+                                           "</message>");
+
+            var bounced   = XElement.Parse($"<message xmlns='jabber:client' type='error' from='{Room}' to='me@example/home'>" +
+                                               "<x xmlns='http://jabber.org/protocol/muc#user'>" +
+                                                   "<invite to='bob@example.org'/>" +
+                                               "</x>" +
+                                           "</message>");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(MultiUserChat.RefusedInvitation(forwarded), Is.Null,
+                            "An invitation that arrived was read as one of ours coming back.");
+
+                Assert.That(MultiUserChat.Invitation(bounced), Is.Null,
+                            "A refused invitation was read as an invitation, so somebody would be " +
+                            "told they had been asked in at the moment they were not.");
+
+                Assert.That(MultiUserChat.RefusedInvitation(bounced)?.Who.ToString(),
+                            Is.EqualTo("bob@example.org"));
+
+            });
+
+        }
+
+        #endregion
+
+        #region SomethingElseRefusedIsNotARefusedInvitation()
+
+        /// <summary>
+        /// Not every message a room sends back is an invitation.
+        /// </summary>
+        /// <remarks>
+        /// A room refuses plenty: a message from somebody with no voice, a
+        /// subject from somebody who may not set one. Claiming those as refused
+        /// invitations would put a name in front of the user that was never
+        /// invited by anybody.
+        /// </remarks>
+        [Test]
+        public void SomethingElseRefusedIsNotARefusedInvitation()
+        {
+
+            Assert.That(MultiUserChat.RefusedInvitation(
+                XElement.Parse($"<message xmlns='jabber:client' type='error' from='{Room}' to='me@example/home'>" +
+                                   "<body>Hello</body>" +
+                                   "<error type='auth'><forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error>" +
+                               "</message>")),
+                Is.Null);
+
+        }
+
+        #endregion
+
     }
 
 }

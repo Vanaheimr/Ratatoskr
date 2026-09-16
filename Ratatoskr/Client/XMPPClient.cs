@@ -412,6 +412,9 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>XEP-0045: somebody we invited is not coming.</summary>
     public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
 
+    /// <summary>XEP-0045: a room would not pass an invitation of ours on.</summary>
+    public event OnInvitationRefusedDelegate?   OnInvitationRefused;
+
     /// <summary>
     /// XEP-0313: one message out of an archive, as it arrives.
     /// </summary>
@@ -652,6 +655,9 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnInvitationDeclined  += async (timestamp, sender, declined, ct)
             => await OnInvitationDeclined.InvokeAllAsync(handler => handler(timestamp, sender, declined, ct), _logger);
+
+        _connection.OnInvitationRefused   += async (timestamp, sender, refusal, ct)
+            => await OnInvitationRefused. InvokeAllAsync(handler => handler(timestamp, sender, refusal, ct), _logger);
 
         _connection.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
             => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
@@ -1338,11 +1344,21 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>
     /// XEP-0045, section 7.8.1: asks somebody into a room, through the room.
     /// </summary>
+    /// <returns>
+    /// false when this client is not in that room. <b>true means sent, not
+    /// delivered</b> - see <see cref="OnInvitationRefused"/>.
+    /// </returns>
     /// <remarks>
     /// Through the room and not straight to the person: an invitation the room
     /// forwarded is one the room will honour, and it can put the invitee on the
     /// member list on the way. One sent directly is a stranger's word about a
     /// room they have never heard of.
+    ///
+    /// <b>Whether one may ask at all is the room's to decide</b>
+    /// (<c>muc#roomconfig_allowinvites</c>), and the default differs: ejabberd
+    /// lets nobody but the owner invite, Prosody lets anybody who is in the
+    /// room. A refusal comes back afterwards and separately, because a message
+    /// has no answer to wait for.
     /// </remarks>
     public Task<bool> InviteToRoomAsync(JID room, JID who, string? reason = null)
         => _connection.Muc?.InviteAsync(room, who, reason) ?? Task.FromResult(false);

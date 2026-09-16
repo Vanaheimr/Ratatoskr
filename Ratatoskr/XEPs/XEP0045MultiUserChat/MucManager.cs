@@ -74,6 +74,12 @@ public delegate Task OnInvitationDeclinedDelegate(DateTimeOffset     Timestamp,
                                                   MucDecline         Decline,
                                                   CancellationToken  CancellationToken);
 
+/// <summary>XEP-0045: the room would not pass an invitation of ours on.</summary>
+public delegate Task OnInvitationRefusedDelegate (DateTimeOffset     Timestamp,
+                                                  MucManager         Sender,
+                                                  MucInviteRefused   Refusal,
+                                                  CancellationToken  CancellationToken);
+
 /// <summary>XEP-0045: the subject of a room.</summary>
 public delegate Task OnRoomSubjectDelegate       (DateTimeOffset     Timestamp,
                                                   MucManager         Sender,
@@ -173,6 +179,7 @@ public sealed class MucManager
     public event OnRoomSubjectDelegate?      OnRoomSubject;
     public event OnRoomInvitationDelegate?      OnRoomInvitation;
     public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
+    public event OnInvitationRefusedDelegate?   OnInvitationRefused;
 
     #endregion
 
@@ -462,7 +469,13 @@ public sealed class MucManager
     /// <summary>
     /// XEP-0045, section 7.8.1: asks somebody into a room, through the room.
     /// </summary>
-    /// <returns>false when this client is not in that room.</returns>
+    /// <returns>
+    /// false when this client is not in that room. <b>true means sent and
+    /// nothing more</b> - an invitation is a message, a message has no answer,
+    /// and a room that will not pass it on says so afterwards through
+    /// <see cref="OnInvitationRefused"/>. Whoever treats true as "they were
+    /// asked" is writing the D129 defect back in.
+    /// </returns>
     public async Task<bool> InviteAsync(JID room, JID who, string? reason = null)
     {
 
@@ -648,6 +661,32 @@ public sealed class MucManager
     /// an ordinary message and travels the ordinary way, so that a client which
     /// knows nothing of rooms still shows it.
     /// </remarks>
+    /// <summary>
+    /// A message of ours that a room sent back. True when it was an invitation
+    /// and has been reported as one.
+    /// </summary>
+    /// <remarks>
+    /// Beside <see cref="ProcessMessageAsync"/> and not inside it: an error
+    /// stanza carries no payload but the reason (RFC 6120, section 8.3) and is
+    /// answered further up before anything here would see it. What it does
+    /// carry is the stanza that provoked it, which is the only place the name
+    /// of the person who was never asked still exists.
+    /// </remarks>
+    public async Task<bool> ProcessRefusalAsync(XElement           message,
+                                                StanzaError        error,
+                                                CancellationToken  cancellationToken = default)
+    {
+
+        if (MultiUserChat.RefusedInvitation(message) is not (JID room, JID who))
+            return false;
+
+        await OnInvitationRefused.InvokeAllAsync(handler => handler(Timestamp.Now, this,
+                                                                    new MucInviteRefused(room, who, error),
+                                                                    cancellationToken), _logger);
+        return true;
+
+    }
+
     public async Task<bool> ProcessMessageAsync(XElement           message,
                                                 JID                from,
                                                 CancellationToken  cancellationToken = default)

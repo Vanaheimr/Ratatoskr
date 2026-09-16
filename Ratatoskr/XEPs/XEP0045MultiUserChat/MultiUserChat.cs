@@ -132,6 +132,30 @@ public sealed record MucDecline(JID Room, JID From, string? Reason = null);
 
 
 /// <summary>
+/// XEP-0045, section 7.8.1: the room would not pass an invitation on.
+/// </summary>
+/// <param name="Room">The room that refused.</param>
+/// <param name="Who">The person who was never asked.</param>
+/// <param name="Error">What the room gave as the reason.</param>
+/// <remarks>
+/// <b>An invitation is a message, and a message has no answer</b> - so the
+/// only sign that one was refused is the stanza coming back. Found in D129:
+/// the default room on ejabberd has <c>muc#roomconfig_allowinvites</c> at 0,
+/// which lets nobody but the owner ask anybody in. Prosody allows it. Both are
+/// within XEP-0045 section 7.8.1, and every round in the suite had the owner do
+/// the inviting - the one person for whom it can never fail.
+///
+/// What made it worth an event of its own: the refusal did arrive, as a
+/// message error like any other, and nothing could tell it apart from a
+/// message to the room that was refused. Meanwhile the caller of
+/// <c>InviteToRoomAsync</c> had already been told <c>true</c>. The sender saw
+/// success and the room saw silence, which is the failure D127 was written to
+/// refuse.
+/// </remarks>
+public sealed record MucInviteRefused(JID Room, JID Who, StanzaError Error);
+
+
+/// <summary>
 /// XEP-0045: a room, and everybody in it.
 /// </summary>
 /// <remarks>
@@ -580,6 +604,39 @@ public static class MultiUserChat
                    invite.Child(UserNamespace, "reason")?.Value,
                    x?.Child(UserNamespace, "password")?.Value
                );
+
+    }
+
+    /// <summary>
+    /// Our own invitation, come back refused - or null.
+    /// </summary>
+    /// <remarks>
+    /// Recognised by the error type and the <c>&lt;invite/&gt;</c> together. The
+    /// element alone is not enough: a room forwarding an invitation sends the
+    /// same one, and the difference between being invited and having an
+    /// invitation thrown back is the <c>type</c> on the message.
+    ///
+    /// The <c>to</c> of the invite is who was never asked. It is the one thing
+    /// here worth carrying: the room and the reason are on the stanza anyway,
+    /// the person is not.
+    /// </remarks>
+    public static (JID Room, JID Who)? RefusedInvitation(XElement message)
+    {
+
+        if (message.Attr("type") != "error")
+            return null;
+
+        var invite = message.Child(UserNamespace, "x")?.
+                             Child(UserNamespace, "invite");
+
+        if (invite is null ||
+            !JID.TryParse(message.Attr("from"), out var room) ||
+            !JID.TryParse(invite.Attr("to"),    out var who))
+        {
+            return null;
+        }
+
+        return (room.Bare, who);
 
     }
 
