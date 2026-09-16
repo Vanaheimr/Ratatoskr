@@ -564,11 +564,22 @@ public sealed class MucManager
             if (info?.IsSelf == true)
             {
 
-                room.State = MucRoomState.Left;
-                room.Clear();
-
+                // All three under the one lock, and not because two threads are
+                // racing here - the stanza path is one - but because a *reader*
+                // is. Between the state going to Left and the room leaving the
+                // list there was a window in which Room() handed back a room
+                // that had been left and emptied, and anybody asking "am I still
+                // in there" got a room object saying "Left, 0 occupants" instead
+                // of null.
+                //
+                // Measured rather than imagined: it cost one nightly, in one of
+                // two lanes running the same code, and the other lane was green.
                 lock (_lock)
+                {
+                    room.State = MucRoomState.Left;
+                    room.Clear();
                     _rooms.Remove(room.Address);
+                }
 
                 await OnRoomLeft.InvokeAllAsync(handler => handler(Timestamp.Now, this, room, info,
                                                                    cancellationToken), _logger);
