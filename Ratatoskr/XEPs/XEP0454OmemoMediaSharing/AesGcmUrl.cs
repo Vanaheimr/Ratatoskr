@@ -272,6 +272,27 @@ public static class AesGcmUrl
                       $"The nonce has to be {NonceLength} bytes; this one is {Nonce.Length}.",
                       nameof(Nonce));
 
+        // https and nothing else, and this is not pedantry about the
+        // specification.
+        //
+        // aesgcm:// is defined as an https address with the scheme swapped,
+        // so a recipient turns it back into one - which means an aesgcm URL
+        // built over plain http names somewhere that does not answer. Worse
+        // than that: the address *is* the secret here, and putting a key on
+        // one whose transport is in the clear hands it to whoever is
+        // listening. Refused rather than corrected, because a caller that
+        // uploaded over http has a problem this method cannot fix.
+        //
+        // Found by a test, not by reading: a web app pointed at a plaintext
+        // test server produced an aesgcm address and then spent thirty
+        // seconds failing a TLS handshake against a server that speaks none.
+        if (URL.Scheme != Uri.UriSchemeHttps)
+            throw new ArgumentException(
+                      $"An encrypted file has to lie behind https; this one is {URL.Scheme}. " +
+                       "The key travels on the address, and an address in the clear carries it " +
+                       "to whoever is listening.",
+                      nameof(URL));
+
         var material = new Byte[Nonce.Length + Key.Length];
 
         Nonce.CopyTo(material, 0);

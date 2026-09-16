@@ -326,6 +326,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AnAddressInTheClear_CarriesNoKey()
+
+        /// <summary>
+        /// An aesgcm URL is only ever built over https.
+        /// </summary>
+        /// <remarks>
+        /// <b>The address is the secret.</b> <c>aesgcm://</c> is defined as an
+        /// https address with the scheme swapped, so one built over plain http
+        /// names somewhere that does not answer - and carries the key on a
+        /// transport that shows it to whoever is listening.
+        ///
+        /// Found by a test rather than by reading: a web app pointed at a
+        /// plaintext test server produced one, and then spent thirty seconds
+        /// failing a TLS handshake against a server that speaks none.
+        /// </remarks>
+        [Test]
+        public void AnAddressInTheClear_CarriesNoKey()
+        {
+
+            var encrypted = AesGcmUrl.Encrypt(Encoding.UTF8.GetBytes("x"));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.Throws<ArgumentException>(
+                    () => AesGcmUrl.ToAesGcm(new Uri("http://files.example.org/e2ee.bin"),
+                                             encrypted.Key, encrypted.Nonce),
+                    "A key was put on an address in the clear.");
+
+                Assert.That(AesGcmUrl.ToAesGcm(new Uri("https://files.example.org/e2ee.bin"),
+                                               encrypted.Key, encrypted.Nonce).Scheme,
+                            Is.EqualTo(AesGcmUrl.Scheme),
+                            "The ordinary case has to go on working.");
+
+            });
+
+        }
+
+        #endregion
+
         #region AKeyLengthNobodyReadsBack_IsRefused()
 
         /// <summary>

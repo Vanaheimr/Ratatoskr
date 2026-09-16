@@ -569,12 +569,33 @@ public sealed class UploadManager : IDisposable
                           CancellationToken
                       );
 
-        return outcome.Url is null
-                   ? new EncryptedUpload(null, outcome)
-                   : new EncryptedUpload(
-                         AesGcmUrl.ToAesGcm(outcome.Url, encrypted.Key, encrypted.Nonce),
-                         outcome
-                     );
+        if (outcome.Url is null)
+            return new EncryptedUpload(null, outcome);
+
+        try
+        {
+            return new EncryptedUpload(
+                       AesGcmUrl.ToAesGcm(outcome.Url, encrypted.Key, encrypted.Nonce),
+                       outcome
+                   );
+        }
+        catch (ArgumentException e)
+        {
+
+            // The service handed out an address this cannot carry a key on -
+            // in practice, plain http. Reported rather than thrown: the caller
+            // asked to send a file, and "it could not be done" is an answer,
+            // while an exception out of a send path becomes a 500 somewhere.
+            //
+            // The file is up by now and nobody will be told where. That is the
+            // better of the two outcomes: the alternative is an address with a
+            // key on it travelling over a transport that shows both.
+            _logger.LogWarning(e, "The upload service answered with an address no encrypted " +
+                                  "file can be published at");
+
+            return new EncryptedUpload(null, outcome);
+
+        }
 
     }
 
