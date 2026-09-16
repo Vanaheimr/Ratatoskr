@@ -82,8 +82,22 @@ public sealed record XMPPMessage(JID              From,
                                  MessageReplyTo?  RepliesTo   = null,
                                  BodyRange?       QuoteRange  = null,
                                  string?          OriginId    = null,
-                                 string?          StanzaId    = null)
+                                 string?          StanzaId    = null,
+                                 Uri?             FileUrl     = null)
 {
+
+    /// <summary>
+    /// Is this message about a file rather than about its own text
+    /// (XEP-0066/XEP-0363)?
+    /// </summary>
+    /// <remarks>
+    /// The body of such a message is the address and nothing else, so an
+    /// interface that shows it as text shows a person a URL. That is not wrong
+    /// - it is exactly what a client without this extension does, and the
+    /// reason section 5 asks for the address in the body as well - but it is
+    /// not what was sent.
+    /// </remarks>
+    public bool IsFile => FileUrl is not null;
 
     /// <summary>
     /// Does this message correct an earlier one (XEP-0308)?

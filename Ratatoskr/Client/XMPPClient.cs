@@ -977,6 +977,89 @@ public sealed class XMPPClient : IAsyncDisposable
 
     }
 
+    #region XEP-0363: files
+
+    /// <summary>
+    /// XEP-0363: the service this server hands out upload slots at, or null.
+    /// </summary>
+    /// <remarks>
+    /// Worth asking before offering somebody a paperclip: a server that has no
+    /// upload service cannot send a file at all, and finding that out after the
+    /// file has been read from disk is a worse way to learn it.
+    /// </remarks>
+    public Task<UploadService?> DiscoverUploadServiceAsync(CancellationToken ct = default)
+        => _connection.Upload?.DiscoverAsync(false, ct) ?? Task.FromResult<UploadService?>(null);
+
+    /// <summary>
+    /// XEP-0363 and XEP-0066: sends a file from disk.
+    /// </summary>
+    /// <remarks>
+    /// The size comes from the file itself, which is the only place it can
+    /// honestly come from: the number in the slot request is a promise the
+    /// service checks the PUT against.
+    /// </remarks>
+    public async Task<FileSent> SendFileAsync(JID                to,
+                                              String             path,
+                                              MessageType        type  = MessageType.Chat,
+                                              CancellationToken  ct    = default)
+    {
+
+        var info = new FileInfo(path);
+
+        if (!info.Exists)
+            return new FileSent(new UploadOutcome(null), null);
+
+        await using var content = info.OpenRead();
+
+        return await SendFileAsync(to,
+                                   content,
+                                   info.Length,
+                                   info.Name,
+                                   HttpFileUpload.GuessContentType(info.Name),
+                                   type,
+                                   ct);
+
+    }
+
+    /// <summary>
+    /// XEP-0363 and XEP-0066: sends what is in a stream as a file.
+    /// </summary>
+    public async Task<FileSent> SendFileAsync(JID                to,
+                                              Stream             content,
+                                              Int64              size,
+                                              String             filename,
+                                              String?            contentType  = null,
+                                              MessageType        type         = MessageType.Chat,
+                                              CancellationToken  ct           = default)
+    {
+
+        var sent = await _connection.SendFileAsync(to, content, size, filename, contentType, type, ct);
+
+        // The same bookkeeping an ordinary message gets: a file message is a
+        // message, and the last thing sent to somebody is what a correction
+        // reaches for.
+        if (sent.MessageId is not null)
+        {
+            lock (_lastSentToLock)
+                _lastSentTo[to.Bare] = sent.MessageId;
+        }
+
+        return sent;
+
+    }
+
+    /// <summary>
+    /// Fetches a file somebody was told about.
+    /// </summary>
+    /// <remarks>
+    /// Without authentication, because there is none to give: see
+    /// <see cref="UploadManager.DownloadAsync"/>.
+    /// </remarks>
+    public Task<Byte[]?> DownloadFileAsync(Uri url, CancellationToken ct = default)
+        => _connection.Upload?.DownloadAsync(url, ct) ?? Task.FromResult<Byte[]?>(null);
+
+    #endregion
+
     #region XEP-0313: the archive
 
     /// <summary>

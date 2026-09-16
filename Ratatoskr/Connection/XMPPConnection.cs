@@ -811,6 +811,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public MamManager? Mam { get; private set; }
 
+    /// <summary>
+    /// XEP-0363: where a file can be put so that it can be sent.
+    /// </summary>
+    /// <remarks>
+    /// Replaced on every reconnect like the other managers - and this one drops
+    /// something on the way that the others do not: the service it found. That
+    /// is deliberate. A slot is good for minutes, the address it came from is
+    /// good for as long as the server says so, and a client that kept either
+    /// across a reconnect would be holding a promise made to a session that no
+    /// longer exists.
+    /// </remarks>
+    public UploadManager? Upload { get; private set; }
+
     /// <summary>XEP-0045: this client is now in a room.</summary>
     public event OnRoomJoinedDelegate?       OnRoomJoined;
 
@@ -1677,6 +1690,21 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         Mam.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
             => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
+
+        // XEP-0363: the file uploads. Given the same certificate judgement as
+        // the stream, because they go to the same server over the same kind of
+        // connection and nobody would expect two answers to one question about
+        // whom to trust.
+        //
+        // The old one is let go of first: it holds an HttpClient, and one of
+        // those left behind on every reconnect is a socket pool that never
+        // empties.
+        Upload?.Dispose();
+        Upload = new UploadManager(BareJid.Domain,
+                                   Disco,
+                                   (to, type, payload, ct) => SendIqAsync(to, type, payload, ct),
+                                   ServerCertificateValidator,
+                                   CreateLogger<UploadManager>());
 
         // XEP-0115: Entity Capabilities
         EntityCaps = new EntityCapsManager(Disco, CreateLogger<EntityCapsManager>());
@@ -2729,6 +2757,12 @@ public sealed class XMPPConnection : IAsyncDisposable
             var repliesTo  = MessageReply.RepliesTo(element);
             var quoteRange = MessageReply.QuoteRangeIn(element, body);
 
+            // XEP-0066: a message whose whole point is an address somewhere
+            // else. Read here and not by whoever shows it, because the
+            // question "is the body a URL" has exactly one right answer and it
+            // is not one to be guessed at from the text.
+            var fileUrl    = OutOfBandData.UrlIn(element, body);
+
             await OnMessage.InvokeAllAsync(handler => handler(Timestamp.Now,
                                                            this,
                                                            new XMPPMessage(from,
@@ -2748,7 +2782,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                            // domain - and for a room message the sender
                                                                            // is the room, which is the entity whose
                                                                            // number everybody present shares.
-                                                                           StableIds.StanzaId(element, from)),
+                                                                           StableIds.StanzaId(element, from),
+                                                                           fileUrl),
                                                            CancellationToken), _logger);
 
             // Answered of its own accord is only where an answer belongs. A
@@ -4606,6 +4641,61 @@ public sealed class XMPPConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// XEP-0363 and XEP-0066: puts a file on the server and says where.
+    /// </summary>
+    /// <param name="to">Who is being told about it.</param>
+    /// <param name="content">The bytes.</param>
+    /// <param name="size">How many there are - the number the slot is asked for.</param>
+    /// <param name="filename">The name it should keep.</param>
+    /// <param name="contentType">What it is, or null to say nothing.</param>
+    /// <remarks>
+    /// <b>The upload is the part that can fail, and it fails before anything is
+    /// said.</b> The order matters: a message naming an address that the file
+    /// never reached is worse than no message at all, because it is indistinguishable
+    /// from a file that will be there in a moment.
+    ///
+    /// The address goes into the body <em>and</em> into an
+    /// <c>&lt;x xmlns='jabber:x:oob'/&gt;</c>, which is what XEP-0363, section 5
+    /// asks for - see <see cref="OutOfBandData"/> for why both.
+    ///
+    /// No receipt is requested and no marker set. Those are about a message
+    /// having been read; what matters here is whether the file was fetched, and
+    /// nothing in XMPP reports that - the fetch happens over HTTP, at a server
+    /// this client is not talking to.
+    /// </remarks>
+    public async Task<FileSent> SendFileAsync(JID                to,
+                                              Stream             content,
+                                              Int64              size,
+                                              String             filename,
+                                              String?            contentType        = null,
+                                              MessageType        type               = MessageType.Chat,
+                                              CancellationToken  cancellationToken  = default)
+    {
+
+        if (Upload is null)
+            return new FileSent(new UploadOutcome(null), null);
+
+        var outcome = await Upload.UploadAsync(content, size, filename, contentType,
+                                               CancellationToken: cancellationToken);
+
+        if (outcome.Url is null)
+            return new FileSent(outcome, null);
+
+        var messageId = await SendMessageStanzaAsync(
+                                  to,
+                                  $"<body>{XmlEscaping.Escape(outcome.Url.AbsoluteUri)}</body>" +
+                                  OutOfBandData.Xml(outcome.Url).ToString(SaveOptions.DisableFormatting),
+                                  requestReceipt:  false,
+                                  markable:        false,
+                                  type:            type,
+                                  corrects:        null
+                              );
+
+        return new FileSent(outcome, messageId);
+
+    }
+
+    /// <summary>
     /// XEP-0461: Sends an answer to a particular message.
     /// </summary>
     /// <param name="to">Who the answer goes to.</param>
@@ -5657,6 +5747,8 @@ public sealed class XMPPConnection : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await DisconnectAsync();
+
+        Upload?.Dispose();
 
         _sendLock.Dispose();
     }

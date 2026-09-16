@@ -305,7 +305,13 @@ public static class MessageArchive
                        MessageReply.RepliesTo(inner),
                        MessageReply.QuoteRangeIn(inner, body ?? ""),
                        StableIds.OriginId(inner),
-                       StableIds.StanzaId(inner, from)
+                       StableIds.StanzaId(inner, from),
+
+                       // The same question the live branch asks. An archived
+                       // message about a file is still about a file, and a
+                       // client that reads it only when it arrives shows the
+                       // picture once and the URL for ever after.
+                       OutOfBandData.UrlIn(inner, body ?? "")
                    )
 
                );

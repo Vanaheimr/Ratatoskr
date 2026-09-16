@@ -110,6 +110,8 @@ Legend: ✅ working · ⚠️ implemented with known gaps · 🚧 present but of
 | XEP-0333 | Chat Markers | ✅ | Sending + receiving, namespace-checked against confusion with XEP-0184 |
 | XEP-0384 | OMEMO Encryption | ✅ | Complete, `urn:xmpp:omemo:2` — see the "End-to-end encryption" section further down. Verified against the reference implementation python-omemo, in both directions (D69) |
 | XEP-0420 | Stanza Content Encryption | ✅ | The envelope that OMEMO encrypts: `<content/>` with the sender inside it and padding of random length |
+| XEP-0363 | HTTP File Upload | ⚠️ | **The asking half**, and it is the only way to send anything that is not text. `SendFileAsync` finds the service (the server itself first, then its items — both Prosody and ejabberd put it on a component, and neither would be found by a client that only asks the host), requests a slot, does the PUT and sends the address; `DownloadFileAsync` fetches one. Three decisions are not the caller's: **redirects are not followed** (the PUT carries a header the service dictated at an address it invented — a 307 would repeat both somewhere nobody vouched for), the certificate is judged exactly as the stream's is, and the `Content-Length` comes from the size that was *promised* and not from the stream. Of the headers a service names, only `Authorization`, `Cookie` and `Expires` are ever sent, and none whose value carries a line break (§5). Not here: the serving half — handing out slots and taking files is a service, not a client |
+| XEP-0066 | Out of Band Data | ⚠️ | The half XEP-0363 needs: a message whose body *is* an address, with an `<x xmlns='jabber:x:oob'/>` beside it saying so. `XMPPMessage.FileUrl` and `.IsFile` on the way in, written on the way out by `SendFileAsync`. **The attachment has to agree with the body** or nothing is read — a message that shows one address and opens another needs no server's help and any contact can send one. Only a direct child counts (D59), so a forwarded or archived message's attachment is not this message's. The IQ half of XEP-0066 (offering a file directly) is not implemented |
 | XEP-0454 | OMEMO Media Sharing | ⚠️ | The receiving half, and nothing that touches the network: `AesGcmUrl` reads `aesgcm://host/path#[iv][key]`, hands out the `https` address the file lies at — without the fragment, which is the key — and decrypts the payload, tag checked. What is deliberately **not** here is the fetching: whether an incoming message may cause a request at all, how large a file may be, which addresses are refused. A library that downloads on its own gives that decision to whoever sent the message. The upload side (encrypting and offering a file) is missing entirely. IV of 12 bytes only — the older 16 byte form is refused with a reason rather than silently, since `AesGcm` takes no other nonce length |
 | XEP-0359 | Unique and Stable Stanza IDs | ⚠️ | **Read, not written.** `XMPPMessage.OriginId` and `.StanzaId` carry the names a message was given by its sender and by an archive; `ReplyableId` picks the one a reply may use. This client assigns none of its own: an `<origin-id/>` would repeat the `id` it just wrote, and a second copy of a number is not a second piece of knowledge. `urn:xmpp:sid:0` is therefore **not** announced — section 3 has that for entities that assign them |
 | XEP-0426 | Character Counting in Message Bodies | ✅ | `CharacterCounting`, and it is one screen of code that exists because .NET counts the other way. Offsets into a body are Unicode code points; `Length` gives UTF-16 units; the two agree for every ASCII text and part company at the first emoji. Conversion happens at the wire and nowhere else |
@@ -743,9 +745,10 @@ tasks, at 1194 until Bind 2, at 1201 until the JID became a type, at 1223 until
 the OMEMO work of 03c44d7 and ca8bce3, at 1226 until an IQ of one's own could be
 registered and sent, at 1231 until a message could answer a particular other one,
 at 1252 until a stream error could no longer go missing on the way, at 1254 until
-this client could enter a room, at 1271 until it could throw somebody out of one
-and at 1277 until it could ask what was said before it arrived, and a figure
-nobody updates stops being a check and becomes decoration.
+this client could enter a room, at 1271 until it could throw somebody out of one,
+at 1277 until it could ask what was said before it arrived and at 1306 until it
+could send something that is not text, and a figure nobody updates stops being a
+check and becomes decoration.
 
 The step from 1201 is the one to read carefully, because it is the one where
 that happened. The JID conversion is what the entry names, and it is not the
@@ -1332,11 +1335,14 @@ distribution, session store, and the wiring.
   a schedule for it does not
 
 ### Feature scope
-- No Multi-User Chat (XEP-0045)
-- No Message Archive Management (XEP-0313)
+- ~~No Multi-User Chat (XEP-0045)~~ The visiting and moderating halves since
+  D116 and D117 — see the table above
+- ~~No Message Archive Management (XEP-0313)~~ The asking half since D118
 - **OMEMO (XEP-0384) is finished** — seven stages, D62 to D68. See the section
   of its own above
-- No HTTP File Upload (XEP-0363)
+- ~~No HTTP File Upload (XEP-0363)~~ The asking half since D119. What is still
+  missing is the **sending half of XEP-0454**: a file can now be put somewhere,
+  and `AesGcmUrl` can still only decrypt one that somebody else encrypted
 - ~~No Client State Indication (XEP-0352)~~ Implemented in D61, on both sides —
   see the table above
 - No Flexible Offline Message Retrieval (XEP-0013) — the store comes out in

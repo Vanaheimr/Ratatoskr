@@ -124,7 +124,17 @@ public sealed class DiscoManager
         // XEP-0045, section 6.2: a client says it understands rooms, so that
         // somebody who wants to invite it into one can find out beforehand
         // whether the invitation will mean anything.
-        "http://jabber.org/protocol/muc"
+        "http://jabber.org/protocol/muc",
+
+        // XEP-0066, and only this one of the two: it says a message about a
+        // file will be recognised as one rather than shown as a line of text.
+        //
+        // urn:xmpp:http:upload:0 is expressly *not* here. That namespace is a
+        // service announcing that it hands out slots, and a client that says
+        // it does invites the one request it cannot answer. Asking is not
+        // something to announce - nobody needs to know beforehand that we can
+        // ask.
+        "jabber:x:oob"
     ];
 
     /// <summary>
