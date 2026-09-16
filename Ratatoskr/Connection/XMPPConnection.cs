@@ -868,6 +868,9 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>XEP-0045: a room would not pass an invitation of ours on.</summary>
     public event OnInvitationRefusedDelegate?   OnInvitationRefused;
 
+    /// <summary>XEP-0045, section 10.9: a room we were in has been taken down.</summary>
+    public event OnRoomDestroyedDelegate?       OnRoomDestroyed;
+
     /// <summary>XEP-0313: one message out of an archive, as it arrives.</summary>
     public event OnArchivedMessageDelegate?     OnArchivedMessage;
 
@@ -1707,6 +1710,9 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         Muc.OnInvitationRefused   += async (timestamp, sender, refusal, ct)
             => await OnInvitationRefused. InvokeAllAsync(handler => handler(timestamp, sender, refusal, ct), _logger);
+
+        Muc.OnRoomDestroyed       += async (timestamp, sender, destroyed, ct)
+            => await OnRoomDestroyed.     InvokeAllAsync(handler => handler(timestamp, sender, destroyed, ct), _logger);
 
         Mam.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
             => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);

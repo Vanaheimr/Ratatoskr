@@ -415,6 +415,9 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>XEP-0045: a room would not pass an invitation of ours on.</summary>
     public event OnInvitationRefusedDelegate?   OnInvitationRefused;
 
+    /// <summary>XEP-0045, section 10.9: a room we were in has been taken down.</summary>
+    public event OnRoomDestroyedDelegate?       OnRoomDestroyed;
+
     /// <summary>
     /// XEP-0313: one message out of an archive, as it arrives.
     /// </summary>
@@ -658,6 +661,9 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnInvitationRefused   += async (timestamp, sender, refusal, ct)
             => await OnInvitationRefused. InvokeAllAsync(handler => handler(timestamp, sender, refusal, ct), _logger);
+
+        _connection.OnRoomDestroyed       += async (timestamp, sender, destroyed, ct)
+            => await OnRoomDestroyed.     InvokeAllAsync(handler => handler(timestamp, sender, destroyed, ct), _logger);
 
         _connection.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
             => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
@@ -1362,6 +1368,35 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </remarks>
     public Task<bool> InviteToRoomAsync(JID room, JID who, string? reason = null)
         => _connection.Muc?.InviteAsync(room, who, reason) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 10.9: takes the room down, which only its owner may.
+    /// </summary>
+    /// <remarks>
+    /// <b>Name the alternative if there is one.</b> The service hands it to
+    /// every occupant, and it is the difference between a room that moved and
+    /// a room that vanished.
+    /// </remarks>
+    public Task<bool> DestroyRoomAsync(JID                room,
+                                       string?            reason             = null,
+                                       JID?               alternate          = null,
+                                       string?            password           = null,
+                                       CancellationToken  cancellationToken  = default)
+        => _connection.Muc?.DestroyRoomAsync(room, reason, alternate, password, cancellationToken)
+               ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 9.5: who is on one of the room's lists.
+    /// </summary>
+    /// <returns>
+    /// null when the room would not say, an empty list when it said nobody.
+    /// The two are different answers.
+    /// </returns>
+    public Task<IReadOnlyList<MucAffiliated>?> RoomAffiliationsAsync(JID                room,
+                                                                     MucAffiliation     affiliation,
+                                                                     CancellationToken  cancellationToken  = default)
+        => _connection.Muc?.AffiliationsAsync(room, affiliation, cancellationToken)
+               ?? Task.FromResult<IReadOnlyList<MucAffiliated>?>(null);
 
     /// <summary>
     /// XEP-0045, section 7.8.2: says no to an invitation.

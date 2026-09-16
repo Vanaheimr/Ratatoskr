@@ -80,6 +80,12 @@ public delegate Task OnInvitationRefusedDelegate (DateTimeOffset     Timestamp,
                                                   MucInviteRefused   Refusal,
                                                   CancellationToken  CancellationToken);
 
+/// <summary>XEP-0045, section 10.9: the room we were in is gone.</summary>
+public delegate Task OnRoomDestroyedDelegate     (DateTimeOffset     Timestamp,
+                                                  MucManager         Sender,
+                                                  MucRoomDestroyed   Destroyed,
+                                                  CancellationToken  CancellationToken);
+
 /// <summary>XEP-0045: the subject of a room.</summary>
 public delegate Task OnRoomSubjectDelegate       (DateTimeOffset     Timestamp,
                                                   MucManager         Sender,
@@ -134,8 +140,12 @@ public sealed record MucJoinOutcome(MucRoom? Room, StanzaError? Refusal)
 /// What is implemented is entering a room, being there, following who else is,
 /// leaving, moderating (D117) and, since D125, the part of the owner protocol
 /// that decides whether a room can be encrypted in at all:
-/// <c>muc#roomconfig_whois</c>. Destroying a room and the affiliation lists are
-/// not here - see the README for what that leaves out.
+/// <c>muc#roomconfig_whois</c>. D130 closed the rest of it: taking a room down
+/// (section 10.9) and reading back who is on its lists (section 9.5), which is
+/// the only way to know an affiliation took - a <c>result</c> says the service
+/// accepted the request and nothing about who ended up on any list. What is
+/// still not here: voice requests, registering a nickname with a room, and
+/// entering one that wants a password. See the README.
 /// </remarks>
 public sealed class MucManager
 {
@@ -180,6 +190,7 @@ public sealed class MucManager
     public event OnRoomInvitationDelegate?      OnRoomInvitation;
     public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
     public event OnInvitationRefusedDelegate?   OnInvitationRefused;
+    public event OnRoomDestroyedDelegate?       OnRoomDestroyed;
 
     #endregion
 
@@ -450,6 +461,66 @@ public sealed class MucManager
 
         => SetRoleAsync(room, nick, MucRole.None, reason, cancellationToken);
 
+
+    /// <summary>
+    /// XEP-0045, section 10.9: takes the room down.
+    /// </summary>
+    /// <param name="alternate">
+    /// Where everybody should go instead. Worth naming: the service passes it
+    /// on to every occupant, and it is the only part of a destruction that is
+    /// of use to them.
+    /// </param>
+    /// <returns>
+    /// false when this client is not in that room, or the room would not do it.
+    /// Unlike an invitation this <i>is</i> an answer - a destruction is an IQ,
+    /// so the service either did it or refused.
+    /// </returns>
+    public async Task<bool> DestroyRoomAsync(JID                room,
+                                             string?            reason             = null,
+                                             JID?               alternate          = null,
+                                             string?            password           = null,
+                                             CancellationToken  cancellationToken  = default)
+    {
+
+        if (_ask is null || Room(room) is null)
+            return false;
+
+        var answer = await _ask(room.Bare, "set",
+                                MultiUserChat.DestroyQuery(alternate, reason, password),
+                                cancellationToken);
+
+        return answer?.Attr("type") == "result";
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 9.5: who is on one of the room's lists.
+    /// </summary>
+    /// <returns>
+    /// null when the room refused to say - which it does to anybody who is not
+    /// entitled to ask - and an <b>empty list</b> when it said nobody. The two
+    /// are different answers and a caller that folds them together will report
+    /// an empty member list for a room it simply may not administer.
+    /// </returns>
+    public async Task<IReadOnlyList<MucAffiliated>?> AffiliationsAsync(JID                room,
+                                                                       MucAffiliation     affiliation,
+                                                                       CancellationToken  cancellationToken = default)
+    {
+
+        if (_ask is null || Room(room) is null)
+            return null;
+
+        var answer = await _ask(room.Bare, "get",
+                                MultiUserChat.AffiliationListQuery(affiliation),
+                                cancellationToken);
+
+        if (answer?.Attr("type") != "result")
+            return null;
+
+        return MultiUserChat.Affiliated(answer.Child(MultiUserChat.AdminNamespace, "query"));
+
+    }
+
     /// <summary>
     /// Keeps somebody out of the room for good (section 9.1).
     /// </summary>
@@ -553,6 +624,36 @@ public sealed class MucManager
 
         if (type == "unavailable")
         {
+
+            // Section 10.9: the room is gone, and it is not the same news as a
+            // departure. Both arrive as an unavailable presence for one's own
+            // nickname and the only difference is the <destroy/> inside, so
+            // whoever reads the codes and not the elements tells somebody they
+            // have left a room they never left - and throws away the address of
+            // the room they were meant to move to.
+            //
+            // Before the nickname-change branch, because a destruction carries
+            // no nickname to change to, and before the departure branch, which
+            // would otherwise claim it.
+            if (MultiUserChat.Destruction(presence) is { } destroyed)
+            {
+
+                lock (_lock)
+                {
+                    room.State = MucRoomState.Left;
+                    room.Clear();
+                    _rooms.Remove(room.Address);
+                }
+
+                await OnRoomDestroyed.InvokeAllAsync(handler => handler(Timestamp.Now, this,
+                                                                        new MucRoomDestroyed(room.Address,
+                                                                                             destroyed.Alternate,
+                                                                                             destroyed.Reason,
+                                                                                             destroyed.Password),
+                                                                        cancellationToken), _logger);
+                return true;
+
+            }
 
             // Section 7.6: a nickname change is an unavailable presence for the
             // old name carrying the new one, followed by an available presence

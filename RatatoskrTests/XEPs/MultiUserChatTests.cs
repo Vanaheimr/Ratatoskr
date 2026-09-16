@@ -1079,6 +1079,189 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ADestroyedRoomIsNotALeftRoom()
+
+        /// <summary>
+        /// XEP-0045, section 10.9: the room is gone, and it does not look it.
+        /// </summary>
+        /// <remarks>
+        /// <b>The same stanza shape as a departure.</b> An unavailable presence
+        /// for one's own nickname, and the only thing that distinguishes the two
+        /// is a <c>&lt;destroy/&gt;</c> inside the wrapper - no status code of
+        /// its own, so whoever reads the numbers and not the elements tells
+        /// somebody they have left a room they never left, and throws away the
+        /// address of the room they were meant to move to.
+        /// </remarks>
+        [Test]
+        public async Task ADestroyedRoomIsNotALeftRoom()
+        {
+
+            await JoinAsync();
+
+            MucRoomDestroyed? destroyed = null;
+            MucRoom?          left      = null;
+
+            _muc.OnRoomDestroyed += (t, s, d, ct) => { destroyed = d; return Task.CompletedTask; };
+            _muc.OnRoomLeft      += (t, s, r, i, ct) => { left = r; return Task.CompletedTask; };
+
+            var handled = await Deliver(
+                XElement.Parse($"<presence xmlns='jabber:client' type='unavailable' from='{Room}/me' to='me@example/home'>" +
+                                   "<x xmlns='http://jabber.org/protocol/muc#user'>" +
+                                       "<item affiliation='none' role='none'/>" +
+                                       "<destroy jid='elsewhere@conference.example'>" +
+                                           "<reason>moving on</reason>" +
+                                       "</destroy>" +
+                                   "</x>" +
+                               "</presence>"));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(handled, Is.True);
+
+                Assert.That(destroyed, Is.Not.Null,
+                            "Nobody was told the room was destroyed.");
+
+                Assert.That(destroyed!.Room, Is.EqualTo(Room));
+
+                Assert.That(destroyed.Alternate?.ToString(), Is.EqualTo("elsewhere@conference.example"),
+                            "The address to move to was dropped, which turns a room that moved " +
+                            "into a room that vanished.");
+
+                Assert.That(destroyed.Reason, Is.EqualTo("moving on"));
+
+                Assert.That(left, Is.Null,
+                            "The destruction was also reported as a departure, so whoever listens " +
+                            "for both is told twice and the second telling is wrong.");
+
+                Assert.That(_muc.IsRoom(Room), Is.False,
+                            "The room is gone and the table still holds it.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AnOrdinaryDepartureIsNotADestruction()
+
+        /// <summary>
+        /// The other direction, and the expensive one.
+        /// </summary>
+        /// <remarks>
+        /// A client that took every unavailable presence for a destruction
+        /// would tear the room out of its own table every time somebody walked
+        /// out of it.
+        /// </remarks>
+        [Test]
+        public async Task AnOrdinaryDepartureIsNotADestruction()
+        {
+
+            await JoinAsync();
+
+            MucRoomDestroyed? destroyed = null;
+            _muc.OnRoomDestroyed += (t, s, d, ct) => { destroyed = d; return Task.CompletedTask; };
+
+            await Deliver(
+                XElement.Parse($"<presence xmlns='jabber:client' type='unavailable' from='{Room}/somebody' to='me@example/home'>" +
+                                   "<x xmlns='http://jabber.org/protocol/muc#user'>" +
+                                       "<item affiliation='none' role='none'/>" +
+                                   "</x>" +
+                               "</presence>"));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(destroyed, Is.Null,
+                            "Somebody leaving was read as the room being destroyed.");
+
+                Assert.That(_muc.IsRoom(Room), Is.True,
+                            "The room was thrown away because one occupant left it.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AnAffiliationListWithoutARealAddressNamesNobody()
+
+        /// <summary>
+        /// XEP-0045, section 9.5: what a list entry has to carry to be one.
+        /// </summary>
+        /// <remarks>
+        /// <b>An affiliation is held against an address and nothing else.</b> An
+        /// item carrying only a nickname says who is standing in the room at
+        /// this moment and nothing about who is on the list - and a caller
+        /// handed it would show a name that cannot be promoted, banned or taken
+        /// off again. So it is dropped rather than carried with an empty
+        /// address, which would be the same mistake spelt differently.
+        /// </remarks>
+        [Test]
+        public void AnAffiliationListWithoutARealAddressNamesNobody()
+        {
+
+            var list = MultiUserChat.Affiliated(
+                XElement.Parse("<query xmlns='http://jabber.org/protocol/muc#admin'>" +
+                                   "<item affiliation='member' jid='alice@example.org' nick='Alice'>" +
+                                       "<reason>asked along</reason>" +
+                                   "</item>" +
+                                   "<item affiliation='member' nick='Anonymous'/>" +
+                               "</query>"));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(list.Count, Is.EqualTo(1),
+                            "An item with no real address was carried into the list, where it " +
+                            "names somebody nobody can do anything about.");
+
+                Assert.That(list[0].Jid.ToString(), Is.EqualTo("alice@example.org"));
+                Assert.That(list[0].Affiliation,    Is.EqualTo(MucAffiliation.Member));
+                Assert.That(list[0].Nick,           Is.EqualTo("Alice"));
+                Assert.That(list[0].Reason,         Is.EqualTo("asked along"));
+
+            });
+
+        }
+
+        #endregion
+
+        #region ADestructionIsAskedForAsAnOwnerAndNotAsAnAdmin()
+
+        /// <summary>
+        /// The two namespaces that look alike.
+        /// </summary>
+        /// <remarks>
+        /// An admin may ban and make members; an owner may configure and
+        /// destroy. Sending a destruction in the admin namespace is refused by
+        /// every service, and rightly - and the mistake is invisible in the
+        /// element names, which are identical.
+        /// </remarks>
+        [Test]
+        public void ADestructionIsAskedForAsAnOwnerAndNotAsAnAdmin()
+        {
+
+            var query = MultiUserChat.DestroyQuery(JID.Parse("elsewhere@conference.example"),
+                                                   "moving on");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(query.Name.NamespaceName,
+                            Is.EqualTo("http://jabber.org/protocol/muc#owner"),
+                            "A destruction asked for in the admin namespace is refused, and the " +
+                            "element names give nothing away.");
+
+                Assert.That(query.ToString(), Does.Contain("jid=\"elsewhere@conference.example\""));
+                Assert.That(query.ToString(), Does.Contain("moving on"));
+
+            });
+
+        }
+
+        #endregion
+
     }
 
 }

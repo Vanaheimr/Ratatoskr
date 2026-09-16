@@ -154,6 +154,53 @@ public sealed record MucDecline(JID Room, JID From, string? Reason = null);
 /// </remarks>
 public sealed record MucInviteRefused(JID Room, JID Who, StanzaError Error);
 
+/// <summary>
+/// XEP-0045, section 10.9: the room is gone.
+/// </summary>
+/// <param name="Room">Which one.</param>
+/// <param name="Alternate">
+/// Where to go instead, when the owner named somewhere - and it is the reason
+/// this is a record and not a flag. A destruction without an alternative leaves
+/// everybody nowhere; one with an alternative is a move, and a client that
+/// drops the address has turned the second into the first.
+/// </param>
+/// <param name="Reason">Why, if the owner said.</param>
+/// <param name="Password">
+/// For the alternative, when it needs one. Useless on its own and useless
+/// without <see cref="Alternate"/>, which is why they travel together.
+/// </param>
+/// <remarks>
+/// <b>A destroyed room is not a left room</b>, and until D130 this client could
+/// not tell them apart: both arrive as an unavailable presence for one's own
+/// nickname, and the only difference is the <c>&lt;destroy/&gt;</c> inside it.
+/// Read as a departure, a destruction says "you have left" to somebody who did
+/// nothing, and throws away the address of the room they were meant to move to.
+/// </remarks>
+public sealed record MucRoomDestroyed(JID      Room,
+                                      JID?     Alternate  = null,
+                                      string?  Reason     = null,
+                                      string?  Password   = null);
+
+
+/// <summary>
+/// XEP-0045, section 9.5: one line of a room's affiliation list.
+/// </summary>
+/// <param name="Jid">
+/// The <b>real</b> address. An affiliation outlives a visit, so it cannot be
+/// held against a nickname - which is the whole difference from a role.
+/// </param>
+/// <param name="Affiliation">What they are to the room.</param>
+/// <param name="Nick">
+/// What they are called in it <i>at the moment</i>, when the service says -
+/// which it does only for somebody who is actually there. Not a key.
+/// </param>
+/// <param name="Reason">Why they were put on the list, when it was recorded.</param>
+public sealed record MucAffiliated(JID             Jid,
+                                   MucAffiliation  Affiliation,
+                                   string?         Nick    = null,
+                                   string?         Reason  = null);
+
+
 
 /// <summary>
 /// XEP-0045: a room, and everybody in it.
@@ -604,6 +651,129 @@ public static class MultiUserChat
                    invite.Child(UserNamespace, "reason")?.Value,
                    x?.Child(UserNamespace, "password")?.Value
                );
+
+    }
+
+
+    /// <summary>
+    /// XEP-0045, section 10.9: take the room down.
+    /// </summary>
+    /// <param name="alternate">
+    /// Where everybody should go instead. The service passes it on to every
+    /// occupant, which makes it the one part of a destruction that is of any
+    /// use to them.
+    /// </param>
+    /// <param name="reason">Why.</param>
+    /// <param name="password">For the alternative, if it has one.</param>
+    /// <remarks>
+    /// In the <b>owner</b> namespace and not the admin one. The two look alike
+    /// and are not: an admin may ban and make members, an owner may configure
+    /// and destroy. A destruction sent as an admin query is refused by both
+    /// services, and rightly.
+    /// </remarks>
+    public static XElement DestroyQuery(JID?     alternate  = null,
+                                        string?  reason     = null,
+                                        string?  password   = null)
+    {
+
+        var destroy = new XElement(XName.Get("destroy", OwnerNamespace));
+
+        if (alternate is not null)
+            destroy.Add(new XAttribute("jid", alternate.ToString()));
+
+        if (reason is not null)
+            destroy.Add(new XElement(XName.Get("reason", OwnerNamespace), reason));
+
+        if (password is not null)
+            destroy.Add(new XElement(XName.Get("password", OwnerNamespace), password));
+
+        return new XElement(XName.Get("query", OwnerNamespace), destroy);
+
+    }
+
+    /// <summary>
+    /// The room was destroyed, said in a presence - or null.
+    /// </summary>
+    /// <remarks>
+    /// <b>The element and not a status code.</b> Section 10.9 gives the
+    /// destruction no number of its own: what arrives is an ordinary unavailable
+    /// presence with a <c>&lt;destroy/&gt;</c> inside the <c>muc#user</c>
+    /// wrapper, so a client reading only the codes sees somebody leaving.
+    ///
+    /// And <b>not</b> conditioned on 110 either. The presence is addressed to
+    /// each occupant under their own nickname, but whether a service marks it as
+    /// theirs is left open by the section, which shows the example without any
+    /// status code at all - and a <c>&lt;destroy/&gt;</c> is news about the room
+    /// however it is labelled.
+    ///
+    /// The inner namespace is the <b>user</b> one here, not the owner one: the
+    /// same element name lives in both, and which applies is decided by the
+    /// wrapper it arrives in. Owner for the request, user for the news.
+    /// </remarks>
+    public static (JID? Alternate, string? Reason, string? Password)? Destruction(XElement presence)
+    {
+
+        var destroy = presence.Child(UserNamespace, "x")?.
+                               Child(UserNamespace, "destroy");
+
+        if (destroy is null)
+            return null;
+
+        return (JID.TryParse(destroy.Attr("jid")),
+                destroy.Child(UserNamespace, "reason")?.Value,
+                destroy.Child(UserNamespace, "password")?.Value);
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 9.5: asks a room who is on one of its lists.
+    /// </summary>
+    /// <remarks>
+    /// A <b>get</b>, and the item carries nothing but the affiliation being
+    /// asked about. One list per question - the protocol has no way to ask for
+    /// two, and a service handed two items answers about one of them without
+    /// saying which.
+    /// </remarks>
+    public static XElement AffiliationListQuery(MucAffiliation affiliation)
+
+        => new (XName.Get("query", AdminNamespace),
+                new XElement(XName.Get("item", AdminNamespace),
+                    new XAttribute("affiliation", affiliation.AsText())));
+
+    /// <summary>
+    /// The list a room answered with.
+    /// </summary>
+    /// <remarks>
+    /// <b>An entry without a real address is dropped rather than carried.</b> An
+    /// affiliation is held against an address and nothing else; an item that has
+    /// only a nickname names somebody who is in the room now and says nothing
+    /// about who is on the list, and keeping it would put a name in front of a
+    /// caller that cannot be banned, promoted or removed.
+    /// </remarks>
+    public static IReadOnlyList<MucAffiliated> Affiliated(XElement? query)
+    {
+
+        var list = new List<MucAffiliated>();
+
+        if (query is null)
+            return list;
+
+        foreach (var item in query.Children(AdminNamespace, "item"))
+        {
+
+            if (JID.TryParse(item.Attr("jid")) is not JID jid)
+                continue;
+
+            list.Add(new MucAffiliated(
+                         jid,
+                         MucRoles.ToAffiliation(item.Attr("affiliation")),
+                         item.Attr("nick"),
+                         item.Child(AdminNamespace, "reason")?.Value
+                     ));
+
+        }
+
+        return list;
 
     }
 
