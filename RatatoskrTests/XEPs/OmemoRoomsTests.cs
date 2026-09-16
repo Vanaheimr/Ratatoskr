@@ -187,6 +187,61 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AModeratorSeeingEverybodyIsStillNotEnough()
+
+        /// <summary>
+        /// <b>The one this lane got wrong, and the far side showed.</b>
+        /// </summary>
+        /// <remarks>
+        /// A semi-anonymous room gives real addresses to its <i>moderators</i>.
+        /// So a moderator's own recipient list is complete, and until D126 that
+        /// was the whole question: <c>WhyNot</c> asked "can we name everybody"
+        /// and answered null.
+        ///
+        /// Encrypting then works in the one direction that does not matter.
+        /// Everybody else in the room sees nicknames, so when the message
+        /// arrives they cannot say who sent it, cannot find the session, and
+        /// read nothing. The sender sees a lock and the room sees silence, and
+        /// nobody is told - which is the exact failure this file exists to
+        /// refuse, arriving through the door that was left open.
+        ///
+        /// Found by running it: a moderator sent a line through a real Prosody
+        /// and the other occupant received nothing at all.
+        /// </remarks>
+        [Test]
+        public void AModeratorSeeingEverybodyIsStillNotEnough()
+        {
+
+            // Exactly the shape Prosody produces: the room is semi-anonymous,
+            // and this client - being a moderator - was told who everybody is.
+            var room = ARoom(nonAnonymous: false);
+
+            Enters(room, "alice", Alice);
+            Enters(room, "bob",   Bob);
+
+            var why = OmemoRooms.WhyNot(room);
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(OmemoRooms.RecipientsOf(room).Complete, Is.True,
+                            "The moderator's own view is incomplete, so this round is not the case " +
+                            "it was written for.");
+
+                Assert.That(why, Is.Not.Null,
+                            "A moderator was allowed to encrypt in a semi-anonymous room. Everybody " +
+                            "else there sees nicknames, cannot attribute the message, and reads " +
+                            "nothing - and nobody is told.");
+
+                Assert.That(why, Does.Contain("semi-anonymous"),
+                            "The refusal does not name the setting that would fix it.");
+
+            });
+
+        }
+
+        #endregion
+
         #region OneOccupantWithoutAnAddressStopsTheWholeMessage()
 
         /// <summary>

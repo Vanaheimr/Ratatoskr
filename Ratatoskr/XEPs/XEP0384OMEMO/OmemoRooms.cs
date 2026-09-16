@@ -213,17 +213,34 @@ public static class OmemoRooms
         if (Room.Occupants.Count <= 1)
             return "nobody else is in this room";
 
+        // The room itself has to be non-anonymous, and seeing the addresses is
+        // not the same thing.
+        //
+        // <b>This is asked before the recipient list and not after it, which is
+        // the correction D126 had to make.</b> A semi-anonymous room gives real
+        // addresses to its moderators, so a moderator's own recipient list is
+        // complete and encrypting looks possible - and it is, in the one
+        // direction that does not matter. Everybody else in the room sees
+        // nicknames, so when the message arrives they cannot say who sent it,
+        // cannot find the session, and read nothing at all.
+        //
+        // Nobody is told. The sender sees a lock, the room sees silence. That
+        // is the exact failure this file exists to refuse, arriving through the
+        // one door that was left open: the question used to be "can we name
+        // everybody" when it had to be "does this room name everybody".
+        //
+        // Found by running it - a moderator sent a line through a real Prosody
+        // and the other occupant received nothing.
+        if (!Room.IsNonAnonymous)
+            return "this room is semi-anonymous: it tells only its moderators who anybody really " +
+                   "is, so even where this client can see the addresses, the others cannot see " +
+                   "ours - and a message they cannot attribute is one they cannot read";
+
         if (!recipients.Complete)
-            return Room.IsNonAnonymous
-
-                       // Non-anonymous and still missing somebody: their
-                       // presence has not arrived yet, or the service did not
-                       // write the address in. Either way it is a wait and not
-                       // a setting.
-                       ? $"the room gave no real address for {String.Join(", ", recipients.Anonymous)}"
-
-                       : "this room is semi-anonymous: it tells only its moderators who anybody " +
-                         "really is, and one cannot encrypt to a nickname";
+            // Non-anonymous and still missing somebody: their presence has not
+            // arrived yet, or the service did not write the address in. Either
+            // way it is a wait and not a setting.
+            return $"the room gave no real address for {String.Join(", ", recipients.Anonymous)}";
 
         return null;
 
