@@ -746,7 +746,7 @@ the OMEMO work of 03c44d7 and ca8bce3, at 1226 until an IQ of one's own could be
 registered and sent, at 1231 until a message could answer a particular other one,
 at 1252 until a stream error could no longer go missing on the way, at 1254 until
 this client could enter a room, at 1271 until it could throw somebody out of one,
-at 1277 until it could ask what was said before it arrived and at 1306 until it
+at 1277 until it could ask what was said before it arrived and at 1307 until it
 could send something that is not text, and a figure nobody updates stops being a
 check and becomes decoration.
 

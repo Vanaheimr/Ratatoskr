@@ -136,17 +136,62 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                               $"<iq xmlns='jabber:client' type='result' id='x'>" +
                               $"<slot xmlns='{NS}'><put url='https://example.org/p'/></slot></iq>");
 
-            var notAbsolute = XElement.Parse(
-                                  $"<iq xmlns='jabber:client' type='result' id='x'>" +
+            Assert.Multiple(() =>
+            {
+                Assert.That(HttpFileUpload.ReadSlot(onlyPut), Is.Null);
+                Assert.That(HttpFileUpload.ReadSlot(
+                    XElement.Parse("<iq xmlns='jabber:client' type='result' id='x'/>")), Is.Null);
+            });
+
+        }
+
+        /// <summary>
+        /// A slot points at the web or it is not a slot.
+        /// </summary>
+        /// <remarks>
+        /// <b>This one was found by running on a second platform, and the fault
+        /// was in the code rather than the test.</b> The first version asked
+        /// only whether the address was absolute.
+        /// <c>Uri.TryCreate("/p", UriKind.Absolute, ...)</c> fails on Windows
+        /// and <em>succeeds</em> on Linux, where a leading slash is an absolute
+        /// path: the result is <c>file:///p</c>. Green on the machine it was
+        /// written on, red in CI.
+        ///
+        /// What it would have cost is not a wrong error message. The PUT writes
+        /// and the GET reads, so a service handing out <c>file:///</c> could
+        /// have had the client write a file onto its own disk, or read one and
+        /// pass the bytes to whoever asked for the upload.
+        /// </remarks>
+        [Test]
+        public void AnAddressThatIsNotWebIsNotASlot()
+        {
+
+            static XElement Slot(String put, String get)
+                => XElement.Parse($"<iq xmlns='jabber:client' type='result' id='x'>" +
                                   $"<slot xmlns='{NS}'>" +
-                                   "<put url='/p'/><get url='/g'/></slot></iq>");
+                                  $"<put url='{put}'/><get url='{get}'/></slot></iq>");
 
             Assert.Multiple(() =>
             {
-                Assert.That(HttpFileUpload.ReadSlot(onlyPut),     Is.Null);
-                Assert.That(HttpFileUpload.ReadSlot(notAbsolute), Is.Null);
-                Assert.That(HttpFileUpload.ReadSlot(
-                    XElement.Parse("<iq xmlns='jabber:client' type='result' id='x'/>")), Is.Null);
+
+                Assert.That(HttpFileUpload.ReadSlot(Slot("/p", "/g")), Is.Null,
+                            "A bare path is an absolute file:// address on Linux.");
+
+                Assert.That(HttpFileUpload.ReadSlot(Slot("file:///tmp/p", "file:///tmp/g")), Is.Null,
+                            "A slot pointing at the local disk was accepted.");
+
+                Assert.That(HttpFileUpload.ReadSlot(Slot("https://example.org/p", "file:///tmp/g")), Is.Null,
+                            "Half of a slot pointing at the local disk is still a slot pointing there.");
+
+                Assert.That(HttpFileUpload.ReadSlot(Slot("https://example.org/p", "https://example.org/g")),
+                            Is.Not.Null,
+                            "The ordinary case has to go on working.");
+
+                Assert.That(HttpFileUpload.ReadSlot(Slot("http://example.org/p", "http://example.org/g")),
+                            Is.Not.Null,
+                            "Plain http is a deployment decision and not this library's to refuse; " +
+                            "whether the real services use it is asked of the real services.");
+
             });
 
         }

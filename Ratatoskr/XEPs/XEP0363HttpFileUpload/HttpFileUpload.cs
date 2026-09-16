@@ -225,6 +225,34 @@ public static class HttpFileUpload
 
     #endregion
 
+    #region (private) IsWeb(Url)
+
+    /// <summary>
+    /// Is this an address a file can be fetched from over the web?
+    /// </summary>
+    /// <remarks>
+    /// <b>Found by the second platform, and it was not a test that was
+    /// wrong.</b> <c>Uri.TryCreate("/p", UriKind.Absolute, ...)</c> fails on
+    /// Windows and <em>succeeds</em> on Linux, where a leading slash is an
+    /// absolute path and the result is <c>file:///p</c>. Without this check a
+    /// service could hand out a slot pointing at the local disk, and the client
+    /// would dutifully read a file from it and hand the bytes to whoever asked
+    /// - or write one, since the PUT is the other direction.
+    ///
+    /// Only <c>http</c> and <c>https</c>, therefore, and nothing else: an
+    /// allow-list because the list of schemes grows and the list of ones that
+    /// belong here does not. That it ought to be <c>https</c> in particular is
+    /// asked where it can be measured - of the real services, in the
+    /// conformance rounds - rather than enforced here, where it would rule out
+    /// a deployment nobody here has seen.
+    /// </remarks>
+    private static Boolean IsWeb(Uri Url)
+
+        => Url.Scheme == Uri.UriSchemeHttps ||
+           Url.Scheme == Uri.UriSchemeHttp;
+
+    #endregion
+
     #region ReadSlot(IQ)
 
     /// <summary>
@@ -251,8 +279,8 @@ public static class HttpFileUpload
         var get = slot.Child(Namespace, "get")?.Attr("url");
 
         if (put is null || get is null ||
-            !Uri.TryCreate(put, UriKind.Absolute, out var putUrl) ||
-            !Uri.TryCreate(get, UriKind.Absolute, out var getUrl))
+            !Uri.TryCreate(put, UriKind.Absolute, out var putUrl) || !IsWeb(putUrl) ||
+            !Uri.TryCreate(get, UriKind.Absolute, out var getUrl) || !IsWeb(getUrl))
         {
             return null;
         }
