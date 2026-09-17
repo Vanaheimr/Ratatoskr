@@ -2840,7 +2840,17 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                            // is the room, which is the entity whose
                                                                            // number everybody present shares.
                                                                            StableIds.StanzaId(element, from),
-                                                                           fileUrl),
+                                                                           fileUrl,
+
+                                                                           // XEP-0045, section 7.5. Only the room
+                                                                           // table can tell a private message in a
+                                                                           // room from a chat with a contact: both
+                                                                           // are a <chat/> from a full address. The
+                                                                           // marker the section asks senders to add
+                                                                           // is not consulted, because the same
+                                                                           // section says receiving entities MUST
+                                                                           // NOT rely on it.
+                                                                           Muc?.IsRoom(from.Bare) == true),
                                                            CancellationToken), _logger);
 
             // Answered of its own accord is only where an answer belongs. A
@@ -4997,6 +5007,26 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// body, because the offsets in the second only mean anything next to the
     /// first.
     /// </param>
+    /// <summary>
+    /// XEP-0045, section 7.5: a message to one occupant of a room.
+    /// </summary>
+    /// <remarks>
+    /// Its own way in rather than an argument on the ordinary send, because of
+    /// the one thing that is peculiar to it: the empty <c>&lt;x/&gt;</c> the
+    /// section asks a sender to add. Everything else - the receipt, the marker,
+    /// the chat state - is what a one-to-one conversation gets, and a private
+    /// message in a room is one.
+    /// </remarks>
+    public Task<string> SendRoomPrivateMessageAsync(JID to, String body)
+
+        => SendMessageStanzaAsync(to,
+                                  $"<body>{XmlEscaping.Escape(body)}</body>",
+                                  requestReceipt:  true,
+                                  markable:        true,
+                                  type:            MessageType.Chat,
+                                  corrects:        null,
+                                  extras:          MultiUserChat.PrivateMark().ToString());
+
     private async Task<string> SendMessageStanzaAsync(JID          to,
                                                       string       Content,
                                                       bool         requestReceipt,

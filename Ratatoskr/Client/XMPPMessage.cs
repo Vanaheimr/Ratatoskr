@@ -70,6 +70,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr;
 /// XEP-0359: The name the sender's own domain gave it - for a room message, the
 /// room's. Null when nobody assigned one.
 /// </param>
+/// <param name="InARoom">
+/// Whether <see cref="From"/> is a room this client is standing in.
+/// </param>
+/// <remarks>
+/// <b>Not read off the stanza, because it cannot be.</b> A private message in a
+/// room (XEP-0045, section 7.5) is an ordinary <c>chat</c> from
+/// <c>room@service/nick</c>, and that address is indistinguishable from a
+/// contact's full address by looking at it. Only the room table knows.
+///
+/// The specification does add a marker - an empty <c>&lt;x/&gt;</c> in the
+/// <c>muc#user</c> namespace - and says in the same breath not to depend on it:
+/// <i>because this requirement was only added in revision 1.28 of this XEP,
+/// receiving entities MUST NOT rely on the existence of the &lt;x/&gt; element
+/// on private messages for proper processing.</i> So the connection sets this
+/// from what it knows, and the marker is sent but never trusted.
+/// </remarks>
 public sealed record XMPPMessage(JID              From,
                                  JID              To,
                                  string           Body,
@@ -83,8 +99,29 @@ public sealed record XMPPMessage(JID              From,
                                  BodyRange?       QuoteRange  = null,
                                  string?          OriginId    = null,
                                  string?          StanzaId    = null,
-                                 Uri?             FileUrl     = null)
+                                 Uri?             FileUrl     = null,
+                                 bool             InARoom     = false)
 {
+
+    /// <summary>
+    /// XEP-0045, section 7.5: was this said to us alone, inside a room?
+    /// </summary>
+    /// <remarks>
+    /// <b>The difference an interface may not blur.</b> It arrives from a room
+    /// address like everything else the room sends, so a client that files by
+    /// the bare address puts it in the room's conversation - where it was never
+    /// said - and a client that answers to the bare address says out loud what
+    /// was told to it in confidence.
+    ///
+    /// <c>groupchat</c> is what the room says to everybody and is excluded here
+    /// whatever else is true of it; a resource is required because a message
+    /// from the bare room is about the room and not from anybody in it.
+    /// </remarks>
+    public bool IsRoomPrivate
+
+        => InARoom &&
+           Type != MessageType.GroupChat &&
+           From.Resourcepart is not null;
 
     /// <summary>
     /// Is this message about a file rather than about its own text

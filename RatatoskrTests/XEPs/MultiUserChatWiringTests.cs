@@ -255,6 +255,153 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region APrivateWordInARoomIsNotAChatWithAContact()
+
+        /// <summary>
+        /// XEP-0045, section 7.5: the one thing that tells them apart.
+        /// </summary>
+        /// <remarks>
+        /// <b>Both are a <c>chat</c> from a full address</b>, and nothing in the
+        /// stanza says which is which. The section does ask a sender to add an
+        /// empty <c>&lt;x/&gt;</c> and then says a receiver must not depend on
+        /// it, so what decides is the room table - which is why this is checked
+        /// here, over a connection, and not in the record's own tests.
+        ///
+        /// Three cases, because two of them are ways of being wrong in the other
+        /// direction: what the room says to everybody is not private, and a
+        /// contact who happens to be online is not in a room.
+        /// </remarks>
+        [Test]
+        public async Task APrivateWordInARoomIsNotAChatWithAContact()
+        {
+
+            var client   = await ConnectClientAsync();
+            var session  = await SessionOfAsync(client);
+
+            var room     = JID.Parse($"chat@conference.{Server.Domain}");
+
+            var messages = new ConcurrentQueue<XMPPMessage>();
+            client.OnMessage += (t, s, m, ct) => { messages.Enqueue(m); return Task.CompletedTask; };
+
+            var joining = client.JoinRoomAsync(room, "me");
+            await session.SendAsync(OccupantPresence(room, "me", client.FullJid, status: MucStatus.Self));
+            await joining;
+
+            // 1. one occupant to another - a private word. No marker on it, on
+            //    purpose: everything written before revision 1.28 sends none.
+            await session.SendAsync($"<message from='{room}/alice' to='{client.FullJid}' type='chat' id='p1'>" +
+                                    "<body>for you alone</body>" +
+                                    "</message>");
+
+            // 2. the room to everybody.
+            await session.SendAsync($"<message from='{room}/alice' to='{client.FullJid}' type='groupchat' id='p2'>" +
+                                    "<body>to everybody</body>" +
+                                    "</message>");
+
+            // 3. somebody who is not in a room at all.
+            await session.SendAsync($"<message from='alice@{Server.Domain}/home' to='{client.FullJid}' type='chat' id='p3'>" +
+                                    "<body>from outside</body>" +
+                                    "</message>");
+
+            await WaitFor(() => messages.Count == 3, "all three messages");
+
+            var privately  = messages.First(m => m.MessageId == "p1");
+            var toEverybody = messages.First(m => m.MessageId == "p2");
+            var fromOutside = messages.First(m => m.MessageId == "p3");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(privately.IsRoomPrivate, Is.True,
+                            "A private word in a room arrived looking like a chat with a " +
+                            "contact. Answered that way it goes to the room.");
+
+                Assert.That(toEverybody.IsRoomPrivate, Is.False,
+                            "What the room said to everybody was taken for something said in " +
+                            "confidence, which is the same mistake the other way about.");
+
+                Assert.That(fromOutside.IsRoomPrivate, Is.False,
+                            "A chat with an ordinary contact was taken for a room's business.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region ACorrectionInARoomGoesToTheOneItWasSentTo()
+
+        /// <summary>
+        /// XEP-0308 against XEP-0045, section 7.5: the table that was keyed
+        /// wrongly.
+        /// </summary>
+        /// <remarks>
+        /// <b>The last-sent table was keyed by bare address</b>, which is right
+        /// everywhere except here. A private message goes to
+        /// <c>room@service/nick</c>, whose bare address is the room - so every
+        /// occupant of one room shared one entry, and the correction that
+        /// followed two private messages carried the id of the one sent to
+        /// somebody else.
+        ///
+        /// Section 5 of XEP-0308 has a correction replace a message from the
+        /// same sender to the same recipient. That one was for neither: the
+        /// person receiving it had never seen what it claimed to replace, and
+        /// what it did replace for them was whatever else they had been sent.
+        ///
+        /// Nothing had ever been addressed to an occupant before D134, which is
+        /// why the table had been right for eighteen entries.
+        /// </remarks>
+        [Test]
+        public async Task ACorrectionInARoomGoesToTheOneItWasSentTo()
+        {
+
+            var client   = await ConnectClientAsync();
+            var session  = await SessionOfAsync(client);
+
+            var room     = JID.Parse($"chat@conference.{Server.Domain}");
+
+            var joining  = client.JoinRoomAsync(room, "me");
+            await session.SendAsync(OccupantPresence(room, "me", client.FullJid, status: MucStatus.Self));
+            await joining;
+
+            var toAlice = await client.SendRoomPrivateMessageAsync(room, "alice", "for Alice");
+            var toBob   = await client.SendRoomPrivateMessageAsync(room, "bob",   "for Bob");
+
+            Assert.That(toAlice, Is.Not.Null);
+            Assert.That(toBob,   Is.Not.Null);
+            Assert.That(toAlice, Is.Not.EqualTo(toBob));
+
+            var sent = new ConcurrentQueue<String>();
+            client.OnRawXml += (t, s, xml, ct) => { sent.Enqueue(xml); return Task.CompletedTask; };
+
+            Assert.That(await client.CorrectLastMessageAsync("for Alice, rather",
+                                                             JID.Parse($"{room.Bare}/alice")),
+                        Is.Not.Null,
+                        "There was nothing to correct, so the table is not keyed by the " +
+                        "occupant at all.");
+
+            await WaitFor(() => sent.Any(xml => xml.Contains("for Alice, rather")),
+                          "the correction going out");
+
+            var correction = sent.First(xml => xml.Contains("for Alice, rather"));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(correction, Does.Contain($"id=\"{toAlice}\"").Or.Contain($"id='{toAlice}'"),
+                            "The correction points at the message sent to somebody else in the " +
+                            "same room, so Alice is told that a line she never saw has been " +
+                            $"replaced. It points at: {correction}");
+
+                Assert.That(correction, Does.Not.Contain($"replace id=\"{toBob}\"").
+                                        And.Not.Contain($"replace id='{toBob}'"));
+
+            });
+
+        }
+
+        #endregion
+
     }
 
 }

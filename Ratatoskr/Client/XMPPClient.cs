@@ -250,6 +250,32 @@ public sealed class XMPPClient : IAsyncDisposable
     private readonly Lock                     _lastSentToLock        = new();
 
     /// <summary>
+    /// The key <see cref="_lastSentTo"/> is kept under.
+    /// </summary>
+    /// <remarks>
+    /// <b>The bare address everywhere except in a room.</b> A correction has to
+    /// name a message this client sent to this recipient (XEP-0308, section 5),
+    /// and for an ordinary conversation the resource is not part of who that is:
+    /// somebody who answers from their telephone is the same person.
+    ///
+    /// <b>In a room they are not.</b> A private message (XEP-0045, section 7.5)
+    /// is addressed to <c>room@service/nick</c>, whose bare address is the room -
+    /// so keying by it puts every occupant of one room under a single entry, and
+    /// a correction sent after two private messages would carry the id of the one
+    /// that went to somebody else. Section 5 of XEP-0308 has a correction replace
+    /// a message from the same sender to the same recipient; that one is for
+    /// neither, and the recipient who gets it never saw what it claims to
+    /// replace.
+    ///
+    /// Found in D134, when there was finally something addressed that way.
+    /// </remarks>
+    private JID LastSentKey(JID to)
+
+        => _connection.Muc?.IsRoom(to.Bare) == true
+               ? to
+               : to.Bare;
+
+    /// <summary>
     /// Valid values for the &lt;show/&gt; element (RFC 6121, section 4.7.2.1).
     /// "available" is the absence of &lt;show/&gt; and therefore permitted as well.
     /// </summary>
@@ -855,7 +881,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // For a later correction (XEP-0308). What is never corrected gets
         // remembered too - the price is one entry per conversation partner.
         lock (_lastSentToLock)
-            _lastSentTo[to.Bare] = id;
+            _lastSentTo[LastSentKey(to)] = id;
 
         return id;
 
@@ -884,18 +910,18 @@ public sealed class XMPPClient : IAsyncDisposable
         if (recipient is null)
             return null;
 
-        var bare = recipient.Value.Bare;
+        var key = LastSentKey(recipient.Value);
 
         string? previous;
 
         lock (_lastSentToLock)
-            if (!_lastSentTo.TryGetValue(bare, out previous))
+            if (!_lastSentTo.TryGetValue(key, out previous))
                 return null;
 
         var id = await _connection.SendMessageAsync(recipient.Value, body, corrects: previous);
 
         lock (_lastSentToLock)
-            _lastSentTo[bare] = id;
+            _lastSentTo[key] = id;
 
         return id;
 
@@ -957,7 +983,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // For a later correction (XEP-0308): an answer is a message like any
         // other, and whoever mistypes in one wants to correct it too.
         lock (_lastSentToLock)
-            _lastSentTo[to.Bare] = sent;
+            _lastSentTo[LastSentKey(to)] = sent;
 
         return sent;
 
@@ -989,7 +1015,7 @@ public sealed class XMPPClient : IAsyncDisposable
                                                   quotedAuthor);
 
         lock (_lastSentToLock)
-            _lastSentTo[to.Bare] = id;
+            _lastSentTo[LastSentKey(to)] = id;
 
         return id;
 
@@ -1059,7 +1085,7 @@ public sealed class XMPPClient : IAsyncDisposable
         if (sent.MessageId is not null)
         {
             lock (_lastSentToLock)
-                _lastSentTo[to.Bare] = sent.MessageId;
+                _lastSentTo[LastSentKey(to)] = sent.MessageId;
         }
 
         return sent;
@@ -1141,7 +1167,7 @@ public sealed class XMPPClient : IAsyncDisposable
         var messageId = await _connection.SendFileMessageAsync(to, encrypted.Url, type, ct);
 
         lock (_lastSentToLock)
-            _lastSentTo[to.Bare] = messageId;
+            _lastSentTo[LastSentKey(to)] = messageId;
 
         return new FileSent(encrypted.Upload with { Url = encrypted.Url }, messageId);
 
@@ -1374,6 +1400,44 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </remarks>
     public Task<bool> InviteToRoomAsync(JID room, JID who, string? reason = null)
         => _connection.Muc?.InviteAsync(room, who, reason) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 7.5: says something to one occupant of a room and to
+    /// nobody else in it.
+    /// </summary>
+    /// <param name="nick">
+    /// Whom - by what they are called <b>in this room</b>. Their real address
+    /// is not used and usually not known: a semi-anonymous room gives it to
+    /// nobody, and the room is what routes this.
+    /// </param>
+    /// <returns>The message id, or null when this client is not in that room.</returns>
+    /// <remarks>
+    /// <b>type=chat and never groupchat.</b> The section is explicit, and the
+    /// mistake it is guarding against is the one that cannot be taken back: a
+    /// groupchat to <c>room@service/nick</c> is either refused or shown to
+    /// everybody, and which of the two depends on the service.
+    ///
+    /// The id is recorded against the <b>occupant</b> address, not the room -
+    /// see <see cref="LastSentKey"/> for what goes wrong otherwise.
+    /// </remarks>
+    public async Task<string?> SendRoomPrivateMessageAsync(JID     room,
+                                                           string  nick,
+                                                           string  body)
+    {
+
+        if (_connection.Muc?.IsRoom(room.Bare) != true)
+            return null;
+
+        var to = JID.Parse($"{room.Bare}/{nick}");
+
+        var id = await _connection.SendRoomPrivateMessageAsync(to, body);
+
+        lock (_lastSentToLock)
+            _lastSentTo[LastSentKey(to)] = id;
+
+        return id;
+
+    }
 
     /// <summary>
     /// XEP-0045, section 8.6: asks a moderated room to be allowed to speak.
@@ -1735,7 +1799,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // here until now, which made every encrypted message the one message
         // that could not be corrected.
         lock (_lastSentToLock)
-            _lastSentTo[to.Bare] = sent.MessageId;
+            _lastSentTo[LastSentKey(to)] = sent.MessageId;
 
         return sent;
 

@@ -733,6 +733,21 @@ public static class MultiUserChat
     public const String RequestAllowField = "muc#request_allow";
 
     /// <summary>
+    /// XEP-0045, section 7.5: the mark a private message in a room carries.
+    /// </summary>
+    /// <remarks>
+    /// <b>Sent and never trusted.</b> The section asks a sending client to add
+    /// it, and says in the same breath that a receiving one must not depend on
+    /// it: the requirement arrived in revision 1.28 and everything written
+    /// before that sends nothing. So it goes out, because a room that has to
+    /// add it for us is doing our work, and the reading is done from the room
+    /// table instead.
+    /// </remarks>
+    public static XElement PrivateMark()
+
+        => new (XName.Get("x", UserNamespace));
+
+    /// <summary>
     /// XEP-0045, section 8.6: asks a moderated room to be allowed to speak.
     /// </summary>
     /// <remarks>
