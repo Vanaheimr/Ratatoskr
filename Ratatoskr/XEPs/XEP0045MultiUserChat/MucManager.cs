@@ -86,6 +86,12 @@ public delegate Task OnRoomDestroyedDelegate     (DateTimeOffset     Timestamp,
                                                   MucRoomDestroyed   Destroyed,
                                                   CancellationToken  CancellationToken);
 
+/// <summary>XEP-0045, section 8.6: somebody is asking to be allowed to speak.</summary>
+public delegate Task OnVoiceRequestedDelegate    (DateTimeOffset     Timestamp,
+                                                  MucManager         Sender,
+                                                  MucVoiceRequest    Request,
+                                                  CancellationToken  CancellationToken);
+
 /// <summary>XEP-0045: the subject of a room.</summary>
 public delegate Task OnRoomSubjectDelegate       (DateTimeOffset     Timestamp,
                                                   MucManager         Sender,
@@ -191,6 +197,7 @@ public sealed class MucManager
     public event OnInvitationDeclinedDelegate?  OnInvitationDeclined;
     public event OnInvitationRefusedDelegate?   OnInvitationRefused;
     public event OnRoomDestroyedDelegate?       OnRoomDestroyed;
+    public event OnVoiceRequestedDelegate?      OnVoiceRequested;
 
     #endregion
 
@@ -461,6 +468,132 @@ public sealed class MucManager
 
         => SetRoleAsync(room, nick, MucRole.None, reason, cancellationToken);
 
+
+
+    /// <summary>
+    /// XEP-0045, section 8.6: asks a moderated room to be allowed to speak.
+    /// </summary>
+    /// <returns>
+    /// false when this client is not in that room. <b>true means asked</b> and
+    /// nothing more: a voice request is a message, nobody answers it, and what
+    /// eventually comes back - if a moderator agrees - is a presence carrying a
+    /// new role. Whoever waits for a result here waits for ever.
+    /// </returns>
+    public async Task<bool> RequestVoiceAsync(JID                room,
+                                              CancellationToken  cancellationToken = default)
+    {
+
+        if (Room(room) is null)
+            return false;
+
+        await _send($"<message to='{XmlEscaping.Escape(room.Bare.ToString())}'>" +
+                        MultiUserChat.VoiceRequestXml() +
+                    "</message>");
+
+        return true;
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 8.6: a moderator's yes or no to a voice request.
+    /// </summary>
+    /// <returns>false when this client is not in that room.</returns>
+    /// <remarks>
+    /// A message again, and a refusal is worth sending: a room that hears
+    /// nothing goes on showing the request to every moderator, and the person
+    /// waiting to speak is told neither way.
+    /// </remarks>
+    public async Task<bool> AnswerVoiceRequestAsync(MucVoiceRequest    request,
+                                                    Boolean            allow,
+                                                    CancellationToken  cancellationToken = default)
+    {
+
+        if (Room(request.Room) is null)
+            return false;
+
+        await _send($"<message to='{XmlEscaping.Escape(request.Room.Bare.ToString())}'>" +
+                        MultiUserChat.VoiceAnswerXml(request, allow) +
+                    "</message>");
+
+        return true;
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 7.10: what nickname this account holds in a room.
+    /// </summary>
+    /// <returns>
+    /// null when the room would not say at all - which is what a service that
+    /// does not offer reservations answers - and a record otherwise. <b>Not
+    /// registered is an answer</b>, and a different one from no answer.
+    /// </returns>
+    public async Task<MucNicknameRegistration?> RegisteredNicknameAsync(JID                room,
+                                                                        CancellationToken  cancellationToken = default)
+    {
+
+        if (_ask is null)
+            return null;
+
+        var answer = await _ask(room.Bare, "get", MultiUserChat.RegisterQuery(), cancellationToken);
+
+        if (answer?.Attr("type") != "result")
+            return null;
+
+        return MultiUserChat.Registered(answer.Child(MultiUserChat.RegisterNamespace, "query"));
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 7.10: claims a nickname in a room, so that nobody else
+    /// may enter under it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Two round trips and not one.</b> The room is asked for its form
+    /// first, because the fields are the service's to name and a submit that
+    /// invented them would be refused - and, worse, a submit carrying only what
+    /// this client knows about tells the room every other field is now unset.
+    /// The same rule as section 10.2, learnt in D125.
+    ///
+    /// Entering under the reserved name is a separate act. Reserving it keeps
+    /// others out; it does not put anybody in.
+    /// </remarks>
+    public async Task<bool> ReserveNicknameAsync(JID                room,
+                                                 String             nick,
+                                                 CancellationToken  cancellationToken = default)
+    {
+
+        if (_ask is null)
+            return false;
+
+        var offered = await _ask(room.Bare, "get", MultiUserChat.RegisterQuery(), cancellationToken);
+
+        if (offered?.Attr("type") != "result")
+            return false;
+
+        var form = offered.Child(MultiUserChat.RegisterNamespace, "query")?.
+                           Child(DataForm.Namespace, "x");
+
+        if (form is null)
+        {
+            _logger.LogWarning("XEP-0045: {Room} offers no registration form, so no nickname can be held there",
+                               room);
+            return false;
+        }
+
+        var submit = MultiUserChat.RegisterSubmit(form, nick, out var missing);
+
+        if (missing.Count > 0)
+        {
+            _logger.LogWarning("XEP-0045: {Room} offers no {Fields}, so nothing was claimed",
+                               room, String.Join(", ", missing));
+            return false;
+        }
+
+        var answer = await _ask(room.Bare, "set", submit, cancellationToken);
+
+        return answer?.Attr("type") == "result";
+
+    }
 
     /// <summary>
     /// XEP-0045, section 10.9: takes the room down.
@@ -817,6 +950,26 @@ public sealed class MucManager
         }
 
         var room = Room(from);
+
+        // XEP-0045, section 8.6: somebody in this room wants to speak. Before
+        // the body branches below and after the room table, because unlike an
+        // invitation this one is only ever about a room we are standing in -
+        // a moderator is asked, and being a moderator means being there.
+        //
+        // Nothing marks it but the form. No body, no status code, so a client
+        // reading either shows nothing at all and the person in the room goes
+        // on waiting to be let speak - the same shape as the configuration
+        // notice D125 found, and missed for the same reason.
+        if (room is not null &&
+            message.Child("body") is null &&
+            MultiUserChat.VoiceRequest(message) is MucVoiceRequest asking)
+        {
+
+            await OnVoiceRequested.InvokeAllAsync(handler => handler(Timestamp.Now, this, asking,
+                                                                     cancellationToken), _logger);
+            return true;
+
+        }
 
         // XEP-0045, section 10.2.1: the room's configuration changed. It comes
         // as a message carrying nothing but status codes, which is why a client

@@ -1262,6 +1262,211 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AVoiceRequestReachesAModeratorAndIsNotAMessage()
+
+        /// <summary>
+        /// XEP-0045, section 8.6: what arrives, and what it does not look like.
+        /// </summary>
+        /// <remarks>
+        /// <b>Nothing marks it.</b> No body, no status code, only the form
+        /// inside - so a client reading bodies shows nothing and a client
+        /// reading status codes sees nothing, and the person in the room goes on
+        /// waiting to be let speak while every moderator is told and none of
+        /// them knows it.
+        ///
+        /// The real address is carried out of it because a semi-anonymous room
+        /// gives it to moderators for exactly this: somebody who cannot tell who
+        /// is asking cannot decide.
+        /// </remarks>
+        [Test]
+        public async Task AVoiceRequestReachesAModeratorAndIsNotAMessage()
+        {
+
+            await JoinAsync();
+
+            MucVoiceRequest? asking = null;
+            _muc.OnVoiceRequested += (t, s, r, ct) => { asking = r; return Task.CompletedTask; };
+
+            var handled = await _muc.ProcessMessageAsync(
+                XElement.Parse($"<message xmlns='jabber:client' from='{Room}' to='me@example/home'>" +
+                                   "<x xmlns='jabber:x:data' type='form'>" +
+                                       "<field var='FORM_TYPE'><value>http://jabber.org/protocol/muc#request</value></field>" +
+                                       "<field var='muc#role'><value>participant</value></field>" +
+                                       "<field var='muc#jid'><value>visitor@example.org/home</value></field>" +
+                                       "<field var='muc#roomnick'><value>Quiet</value></field>" +
+                                       "<field var='muc#request_allow' type='boolean'><value>0</value></field>" +
+                                   "</x>" +
+                               "</message>"),
+                JID.Parse(Room.ToString()));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(handled, Is.True,
+                            "The request travelled on as an ordinary message, which shows as an " +
+                            "empty line in a conversation.");
+
+                Assert.That(asking, Is.Not.Null, "No moderator was told.");
+
+                Assert.That(asking!.Room,               Is.EqualTo(Room));
+                Assert.That(asking.Nick,                Is.EqualTo("Quiet"));
+                Assert.That(asking.Jid?.ToString(),     Is.EqualTo("visitor@example.org/home"),
+                            "The real address was dropped, so a moderator is asked to decide " +
+                            "about a nickname and nothing else.");
+                Assert.That(asking.Role,                Is.EqualTo(MucRole.Participant));
+
+            });
+
+        }
+
+        #endregion
+
+        #region AModeratorsAnswerIsNotAnotherRequest()
+
+        /// <summary>
+        /// The same form, both ways round.
+        /// </summary>
+        /// <remarks>
+        /// <b>A request and an answer travel through the same room in the same
+        /// kind of stanza carrying the same fields.</b> The one thing that
+        /// separates them is the form's <c>type</c>: a question is
+        /// <c>form</c>, a decision is <c>submit</c>. Read the wrong way round, a
+        /// moderator's yes would be shown to every other moderator as a fresh
+        /// request from somebody who is already speaking.
+        /// </remarks>
+        [Test]
+        public async Task AModeratorsAnswerIsNotAnotherRequest()
+        {
+
+            await JoinAsync();
+
+            MucVoiceRequest? asking = null;
+            _muc.OnVoiceRequested += (t, s, r, ct) => { asking = r; return Task.CompletedTask; };
+
+            await _muc.ProcessMessageAsync(
+                XElement.Parse($"<message xmlns='jabber:client' from='{Room}' to='me@example/home'>" +
+                                   "<x xmlns='jabber:x:data' type='submit'>" +
+                                       "<field var='FORM_TYPE'><value>http://jabber.org/protocol/muc#request</value></field>" +
+                                       "<field var='muc#roomnick'><value>Quiet</value></field>" +
+                                       "<field var='muc#request_allow'><value>1</value></field>" +
+                                   "</x>" +
+                               "</message>"),
+                JID.Parse(Room.ToString()));
+
+            Assert.That(asking, Is.Null,
+                        "A moderator's answer was read as a request, so everybody who may decide " +
+                        "is asked again about somebody who has already been allowed to speak.");
+
+        }
+
+        #endregion
+
+        #region AnAnswerCarriesTheWholeFormBack()
+
+        /// <summary>
+        /// XEP-0045, section 8.6: what the moderator sends.
+        /// </summary>
+        /// <remarks>
+        /// <b>The form goes back whole</b> - the rule D125 learnt about a
+        /// different form. Here nothing is stored, so an incomplete answer does
+        /// not reset anything; what it does instead is name nobody. The room
+        /// matches an answer to a request by what is in it, and a submit
+        /// carrying only the decision is a decision about no one.
+        ///
+        /// The second half is the field a room is free to leave out of the
+        /// question it asks. Then it has to be added, because an answer without
+        /// it is not an answer.
+        /// </remarks>
+        [Test]
+        public void AnAnswerCarriesTheWholeFormBack()
+        {
+
+            var asked = XElement.Parse(
+                "<x xmlns='jabber:x:data' type='form'>" +
+                    "<field var='FORM_TYPE'><value>http://jabber.org/protocol/muc#request</value></field>" +
+                    "<field var='muc#role'><value>participant</value></field>" +
+                    "<field var='muc#jid'><value>visitor@example.org/home</value></field>" +
+                    "<field var='muc#roomnick'><value>Quiet</value></field>" +
+                "</x>");
+
+            var answer = MultiUserChat.VoiceAnswerXml(
+                             new MucVoiceRequest(Room, JID.Parse("visitor@example.org/home"),
+                                                 "Quiet", MucRole.Participant, asked),
+                             allow: true);
+
+            var text = answer.ToString();
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(text, Does.Contain("visitor@example.org/home"),
+                            "The answer named nobody, so the room has nothing to match it to.");
+
+                Assert.That(text, Does.Contain("Quiet"));
+
+                Assert.That(text, Does.Contain("muc#request_allow"),
+                            "The room left the decision out of its question and the answer left " +
+                            "it out too, so nothing was decided.");
+
+                Assert.That(answer.Attribute("type")?.Value, Is.EqualTo("submit"),
+                            "An answer sent as a form is another question.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region ARegistrationWithoutANameIsStillARegistration()
+
+        /// <summary>
+        /// XEP-0045, section 7.10: two things read out of one answer.
+        /// </summary>
+        /// <remarks>
+        /// <b>Measured against both services, which disagree.</b> ejabberd names
+        /// the nickname it holds; Prosody answers <c>&lt;registered/&gt;</c> and
+        /// leaves the field empty. Neither is wrong - the section has the
+        /// service return the registration form and does not oblige it to fill
+        /// anything in - so a client that read only the name would report no
+        /// reservation against Prosody where there is one.
+        /// </remarks>
+        [Test]
+        public void ARegistrationWithoutANameIsStillARegistration()
+        {
+
+            var bare = MultiUserChat.Registered(
+                XElement.Parse("<query xmlns='jabber:iq:register'><registered/></query>"));
+
+            var named = MultiUserChat.Registered(
+                XElement.Parse("<query xmlns='jabber:iq:register'>" +
+                                   "<registered/>" +
+                                   "<x xmlns='jabber:x:data' type='result'>" +
+                                       "<field var='muc#register_roomnick'><value>Held</value></field>" +
+                                   "</x>" +
+                               "</query>"));
+
+            var none = MultiUserChat.Registered(
+                XElement.Parse("<query xmlns='jabber:iq:register'/>"));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(bare.Registered, Is.True,
+                            "A reservation the service would not name was read as no reservation.");
+                Assert.That(bare.Nick, Is.Null);
+
+                Assert.That(named.Registered, Is.True);
+                Assert.That(named.Nick,       Is.EqualTo("Held"));
+
+                Assert.That(none.Registered, Is.False,
+                            "A room holding nothing was reported as holding something.");
+
+            });
+
+        }
+
+        #endregion
+
     }
 
 }

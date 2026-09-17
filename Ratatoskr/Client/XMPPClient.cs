@@ -418,6 +418,9 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <summary>XEP-0045, section 10.9: a room we were in has been taken down.</summary>
     public event OnRoomDestroyedDelegate?       OnRoomDestroyed;
 
+    /// <summary>XEP-0045, section 8.6: somebody is asking to be allowed to speak.</summary>
+    public event OnVoiceRequestedDelegate?      OnVoiceRequested;
+
     /// <summary>
     /// XEP-0313: one message out of an archive, as it arrives.
     /// </summary>
@@ -664,6 +667,9 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnRoomDestroyed       += async (timestamp, sender, destroyed, ct)
             => await OnRoomDestroyed.     InvokeAllAsync(handler => handler(timestamp, sender, destroyed, ct), _logger);
+
+        _connection.OnVoiceRequested      += async (timestamp, sender, request, ct)
+            => await OnVoiceRequested.    InvokeAllAsync(handler => handler(timestamp, sender, request, ct), _logger);
 
         _connection.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
             => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
@@ -1368,6 +1374,55 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </remarks>
     public Task<bool> InviteToRoomAsync(JID room, JID who, string? reason = null)
         => _connection.Muc?.InviteAsync(room, who, reason) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 8.6: asks a moderated room to be allowed to speak.
+    /// </summary>
+    /// <returns>
+    /// false when this client is not in that room. <b>true means asked</b>, not
+    /// granted - nobody answers a voice request, and what comes back if a
+    /// moderator agrees is a presence carrying a new role.
+    /// </returns>
+    public Task<bool> RequestVoiceAsync(JID                room,
+                                        CancellationToken  cancellationToken = default)
+        => _connection.Muc?.RequestVoiceAsync(room, cancellationToken) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 8.6: a moderator's yes or no to a voice request.
+    /// </summary>
+    /// <remarks>
+    /// A refusal is worth sending: a room that hears nothing goes on showing
+    /// the request, and the person waiting to speak is told neither way.
+    /// </remarks>
+    public Task<bool> AnswerVoiceRequestAsync(MucVoiceRequest    request,
+                                              Boolean            allow,
+                                              CancellationToken  cancellationToken = default)
+        => _connection.Muc?.AnswerVoiceRequestAsync(request, allow, cancellationToken) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 7.10: claims a nickname in a room, so that nobody
+    /// else may enter under it.
+    /// </summary>
+    /// <remarks>
+    /// Reserving a name keeps others out; it does not put anybody in.
+    /// </remarks>
+    public Task<bool> ReserveRoomNicknameAsync(JID                room,
+                                               String             nick,
+                                               CancellationToken  cancellationToken = default)
+        => _connection.Muc?.ReserveNicknameAsync(room, nick, cancellationToken) ?? Task.FromResult(false);
+
+    /// <summary>
+    /// XEP-0045, section 7.10: what nickname this account holds in a room.
+    /// </summary>
+    /// <returns>
+    /// null when the room would not say at all - which a service without
+    /// reservations answers - and a record otherwise. Not registered is an
+    /// answer, and a different one from no answer.
+    /// </returns>
+    public Task<MucNicknameRegistration?> RoomNicknameAsync(JID                room,
+                                                            CancellationToken  cancellationToken = default)
+        => _connection.Muc?.RegisteredNicknameAsync(room, cancellationToken)
+               ?? Task.FromResult<MucNicknameRegistration?>(null);
 
     /// <summary>
     /// XEP-0045, section 10.9: takes the room down, which only its owner may.

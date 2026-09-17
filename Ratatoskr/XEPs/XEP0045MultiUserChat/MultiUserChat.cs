@@ -200,6 +200,55 @@ public sealed record MucAffiliated(JID             Jid,
                                    string?         Nick    = null,
                                    string?         Reason  = null);
 
+/// <summary>
+/// XEP-0045, section 8.6: somebody in a moderated room is asking to be allowed
+/// to speak.
+/// </summary>
+/// <param name="Room">Which room.</param>
+/// <param name="Jid">
+/// Their <b>real</b> address, when the room gave it - and in a semi-anonymous
+/// room it does, to moderators, because a moderator who cannot tell who is
+/// asking cannot decide. Null where the service withheld it.
+/// </param>
+/// <param name="Nick">What they are called in the room.</param>
+/// <param name="Role">What they are asking for. In practice always participant.</param>
+/// <param name="Form">
+/// The form as it arrived. Carried rather than taken apart, because the answer
+/// is the same form sent back - see <see cref="MultiUserChat.VoiceAnswerXml"/>.
+/// </param>
+/// <remarks>
+/// <b>It arrives as an ordinary message.</b> No <c>&lt;body/&gt;</c>, no status
+/// code, nothing to mark it as being about the room except the form inside it -
+/// so a client that reads bodies shows nothing and a client that reads status
+/// codes sees nothing, and the person in the room goes on waiting to be let
+/// speak. The same shape as the configuration notice D125 found, and for the
+/// same reason it was missed.
+/// </remarks>
+public sealed record MucVoiceRequest(JID       Room,
+                                     JID?      Jid,
+                                     string?   Nick,
+                                     MucRole   Role,
+                                     XElement  Form);
+
+
+/// <summary>
+/// XEP-0045, section 7.10: what a room says about a nickname held there.
+/// </summary>
+/// <param name="Registered">Whether this account has one at all.</param>
+/// <param name="Nick">
+/// The nickname it holds, when the room says. A room that answers
+/// <c>&lt;registered/&gt;</c> without naming it has still answered the question
+/// that matters.
+/// </param>
+/// <remarks>
+/// <b>A reservation is not an affiliation.</b> Being on the member list says one
+/// may enter; holding a nickname says nobody else may enter under that name.
+/// Rooms and services differ over whether they offer it at all, which is why
+/// this is asked for rather than assumed.
+/// </remarks>
+public sealed record MucNicknameRegistration(bool Registered, string? Nick = null);
+
+
 
 
 /// <summary>
@@ -654,6 +703,173 @@ public static class MultiUserChat
 
     }
 
+
+
+    /// <summary>
+    /// The namespace a voice request and its answer are carried in
+    /// (section 8.6).
+    /// </summary>
+    public const String RequestNamespace = "http://jabber.org/protocol/muc#request";
+
+    /// <summary>
+    /// The namespace a room is asked for a nickname in (section 7.10).
+    /// </summary>
+    /// <remarks>
+    /// <b>XEP-0077's, not one of XEP-0045's own.</b> Registering with a room is
+    /// in-band registration pointed at a room instead of at a server, which is
+    /// why nothing in this file looked like it until D133 - it was being
+    /// searched for under the wrong name.
+    /// </remarks>
+    public const String RegisterNamespace = "jabber:iq:register";
+
+    /// <summary>
+    /// The field a room's registration form holds the nickname in.
+    /// </summary>
+    public const String RoomNickField = "muc#register_roomnick";
+
+    /// <summary>
+    /// The field a moderator says yes or no in (section 8.6).
+    /// </summary>
+    public const String RequestAllowField = "muc#request_allow";
+
+    /// <summary>
+    /// XEP-0045, section 8.6: asks a moderated room to be allowed to speak.
+    /// </summary>
+    /// <remarks>
+    /// A message and not an IQ, so <b>nothing answers it</b>: what comes back,
+    /// if anything comes back, is a presence with a new role in it, whenever a
+    /// moderator gets round to it. A client that waits for a result waits for
+    /// ever.
+    /// </remarks>
+    public static XElement VoiceRequestXml(MucRole role = MucRole.Participant)
+
+        => DataForm.Form("submit",
+                         RequestNamespace,
+                         DataForm.Field("muc#role", "list-single", "Requested role", role.AsText()));
+
+    /// <summary>
+    /// Somebody asking a room for voice, or null.
+    /// </summary>
+    /// <remarks>
+    /// The form arrives as <c>type='form'</c> - it is a question being put to a
+    /// moderator, not a decision. That is what tells it from the submit a
+    /// moderator sends back, and both travel through the same room in the same
+    /// kind of stanza, so the type is the only thing that separates them.
+    /// </remarks>
+    public static MucVoiceRequest? VoiceRequest(XElement message)
+    {
+
+        var x = message.Child(DataForm.Namespace, "x");
+
+        if (x is null ||
+            !DataForm.Is(x, "form") ||
+            !JID.TryParse(message.Attr("from"), out var room))
+        {
+            return null;
+        }
+
+        String? valueOf(String name)
+            => DataForm.Fields(x).
+                        Where    (field => field.Attr("var") == name).
+                        Select   (DataForm.ValueOf).
+                        FirstOrDefault();
+
+        if (valueOf("FORM_TYPE") != RequestNamespace)
+            return null;
+
+        return new MucVoiceRequest(
+                   room.Bare,
+                   JID.TryParse(valueOf("muc#jid")),
+                   valueOf("muc#roomnick"),
+                   MucRoles.ToRole(valueOf("muc#role")),
+                   x
+               );
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 8.6: a moderator's answer to a voice request.
+    /// </summary>
+    /// <remarks>
+    /// <b>The form goes back whole</b>, for the reason section 10.2 gives about
+    /// a different form and D125 learnt the hard way: a submit is a state and
+    /// not a patch. Here it costs less than there - nothing is stored - but the
+    /// room matches the answer to the request by what is in it, and an answer
+    /// carrying only the decision names nobody.
+    ///
+    /// The one field that may not be there already is the decision itself: a
+    /// room is free to leave it out of the question it asks. Then it is added,
+    /// because an answer without it is not an answer.
+    /// </remarks>
+    public static XElement VoiceAnswerXml(MucVoiceRequest request, Boolean allow)
+    {
+
+        var submit = ConfigWith(request.Form,
+                                new Dictionary<String, String> {
+                                    [RequestAllowField] = DataForm.Boolean(allow)
+                                },
+                                out var missing);
+
+        if (missing.Contains(RequestAllowField))
+            submit.Add(DataForm.Field(RequestAllowField, "boolean", null, DataForm.Boolean(allow)));
+
+        return submit;
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 7.10: asks a room about a nickname of one's own.
+    /// </summary>
+    public static XElement RegisterQuery()
+
+        => new (XName.Get("query", RegisterNamespace));
+
+    /// <summary>
+    /// What a room answered about a nickname of ours.
+    /// </summary>
+    /// <remarks>
+    /// <b>Two different things are being read out of one answer.</b>
+    /// <c>&lt;registered/&gt;</c> says there is a reservation; the form beside
+    /// it says what it is for. A room may send the first without the second,
+    /// and a client that only looked for the name would report no reservation
+    /// where there is one.
+    /// </remarks>
+    public static MucNicknameRegistration Registered(XElement? query)
+    {
+
+        if (query is null)
+            return new MucNicknameRegistration(false);
+
+        var registered = query.Child(RegisterNamespace, "registered") is not null;
+
+        var nick = query.Child(DataForm.Namespace, "x") is XElement form
+                       ? DataForm.Fields(form).
+                                  Where    (field => field.Attr("var") == RoomNickField).
+                                  Select   (DataForm.ValueOf).
+                                  FirstOrDefault()
+                       : null;
+
+        return new MucNicknameRegistration(registered, String.IsNullOrEmpty(nick) ? null : nick);
+
+    }
+
+    /// <summary>
+    /// XEP-0045, section 7.10: claims a nickname in a room.
+    /// </summary>
+    /// <remarks>
+    /// The form the room sent goes back with the nickname in it, whole - the
+    /// same rule as everywhere else a form is answered here.
+    /// </remarks>
+    public static XElement RegisterSubmit(XElement form, String nick, out IReadOnlyList<String> Missing)
+    {
+
+        var submit = ConfigWith(form,
+                                new Dictionary<String, String> { [RoomNickField] = nick },
+                                out Missing);
+
+        return new XElement(XName.Get("query", RegisterNamespace), submit);
+
+    }
 
     /// <summary>
     /// XEP-0045, section 10.9: take the room down.

@@ -871,6 +871,9 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <summary>XEP-0045, section 10.9: a room we were in has been taken down.</summary>
     public event OnRoomDestroyedDelegate?       OnRoomDestroyed;
 
+    /// <summary>XEP-0045, section 8.6: somebody is asking to be allowed to speak.</summary>
+    public event OnVoiceRequestedDelegate?      OnVoiceRequested;
+
     /// <summary>XEP-0313: one message out of an archive, as it arrives.</summary>
     public event OnArchivedMessageDelegate?     OnArchivedMessage;
 
@@ -1713,6 +1716,9 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         Muc.OnRoomDestroyed       += async (timestamp, sender, destroyed, ct)
             => await OnRoomDestroyed.     InvokeAllAsync(handler => handler(timestamp, sender, destroyed, ct), _logger);
+
+        Muc.OnVoiceRequested      += async (timestamp, sender, request, ct)
+            => await OnVoiceRequested.    InvokeAllAsync(handler => handler(timestamp, sender, request, ct), _logger);
 
         Mam.OnArchivedMessage     += async (timestamp, sender, queryId, archived, ct)
             => await OnArchivedMessage.   InvokeAllAsync(handler => handler(timestamp, sender, queryId, archived, ct), _logger);
