@@ -918,7 +918,24 @@ public sealed class XMPPClient : IAsyncDisposable
             if (!_lastSentTo.TryGetValue(key, out previous))
                 return null;
 
-        var id = await _connection.SendMessageAsync(recipient.Value, body, corrects: previous);
+        // XEP-0045, section 7.4 together with XEP-0308: a correction is a
+        // message like the one it replaces, and in a room that means
+        // groupchat. Sent as a chat it goes to the room as a private word to
+        // nobody - refused or dropped, and either way the line everybody can
+        // see stays wrong.
+        //
+        // The resource decides between the two: room@service is the room
+        // itself, room@service/nick is one occupant (section 7.5), and a
+        // private word is corrected the way any other one-to-one message is.
+        var asGroupChat = _connection.Muc?.IsRoom(recipient.Value.Bare) == true &&
+                          recipient.Value.Resourcepart is null;
+
+        var id = await _connection.SendMessageAsync(recipient.Value,
+                                                    body,
+                                                    corrects: previous,
+                                                    type:     asGroupChat
+                                                                  ? MessageType.GroupChat
+                                                                  : MessageType.Chat);
 
         lock (_lastSentToLock)
             _lastSentTo[key] = id;
@@ -1536,8 +1553,25 @@ public sealed class XMPPClient : IAsyncDisposable
     /// a chat marker are not requested and could not be: in a room everybody
     /// present would see the acknowledgements.
     /// </remarks>
-    public Task<string> SendRoomMessageAsync(JID room, string body)
-        => _connection.SendMessageAsync(room.Bare, body, type: MessageType.GroupChat);
+    public async Task<string> SendRoomMessageAsync(JID room, string body)
+    {
+
+        var id = await _connection.SendMessageAsync(room.Bare, body, type: MessageType.GroupChat);
+
+        // XEP-0308: so that it can be corrected. Until D135 nothing said in a
+        // room was ever written down here, so /fix in a room found nothing to
+        // fix - and mistyping in front of forty people is the case where one
+        // wants it most.
+        //
+        // The key is the bare room, and a private word in the same room keys
+        // under the occupant (D134), so the two do not collide: correcting
+        // what was said to everybody cannot reach into what was said to one.
+        lock (_lastSentToLock)
+            _lastSentTo[LastSentKey(room.Bare)] = id;
+
+        return id;
+
+    }
 
     /// <summary>
     /// XEP-0384 in a room: says something only the people in it can read.
