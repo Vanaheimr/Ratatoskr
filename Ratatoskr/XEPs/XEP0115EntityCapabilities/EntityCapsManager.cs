@@ -73,11 +73,6 @@ public sealed class EntityCapsManager
     public const string Sha1Algorithm = "sha-1";
 
     /// <summary>
-    /// The namespace of the data forms (XEP-0004).
-    /// </summary>
-    private const string DataFormNamespace = "jabber:x:data";
-
-    /// <summary>
     /// Why the legacy form cannot be checked. In one place because two paths
     /// report it: the one that declines to ask, and the verification of an
     /// answer that reached it anyway.
