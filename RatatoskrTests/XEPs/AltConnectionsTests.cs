@@ -341,6 +341,95 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AnAnswerThatCameOverHttp_IsNotRead()
+
+        /// <summary>
+        /// The MUST of the XEP, asked of the address the answer came from.
+        /// </summary>
+        /// <remarks>
+        /// A security review described the attack this stands against: the
+        /// host-meta is asked for over https, the answer is a redirect to
+        /// http, and whoever sits on the cleartext hop then decides where the
+        /// client signs on - and with it where the SCRAM proof goes.
+        ///
+        /// It does not work, and the reason it does not is not in this
+        /// repository: .NET refuses a redirect from https to http in
+        /// <c>RedirectHandler.GetUriForRedirect</c>. That was worth checking
+        /// rather than believing, and what it left behind is this - a defence
+        /// that was real, inherited, unstated and untested, so that anybody
+        /// installing a handler of their own would have removed it without a
+        /// single test going red.
+        ///
+        /// A rule nothing tests is a rule that leaves quietly.
+        /// </remarks>
+        [Test]
+        public void AnAnswerThatCameOverHttp_IsNotRead()
+        {
+
+            Assert.Multiple(() => {
+
+                Assert.That(AltConnectionsResolver.MayBeRead(new Uri("https://example.test/.well-known/host-meta.json")),
+                            Is.True,
+                            "An answer that came over https is the ordinary case and has to be readable.");
+
+                Assert.That(AltConnectionsResolver.MayBeRead(new Uri("http://example.test/.well-known/host-meta.json")),
+                            Is.False,
+                            "An answer that came over http was read all the same, so a redirect out of TLS " +
+                            "decides where this client sends its password.");
+
+                Assert.That(AltConnectionsResolver.MayBeRead(null),
+                            Is.False,
+                            "No address at all counted as good enough.");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AForeignHostIsNotRefusedHere()
+
+        /// <summary>
+        /// What is deliberately <i>not</i> checked, and why the review's second
+        /// half was not implemented.
+        /// </summary>
+        /// <remarks>
+        /// The review asked for the <c>wss://</c> host to be bound to the JID
+        /// domain. That would break the specification it is meant to protect:
+        /// XEP-0156 exists in part so that a domain can put its XMPP service
+        /// somewhere else, and the XRD example in this very file - answering
+        /// for example.test with <c>web.example.com</c> - is that case.
+        ///
+        /// The XEP's own rule is one about the certificate, not about the
+        /// name: "validate that the certificate is valid for that host or the
+        /// XMPP domain". That belongs where the socket is opened and not here.
+        ///
+        /// This test exists so the omission is a decision on the record rather
+        /// than a gap somebody closes on a quiet afternoon.
+        /// </remarks>
+        [Test]
+        public async Task AForeignHostIsNotRefusedHere()
+        {
+
+            var queried   = new List<String>();
+
+            var resolver  = Resolver(
+                                queried,
+                                new Dictionary<String, String> {
+                                    [ "https://example.test/.well-known/host-meta.json" ] = Jrd
+                                }
+                            );
+
+            var endpoint  = await resolver.DiscoverWebSocketAsync("example.test");
+
+            Assert.That(endpoint, Is.EqualTo(URL.Parse("wss://web.example.com:443/ws")),
+                        "The endpoint of a domain that hosts its XMPP service elsewhere was refused, " +
+                        "which is the delegation XEP-0156 is there to allow.");
+
+        }
+
+        #endregion
+
     }
 
 }

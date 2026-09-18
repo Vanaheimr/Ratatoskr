@@ -66,7 +66,26 @@ public sealed class AltConnectionsResolver
     /// per call uses up sockets that stay occupied for minutes after the
     /// closing.
     /// </summary>
-    private static readonly HttpClient _httpClient = new();
+    /// <remarks>
+    /// The handler is written out rather than inherited (D139). Redirects stay
+    /// allowed, because a host-meta that answers from www. instead of the apex
+    /// is ordinary and stays within the XEP as long as it stays on https - and
+    /// that last part is checked in <see cref="MayBeRead"/> against the address
+    /// the answer actually came from, not against the one that was asked for.
+    ///
+    /// .NET refuses a redirect from https to http by itself, in
+    /// <c>RedirectHandler.GetUriForRedirect</c>. That is the whole reason the
+    /// attack a security review described here does not work - and it is a
+    /// property of the platform, inherited, unstated and untested. Whoever puts
+    /// a handler of their own in here would take it away and nothing would say
+    /// so. Now something does.
+    /// </remarks>
+    private static readonly HttpClient _httpClient =
+
+        new (new SocketsHttpHandler {
+                 AllowAutoRedirect         = true,
+                 MaxAutomaticRedirections  = 5
+             });
 
     private readonly Func<string, CancellationToken, Task<string?>> _fetch;
 
@@ -215,6 +234,32 @@ public sealed class AltConnectionsResolver
 
 
     /// <summary>
+    /// Whether an answer may be read at all: the address it came from has to be
+    /// https, whatever was asked for.
+    /// </summary>
+    /// <remarks>
+    /// "host-meta files MUST be fetched only over HTTPS" is a sentence about
+    /// the whole chain, and a check on the requested address only covers its
+    /// first link. Internal rather than private so a test can hold it: this is
+    /// the one line standing between a redirected discovery and a stranger
+    /// deciding where the password goes, and a rule nothing tests is a rule
+    /// that leaves quietly.
+    ///
+    /// What is deliberately NOT checked here is the host. XEP-0156 exists in
+    /// part to let a domain put its XMPP service somewhere else, so demanding
+    /// that the endpoint live on the JID domain would break the thing the
+    /// specification is for. Its own rule is one about the certificate - "send
+    /// SNI matching the host of the URL ... and validate that the certificate
+    /// is valid for that host or the XMPP domain" - and that happens where the
+    /// WebSocket is opened, not here.
+    /// </remarks>
+    internal static Boolean MayBeRead(Uri? answeredFrom)
+
+        => answeredFrom is not null &&
+           answeredFrom.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+
+
+    /// <summary>
     /// Loads an address over HTTPS. Everything that goes wrong in the process is
     /// a domain without a <c>host-meta</c> and no error.
     /// </summary>
@@ -231,6 +276,13 @@ public sealed class AltConnectionsResolver
         {
 
             var response = await _httpClient.GetAsync(uri, ct);
+
+            // The MUST of the XEP at the END of the chain and not only at its
+            // start (D139). The line above asks what was requested; this one
+            // asks where the answer came from, which after a redirect is not
+            // the same question.
+            if (!MayBeRead(response.RequestMessage?.RequestUri))
+                return null;
 
             if (!response.IsSuccessStatusCode)
                 return null;
