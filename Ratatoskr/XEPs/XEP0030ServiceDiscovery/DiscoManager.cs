@@ -121,6 +121,13 @@ public sealed class DiscoManager
         "urn:xmpp:reply:0",
         "urn:xmpp:fallback:0",
 
+        // XEP-0424, at version 1 - and the version is the whole of what this
+        // line says. urn:xmpp:message-retract:0 is the old shape that wrapped
+        // itself in XEP-0422 and is not compatible with this one, so a client
+        // announcing the wrong number is telling its contacts to send it
+        // something it will not see.
+        "urn:xmpp:message-retract:1",
+
         // XEP-0045, section 6.2: a client says it understands rooms, so that
         // somebody who wants to invite it into one can find out beforehand
         // whether the invitation will mean anything.

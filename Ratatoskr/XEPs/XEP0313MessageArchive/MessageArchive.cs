@@ -262,7 +262,25 @@ public static class MessageArchive
     /// conversation cannot be known, so it is refused rather than filed under
     /// today.
     /// </remarks>
-    public static ArchivedMessage? Read(XElement message, JID ownJid)
+    /// <param name="isRoom">
+    /// Whether an address is a room this client is standing in.
+    /// </param>
+    /// <remarks>
+    /// <b>The predicate is here because two things on a message cannot be read
+    /// off the message.</b> Whether it came from a room decides whether a
+    /// <c>chat</c> is a private word inside one (XEP-0045, section 7.5), and
+    /// that is not visible in the stanza - it is the difference between
+    /// answering one person and answering a room.
+    ///
+    /// Found in D136, by a round that measured this parser and thought it was
+    /// measuring a service: a retraction read out of an archive came back
+    /// looking like an ordinary message, because this construction knew
+    /// nothing of the two fields added to <see cref="XMPPMessage"/> after it
+    /// was written. The live branch had been taught and this one had not.
+    /// </remarks>
+    public static ArchivedMessage? Read(XElement              message,
+                                        JID                   ownJid,
+                                        Func<JID, Boolean>?   isRoom = null)
     {
 
         var result = message.Child(Namespace, "result");
@@ -311,7 +329,13 @@ public static class MessageArchive
                        // message about a file is still about a file, and a
                        // client that reads it only when it arrives shows the
                        // picture once and the URL for ever after.
-                       OutOfBandData.UrlIn(inner, body ?? "")
+                       OutOfBandData.UrlIn(inner, body ?? ""),
+
+                       // XEP-0045, section 7.5 and XEP-0424: the two questions
+                       // the live branch also asks, and the two this parser
+                       // did not until D136.
+                       isRoom?.Invoke(from.Bare) == true,
+                       MessageRetraction.RetractedId(inner)
                    )
 
                );

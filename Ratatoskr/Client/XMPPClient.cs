@@ -1419,6 +1419,63 @@ public sealed class XMPPClient : IAsyncDisposable
         => _connection.Muc?.InviteAsync(room, who, reason) ?? Task.FromResult(false);
 
     /// <summary>
+    /// XEP-0424: takes back a message that was sent.
+    /// </summary>
+    /// <param name="message">
+    /// The message itself, and not its id - because which id to use is the
+    /// question, and only the message can answer it. In a room it is the name
+    /// the room gave (XEP-0359), everywhere else the sender's own.
+    /// </param>
+    /// <returns>
+    /// The id of the retraction, or null - then this message carries no name
+    /// everybody can agree on, and taking it back would mean naming a line
+    /// that is a different one for every reader.
+    /// </returns>
+    /// <remarks>
+    /// <b>It is a request and never a deletion.</b> What the far side does
+    /// with it is the far side's business: a client may hide the line, replace
+    /// it with a note, or ignore the whole extension and show the fallback
+    /// body. The archive keeps its own copy either way - XEP-0424 says the
+    /// archiving service MUST store the retraction, and leaves what happens
+    /// to the retracted message to the service.
+    ///
+    /// So this is worth offering and worth being honest about. Whoever needs
+    /// something unsaid needs not to have said it.
+    /// </remarks>
+    public async Task<string?> RetractAsync(XMPPMessage message)
+    {
+
+        if (message.RetractableId is not string id)
+            return null;
+
+        var room = message.Type == MessageType.GroupChat;
+
+        // In a room the retraction goes to the room, like the line it takes
+        // back - everybody who saw the one has to see the other. Outside, to
+        // whoever the line went to.
+        var to   = room ? message.From.Bare : message.From;
+
+        return await _connection.SendRetractionAsync(to, id,
+                                                     room ? MessageType.GroupChat
+                                                          : MessageType.Chat);
+
+    }
+
+    /// <summary>
+    /// XEP-0424: takes back a message by its name, for a caller that has one
+    /// but not the message.
+    /// </summary>
+    /// <remarks>
+    /// The caller owes the right name here - the room's in a room, the
+    /// sender's own outside one. <see cref="RetractAsync(XMPPMessage)"/> works
+    /// it out instead, and is the one to prefer.
+    /// </remarks>
+    public Task<string> RetractMessageAsync(JID          to,
+                                            String       retractedId,
+                                            MessageType  type = MessageType.Chat)
+        => _connection.SendRetractionAsync(to, retractedId, type);
+
+    /// <summary>
     /// XEP-0045, section 7.5: says something to one occupant of a room and to
     /// nobody else in it.
     /// </summary>

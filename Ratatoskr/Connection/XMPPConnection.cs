@@ -1703,7 +1703,15 @@ public sealed class XMPPConnection : IAsyncDisposable
         // answer to the query does, so it has to exist before anything is asked.
         Mam = new MamManager(BareJid,
                              (to, type, payload, ct) => SendIqAsync(to, type, payload, ct),
-                             CreateLogger<MamManager>());
+                             CreateLogger<MamManager>(),
+
+                             // So that what comes out of an archive is read the
+                             // way the live branch reads it. Only the room table
+                             // can say whether an address is a room, and without
+                             // it a private word out of a personal archive looks
+                             // like an ordinary chat - which is the one thing
+                             // D134 was written to prevent.
+                             jid => Muc?.IsRoom(jid) == true);
 
         Muc.OnRoomInvitation      += async (timestamp, sender, invitation, ct)
             => await OnRoomInvitation.    InvokeAllAsync(handler => handler(timestamp, sender, invitation, ct), _logger);
@@ -2850,7 +2858,11 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                                            // is not consulted, because the same
                                                                            // section says receiving entities MUST
                                                                            // NOT rely on it.
-                                                                           Muc?.IsRoom(from.Bare) == true),
+                                                                           Muc?.IsRoom(from.Bare) == true,
+
+                                                                           // XEP-0424: what this one takes back,
+                                                                           // if anything.
+                                                                           MessageRetraction.RetractedId(element)),
                                                            CancellationToken), _logger);
 
             // Answered of its own accord is only where an answer belongs. A
@@ -5007,6 +5019,36 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// body, because the offsets in the second only mean anything next to the
     /// first.
     /// </param>
+    /// <summary>
+    /// XEP-0424: takes back something that was said.
+    /// </summary>
+    /// <param name="retractedId">
+    /// The message being taken back, by the name everybody who can see it
+    /// agrees on - <see cref="XMPPMessage.RetractableId"/>.
+    /// </param>
+    /// <remarks>
+    /// <b>No receipt and no marker.</b> A retraction is not a thing to
+    /// acknowledge having read: the point of it is that there is nothing to
+    /// read, and asking for a receipt would put the taken-back message back
+    /// into the conversation as an acknowledgement of itself.
+    ///
+    /// The body is the fallback and nothing else. It is sent rather than
+    /// left out because a client that has never heard of the extension shows
+    /// the body or shows nothing at all, and nothing at all is a message
+    /// that silently did not arrive.
+    /// </remarks>
+    public Task<string> SendRetractionAsync(JID          to,
+                                            String       retractedId,
+                                            MessageType  type = MessageType.Chat)
+
+        => SendMessageStanzaAsync(to,
+                                  $"<body>{XmlEscaping.Escape(MessageRetraction.FallbackBody)}</body>",
+                                  requestReceipt:  false,
+                                  markable:        false,
+                                  type:            type,
+                                  corrects:        null,
+                                  extras:          MessageRetraction.Extras(retractedId));
+
     /// <summary>
     /// XEP-0045, section 7.5: a message to one occupant of a room.
     /// </summary>

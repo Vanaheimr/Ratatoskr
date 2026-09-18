@@ -100,7 +100,8 @@ public sealed record XMPPMessage(JID              From,
                                  string?          OriginId    = null,
                                  string?          StanzaId    = null,
                                  Uri?             FileUrl     = null,
-                                 bool             InARoom     = false)
+                                 bool             InARoom     = false,
+                                 string?          RetractsId  = null)
 {
 
     /// <summary>
@@ -197,6 +198,33 @@ public sealed record XMPPMessage(JID              From,
         => Type == MessageType.GroupChat
                ? StanzaId
                : OriginId ?? MessageId;
+
+    /// <summary>
+    /// XEP-0424: the name to use when taking this message back - or null
+    /// when there is none to use.
+    /// </summary>
+    /// <remarks>
+    /// <b>The same name as for an answer, and that is not an accident.</b>
+    /// Both extensions are asking one question - <i>what is this message
+    /// called, in a way everybody who can see it agrees on</i> - and arrive
+    /// at the same rule from different directions. XEP-0461 forbids the
+    /// stanza's id in a room because everybody present sees a different one;
+    /// XEP-0424 requires the room's id there, in so many words. One
+    /// expression, so that a change to what a shared name is cannot quietly
+    /// hold for one of them and not the other.
+    ///
+    /// Null means the same here as there and is worth as much: a room that
+    /// assigns no name is a room in which nothing can be taken back either,
+    /// and saying so is better than retracting somebody else's line.
+    /// </remarks>
+    public string? RetractableId
+
+        => ReplyableId;
+
+    /// <summary>
+    /// XEP-0424: does this message take an earlier one back?
+    /// </summary>
+    public bool IsRetraction => RetractsId is not null;
 
     /// <summary>
     /// Sender without resource.

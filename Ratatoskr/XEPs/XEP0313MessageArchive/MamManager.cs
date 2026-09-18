@@ -72,6 +72,9 @@ public sealed class MamManager
 
     private readonly Func<JID?, string, XElement, CancellationToken, Task<XElement?>>?  _ask;
     private readonly JID                                                                _ownJid;
+
+    /// <summary>Whether an address is a room this client is standing in.</summary>
+    private readonly Func<JID, Boolean>?                                                _isRoom;
     private readonly ILogger                                                            _logger;
 
     /// <summary>
@@ -98,13 +101,19 @@ public sealed class MamManager
 
     #region Constructor
 
+    /// <param name="isRoom">
+    /// Whether an address is a room this client is standing in - see
+    /// <see cref="MessageArchive.Read"/> for the two things it decides.
+    /// </param>
     public MamManager(JID                                                                ownJid,
                       Func<JID?, string, XElement, CancellationToken, Task<XElement?>>?  askArchive = null,
-                      ILogger?                                                           logger     = null)
+                      ILogger?                                                           logger     = null,
+                      Func<JID, Boolean>?                                                isRoom     = null)
     {
         _ownJid  = ownJid;
         _ask     = askArchive;
         _logger  = logger ?? NullLogger.Instance;
+        _isRoom  = isRoom;
     }
 
     #endregion
@@ -229,7 +238,7 @@ public sealed class MamManager
             return true;
         }
 
-        var archived = MessageArchive.Read(message, _ownJid);
+        var archived = MessageArchive.Read(message, _ownJid, _isRoom);
 
         if (archived is null)
         {
