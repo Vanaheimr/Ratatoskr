@@ -644,12 +644,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// leave the far side to decide what that means.
         /// </remarks>
         [Test]
-        public void AReplyWithoutAMessageToAnswerIsRefused()
+        public async Task AReplyWithoutAMessageToAnswerIsRefused()
         {
 
             var alice = CreateClient();
 
-            Assert.ThrowsAsync<ArgumentException>(
+            await Assert.ThrowsAsync<ArgumentException>(
                 async () => await alice.SendReplyAsync(JID.Parse($"bob@{Server.Domain}"), "Yes", ""));
 
         }

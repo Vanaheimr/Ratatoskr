@@ -71,6 +71,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 catch { /* does not matter in the teardown */ }
             }
 
+            _dnsClient?.Dispose();
+
             _dnsServer = null;
             _dnsClient = null;
 

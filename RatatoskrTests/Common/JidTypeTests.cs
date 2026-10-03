@@ -48,8 +48,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         public void TheSpellingOfAnAccount_DoesNotMatter()
         {
 
-            var lower = JID.Parse("alice@example.com");
-            var upper = JID.Parse("ALICE@Example.COM");
+            String lowerText = "alice@example.com";
+            String upperText = "ALICE@Example.COM";
+
+            var lower = JID.Parse(lowerText);
+            var upper = JID.Parse(upperText);
 
             Assert.Multiple(() =>
             {
@@ -60,7 +63,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
                 // The point of the type, stated as the test it exists for: on
                 // the strings this comparison was false.
-                Assert.That("alice@example.com" == "ALICE@Example.COM", Is.False,
+                Assert.That(lowerText == upperText,          Is.False,
                             "Which is exactly why these are no longer strings.");
 
             });

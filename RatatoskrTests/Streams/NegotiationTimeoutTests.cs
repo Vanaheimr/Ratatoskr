@@ -185,7 +185,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// reporting through events.
         /// </remarks>
         [Test]
-        public void AFailedSetup_ThrowsInsteadOfReturningQuietly()
+        public async Task AFailedSetup_ThrowsInsteadOfReturningQuietly()
         {
 
             Server.AnswerStreamOpen = false;
@@ -193,7 +193,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = CreateClient("alice", maxReconnectAttempts: 0);
 
-            var error = Assert.CatchAsync(async () => await client.ConnectAsync());
+            var error = await Assert.CatchAsync(async () => await client.ConnectAsync());
 
             Assert.Multiple(() =>
             {
@@ -258,7 +258,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var client = await ConnectClientAsync("alice");
 
-            Assert.That(client.FullJid, Is.Not.Null);
+            Assert.That(client.FullJid.IsFull, Is.True);
 
         }
 

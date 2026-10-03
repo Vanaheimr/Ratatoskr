@@ -140,7 +140,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             // front, or an attacker who would like the exchange unbound.
             Server.OfferChannelBinding = false;
 
-            Assert.ThrowsAsync<SaslDowngradeException>(
+            await Assert.ThrowsAsync<SaslDowngradeException>(
                 async () => await alice.ConnectAsync(),
                 "An unbound offer is below the bound mechanism that was pinned."
             );

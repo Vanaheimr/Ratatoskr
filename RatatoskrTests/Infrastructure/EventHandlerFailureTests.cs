@@ -244,8 +244,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await WaitFor(() => bob.PendingSubscriptions.Count > 0,
                           "the noted contact request at Bob");
 
+            // No IgnoreCase: these are JIDs, and a JID compares its local
+            // and domain part without regard to spelling by itself.
             Assert.That(bob.PendingSubscriptions[0],
-                        Is.EqualTo(alice.BareJid).IgnoreCase);
+                        Is.EqualTo(alice.BareJid));
 
         }
 

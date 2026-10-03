@@ -93,7 +93,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Server.SignAnotherSaslAnnouncement = true;
 
-            var thrown = Assert.ThrowsAsync<SaslDowngradeException>(
+            var thrown = await Assert.ThrowsAsync<SaslDowngradeException>(
                              async () => await ConnectClientAsync("mallory")
                          );
 

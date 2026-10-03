@@ -80,6 +80,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             _clients.Clear();
 
+            // The links own a listener and the inbound connections of their
+            // server, and the server does not take them down with itself.
+            // Nulled after disposal: not every test sets them up again, and a
+            // second DisposeAsync would hit an already disposed token source.
+            if (_leftS  is not null) await _leftS.DisposeAsync();
+            if (_rightS is not null) await _rightS.DisposeAsync();
+
+            _leftS   = null!;
+            _rightS  = null!;
+
             if (_left  is not null) await _left.DisposeAsync();
             if (_right is not null) await _right.DisposeAsync();
 

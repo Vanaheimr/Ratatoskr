@@ -440,8 +440,10 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var theKey   = Curve25519.GenerateKeyPair();
             var message  = Encoding.UTF8.GetBytes("twice the same");
 
-            Assert.That(Hex(Curve25519.Sign(theKey.PrivateKey, message)),
-                        Is.Not.EqualTo(Hex(Curve25519.Sign(theKey.PrivateKey, message))));
+            var first    = Hex(Curve25519.Sign(theKey.PrivateKey, message));
+            var second   = Hex(Curve25519.Sign(theKey.PrivateKey, message));
+
+            Assert.That(first, Is.Not.EqualTo(second));
 
         }
 
