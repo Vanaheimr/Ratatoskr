@@ -820,7 +820,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
 
             public override async Task ProcessTextMessage(DateTimeOffset             Timestamp,
-                                                          AWebSocketServer           Server,
+                                                          AWebSocketEndpoint         Server,
                                                           WebSocketServerConnection  Connection,
                                                           EventTracking_Id           EventTrackingId,
                                                           WebSocketFrame             TextFrame,

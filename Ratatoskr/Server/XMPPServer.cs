@@ -1275,7 +1275,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
 
             public override Task ProcessTextMessage(DateTimeOffset             Timestamp,
-                                                    AWebSocketServer           Server,
+                                                    AWebSocketEndpoint         Server,
                                                     WebSocketServerConnection  Connection,
                                                     EventTracking_Id           EventTrackingId,
                                                     WebSocketFrame             TextFrame,
@@ -1290,7 +1290,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// A new connection stands - from here on there is a session for it.
         /// </summary>
         private Task OnConnectionOpenedAsync(DateTimeOffset             timestamp,
-                                             AWebSocketServer           server,
+                                             AWebSocketEndpoint         server,
                                              WebSocketServerConnection  connection,
                                              IEnumerable<String>        sharedSubprotocols,
                                              String?                    selectedSubprotocol,
@@ -1425,7 +1425,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// taken hold - the first version here almost ran past exactly that.
         /// </remarks>
         private async Task OnCloseFrameReceivedAsync(DateTimeOffset                    timestamp,
-                                                     AWebSocketServer                  server,
+                                                     AWebSocketEndpoint                server,
                                                      WebSocketServerConnection         connection,
                                                      WebSocketFrame                    frame,
                                                      EventTracking_Id                  eventTrackingId,
@@ -1461,7 +1461,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// exception: the contacts have to learn of it.
         /// </summary>
         private async Task OnConnectionClosedAsync(DateTimeOffset             timestamp,
-                                                   AWebSocketServer           server,
+                                                   AWebSocketEndpoint         server,
                                                    WebSocketServerConnection  connection,
                                                    EventTracking_Id           eventTrackingId,
                                                    String?                    reason,
