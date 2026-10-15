@@ -382,7 +382,8 @@ no `host-meta`. Whoever does not want it gives the URL, e.g. for Prosody:
 | Server signature verification (constant time) | ✅ Mandatory — a `<success/>` without a server-final-message aborts the handshake |
 | SASLprep (RFC 4013) | ✅ Complete: mapping, NFKC, prohibited tables, unassigned code points and the bidi rules; checked against the example table from §3 |
 | Channel binding — `tls-server-end-point` (RFC 5929 §4.1) | ✅ Both sides, announced per XEP-0440. MD5 and SHA-1 signatures promoted to SHA-256; a certificate whose signature carries no readable hash (Ed25519, Ed448, RSASSA-PSS) gets no binding rather than a guessed one |
-| Channel binding — `tls-exporter` (RFC 9266) | ❌ Blocked on the platform: .NET 10 exposes no `ExportKeyingMaterial` on `SslStream` (checked against the reference assembly, 10.0.11) |
+| Channel binding — `tls-unique` (RFC 5929 §3) | ❌ Not offered — TLS 1.2 and below only, undefined under TLS 1.3 |
+| Channel binding — `tls-exporter` (RFC 9266) | ❌ Blocked on the platform: .NET 10 exposes no `ExportKeyingMaterial` on `SslStream` (checked against the reference assembly, 10.0.11). The API passed review on 29 Sep 2026 ([dotnet/runtime#112529](https://github.com/dotnet/runtime/issues/112529), milestone *Future*) and is not in .NET 11 — neither `release/11.0` nor `main` (12.0) has it as of 15 Oct 2026 |
 
 ### RFC 7622 — JID handling
 
