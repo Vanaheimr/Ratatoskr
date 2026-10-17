@@ -242,4 +242,20 @@ public sealed record XMPPMessage(JID              From,
     public bool IsDelayed
         => ReceivedAt.HasValue && ReceivedAt.Value != Timestamp;
 
+    /// <summary>
+    /// XEP-0384: did this message arrive encrypted, and was it opened here?
+    /// </summary>
+    /// <remarks>
+    /// <b>A client hears a decrypted message twice</b>: on
+    /// <c>OnEncryptedMessage</c>, with the rating of the device that sent it,
+    /// and on <c>OnMessage</c>, for a user interface that knows nothing of
+    /// OMEMO and should still show it. One that listens to both has to tell
+    /// the second from a plain message, or it files the same message twice -
+    /// and the second time without anything that says it was encrypted. As
+    /// long as a decrypted message carried only a body, an id told the two
+    /// apart; one that corrects or takes back another acts twice, and the
+    /// second time takes the lock off the line it acted on.
+    /// </remarks>
+    public bool Decrypted { get; init; }
+
 }

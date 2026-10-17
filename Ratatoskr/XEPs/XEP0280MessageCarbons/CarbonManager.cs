@@ -143,7 +143,9 @@ public sealed class CarbonManager
                                        MessageReply.RepliesTo(inner),
                                        body is not null
                                            ? MessageReply.QuoteRangeIn(inner, body)
-                                           : null);
+                                           : null,
+                                       MessageCorrection.ReplacedId(inner),
+                                       MessageRetraction.RetractedId(inner));
 
         await OnCarbonReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, carbon, CancellationToken), _logger);
 

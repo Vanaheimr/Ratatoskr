@@ -198,6 +198,20 @@ public delegate Task OnXMPPConnectionEncryptedMessageDelegate           (DateTim
                                                                          CancellationToken  CancellationToken);
 
 /// <summary>
+/// XEP-0384 with XEP-0359 in a room: one of our own encrypted lines came back,
+/// and the room gave it a name.
+/// </summary>
+/// <param name="From">The occupant address it came back from - the room and our nickname in it.</param>
+/// <param name="MessageId">The id the line was sent with.</param>
+/// <param name="StanzaId">The name the room gave it.</param>
+public delegate Task OnXMPPConnectionOwnRoomLineNamedDelegate           (DateTimeOffset     Timestamp,
+                                                                         XMPPConnection     Sender,
+                                                                         JID                From,
+                                                                         String             MessageId,
+                                                                         String             StanzaId,
+                                                                         CancellationToken  CancellationToken);
+
+/// <summary>
 /// XEP-0384: a known device reports with a different identity key, and its
 /// message was refused.
 /// </summary>
@@ -4446,6 +4460,22 @@ public sealed class XMPPConnection : IAsyncDisposable
     public event OnXMPPConnectionEncryptedMessageDelegate? OnEncryptedMessage;
 
     /// <summary>
+    /// XEP-0384 with XEP-0359: one of our own encrypted lines came back from a
+    /// room, and the room gave it a name.
+    /// </summary>
+    /// <remarks>
+    /// <b>The one thing worth having from a reflection that cannot be
+    /// read.</b> An OMEMO element carries no key for the device that made it,
+    /// so one's own encrypted line comes back unreadable and is dropped (see
+    /// <see cref="OmemoRooms.IsOwnReflection"/>). But the name the room gave
+    /// it stands outside the encryption, and it is the name an answer
+    /// (XEP-0461) and a retraction (XEP-0424) have to use in a room. Dropped
+    /// with the rest, it left every encrypted line one wrote in a room one
+    /// that could be neither answered nor taken back.
+    /// </remarks>
+    public event OnXMPPConnectionOwnRoomLineNamedDelegate? OnOwnRoomLineNamed;
+
+    /// <summary>
     /// XEP-0384: a known device reports with a different identity key - and its
     /// message was refused.
     /// </summary>
@@ -4559,9 +4589,9 @@ public sealed class XMPPConnection : IAsyncDisposable
     ///
     /// <b>No correction (XEP-0308) here.</b> A <c>&lt;replace/&gt;</c> beside
     /// the <c>&lt;encrypted/&gt;</c> would say in the clear which message is
-    /// being rewritten, and inside the envelope no client would read it.
-    /// Nothing sends one yet; when something does, that is the question to
-    /// answer first.
+    /// being rewritten; <see cref="SendEncryptedCorrectionAsync"/> puts it
+    /// inside the envelope, which is where a reader of this library takes it
+    /// from.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// When OMEMO is not switched on. <b>Here it throws and does not send
@@ -4623,10 +4653,85 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         => XElement.Parse($"<extras>{xml}</extras>").Elements().ToList();
 
+    /// <summary>
+    /// XEP-0384 with XEP-0308: replaces the text of an encrypted message.
+    /// </summary>
+    /// <param name="to">Who the corrected message went to.</param>
+    /// <param name="body">The complete new text.</param>
+    /// <param name="correctsId">
+    /// The <c>id</c> of the original message - the original's even for a
+    /// correction of a correction (section 5, since 1.1.0).
+    /// </param>
+    /// <remarks>
+    /// <b>The &lt;replace/&gt; goes inside the envelope</b>, next to the text
+    /// it replaces. Beside the &lt;encrypted/&gt; it would say in the clear
+    /// which message is being rewritten - and a reader of this library takes
+    /// a correction of an encrypted message only from inside the envelope,
+    /// because one from outside could put somebody else's words in the place
+    /// of an authenticated line.
+    ///
+    /// A plain correction of an encrypted message would carry the corrected
+    /// text in the clear - the very words that were encrypted a moment ago.
+    /// This is the way to correct one at all.
+    /// </remarks>
+    public Task<OmemoSent> SendEncryptedCorrectionAsync(JID                to,
+                                                        string             body,
+                                                        string             correctsId,
+                                                        CancellationToken  ct = default)
+    {
+
+        if (string.IsNullOrEmpty(correctsId))
+            throw new ArgumentException("A correction needs the message it replaces.",
+                                        nameof(correctsId));
+
+        return SendEncryptedContentAsync(to, body, Elements(MessageCorrection.ReplaceXml(correctsId)), ct);
+
+    }
+
+    /// <summary>
+    /// XEP-0384 with XEP-0424: takes back an encrypted message.
+    /// </summary>
+    /// <param name="to">Who the message went to.</param>
+    /// <param name="retractedId">The <c>id</c> of the message taken back.</param>
+    /// <remarks>
+    /// <b>The &lt;retract/&gt; goes inside the envelope</b>, for the reason
+    /// <see cref="SendEncryptedCorrectionAsync"/> gives and with the same
+    /// fallback sentence and marking a plain retraction carries (see
+    /// <see cref="MessageRetraction.Extras"/>). The storage hint stays
+    /// outside, where the server can read it; inside it would be a note to
+    /// nobody.
+    ///
+    /// No receipt and no marker, as for the plain one: there is nothing here
+    /// anybody is meant to read.
+    /// </remarks>
+    public Task<OmemoSent> SendEncryptedRetractionAsync(JID                to,
+                                                        string             retractedId,
+                                                        CancellationToken  ct = default)
+    {
+
+        if (string.IsNullOrEmpty(retractedId))
+            throw new ArgumentException("A retraction needs the message it takes back.",
+                                        nameof(retractedId));
+
+        var extras = Elements(MessageRetraction.Extras(retractedId))
+                         .Where(element => element.Name.NamespaceName != "urn:xmpp:hints")
+                         .ToList();
+
+        return SendEncryptedContentAsync(to,
+                                         MessageRetraction.FallbackBody,
+                                         extras,
+                                         ct,
+                                         requestReceipt:  false,
+                                         markable:        false);
+
+    }
+
     private async Task<OmemoSent> SendEncryptedContentAsync(JID                     to,
                                                             string                  body,
                                                             IReadOnlyList<XElement> extras,
-                                                            CancellationToken       ct)
+                                                            CancellationToken       ct,
+                                                            bool                    requestReceipt  = true,
+                                                            bool                    markable        = true)
     {
 
         if (Omemo is null)
@@ -4645,8 +4750,8 @@ public sealed class XMPPConnection : IAsyncDisposable
                                   to.Bare,
                                   result.Element.ToXml().ToString(SaveOptions.DisableFormatting) +
                                       "<store xmlns='urn:xmpp:hints'/>",
-                                  requestReceipt:  true,
-                                  markable:        true,
+                                  requestReceipt,
+                                  markable,
                                   MessageType.Chat,
                                   corrects:        null);
 
@@ -4725,6 +4830,32 @@ public sealed class XMPPConnection : IAsyncDisposable
         var composed = MessageReply.Compose(body, replyToId, replyToAuthor, quotedText, quotedAuthor);
 
         return SendEncryptedRoomContentAsync(room, composed.Body, Elements(composed.Extras), ct);
+
+    }
+
+    /// <summary>
+    /// XEP-0384 with XEP-0308 in a room: replaces the text of an encrypted
+    /// line said there.
+    /// </summary>
+    /// <param name="room">The room.</param>
+    /// <param name="body">The complete new text.</param>
+    /// <param name="correctsId">The <c>id</c> of the original line.</param>
+    /// <remarks>
+    /// Inside the envelope for the reason <see cref="SendEncryptedCorrectionAsync"/>
+    /// gives, and under the conditions <see cref="SendEncryptedRoomMessageAsync"/>
+    /// names.
+    /// </remarks>
+    public Task<OmemoRoomSent> SendEncryptedRoomCorrectionAsync(JID                room,
+                                                                string             body,
+                                                                string             correctsId,
+                                                                CancellationToken  ct = default)
+    {
+
+        if (string.IsNullOrEmpty(correctsId))
+            throw new ArgumentException("A correction needs the line it replaces.",
+                                        nameof(correctsId));
+
+        return SendEncryptedRoomContentAsync(room, body, Elements(MessageCorrection.ReplaceXml(correctsId)), ct);
 
     }
 
@@ -4812,7 +4943,20 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
 
         if (OmemoRooms.IsOwnReflection(room, from))
+        {
+
+            // Unreadable, and not to be reported as such - but the room's name
+            // for it is outside the encryption, taken under the same check a
+            // plain message gets: only from the room it claims to be from.
+            if (element.Attr("id") is String sentAs &&
+                StableIds.StanzaId(element, from) is String named)
+            {
+                _ = OnOwnRoomLineNamed.InvokeAllAsync(handler => handler(Timestamp.Now, this, from, sentAs, named, CancellationToken), _logger);
+            }
+
             return;
+
+        }
 
         if (OmemoRooms.SenderOf(room, from) is not JID sender)
         {
@@ -4920,21 +5064,27 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// envelope says about that body.
     /// </summary>
     /// <remarks>
-    /// <b>Whether it answers something, and which part of it is only the
-    /// quotation, is read from inside the envelope and nowhere else.</b>
-    /// XEP-0420 puts the elements that belong to the content into the
-    /// content, and a &lt;reply/&gt; or a &lt;fallback/&gt; are exactly that.
-    /// The stanza around the envelope is anybody's to rewrite on the way: a
-    /// &lt;fallback/&gt; out there could mark half of an authenticated
-    /// sentence as "only a quotation", and the client would set it aside as
-    /// one. The envelope is the part nobody could have touched.
+    /// <b>What the sender says about the message is read from inside the
+    /// envelope and nowhere else</b>: whether it answers something and which
+    /// part of it is only the quotation (XEP-0461, XEP-0428), whether it
+    /// replaces an earlier one (XEP-0308), whether it takes one back
+    /// (XEP-0424). XEP-0420 puts the elements that belong to the content into
+    /// the content, and these are exactly that. The stanza around the envelope
+    /// is anybody's to rewrite on the way: a &lt;replace/&gt; out there could
+    /// put the words of one authenticated message in the place of another, a
+    /// &lt;retract/&gt; could empty one, a &lt;fallback/&gt; could mark half
+    /// of a sentence as "only a quotation". The envelope is the part nobody
+    /// could have touched.
     ///
-    /// <b>The name a room gave the message is the one exception</b>, and
-    /// rightly: it is the room's statement, added on the way through, and it
-    /// can only ever stand outside. It is taken under the same check a plain
-    /// message gets - only from the entity whose name it claims to be.
-    /// Without it an encrypted line in a room could be neither answered nor
-    /// taken back, because both have to name it by what the room called it.
+    /// <b>What the servers on the way say about it is read from outside</b>,
+    /// because that is where only they can put it: the name a room gave the
+    /// message (XEP-0359), under the same check a plain message gets - only
+    /// from the entity whose name it claims to be - and the stamp of a
+    /// message that was held (XEP-0203), on the stanza itself and not on
+    /// anything it carries, as for a plain one (D59). Without the first an
+    /// encrypted line in a room could be neither answered nor taken back;
+    /// without the second an encrypted message delivered late showed the time
+    /// it arrived.
     /// </remarks>
     private XMPPMessage DecryptedMessage(XElement        element,
                                          JID             from,
@@ -4943,17 +5093,30 @@ public sealed class XMPPConnection : IAsyncDisposable
                                          MessageType     type)
     {
 
-        var envelope = new XElement(XName.Get("message", "jabber:client"), decrypted.Content);
+        var envelope  = new XElement(XName.Get("message", "jabber:client"), decrypted.Content);
+
+        var received  = DateTime.Now;
+        var written   = DelayedDelivery.TryRead(element, out var stamp, out var heldBy)
+                            ? stamp.ToLocalTime().DateTime
+                            : received;
 
         return new XMPPMessage(from,
                                JID.TryParse(element.Attr("to")) ?? FullJid,
                                body,
                                element.Attr("id"),
-                               DateTime.Now,
+                               written,
                                type,
+                               ReceivedAt:  received,
+                               DelayedBy:   JID.TryParse(heldBy),
+                               ReplacesId:  MessageCorrection.ReplacedId(envelope),
                                RepliesTo:   MessageReply.RepliesTo(envelope),
                                QuoteRange:  MessageReply.QuoteRangeIn(envelope, body),
-                               StanzaId:    StableIds.StanzaId(element, from));
+                               StanzaId:    StableIds.StanzaId(element, from),
+                               RetractsId:  MessageRetraction.RetractedId(envelope)) {
+
+                   Decrypted = true
+
+               };
 
     }
 

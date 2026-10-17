@@ -308,6 +308,58 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region Carbon_OfACorrectionAndOfARetraction_SaysWhichMessage()
+
+        /// <summary>
+        /// XEP-0308 and XEP-0424 on mirrored messages: what another device of
+        /// one's own corrected or took back.
+        /// </summary>
+        /// <remarks>
+        /// Without the ids a correction made on the phone stood here as a
+        /// second line beside the one it corrects, and a retraction as a line
+        /// carrying the fallback sentence beside the words it took back.
+        /// </remarks>
+        [Test]
+        public async Task Carbon_OfACorrectionAndOfARetraction_SaysWhichMessage()
+        {
+
+            var (client, session) = await ConnectedPairAsync();
+
+            var reported = new List<CarbonMessage>();
+            client.OnCarbonMessage += (timestamp, sender, carbon, ct) => { lock (reported) reported.Add(carbon); return Task.CompletedTask; };
+
+            String Carbon(String Inner)
+
+                => $"<message xmlns='jabber:client' from='{client.BareJid}' to='{client.FullJid}'>" +
+                   "<sent xmlns='urn:xmpp:carbons:2'>" +
+                   "<forwarded xmlns='urn:xmpp:forward:0'>" +
+                   $"<message xmlns='jabber:client' from='{client.BareJid}/other' to='{Bob}' type='chat' id='{Guid.NewGuid():N}'>" +
+                   Inner +
+                   "</message></forwarded></sent></message>";
+
+            await session.SendAsync(Carbon("<body>Until eight</body>" + MessageCorrection.ReplaceXml("m1")));
+            await session.SendAsync(Carbon($"<body>{XmlEscaping.Escape(MessageRetraction.FallbackBody)}</body>" +
+                                           MessageRetraction.Extras("m1")));
+
+            await WaitFor(() => { lock (reported) return reported.Count == 2; }, "both carbons");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(reported[0].ReplacesId, Is.EqualTo("m1"),
+                            "The carbon of a correction arrived as a message that replaces nothing.");
+                Assert.That(reported[0].RetractsId, Is.Null);
+
+                Assert.That(reported[1].RetractsId, Is.EqualTo("m1"),
+                            "The carbon of a retraction arrived as a message that takes nothing back.");
+                Assert.That(reported[1].ReplacesId, Is.Null);
+
+            });
+
+        }
+
+        #endregion
+
         #region Carbon_OfAnAnswer_KeepsWhatItAnswers()
 
         /// <summary>

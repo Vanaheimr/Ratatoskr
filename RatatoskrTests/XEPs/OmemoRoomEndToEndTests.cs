@@ -383,6 +383,71 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region OurOwnLineComesBackWithTheNameTheRoomGaveIt()
+
+        /// <summary>
+        /// XEP-0359: the one thing worth having from a reflection that cannot
+        /// be read.
+        /// </summary>
+        /// <remarks>
+        /// The line is dropped unread, rightly - and the name the room gave it
+        /// was dropped with it, although it stands outside the encryption. In
+        /// a room that name is what an answer and a retraction have to use, so
+        /// every encrypted line one wrote there could be neither answered nor
+        /// taken back.
+        ///
+        /// And only the room's own name: a stanza-id claiming to be by somebody
+        /// else is nobody's statement about this room.
+        /// </remarks>
+        [Test]
+        public async Task OurOwnLineComesBackWithTheNameTheRoomGaveIt()
+        {
+
+            var (alice, aliceSession, _, _) = await TwoInARoomAsync();
+
+            var named = new List<(JID From, String MessageId, String StanzaId)>();
+
+            alice.OnOwnRoomLineNamed += (t, s, from, messageId, stanzaId, ct) =>
+            {
+                lock (named) named.Add((from, messageId, stanzaId));
+                return Task.CompletedTask;
+            };
+
+            var first   = await alice.SendEncryptedRoomMessageAsync(RoomJid, "Said once.");
+            var second  = await alice.SendEncryptedRoomMessageAsync(RoomJid, "Said twice.");
+
+            Assert.That(first.Sent && second.Sent, Is.True);
+
+            // The room hands both back - the second with a name somebody else
+            // claims to have given it.
+            await aliceSession.SendAsync(
+                      Reflected(await EncryptedStanzaInAsync(aliceSession, second.MessageId!), "alice", alice.FullJid).
+                          Replace("</message>", $"<stanza-id xmlns='urn:xmpp:sid:0' id='forged-1' by='mallory@{Server.Domain}'/></message>"));
+
+            await aliceSession.SendAsync(
+                      Reflected(await EncryptedStanzaInAsync(aliceSession, first.MessageId!), "alice", alice.FullJid).
+                          Replace("</message>", $"<stanza-id xmlns='urn:xmpp:sid:0' id='room-1' by='{RoomJid}'/></message>"));
+
+            await WaitFor(() => { lock (named) return named.Count > 0; }, "the room's name for our line");
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(named, Has.Count.EqualTo(1),
+                            "A name somebody other than the room claims to have given was believed.");
+
+                Assert.That(named[0].From,       Is.EqualTo(JID.Parse($"{RoomJid}/alice")));
+                Assert.That(named[0].MessageId,  Is.EqualTo(first.MessageId));
+                Assert.That(named[0].StanzaId,   Is.EqualTo("room-1"));
+
+            });
+
+        }
+
+        #endregion
+
         #region ASemiAnonymousRoomRefusesBeforeAnythingIsEncrypted()
 
         /// <summary>

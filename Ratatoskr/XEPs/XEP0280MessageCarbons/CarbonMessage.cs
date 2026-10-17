@@ -48,6 +48,26 @@ public sealed class CarbonMessage
     public BodyRange? QuoteRange { get; }
 
     /// <summary>
+    /// XEP-0308: the id of the message the mirrored one replaces, or null.
+    /// </summary>
+    /// <remarks>
+    /// A correction made on another device of one's own is still a
+    /// correction; without this it arrived here as a second line beside the
+    /// one it corrects.
+    /// </remarks>
+    public string? ReplacesId { get; }
+
+    /// <summary>
+    /// XEP-0424: the id of the message the mirrored one takes back, or null.
+    /// </summary>
+    /// <remarks>
+    /// Without this a line taken back on another device of one's own stayed
+    /// here with its words, and the fallback sentence stood beside it as
+    /// though somebody had typed it.
+    /// </remarks>
+    public string? RetractsId { get; }
+
+    /// <summary>
     /// The mirrored message without the quoted lines - what was actually
     /// written. The same as <see cref="Body"/> whenever nothing was marked.
     /// </summary>
@@ -72,7 +92,9 @@ public sealed class CarbonMessage
                          string?          body,
                          string?          messageId,
                          MessageReplyTo?  repliesTo   = null,
-                         BodyRange?       quoteRange  = null)
+                         BodyRange?       quoteRange  = null,
+                         string?          replacesId  = null,
+                         string?          retractsId  = null)
     {
         IsSent = isSent;
         OriginalFrom = originalFrom;
@@ -81,6 +103,8 @@ public sealed class CarbonMessage
         MessageId = messageId;
         RepliesTo = repliesTo;
         QuoteRange = quoteRange;
+        ReplacesId = replacesId;
+        RetractsId = retractsId;
         ReceivedAt = DateTime.UtcNow;
     }
 }

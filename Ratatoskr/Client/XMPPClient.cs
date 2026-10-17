@@ -60,6 +60,17 @@ public delegate Task OnXMPPClientOmemoIdentityChangedDelegate       (DateTimeOff
                                                                      CancellationToken     CancellationToken);
 
 /// <summary>
+/// XEP-0384 with XEP-0359 in a room: one of our own encrypted lines came back,
+/// and the room gave it a name.
+/// </summary>
+public delegate Task OnXMPPClientOwnRoomLineNamedDelegate           (DateTimeOffset     Timestamp,
+                                                                     XMPPClient         Sender,
+                                                                     JID                From,
+                                                                     String             MessageId,
+                                                                     String             StanzaId,
+                                                                     CancellationToken  CancellationToken);
+
+/// <summary>
 /// XEP-0280: a message was mirrored from or to another device of our own.
 /// </summary>
 public delegate Task OnXMPPClientCarbonMessageDelegate              (DateTimeOffset     Timestamp,
@@ -392,6 +403,13 @@ public sealed class XMPPClient : IAsyncDisposable
     public event OnXMPPClientOmemoIdentityChangedDelegate? OnOmemoIdentityChanged;
 
     /// <summary>
+    /// XEP-0384 with XEP-0359: one of our own encrypted lines came back from a
+    /// room, and the room gave it a name - the one an answer and a retraction
+    /// have to use there. Nothing else of the reflection can be read.
+    /// </summary>
+    public event OnXMPPClientOwnRoomLineNamedDelegate? OnOwnRoomLineNamed;
+
+    /// <summary>
     /// XEP-0280: A message was mirrored from/to another device of our own.
     /// </summary>
     public event OnXMPPClientCarbonMessageDelegate? OnCarbonMessage;
@@ -655,6 +673,9 @@ public sealed class XMPPClient : IAsyncDisposable
 
         _connection.OnOmemoIdentityChanged += async (timestamp, sender, change, ct)
             => await OnOmemoIdentityChanged.InvokeAllAsync(handler => handler(timestamp, this, change, ct), _logger);
+
+        _connection.OnOwnRoomLineNamed += async (timestamp, sender, from, messageId, stanzaId, ct)
+            => await OnOwnRoomLineNamed.InvokeAllAsync(handler => handler(timestamp, this, from, messageId, stanzaId, ct), _logger);
 
         _connection.OnCarbonMessage += async (timestamp, sender, carbon, ct)
             => await OnCarbonMessage.InvokeAllAsync(handler => handler(timestamp, this, carbon, ct), _logger);
@@ -1671,6 +1692,17 @@ public sealed class XMPPClient : IAsyncDisposable
                                                    ct);
 
     /// <summary>
+    /// XEP-0384 with XEP-0308 in a room: replaces the text of an encrypted
+    /// line said there, the &lt;replace/&gt; inside the envelope.
+    /// </summary>
+    public Task<OmemoRoomSent> SendEncryptedRoomCorrectionAsync(JID                room,
+                                                                string             body,
+                                                                string             correctsId,
+                                                                CancellationToken  ct = default)
+
+        => _connection.SendEncryptedRoomCorrectionAsync(room, body, correctsId, ct);
+
+    /// <summary>
     /// Why this room cannot carry an encrypted message, or null when it can.
     /// </summary>
     /// <remarks>
@@ -1955,6 +1987,36 @@ public sealed class XMPPClient : IAsyncDisposable
         return sent;
 
     }
+
+    /// <summary>
+    /// XEP-0384 with XEP-0308: replaces the text of an encrypted message, the
+    /// &lt;replace/&gt; inside the envelope.
+    /// </summary>
+    /// <param name="to">Who the message went to.</param>
+    /// <param name="body">The complete new text.</param>
+    /// <param name="correctsId">The id of the original message, also for a correction of a correction.</param>
+    /// <remarks>
+    /// The way in for a caller that keeps its own history and names the line
+    /// itself. What this client remembers as last sent stays as it is: it
+    /// names the original, and the original is what a further correction
+    /// names as well.
+    /// </remarks>
+    public Task<OmemoSent> SendEncryptedCorrectionAsync(JID                to,
+                                                        string             body,
+                                                        string             correctsId,
+                                                        CancellationToken  ct = default)
+
+        => _connection.SendEncryptedCorrectionAsync(to, body, correctsId, ct);
+
+    /// <summary>
+    /// XEP-0384 with XEP-0424: takes back an encrypted message, the
+    /// &lt;retract/&gt; inside the envelope.
+    /// </summary>
+    public Task<OmemoSent> SendEncryptedRetractionAsync(JID                to,
+                                                        string             retractedId,
+                                                        CancellationToken  ct = default)
+
+        => _connection.SendEncryptedRetractionAsync(to, retractedId, ct);
 
     /// <summary>
     /// XEP-0352: Is a human being looking right now?

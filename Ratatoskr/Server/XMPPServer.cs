@@ -1363,6 +1363,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             session.RecordReceived(frame);
             await OnStanzaReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, session, frame, CancellationToken.None), Logger);
 
+            // RFC 7395, section 3.3.3: every frame is one complete, well-formed
+            // XML element - and RFC 6120, section 4.9.3.13: what is not ends
+            // the stream with <not-well-formed/>. A real server does exactly
+            // that; this one used to read the frame as text and carry on. So a
+            // client that put a control character on the wire - a NUL pasted
+            // into a chat, a form feed in a room's subject - passed every test
+            // here and lost its connection on the first real server it met,
+            // for every conversation it held at once.
+            //
+            // Recorded before, so that a test can still see what was sent.
+            //
+            // A frame of nothing but whitespace is no element at all and goes
+            // on to be ignored, as it has since D26: whitespace is a keepalive
+            // (section 4.6.1), not a malformed child. XML's whitespace only - a
+            // form feed is whitespace to .NET and a forbidden character to XML.
+            if (!IsXmlWhitespace(frame) && !IsWellFormed(frame))
+            {
+                await session.SendStreamErrorAsync("not-well-formed");
+                return;
+            }
+
             if (StanzaElement.Is(frame, "open"))
                 session.OpenCount++;
 
@@ -1408,6 +1429,33 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             }
 
         }
+
+        /// <summary>
+        /// Whether a frame is one well-formed XML element (XML 1.0 and
+        /// Namespaces in XML) - characters XML does not allow included, which
+        /// is the case that matters: nothing escapes them, so they reach the
+        /// wire as they are.
+        /// </summary>
+        private static Boolean IsWellFormed(String frame)
+        {
+            try
+            {
+                XElement.Parse(frame);
+                return true;
+            }
+            catch (System.Xml.XmlException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Whether a frame is nothing but whitespace in the sense of XML 1.0
+        /// (production 3): space, tab, carriage return, line feed.
+        /// </summary>
+        private static Boolean IsXmlWhitespace(String frame)
+
+            => frame.All(character => character is ' ' or '\t' or '\r' or '\n');
 
         /// <summary>
         /// The client has closed the stream.

@@ -144,6 +144,46 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AFrameThatIsNotWellFormed_EndsTheStream()
+
+        /// <summary>
+        /// RFC 7395, section 3.3.3 and RFC 6120, section 4.9.3.13: a frame that
+        /// is not well-formed XML ends the stream with &lt;not-well-formed/&gt;.
+        /// </summary>
+        /// <remarks>
+        /// <b>What a real server does, and what this one did not.</b> It read the
+        /// frame as text and carried on, so a client that put a control
+        /// character on the wire - nothing escapes those, they arrive as they
+        /// are - passed every test here and lost its connection on the first
+        /// real server it met. That is how a pasted control character in a room
+        /// went unnoticed in a web app built on this library: its tests ran
+        /// against this server, and this server never said no.
+        /// </remarks>
+        [Test]
+        [TestCase("<message type='chat'><body>one\u0001two</body></message>",  TestName = "AControlCharacter_EndsTheStream")]
+        [TestCase("<message type='chat'><body>left open</message>",           TestName = "AnElementLeftOpen_EndsTheStream")]
+        [TestCase("\u000C",                                                    TestName = "AFormFeed_IsNoKeepalive")]
+        public async Task AFrameThatIsNotWellFormed_EndsTheStream(String frame)
+        {
+
+            var alice   = await AloneAsync();
+            var session = Server.SessionOf(alice.FullJid!.ToString())!;
+            var errors  = ErrorBasket(alice);
+
+            await alice.SendRawAsync(frame);
+
+            await WaitFor(() => !errors.IsEmpty, "the stream error");
+
+            errors.TryDequeue(out var reported);
+
+            Assert.That(reported!.Condition, Is.EqualTo("not-well-formed"));
+
+            await WaitFor(() => !session.IsOpen, "the end of the stream");
+
+        }
+
+        #endregion
+
         #region TheRefusalIsNotAStanzaError()
 
         /// <summary>

@@ -195,6 +195,91 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ACorrectionAndARetraction_TravelInsideTheEnvelope()
+
+        /// <summary>
+        /// XEP-0308 and XEP-0424 under XEP-0384: an encrypted message can be
+        /// corrected and taken back, and neither says in the clear which one.
+        /// </summary>
+        /// <remarks>
+        /// Until now neither was possible: a correction of an encrypted
+        /// message could only go out in the clear - carrying the corrected
+        /// words - and a decrypted message came out without a correction id or
+        /// a retraction id, whatever its envelope held. A correction became a
+        /// second line, a retraction a line with the fallback sentence on it.
+        ///
+        /// Both are read from inside the envelope only, because a
+        /// &lt;replace/&gt; or a &lt;retract/&gt; beside it is anybody's to add
+        /// - and could put somebody else's words in the place of an
+        /// authenticated line, or empty one.
+        /// </remarks>
+        [Test]
+        public async Task ACorrectionAndARetraction_TravelInsideTheEnvelope()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice = await ConnectClientAsync("alice", createAccount: false);
+            var bob   = await ConnectClientAsync("bob",   createAccount: false);
+
+            await alice.EnableOmemoAsync();
+            await bob.EnableOmemoAsync();
+
+            var atBob = new List<XMPPMessage>();
+            bob.OnEncryptedMessage += (timestamp, sender, message, _, ct) => { lock (atBob) atBob.Add(message); return Task.CompletedTask; };
+
+            var bobJid    = JID.Parse($"bob@{Server.Domain}");
+
+            var original  = await alice.SendEncryptedMessageAsync(bobJid, "Untill eight");
+            await WaitFor(() => { lock (atBob) return atBob.Count == 1; }, "the original");
+
+            await alice.SendEncryptedCorrectionAsync(bobJid, "Until eight", original.MessageId);
+            await WaitFor(() => { lock (atBob) return atBob.Count == 2; }, "the correction");
+
+            await alice.SendEncryptedCorrectionAsync(bobJid, "Until nine", original.MessageId);
+            await WaitFor(() => { lock (atBob) return atBob.Count == 3; }, "the correction of the correction");
+
+            await alice.SendEncryptedRetractionAsync(bobJid, original.MessageId);
+            await WaitFor(() => { lock (atBob) return atBob.Count == 4; }, "the retraction");
+
+            var messages = Server.Sessions
+                                 .SelectMany(session => session.Received.Concat(session.Sent))
+                                 .Where     (frame   => frame.StartsWith("<message", StringComparison.Ordinal))
+                                 .ToList();
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(atBob[0].IsCorrection,  Is.False);
+
+                Assert.That(atBob[1].ReplacesId,    Is.EqualTo(original.MessageId),
+                            "The encrypted correction arrived as a message that replaces nothing.");
+                Assert.That(atBob[1].Body,          Is.EqualTo("Until eight"));
+
+                Assert.That(atBob[2].ReplacesId,    Is.EqualTo(original.MessageId),
+                            "A correction of a correction names the original (XEP-0308, section 5).");
+
+                Assert.That(atBob[3].RetractsId,    Is.EqualTo(original.MessageId),
+                            "The encrypted retraction arrived as a message that takes nothing back.");
+
+                Assert.That(messages.Any(frame => frame.Contains(MessageCorrection.Namespace, StringComparison.Ordinal)),
+                            Is.False,
+                            "Which message was corrected stood beside the encryption, in the clear.");
+
+                Assert.That(messages.Any(frame => frame.Contains(MessageRetraction.Namespace, StringComparison.Ordinal)),
+                            Is.False,
+                            "Which message was taken back stood beside the encryption, in the clear.");
+
+                Assert.That(messages.Any(frame => frame.Contains("Until eight", StringComparison.Ordinal)),
+                            Is.False,
+                            "The corrected words stand in a stanza the server has seen.");
+
+            });
+
+        }
+
+        #endregion
+
         #region TwoMessagesInARow_BothArrive()
 
         /// <summary>
