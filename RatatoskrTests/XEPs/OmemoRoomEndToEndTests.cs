@@ -516,6 +516,66 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ALineTakenBackStaysEncrypted()
+
+        /// <summary>
+        /// XEP-0424 in a room: an encrypted line is taken back encrypted, by
+        /// the name the room gave it.
+        /// </summary>
+        /// <remarks>
+        /// Until now the only retraction in a room was the plain one, which
+        /// names the line beside the encryption and tells everybody watching
+        /// that its author wanted it gone.
+        /// </remarks>
+        [Test]
+        public async Task ALineTakenBackStaysEncrypted()
+        {
+
+            var (alice, aliceSession, bob, bobSession) = await TwoInARoomAsync();
+
+            var received = new List<XMPPMessage>();
+            bob.OnEncryptedMessage += (timestamp, sender, message, _, ct) => { lock (received) received.Add(message); return Task.CompletedTask; };
+
+            // The name the room gave the line. A room assigns it on the way
+            // through; here it is simply the one being taken back.
+            const String named = "room-named-7";
+
+            var taken = await alice.SendEncryptedRoomRetractionAsync(RoomJid, named);
+
+            Assert.That(taken.Sent, Is.True, "The room refused: " + taken.Refusal);
+
+            await bobSession.SendAsync(Reflected(await EncryptedStanzaInAsync(aliceSession, taken.MessageId!), "alice", bob.FullJid));
+
+            await WaitFor(() => { lock (received) return received.Count == 1; },
+                          "the retraction at Bob, decrypted");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(received[0].RetractsId, Is.EqualTo(named),
+                            "The decrypted retraction takes nothing back.");
+
+                Assert.That(received[0].Type, Is.EqualTo(MessageType.GroupChat));
+
+                var messages = Server.Sessions.SelectMany(s => s.Received.Concat(s.Sent))
+                                              .Where     (f => f.StartsWith("<message", StringComparison.Ordinal))
+                                              .ToList();
+
+                Assert.That(messages.Any(f => f.Contains(MessageRetraction.Namespace, StringComparison.Ordinal)), Is.False,
+                            "Which line was taken back stood beside the encryption, in the clear.");
+
+                Assert.That(messages.Any(f => f.Contains(named, StringComparison.Ordinal)), Is.False,
+                            "The name of the line stands in a stanza the server has seen.");
+
+                Assert.That(messages.Any(f => f.Contains("urn:xmpp:hints", StringComparison.Ordinal)), Is.True,
+                            "No storage hint outside: the archive would drop a retraction it cannot read.");
+
+            });
+
+        }
+
+        #endregion
+
         #region ASemiAnonymousRoomRefusesBeforeAnythingIsEncrypted()
 
         /// <summary>

@@ -4897,6 +4897,43 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
+    /// <summary>
+    /// XEP-0384 with XEP-0424 in a room: takes back an encrypted line said
+    /// there.
+    /// </summary>
+    /// <param name="room">The room.</param>
+    /// <param name="retractedId">
+    /// The name <b>the room</b> gave the line - XEP-0424 asks for it in so
+    /// many words, and for an encrypted line of one's own it arrives on
+    /// <see cref="OnOwnRoomLineNamed"/>.
+    /// </param>
+    /// <remarks>
+    /// Inside the envelope for the reason <see cref="SendEncryptedRetractionAsync"/>
+    /// gives, with its fallback sentence and marking, and under the conditions
+    /// <see cref="SendEncryptedRoomMessageAsync"/> names. The storage hint is
+    /// put outside by the room send itself.
+    ///
+    /// Missing until now, so a line written encrypted in a room could only be
+    /// taken back in the clear - which names the line, and says to everybody
+    /// watching that its author wanted it gone.
+    /// </remarks>
+    public Task<OmemoRoomSent> SendEncryptedRoomRetractionAsync(JID                room,
+                                                                string             retractedId,
+                                                                CancellationToken  ct = default)
+    {
+
+        if (string.IsNullOrEmpty(retractedId))
+            throw new ArgumentException("A retraction needs the line it takes back.",
+                                        nameof(retractedId));
+
+        var extras = Elements(MessageRetraction.Extras(retractedId))
+                         .Where(element => element.Name.NamespaceName != "urn:xmpp:hints")
+                         .ToList();
+
+        return SendEncryptedRoomContentAsync(room, MessageRetraction.FallbackBody, extras, ct);
+
+    }
+
     private async Task<OmemoRoomSent> SendEncryptedRoomContentAsync(JID                     room,
                                                                     string                  body,
                                                                     IReadOnlyList<XElement> extras,

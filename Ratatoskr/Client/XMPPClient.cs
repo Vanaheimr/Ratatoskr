@@ -1825,6 +1825,21 @@ public sealed class XMPPClient : IAsyncDisposable
         => _connection.SendEncryptedRoomCorrectionAsync(room, body, correctsId, ct);
 
     /// <summary>
+    /// XEP-0384 with XEP-0424 in a room: takes back an encrypted line said
+    /// there, the &lt;retract/&gt; inside the envelope.
+    /// </summary>
+    /// <param name="room">The room.</param>
+    /// <param name="retractedId">
+    /// The name the room gave the line - for one's own encrypted line, the one
+    /// <see cref="OnOwnRoomLineNamed"/> reports.
+    /// </param>
+    public Task<OmemoRoomSent> SendEncryptedRoomRetractionAsync(JID                room,
+                                                                string             retractedId,
+                                                                CancellationToken  ct = default)
+
+        => _connection.SendEncryptedRoomRetractionAsync(room, retractedId, ct);
+
+    /// <summary>
     /// Why this room cannot carry an encrypted message, or null when it can.
     /// </summary>
     /// <remarks>
