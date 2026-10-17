@@ -76,12 +76,13 @@ public readonly record struct ComposedReply(string Body, string Extras);
 /// quotation. Nobody is worse off than before, which is the reason this design
 /// is worth the two elements.
 ///
-/// <b>Not for encrypted messages here.</b> An OMEMO message would carry the
-/// <c>&lt;reply/&gt;</c> outside the encryption, and that element says who
-/// answered whom and when - the shape of a conversation, in clear, for anyone
-/// watching the connection. Where it belongs is inside the envelope of
-/// XEP-0420, next to the body it is about; until it is put there, this side
-/// offers a reply only for a message that was not going to be secret anyway.
+/// <b>An encrypted answer carries both inside the envelope.</b> Outside the
+/// encryption the <c>&lt;reply/&gt;</c> would say who answered whom and when -
+/// the shape of a conversation, in clear, for anyone watching the connection.
+/// Inside the envelope of XEP-0420, next to the body it is about, it says that
+/// to the reader only: <c>SendEncryptedReplyAsync</c> puts it there, and a
+/// decrypted message is read from there and from nowhere else, because the
+/// stanza around an envelope is anybody's to rewrite on the way.
 /// </remarks>
 public static class MessageReply
 {

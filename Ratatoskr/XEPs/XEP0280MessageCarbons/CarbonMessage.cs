@@ -29,13 +29,58 @@ public sealed class CarbonMessage
     public string? MessageId { get; }
     public DateTime ReceivedAt { get; }
 
-    public CarbonMessage(bool isSent, JID originalFrom, JID originalTo, string? body, string? messageId)
+    /// <summary>
+    /// XEP-0461: which message the mirrored one answers, or null.
+    /// </summary>
+    /// <remarks>
+    /// The same reading <see cref="XMPPMessage"/> gets, and for the same
+    /// reason: an answer written on another device of one's own is still an
+    /// answer, and without this it arrived here as a line whose quotation sat
+    /// in the middle of its own text.
+    /// </remarks>
+    public MessageReplyTo? RepliesTo { get; }
+
+    /// <summary>
+    /// XEP-0428: which part of <see cref="Body"/> is only the quotation of the
+    /// message answered, or null. <see cref="Text"/> and <see cref="Quote"/>
+    /// are the two views of it.
+    /// </summary>
+    public BodyRange? QuoteRange { get; }
+
+    /// <summary>
+    /// The mirrored message without the quoted lines - what was actually
+    /// written. The same as <see cref="Body"/> whenever nothing was marked.
+    /// </summary>
+    public string? Text
+
+        => Body is not null && QuoteRange is BodyRange range
+               ? Body.Remove(range.Start, range.Length)
+               : Body;
+
+    /// <summary>
+    /// The quoted lines, or null when the mirrored message carries none.
+    /// </summary>
+    public string? Quote
+
+        => Body is not null && QuoteRange is BodyRange range
+               ? Body.Substring(range.Start, range.Length)
+               : null;
+
+    public CarbonMessage(bool             isSent,
+                         JID              originalFrom,
+                         JID              originalTo,
+                         string?          body,
+                         string?          messageId,
+                         MessageReplyTo?  repliesTo   = null,
+                         BodyRange?       quoteRange  = null)
     {
         IsSent = isSent;
         OriginalFrom = originalFrom;
         OriginalTo = originalTo;
         Body = body;
         MessageId = messageId;
+        RepliesTo = repliesTo;
+        QuoteRange = quoteRange;
         ReceivedAt = DateTime.UtcNow;
     }
 }

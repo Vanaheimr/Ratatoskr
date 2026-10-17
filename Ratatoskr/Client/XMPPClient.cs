@@ -898,9 +898,17 @@ public sealed class XMPPClient : IAsyncDisposable
     /// </returns>
     /// <remarks>
     /// Corrected is exclusively the <b>last</b> message to this recipient
-    /// (section 5) - and the correction itself becomes the last one, so that a
-    /// correction can in turn be corrected. That is not hairsplitting but the
-    /// usual case: whoever mistypes also mistypes in the correction.
+    /// (section 5), and a correction can in turn be corrected - the usual case
+    /// and not hairsplitting: whoever mistypes also mistypes in the correction.
+    ///
+    /// <b>Every correction names the original message</b>, the second one
+    /// included. Section 5 since 1.1.0: "If the same message is to be
+    /// corrected several times, the id of the original message is used in
+    /// each case" - what is replaced is the payload, not the identity of the
+    /// message. Until now the correction became the message a further
+    /// correction named, which is what 1.0 was read to say; a recipient keyed
+    /// by the original then found the second correction pointing at a stanza
+    /// it had never kept as a message of its own, and showed it as one.
     /// </remarks>
     public async Task<string?> CorrectLastMessageAsync(string body, JID? to = null)
     {
@@ -930,17 +938,14 @@ public sealed class XMPPClient : IAsyncDisposable
         var asGroupChat = _connection.Muc?.IsRoom(recipient.Value.Bare) == true &&
                           recipient.Value.Resourcepart is null;
 
-        var id = await _connection.SendMessageAsync(recipient.Value,
-                                                    body,
-                                                    corrects: previous,
-                                                    type:     asGroupChat
-                                                                  ? MessageType.GroupChat
-                                                                  : MessageType.Chat);
-
-        lock (_lastSentToLock)
-            _lastSentTo[key] = id;
-
-        return id;
+        // The entry stays as it is: it names the original, and the original
+        // is what the next correction has to name as well.
+        return await _connection.SendMessageAsync(recipient.Value,
+                                                  body,
+                                                  corrects: previous,
+                                                  type:     asGroupChat
+                                                                ? MessageType.GroupChat
+                                                                : MessageType.Chat);
 
     }
 
@@ -1646,6 +1651,26 @@ public sealed class XMPPClient : IAsyncDisposable
         => _connection.SendEncryptedRoomMessageAsync(room, body, ct);
 
     /// <summary>
+    /// XEP-0384 with XEP-0461 in a room: an encrypted answer to a line said
+    /// there, referring to it by the name the room gave it.
+    /// </summary>
+    public Task<OmemoRoomSent> SendEncryptedRoomReplyAsync(JID                room,
+                                                           string             body,
+                                                           string             replyToId,
+                                                           JID?               replyToAuthor  = null,
+                                                           string?            quotedText     = null,
+                                                           string?            quotedAuthor   = null,
+                                                           CancellationToken  ct             = default)
+
+        => _connection.SendEncryptedRoomReplyAsync(room,
+                                                   body,
+                                                   replyToId,
+                                                   replyToAuthor,
+                                                   quotedText,
+                                                   quotedAuthor,
+                                                   ct);
+
+    /// <summary>
     /// Why this room cannot carry an encrypted message, or null when it can.
     /// </summary>
     /// <remarks>
@@ -1889,6 +1914,41 @@ public sealed class XMPPClient : IAsyncDisposable
         // this address is what a later correction (XEP-0308) names. Missing
         // here until now, which made every encrypted message the one message
         // that could not be corrected.
+        lock (_lastSentToLock)
+            _lastSentTo[LastSentKey(to)] = sent.MessageId;
+
+        return sent;
+
+    }
+
+    /// <summary>
+    /// XEP-0384 with XEP-0461: sends an encrypted answer to a particular
+    /// message - the reference and the quotation's marking inside the
+    /// envelope, where nobody watching the connection can read them.
+    /// </summary>
+    /// <remarks>
+    /// The way in for a caller that keeps its own history, like
+    /// <see cref="SendReplyAsync"/> is for a plain one.
+    /// </remarks>
+    public async Task<OmemoSent> SendEncryptedReplyAsync(JID                to,
+                                                         string             body,
+                                                         string             replyToId,
+                                                         JID?               replyToAuthor  = null,
+                                                         string?            quotedText     = null,
+                                                         string?            quotedAuthor   = null,
+                                                         CancellationToken  ct             = default)
+    {
+
+        var sent = await _connection.SendEncryptedReplyAsync(to,
+                                                             body,
+                                                             replyToId,
+                                                             replyToAuthor,
+                                                             quotedText,
+                                                             quotedAuthor,
+                                                             ct);
+
+        // An answer is a message like any other, and whoever mistypes in one
+        // wants to correct it too.
         lock (_lastSentToLock)
             _lastSentTo[LastSentKey(to)] = sent.MessageId;
 

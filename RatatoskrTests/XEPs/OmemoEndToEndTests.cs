@@ -121,6 +121,80 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AnAnswer_CarriesItsReferenceInsideTheEnvelope()
+
+        /// <summary>
+        /// XEP-0461 under XEP-0384: an encrypted answer arrives as an answer,
+        /// and nothing about it stands on the wire.
+        /// </summary>
+        /// <remarks>
+        /// <b>Inside the envelope, both ways.</b> The &lt;reply/&gt; beside the
+        /// &lt;encrypted/&gt; would tell anybody watching the connection who
+        /// answered whom - and a &lt;fallback/&gt; out there is the server's to
+        /// rewrite, marking half of an authenticated sentence as "only a
+        /// quotation". So it is written into the envelope and read from there.
+        ///
+        /// Until now neither happened: the encrypted answer went out as quoted
+        /// lines in the body and nothing else, and a decrypted message came
+        /// out with no reference and no quotation, whatever its envelope held.
+        /// </remarks>
+        [Test]
+        public async Task AnAnswer_CarriesItsReferenceInsideTheEnvelope()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice = await ConnectClientAsync("alice", createAccount: false);
+            var bob   = await ConnectClientAsync("bob",   createAccount: false);
+
+            await alice.EnableOmemoAsync();
+            await bob.EnableOmemoAsync();
+
+            XMPPMessage? received = null;
+            bob.OnEncryptedMessage += (timestamp, sender, message, _, ct) => { received = message; return Task.CompletedTask; };
+
+            var sent = await alice.SendEncryptedReplyAsync(JID.Parse($"bob@{Server.Domain}"),
+                                                           "Eight is fine",
+                                                           "m1",
+                                                           JID.Parse($"bob@{Server.Domain}/phone"),
+                                                           quotedText: "Shall we meet at eight?");
+
+            Assert.That(sent.Skipped, Is.Empty);
+
+            await WaitFor(() => received is not null, "the decrypted answer at Bob");
+
+            var messages = Server.Sessions
+                                 .SelectMany(session => session.Received.Concat(session.Sent))
+                                 .Where     (frame   => frame.StartsWith("<message", StringComparison.Ordinal))
+                                 .ToList();
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(received!.RepliesTo?.Id,  Is.EqualTo("m1"),
+                            "The decrypted answer refers to nothing.");
+
+                Assert.That(received.RepliesTo?.To,   Is.EqualTo(JID.Parse($"bob@{Server.Domain}/phone")));
+
+                Assert.That(received.Text,            Is.EqualTo("Eight is fine"),
+                            "The quotation was left in the text of the decrypted answer.");
+
+                Assert.That(received.Quote,           Is.EqualTo("> Shall we meet at eight?\n"));
+
+                Assert.That(messages.Any(frame => frame.Contains(MessageReply.Namespace, StringComparison.Ordinal)),
+                            Is.False,
+                            "The reference stood beside the encryption, in the clear.");
+
+                Assert.That(messages.Any(frame => frame.Contains("Eight is fine", StringComparison.Ordinal)),
+                            Is.False,
+                            "The plaintext stands in a stanza the server has seen.");
+
+            });
+
+        }
+
+        #endregion
+
         #region TwoMessagesInARow_BothArrive()
 
         /// <summary>

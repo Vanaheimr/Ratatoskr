@@ -193,14 +193,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region ACorrectionCanBeCorrected()
 
         /// <summary>
-        /// A correction itself becomes the last message.
+        /// A correction can be corrected, and every correction names the
+        /// original.
         /// </summary>
         /// <remarks>
         /// No special case but the usual one: whoever mistypes mistypes in the
-        /// correction as well. Were the second correction to go on pointing at
-        /// the original, the first correction would hang in the air at the
-        /// recipient's - it would be superseded by nothing and would stand next
-        /// to the second one.
+        /// correction as well.
+        ///
+        /// XEP-0308, section 5, since 1.1.0: "If the same message is to be
+        /// corrected several times, the id of the original message is used in
+        /// each case." What a correction replaces is the payload of a message,
+        /// not its identity - so the recipient keeps one message under one id,
+        /// and every correction that arrives replaces its text again. This test
+        /// used to assert the opposite, the reading of 1.0 the revision cleared
+        /// up: a recipient that keys by the original never kept the first
+        /// correction as a message of its own, and a second correction naming
+        /// it named nothing it knew.
         /// </remarks>
         [Test]
         public async Task ACorrectionCanBeCorrected()
@@ -216,11 +224,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob_jid = $"bob@{Server.Domain}";
 
-            await alice.SendMessageAsync(JID.Parse(bob_jid), "Until today");
+            var original = await alice.SendMessageAsync(JID.Parse(bob_jid), "Until today");
 
             await WaitFor(() => inbox.Count == 1, "the first message");
 
-            var first = await alice.CorrectLastMessageAsync("Until tomorrow", JID.Parse(bob_jid));
+            await alice.CorrectLastMessageAsync("Until tomorrow", JID.Parse(bob_jid));
 
             await WaitFor(() => inbox.Count == 2, "the first correction");
 
@@ -230,8 +238,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var all = inbox.ToArray();
 
-            Assert.That(all[2].ReplacesId, Is.EqualTo(first),
-                        "The second correction supersedes the first, not the original.");
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(all[1].ReplacesId, Is.EqualTo(original));
+
+                Assert.That(all[2].ReplacesId, Is.EqualTo(original),
+                            "The second correction named the first correction rather than the " +
+                            "original message (XEP-0308, section 5, since 1.1.0).");
+
+            });
 
         }
 

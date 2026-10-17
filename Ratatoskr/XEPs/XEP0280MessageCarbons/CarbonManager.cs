@@ -130,11 +130,20 @@ public sealed class CarbonManager
             return CarbonResult.ParseError;
         }
 
+        var body   = inner.ChildValue("body");
+
+        // XEP-0461 with XEP-0428, read off the inner message by the one rule
+        // the connection uses for a message of its own - see
+        // MessageReply.QuoteRangeIn for why a marking alone cuts nothing.
         var carbon = new CarbonMessage(isSent,
                                        originalFrom ?? default,
                                        originalTo   ?? default,
-                                       inner.ChildValue("body"),
-                                       inner.Attr("id"));
+                                       body,
+                                       inner.Attr("id"),
+                                       MessageReply.RepliesTo(inner),
+                                       body is not null
+                                           ? MessageReply.QuoteRangeIn(inner, body)
+                                           : null);
 
         await OnCarbonReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, carbon, CancellationToken), _logger);
 

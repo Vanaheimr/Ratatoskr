@@ -4568,8 +4568,65 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// unencrypted:</b> whoever wanted to write encrypted and sends unencrypted
     /// has made the worst of all mistakes - and silently at that.
     /// </exception>
-    public async Task<OmemoSent> SendEncryptedMessageAsync(
+    public Task<OmemoSent> SendEncryptedMessageAsync(
         JID to, string body, CancellationToken ct = default)
+
+        => SendEncryptedContentAsync(to, body, [], ct);
+
+    /// <summary>
+    /// XEP-0384 with XEP-0461: sends an encrypted answer to a particular
+    /// message.
+    /// </summary>
+    /// <param name="to">Who the answer goes to.</param>
+    /// <param name="body">The answer.</param>
+    /// <param name="replyToId">The name of the message being answered.</param>
+    /// <param name="replyToAuthor">Who wrote that message, or null.</param>
+    /// <param name="quotedText">Its text, to be carried along as quoted lines - or null to leave them out.</param>
+    /// <param name="quotedAuthor">Whose text that is, above the quotation.</param>
+    /// <remarks>
+    /// <b>The reference goes inside the envelope, next to the body it is
+    /// about</b> (XEP-0420), and so does the marking that says which part of
+    /// the body is only the quotation. Beside the &lt;encrypted/&gt; the
+    /// &lt;reply/&gt; would tell anybody watching the connection who answered
+    /// whom and when - the shape of a conversation, in the clear, around
+    /// words that were not.
+    ///
+    /// The body and the extras come out of <see cref="MessageReply.Compose"/>
+    /// for the reason <see cref="SendReplyAsync"/> gives: the quotation and
+    /// the numbers that say where it ends have to agree exactly, and they are
+    /// only certain to when one method writes both.
+    /// </remarks>
+    public Task<OmemoSent> SendEncryptedReplyAsync(JID                to,
+                                                   string             body,
+                                                   string             replyToId,
+                                                   JID?               replyToAuthor  = null,
+                                                   string?            quotedText     = null,
+                                                   string?            quotedAuthor   = null,
+                                                   CancellationToken  ct             = default)
+    {
+
+        if (string.IsNullOrEmpty(replyToId))
+            throw new ArgumentException("A reply needs the message it answers.",
+                                        nameof(replyToId));
+
+        var composed = MessageReply.Compose(body, replyToId, replyToAuthor, quotedText, quotedAuthor);
+
+        return SendEncryptedContentAsync(to, composed.Body, Elements(composed.Extras), ct);
+
+    }
+
+    /// <summary>
+    /// The elements of a piece of XML that is a sequence of them, to be put
+    /// into an envelope.
+    /// </summary>
+    private static IReadOnlyList<XElement> Elements(string xml)
+
+        => XElement.Parse($"<extras>{xml}</extras>").Elements().ToList();
+
+    private async Task<OmemoSent> SendEncryptedContentAsync(JID                     to,
+                                                            string                  body,
+                                                            IReadOnlyList<XElement> extras,
+                                                            CancellationToken       ct)
     {
 
         if (Omemo is null)
@@ -4579,7 +4636,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         XNamespace client = "jabber:client";
 
-        var result = await Omemo.EncryptAsync([to], [new XElement(client + "body", body)]);
+        var result = await Omemo.EncryptAsync([to], [new XElement(client + "body", body), .. extras]);
 
         // A <store/> per XEP-0334, so that the storage keeps it: from the
         // outside this message looks like one without content, and a server
@@ -4628,8 +4685,53 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// When OMEMO is not switched on - it will not fall back to sending in the
     /// clear, here least of all.
     /// </exception>
-    public async Task<OmemoRoomSent> SendEncryptedRoomMessageAsync(
+    public Task<OmemoRoomSent> SendEncryptedRoomMessageAsync(
         JID room, string body, CancellationToken ct = default)
+
+        => SendEncryptedRoomContentAsync(room, body, [], ct);
+
+    /// <summary>
+    /// XEP-0384 with XEP-0461 in a room: an encrypted answer to a line said
+    /// there.
+    /// </summary>
+    /// <param name="room">The room.</param>
+    /// <param name="body">The answer.</param>
+    /// <param name="replyToId">
+    /// The name <b>the room</b> gave the line being answered - never the id on
+    /// its stanza, which everybody present may see differently (XEP-0461,
+    /// section 4).
+    /// </param>
+    /// <param name="replyToAuthor">The occupant who wrote it, or null.</param>
+    /// <param name="quotedText">Its text, to be carried along as quoted lines - or null to leave them out.</param>
+    /// <param name="quotedAuthor">Whose text that is - in a room there is more than one person it could be.</param>
+    /// <remarks>
+    /// Inside the envelope for the reason <see cref="SendEncryptedReplyAsync"/>
+    /// gives, and under the conditions <see cref="SendEncryptedRoomMessageAsync"/>
+    /// names.
+    /// </remarks>
+    public Task<OmemoRoomSent> SendEncryptedRoomReplyAsync(JID                room,
+                                                           string             body,
+                                                           string             replyToId,
+                                                           JID?               replyToAuthor  = null,
+                                                           string?            quotedText     = null,
+                                                           string?            quotedAuthor   = null,
+                                                           CancellationToken  ct             = default)
+    {
+
+        if (string.IsNullOrEmpty(replyToId))
+            throw new ArgumentException("A reply needs the message it answers.",
+                                        nameof(replyToId));
+
+        var composed = MessageReply.Compose(body, replyToId, replyToAuthor, quotedText, quotedAuthor);
+
+        return SendEncryptedRoomContentAsync(room, composed.Body, Elements(composed.Extras), ct);
+
+    }
+
+    private async Task<OmemoRoomSent> SendEncryptedRoomContentAsync(JID                     room,
+                                                                    string                  body,
+                                                                    IReadOnlyList<XElement> extras,
+                                                                    CancellationToken       ct)
     {
 
         if (Omemo is null)
@@ -4650,7 +4752,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         XNamespace client = "jabber:client";
 
         var result = await Omemo.EncryptAsync(recipients.Jids,
-                                              [new XElement(client + "body", body)]);
+                                              [new XElement(client + "body", body), .. extras]);
 
         var messageId = await SendMessageStanzaAsync(
                                   room.Bare,
@@ -4745,12 +4847,7 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                             // name on screen that the room shows
                                                             // nowhere else. Who it really is stands
                                                             // in the decrypted result.
-                                                            new XMPPMessage(from,
-                                                                            JID.TryParse(element.Attr("to")) ?? FullJid,
-                                                                            body,
-                                                                            element.Attr("id"),
-                                                                            DateTime.Now,
-                                                                            MessageType.GroupChat),
+                                                            DecryptedMessage(element, from, body, decrypted, MessageType.GroupChat),
                                                             decrypted,
                                                             CancellationToken), _logger);
 
@@ -4792,12 +4889,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             await OnEncryptedMessage.InvokeAllAsync(handler => handler(
                                                             Timestamp.Now,
                                                             this,
-                                                            new XMPPMessage(from,
-                                                                            JID.TryParse(element.Attr("to")) ?? FullJid,
-                                                                            body,
-                                                                            element.Attr("id"),
-                                                                            DateTime.Now,
-                                                                            MessageType.Chat),
+                                                            DecryptedMessage(element, from, body, decrypted, MessageType.Chat),
                                                             decrypted,
                                                             CancellationToken), _logger);
 
@@ -4820,6 +4912,48 @@ public sealed class XMPPConnection : IAsyncDisposable
         });
 
         return true;
+
+    }
+
+    /// <summary>
+    /// The message an opened envelope amounts to: its body, and what the
+    /// envelope says about that body.
+    /// </summary>
+    /// <remarks>
+    /// <b>Whether it answers something, and which part of it is only the
+    /// quotation, is read from inside the envelope and nowhere else.</b>
+    /// XEP-0420 puts the elements that belong to the content into the
+    /// content, and a &lt;reply/&gt; or a &lt;fallback/&gt; are exactly that.
+    /// The stanza around the envelope is anybody's to rewrite on the way: a
+    /// &lt;fallback/&gt; out there could mark half of an authenticated
+    /// sentence as "only a quotation", and the client would set it aside as
+    /// one. The envelope is the part nobody could have touched.
+    ///
+    /// <b>The name a room gave the message is the one exception</b>, and
+    /// rightly: it is the room's statement, added on the way through, and it
+    /// can only ever stand outside. It is taken under the same check a plain
+    /// message gets - only from the entity whose name it claims to be.
+    /// Without it an encrypted line in a room could be neither answered nor
+    /// taken back, because both have to name it by what the room called it.
+    /// </remarks>
+    private XMPPMessage DecryptedMessage(XElement        element,
+                                         JID             from,
+                                         string          body,
+                                         OmemoDecrypted  decrypted,
+                                         MessageType     type)
+    {
+
+        var envelope = new XElement(XName.Get("message", "jabber:client"), decrypted.Content);
+
+        return new XMPPMessage(from,
+                               JID.TryParse(element.Attr("to")) ?? FullJid,
+                               body,
+                               element.Attr("id"),
+                               DateTime.Now,
+                               type,
+                               RepliesTo:   MessageReply.RepliesTo(envelope),
+                               QuoteRange:  MessageReply.QuoteRangeIn(envelope, body),
+                               StanzaId:    StableIds.StanzaId(element, from));
 
     }
 

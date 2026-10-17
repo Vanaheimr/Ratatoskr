@@ -308,6 +308,65 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region Carbon_OfAnAnswer_KeepsWhatItAnswers()
+
+        /// <summary>
+        /// XEP-0461 on a mirrored message: an answer written on another device
+        /// of one's own is still an answer.
+        /// </summary>
+        /// <remarks>
+        /// The carbon used to bring the body and nothing else, so a client
+        /// showing it put the quotation in the middle of the text - the one
+        /// thing XEP-0428 exists to prevent for a client that knows better.
+        /// The stanza is the one this library writes itself
+        /// (<see cref="MessageReply.Compose"/>), so the offsets are the real
+        /// ones and not a test's idea of them.
+        /// </remarks>
+        [Test]
+        public async Task Carbon_OfAnAnswer_KeepsWhatItAnswers()
+        {
+
+            var (client, session) = await ConnectedPairAsync();
+
+            CarbonMessage? reported = null;
+            client.OnCarbonMessage += (timestamp, sender, carbon, ct) => { reported = carbon; return Task.CompletedTask; };
+
+            var composed = MessageReply.Compose("Eight is fine",
+                                                "m1",
+                                                JID.Parse($"{Bob}/phone"),
+                                                quotedText: "Shall we meet at eight?");
+
+            await session.SendAsync(
+                $"<message xmlns='jabber:client' from='{client.BareJid}' to='{client.FullJid}'>" +
+                "<sent xmlns='urn:xmpp:carbons:2'>" +
+                "<forwarded xmlns='urn:xmpp:forward:0'>" +
+                $"<message xmlns='jabber:client' from='{client.BareJid}/other' to='{Bob}' type='chat' id='a2'>" +
+                $"<body>{XmlEscaping.Escape(composed.Body)}</body>" +
+                composed.Extras +
+                "</message></forwarded></sent></message>");
+
+            await WaitFor(() => reported is not null, "the reported carbon");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(reported!.RepliesTo?.Id, Is.EqualTo("m1"),
+                            "The carbon of an answer arrived as a message that answers nothing.");
+
+                Assert.That(reported.Text,  Is.EqualTo("Eight is fine"),
+                            "The quotation was left in the text of the mirrored answer.");
+
+                Assert.That(reported.Quote, Is.EqualTo("> Shall we meet at eight?\n"));
+
+                Assert.That(reported.Body,  Is.EqualTo(composed.Body),
+                            "What came over the wire is what stands in Body.");
+
+            });
+
+        }
+
+        #endregion
+
     }
 
 }
