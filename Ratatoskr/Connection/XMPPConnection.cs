@@ -315,6 +315,44 @@ public sealed class XMPPConnection : IAsyncDisposable
     private readonly SemaphoreSlim _sendLock = new(1, 1);
 
     /// <summary>
+    /// XEP-0384: the decryptions, one after the other in the order the
+    /// messages arrived.
+    /// </summary>
+    /// <remarks>
+    /// <b>Order is not a nicety here.</b> Only the first message to a device
+    /// carries the key exchange; the ones after it can be read only once that
+    /// one has built the session. Each decryption used to run as a task of its
+    /// own, so a second message could overtake the first, find no session, and
+    /// be dropped without a word - in a room every time a test ran on its own,
+    /// and anywhere a correction followed the line it corrects.
+    ///
+    /// <b>Off the receive loop all the same</b>, as before: what a decrypted
+    /// message is handed to may wait for an answer from the server, and that
+    /// answer has to be read by the loop this would otherwise be blocking.
+    /// </remarks>
+    private          Task  _decryptions      = Task.CompletedTask;
+    private readonly Lock  _decryptionsLock  = new();
+
+    private void DecryptInTurn(Func<Task> work)
+    {
+        lock (_decryptionsLock)
+            _decryptions = _decryptions.ContinueWith(async _ =>
+                                                     {
+                                                         try
+                                                         {
+                                                             await work();
+                                                         }
+                                                         catch (Exception e)
+                                                         {
+                                                             _logger.LogWarning(e, "OMEMO: handling a decrypted message failed");
+                                                         }
+                                                     },
+                                                     CancellationToken.None,
+                                                     TaskContinuationOptions.None,
+                                                     TaskScheduler.Default).Unwrap();
+    }
+
+    /// <summary>
     /// How long the teardown waits for the background loops to end before
     /// giving up on them.
     /// </summary>
@@ -4966,7 +5004,7 @@ public sealed class XMPPConnection : IAsyncDisposable
             return;
         }
 
-        _ = Task.Run(async () =>
+        DecryptInTurn(async () =>
         {
 
             var decrypted = await Omemo.DecryptAsync(encrypted!, sender);
@@ -5015,7 +5053,7 @@ public sealed class XMPPConnection : IAsyncDisposable
         if (Omemo is null || !OmemoEncryptedElement.TryRead(element, out var encrypted))
             return false;
 
-        _ = Task.Run(async () =>
+        DecryptInTurn(async () =>
         {
 
             var decrypted = await Omemo.DecryptAsync(encrypted!, from);
