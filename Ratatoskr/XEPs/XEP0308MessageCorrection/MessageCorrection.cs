@@ -84,3 +84,36 @@ public static class MessageCorrection
     }
 
 }
+
+/// <summary>
+/// What became of a correction.
+/// </summary>
+/// <param name="MessageId">The id it went out under, or null when it did not go.</param>
+/// <param name="Encrypted">Whether it went out encrypted - which it does exactly when the corrected message did.</param>
+/// <param name="Skipped">The devices that cannot read an encrypted one - empty means all can.</param>
+/// <param name="Readable">Whether anybody on the far side can read it at all.</param>
+/// <param name="Refusal">
+/// Why nothing was sent, or null. Only ever for an encrypted message whose
+/// correction could not be encrypted, and then the alternative would have
+/// been to write the new text in the clear.
+/// </param>
+public sealed record CorrectionSent(String?                            MessageId,
+                                    Boolean                            Encrypted,
+                                    IReadOnlyList<OmemoSkippedDevice>  Skipped,
+                                    Boolean                            Readable,
+                                    String?                            Refusal)
+{
+
+    /// <summary>
+    /// Did it go?
+    /// </summary>
+    public Boolean Sent
+        => MessageId is not null;
+
+    internal static CorrectionSent InTheClear(String messageId)
+        => new (messageId, Encrypted: false, Skipped: [], Readable: true, Refusal: null);
+
+    internal static CorrectionSent Refused(String why)
+        => new (null, Encrypted: true, Skipped: [], Readable: false, Refusal: why);
+
+}

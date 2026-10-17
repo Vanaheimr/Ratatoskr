@@ -257,8 +257,20 @@ public sealed class XMPPClient : IAsyncDisposable
     /// note would be wrong after every change of subject - and wrong in such a
     /// way that the correction ends up with the previous conversation partner.
     /// </remarks>
-    private readonly Dictionary<JID, string>  _lastSentTo            = [];
-    private readonly Lock                     _lastSentToLock        = new();
+    private readonly Dictionary<JID, LastSent>  _lastSentTo          = [];
+    private readonly Lock                       _lastSentToLock      = new();
+
+    /// <summary>
+    /// What a correction needs to know about the message it replaces: its
+    /// name, and whether it went out encrypted.
+    /// </summary>
+    /// <remarks>
+    /// <b>The second half is not bookkeeping for its own sake.</b> A correction
+    /// carries the complete new text, so correcting an encrypted message in the
+    /// clear publishes what the first one was written encrypted to keep from
+    /// being read. Until this was noted here, that is what happened.
+    /// </remarks>
+    private readonly record struct LastSent(String Id, Boolean Encrypted);
 
     /// <summary>
     /// The key <see cref="_lastSentTo"/> is kept under.
@@ -902,7 +914,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // For a later correction (XEP-0308). What is never corrected gets
         // remembered too - the price is one entry per conversation partner.
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = id;
+            _lastSentTo[LastSentKey(to)] = new (id, Encrypted: false);
 
         return id;
 
@@ -914,8 +926,10 @@ public sealed class XMPPClient : IAsyncDisposable
     /// <param name="to">The recipient; without one the current chat partner.</param>
     /// <param name="body">The complete new text.</param>
     /// <returns>
-    /// The ID of the correction, or null - then there is nothing to correct:
-    /// no recipient, or nothing has gone out to this one in this session yet.
+    /// The ID of the correction, or null - then nothing went out: no
+    /// recipient, nothing has gone out to this one in this session yet, or the
+    /// message to be corrected was encrypted and the correction cannot be.
+    /// <see cref="CorrectLastAsync"/> tells the three apart.
     /// </returns>
     /// <remarks>
     /// Corrected is exclusively the <b>last</b> message to this recipient
@@ -932,6 +946,39 @@ public sealed class XMPPClient : IAsyncDisposable
     /// it had never kept as a message of its own, and showed it as one.
     /// </remarks>
     public async Task<string?> CorrectLastMessageAsync(string body, JID? to = null)
+
+        => (await CorrectLastAsync(body, to))?.MessageId;
+
+    /// <summary>
+    /// XEP-0308: Corrects the message last sent to this recipient - encrypted
+    /// when that message was.
+    /// </summary>
+    /// <param name="body">The complete new text.</param>
+    /// <param name="to">The recipient; without one the current chat partner.</param>
+    /// <param name="ct">A cancellation token.</param>
+    /// <returns>
+    /// What became of the correction, or null when there is nothing to
+    /// correct: no recipient, or nothing has gone out to this one in this
+    /// session yet.
+    /// </returns>
+    /// <remarks>
+    /// <b>A correction goes out the way the corrected message did.</b> It
+    /// carries the complete new text, so correcting an encrypted message in
+    /// the clear publishes what the first one was encrypted to protect - which
+    /// is exactly what this did until now. The &lt;replace/&gt; travels inside
+    /// the envelope (XEP-0420), where only the reader learns which message is
+    /// being rewritten, and a decrypted message is read from there.
+    ///
+    /// <b>It never falls back to the clear.</b> When OMEMO is off by now, or a
+    /// room has stopped being able to carry an encrypted line, the result
+    /// says why in <see cref="CorrectionSent.Refusal"/> and nothing is sent.
+    ///
+    /// The rules of <see cref="CorrectLastMessageAsync"/> hold otherwise: only
+    /// the last message, and every correction names the original.
+    /// </remarks>
+    public async Task<CorrectionSent?> CorrectLastAsync(string             body,
+                                                        JID?               to  = null,
+                                                        CancellationToken  ct  = default)
     {
 
         var recipient = to ?? CurrentChatPartner;
@@ -941,7 +988,7 @@ public sealed class XMPPClient : IAsyncDisposable
 
         var key = LastSentKey(recipient.Value);
 
-        string? previous;
+        LastSent previous;
 
         lock (_lastSentToLock)
             if (!_lastSentTo.TryGetValue(key, out previous))
@@ -959,14 +1006,53 @@ public sealed class XMPPClient : IAsyncDisposable
         var asGroupChat = _connection.Muc?.IsRoom(recipient.Value.Bare) == true &&
                           recipient.Value.Resourcepart is null;
 
-        // The entry stays as it is: it names the original, and the original
-        // is what the next correction has to name as well.
-        return await _connection.SendMessageAsync(recipient.Value,
-                                                  body,
-                                                  corrects: previous,
-                                                  type:     asGroupChat
-                                                                ? MessageType.GroupChat
-                                                                : MessageType.Chat);
+        // The entry stays as it is in every case below: it names the
+        // original, and the original is what the next correction has to name
+        // as well.
+        if (!previous.Encrypted)
+            return CorrectionSent.InTheClear(await _connection.SendMessageAsync(recipient.Value,
+                                                                                body,
+                                                                                corrects: previous.Id,
+                                                                                type:     asGroupChat
+                                                                                              ? MessageType.GroupChat
+                                                                                              : MessageType.Chat));
+
+        if (_connection.Omemo is null)
+            return CorrectionSent.Refused("the message it corrects was encrypted, and OMEMO is not switched on");
+
+        if (asGroupChat)
+        {
+
+            var why = CannotEncryptInRoom(recipient.Value.Bare);
+
+            if (why is not null)
+                return CorrectionSent.Refused(why);
+
+            var inRoom = await _connection.SendEncryptedRoomCorrectionAsync(recipient.Value.Bare,
+                                                                            body,
+                                                                            previous.Id,
+                                                                            ct);
+
+            return inRoom.Refusal is not null
+                       ? CorrectionSent.Refused(inRoom.Refusal)
+                       : new CorrectionSent(inRoom.MessageId,
+                                            Encrypted:  true,
+                                            Skipped:    inRoom.Skipped,
+                                            Readable:   true,
+                                            Refusal:    null);
+
+        }
+
+        var sent = await _connection.SendEncryptedCorrectionAsync(recipient.Value,
+                                                                  body,
+                                                                  previous.Id,
+                                                                  ct);
+
+        return new CorrectionSent(sent.MessageId,
+                                  Encrypted:  true,
+                                  Skipped:    sent.Skipped,
+                                  Readable:   sent.Readable,
+                                  Refusal:    null);
 
     }
 
@@ -1026,7 +1112,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // For a later correction (XEP-0308): an answer is a message like any
         // other, and whoever mistypes in one wants to correct it too.
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = sent;
+            _lastSentTo[LastSentKey(to)] = new (sent, Encrypted: false);
 
         return sent;
 
@@ -1058,7 +1144,7 @@ public sealed class XMPPClient : IAsyncDisposable
                                                   quotedAuthor);
 
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = id;
+            _lastSentTo[LastSentKey(to)] = new (id, Encrypted: false);
 
         return id;
 
@@ -1128,7 +1214,7 @@ public sealed class XMPPClient : IAsyncDisposable
         if (sent.MessageId is not null)
         {
             lock (_lastSentToLock)
-                _lastSentTo[LastSentKey(to)] = sent.MessageId;
+                _lastSentTo[LastSentKey(to)] = new (sent.MessageId, Encrypted: false);
         }
 
         return sent;
@@ -1210,7 +1296,7 @@ public sealed class XMPPClient : IAsyncDisposable
         var messageId = await _connection.SendFileMessageAsync(to, encrypted.Url, type, ct);
 
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = messageId;
+            _lastSentTo[LastSentKey(to)] = new (messageId, Encrypted: false);
 
         return new FileSent(encrypted.Upload with { Url = encrypted.Url }, messageId);
 
@@ -1533,7 +1619,7 @@ public sealed class XMPPClient : IAsyncDisposable
         var id = await _connection.SendRoomPrivateMessageAsync(to, body);
 
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = id;
+            _lastSentTo[LastSentKey(to)] = new (id, Encrypted: false);
 
         return id;
 
@@ -1650,7 +1736,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // under the occupant (D134), so the two do not collide: correcting
         // what was said to everybody cannot reach into what was said to one.
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(room.Bare)] = id;
+            _lastSentTo[LastSentKey(room.Bare)] = new (id, Encrypted: false);
 
         return id;
 
@@ -1666,30 +1752,66 @@ public sealed class XMPPClient : IAsyncDisposable
     /// asks the same question beforehand, which is what a client draws its lock
     /// from; <see cref="MakeRoomNonAnonymousAsync"/> is what changes it.
     /// </remarks>
-    public Task<OmemoRoomSent> SendEncryptedRoomMessageAsync(JID                room,
-                                                             string             body,
-                                                             CancellationToken  ct = default)
-        => _connection.SendEncryptedRoomMessageAsync(room, body, ct);
+    public async Task<OmemoRoomSent> SendEncryptedRoomMessageAsync(JID                room,
+                                                                   string             body,
+                                                                   CancellationToken  ct = default)
+    {
+
+        var sent = await _connection.SendEncryptedRoomMessageAsync(room, body, ct);
+
+        RecordEncryptedRoomLine(room, sent);
+
+        return sent;
+
+    }
+
+    /// <summary>
+    /// XEP-0308: an encrypted line in a room is the last thing said there,
+    /// like a plain one.
+    /// </summary>
+    /// <remarks>
+    /// Not recorded until now, and the omission was worse than a correction
+    /// that finds nothing: the entry still named the last <b>plain</b> line,
+    /// so correcting an encrypted line rewrote an older one - in the clear,
+    /// with the text meant for the encrypted one.
+    /// </remarks>
+    private void RecordEncryptedRoomLine(JID room, OmemoRoomSent sent)
+    {
+
+        if (sent.MessageId is null)
+            return;
+
+        lock (_lastSentToLock)
+            _lastSentTo[LastSentKey(room.Bare)] = new (sent.MessageId, Encrypted: true);
+
+    }
 
     /// <summary>
     /// XEP-0384 with XEP-0461 in a room: an encrypted answer to a line said
     /// there, referring to it by the name the room gave it.
     /// </summary>
-    public Task<OmemoRoomSent> SendEncryptedRoomReplyAsync(JID                room,
-                                                           string             body,
-                                                           string             replyToId,
-                                                           JID?               replyToAuthor  = null,
-                                                           string?            quotedText     = null,
-                                                           string?            quotedAuthor   = null,
-                                                           CancellationToken  ct             = default)
+    public async Task<OmemoRoomSent> SendEncryptedRoomReplyAsync(JID                room,
+                                                                 string             body,
+                                                                 string             replyToId,
+                                                                 JID?               replyToAuthor  = null,
+                                                                 string?            quotedText     = null,
+                                                                 string?            quotedAuthor   = null,
+                                                                 CancellationToken  ct             = default)
+    {
 
-        => _connection.SendEncryptedRoomReplyAsync(room,
-                                                   body,
-                                                   replyToId,
-                                                   replyToAuthor,
-                                                   quotedText,
-                                                   quotedAuthor,
-                                                   ct);
+        var sent = await _connection.SendEncryptedRoomReplyAsync(room,
+                                                                 body,
+                                                                 replyToId,
+                                                                 replyToAuthor,
+                                                                 quotedText,
+                                                                 quotedAuthor,
+                                                                 ct);
+
+        RecordEncryptedRoomLine(room, sent);
+
+        return sent;
+
+    }
 
     /// <summary>
     /// XEP-0384 with XEP-0308 in a room: replaces the text of an encrypted
@@ -1947,7 +2069,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // here until now, which made every encrypted message the one message
         // that could not be corrected.
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = sent.MessageId;
+            _lastSentTo[LastSentKey(to)] = new (sent.MessageId, Encrypted: true);
 
         return sent;
 
@@ -1982,7 +2104,7 @@ public sealed class XMPPClient : IAsyncDisposable
         // An answer is a message like any other, and whoever mistypes in one
         // wants to correct it too.
         lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = sent.MessageId;
+            _lastSentTo[LastSentKey(to)] = new (sent.MessageId, Encrypted: true);
 
         return sent;
 

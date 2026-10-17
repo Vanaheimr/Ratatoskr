@@ -448,6 +448,74 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ACorrectedLineStaysEncrypted()
+
+        /// <summary>
+        /// XEP-0308 in a room: the encrypted line is the one corrected, and
+        /// the correction is encrypted as well.
+        /// </summary>
+        /// <remarks>
+        /// <b>Two faults, and the plain line first is what shows the second.</b>
+        /// An encrypted line in a room was never noted as the last thing said
+        /// there, so the entry still named the plain line before it: the
+        /// correction rewrote that one - in the clear, with the text meant for
+        /// the encrypted one.
+        /// </remarks>
+        [Test]
+        public async Task ACorrectedLineStaysEncrypted()
+        {
+
+            var (alice, aliceSession, bob, bobSession) = await TwoInARoomAsync();
+
+            var received = new List<XMPPMessage>();
+            bob.OnEncryptedMessage += (timestamp, sender, message, _, ct) => { lock (received) received.Add(message); return Task.CompletedTask; };
+
+            await alice.SendRoomMessageAsync(RoomJid, "Good evening.");
+
+            var line = await alice.SendEncryptedRoomMessageAsync(RoomJid, "The key is under the mat.");
+
+            Assert.That(line.Sent, Is.True, "The room refused: " + line.Refusal);
+
+            var fix  = await alice.CorrectLastAsync("The key is under the stone.", RoomJid);
+
+            Assert.That(fix, Is.Not.Null, "Nothing said in the room was found to correct.");
+            Assert.That(fix!.Refusal, Is.Null, fix.Refusal);
+
+            // The room hands both on.
+            foreach (var id in new[] { line.MessageId!, fix.MessageId! })
+                await bobSession.SendAsync(Reflected(await EncryptedStanzaInAsync(aliceSession, id), "alice", bob.FullJid));
+
+            await WaitFor(() => { lock (received) return received.Count == 2; },
+                          "the line and its correction at Bob, decrypted");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(fix.Encrypted, Is.True, "The correction went out in the clear.");
+
+                Assert.That(received[1].ReplacesId, Is.EqualTo(line.MessageId),
+                            "The correction names something other than the encrypted line.");
+
+                Assert.That(received[1].Body, Is.EqualTo("The key is under the stone."));
+                Assert.That(received[1].Type, Is.EqualTo(MessageType.GroupChat));
+
+                var everything = Server.Sessions.SelectMany(s => s.Received.Concat(s.Sent)).ToList();
+
+                Assert.That(everything.Any(f => f.Contains("under the", StringComparison.Ordinal)), Is.False,
+                            "A text stands in a stanza the server has seen.");
+
+                // Messages only: the namespace is announced in every disco#info
+                // answer, which is where it belongs.
+                Assert.That(everything.Where(f => f.StartsWith("<message", StringComparison.Ordinal))
+                                      .Any  (f => f.Contains(MessageCorrection.Namespace, StringComparison.Ordinal)), Is.False,
+                            "The <replace/> stood beside the encryption, in the clear.");
+
+            });
+
+        }
+
+        #endregion
+
         #region ASemiAnonymousRoomRefusesBeforeAnythingIsEncrypted()
 
         /// <summary>

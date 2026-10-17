@@ -280,6 +280,86 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ACorrection_OfAnEncryptedMessage_IsEncryptedToo()
+
+        /// <summary>
+        /// XEP-0308 under XEP-0384: an encrypted message is corrected
+        /// encrypted, twice, and both corrections name the original.
+        /// </summary>
+        /// <remarks>
+        /// <b>The new text is the whole point of a correction</b>, so a
+        /// correction in the clear publishes exactly what the message it
+        /// corrects was encrypted to keep. That is what happened until now:
+        /// the encrypted send noted its id for a later correction, and the
+        /// correction went out as a plain message.
+        ///
+        /// The &lt;replace/&gt; is inside the envelope and read from there,
+        /// like the &lt;reply/&gt; of an answer.
+        /// </remarks>
+        [Test]
+        public async Task ACorrection_OfAnEncryptedMessage_IsEncryptedToo()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice = await ConnectClientAsync("alice", createAccount: false);
+            var bob   = await ConnectClientAsync("bob",   createAccount: false);
+
+            await alice.EnableOmemoAsync();
+            await bob.EnableOmemoAsync();
+
+            var received = new List<XMPPMessage>();
+            bob.OnEncryptedMessage += (timestamp, sender, message, _, ct) => { lock (received) received.Add(message); return Task.CompletedTask; };
+
+            var bobJid   = JID.Parse($"bob@{Server.Domain}");
+
+            var original = await alice.SendEncryptedMessageAsync(bobJid, "Shall we meet at eihgt?");
+            var first    = await alice.CorrectLastAsync("Shall we meet at eight?", bobJid);
+            var second   = await alice.CorrectLastAsync("Shall we meet at nine?",  bobJid);
+
+            await WaitFor(() => { lock (received) return received.Count == 3; },
+                          "the message and both corrections at Bob, decrypted");
+
+            var messages = Server.Sessions
+                                 .SelectMany(session => session.Received.Concat(session.Sent))
+                                 .Where     (frame   => frame.StartsWith("<message", StringComparison.Ordinal))
+                                 .ToList();
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(first,             Is.Not.Null);
+                Assert.That(first!.Encrypted,  Is.True,  "The first correction went out in the clear.");
+                Assert.That(first.Refusal,     Is.Null,  first.Refusal);
+                Assert.That(second!.Encrypted, Is.True,  "The second correction went out in the clear.");
+
+                // By position, which holds since the decryptions take turns:
+                // before, the two corrections could overtake the key exchange
+                // and each other.
+                Assert.That(received.Select(message => message.Body),
+                            Is.EqualTo(new[] { "Shall we meet at eihgt?", "Shall we meet at eight?", "Shall we meet at nine?" }),
+                            "The messages arrived out of order.");
+
+                Assert.That(received[1].ReplacesId, Is.EqualTo(original.MessageId),
+                            "The decrypted correction does not say what it corrects.");
+
+                Assert.That(received[2].ReplacesId, Is.EqualTo(original.MessageId),
+                            "The second correction named the first and not the original.");
+
+                Assert.That(messages.Any(frame => frame.Contains("meet at", StringComparison.Ordinal)),
+                            Is.False,
+                            "A text stands in a stanza the server has seen.");
+
+                Assert.That(messages.Any(frame => frame.Contains(MessageCorrection.Namespace, StringComparison.Ordinal)),
+                            Is.False,
+                            "The <replace/> stood beside the encryption, in the clear.");
+
+            });
+
+        }
+
+        #endregion
+
         #region TwoMessagesInARow_BothArrive()
 
         /// <summary>
