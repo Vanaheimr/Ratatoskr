@@ -287,6 +287,47 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AMissingDeviceList_IsNotReportedAsAStanzaError()
+
+        /// <summary>
+        /// A contact who does not do OMEMO has no device list, and that is not
+        /// an error anybody should be shown.
+        /// </summary>
+        /// <remarks>
+        /// <b>Most of the world has no such node.</b> Every encrypted send
+        /// fetches the recipient's device list first, so a client that reports
+        /// the resulting item-not-found generally puts a red error in front of
+        /// its user for every message written to somebody on Conversations -
+        /// which answers a different OMEMO version and therefore has nothing
+        /// under this node.
+        ///
+        /// The fetch itself already treats the refusal correctly: no node, no
+        /// device list, null. What is checked here is that nothing <i>also</i>
+        /// announces it as a stanza error nobody was waiting for.
+        /// </remarks>
+        [Test]
+        public async Task AMissingDeviceList_IsNotReportedAsAStanzaError()
+        {
+
+            var alice = await ConnectClientAsync("alice");
+
+            // Bob exists and has published nothing.
+            Server.AddAccount("bob");
+
+            StanzaError? reported = null;
+            alice.OnStanzaError += (timestamp, sender, from, error, ct) => { reported = error; return Task.CompletedTask; };
+
+            var list = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"bob@{Server.Domain}"));
+
+            Assert.That(list, Is.Null, "Bob has published no device list");
+
+            await WaitAgainst(() => reported is not null,
+                              $"a stanza error for a node that is simply not there: {reported}");
+
+        }
+
+        #endregion
+
         #region ABundle_TravelsFromOneAccountToAnother()
 
         /// <summary>
