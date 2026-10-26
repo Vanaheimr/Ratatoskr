@@ -328,6 +328,78 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ALateAnswerToAGivenUpIq_IsNotReportedAsAStanzaError()
+
+        /// <summary>
+        /// An answer that arrives after this side stopped waiting is still this
+        /// side's own answer - and not a stanza nobody asked for.
+        /// </summary>
+        /// <remarks>
+        /// <b>This is the one that put the red error on the screen.</b> The
+        /// device list of a contact is fetched before every encrypted send;
+        /// their server took longer than the ten seconds, the fetch gave up and
+        /// sent in the clear, and the <c>item-not-found</c> that came
+        /// afterwards belonged to nobody any more - so it went out through
+        /// OnStanzaError, which an application shows its user. The log said it
+        /// in three lines ten seconds apart: no answer to 'pep-42', sending in
+        /// the clear, stanza refused.
+        ///
+        /// <see cref="AMissingDeviceList_IsNotReportedAsAStanzaError"/> checks
+        /// the same refusal arriving in time, and that one was never the
+        /// problem. The difference between the two tests is the whole fault.
+        ///
+        /// <b>The order is asserted, not assumed.</b> Were the answer to arrive
+        /// before the giving up, the fetch would simply have succeeded and there
+        /// would be no late answer to report - a test that cannot tell those
+        /// apart passes without checking anything.
+        /// </remarks>
+        [Test]
+        public async Task ALateAnswerToAGivenUpIq_IsNotReportedAsAStanzaError()
+        {
+
+            var alice = await ConnectClientAsync("alice");
+
+            // Bob exists and has published nothing, so the answer is a refusal.
+            Server.AddAccount("bob");
+
+            // A slow server, without the test waiting out ten seconds for one.
+            alice.Connection.IqTimeout = TimeSpan.FromMilliseconds(300);
+
+            Server.OnStanzaReceived += async (timestamp, server, session, frame, ct) => {
+                if (frame.Contains("type='get'") && frame.Contains(OmemoDeviceList.Node))
+                    await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            };
+
+            DateTimeOffset? answered = null;
+
+            alice.Connection.OnRawXml += (timestamp, sender, xml, ct) => {
+                if (xml.StartsWith("<<< ") && xml.Contains("item-not-found"))
+                    answered ??= timestamp;
+                return Task.CompletedTask;
+            };
+
+            StanzaError? reported = null;
+            alice.OnStanzaError += (timestamp, sender, from, error, ct) => { reported = error; return Task.CompletedTask; };
+
+            var list      = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"bob@{Server.Domain}"));
+            var gaveUpAt  = DateTimeOffset.UtcNow;
+
+            Assert.That(list, Is.Null, "the fetch gave up before an answer came");
+
+            await WaitFor(() => answered is not null,
+                          "the answer that was waited for in vain",
+                          TimeSpan.FromSeconds(5));
+
+            Assert.That(answered, Is.GreaterThan(gaveUpAt),
+                        "the answer has to arrive after the giving up, or this test checks nothing");
+
+            await WaitAgainst(() => reported is not null,
+                              $"a stanza error for this side's own request: {reported}");
+
+        }
+
+        #endregion
+
         #region ABundle_TravelsFromOneAccountToAnother()
 
         /// <summary>

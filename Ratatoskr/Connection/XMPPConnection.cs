@@ -381,6 +381,20 @@ public sealed class XMPPConnection : IAsyncDisposable
     private static readonly TimeSpan SetupTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
+    /// How long a request sent through <see cref="SendIqAsync"/> waits for its
+    /// answer.
+    /// </summary>
+    /// <remarks>
+    /// Settable so that a test can reach the case of an answer arriving after
+    /// the waiting was given up on, without waiting out ten seconds for it.
+    /// Deliberately not part of the public surface: whether an application
+    /// should set this is a question of its own, and a wrong answer to it is
+    /// either a client that gives up on slow servers or one that hangs on
+    /// broken ones.
+    /// </remarks>
+    internal TimeSpan IqTimeout { get; set; } = SetupTimeout;
+
+    /// <summary>
     /// The largest stanza that is read off the socket, in bytes.
     /// </summary>
     /// <remarks>
@@ -425,6 +439,45 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </param>
     private sealed record PendingIq(TaskCompletionSource<XElement>  Completion,
                                     String?                         ExpectedFrom);
+
+    /// <summary>
+    /// Identifiers of IQs this side sent and then gave up on, with the moment
+    /// it gave up.
+    /// </summary>
+    /// <remarks>
+    /// <b>A late answer is an answer, not an unsolicited stanza.</b> When an IQ
+    /// times out the waiting party is released and the identifier taken out of
+    /// <see cref="_pendingIqs"/> - and the answer that arrives a second later
+    /// then belongs to nobody. Up to here it took the only route left to it and
+    /// was announced through <see cref="OnStanzaError"/>, which is the route an
+    /// application puts in front of its user.
+    ///
+    /// What that looked like: the device list of a contact is fetched before
+    /// every encrypted send. Their server took longer than the ten seconds, the
+    /// fetch gave up and sent in the clear, and the <c>item-not-found</c> that
+    /// came afterwards stood on the screen as a refused stanza - for a request
+    /// the program had made itself and had already decided about.
+    ///
+    /// <b>Not a cache of answers.</b> Nothing out of a late answer is believed
+    /// or passed on; the identifier is recognised as this side's own so the
+    /// stanza can be dropped with a line in the log instead of an alarm.
+    /// Consumed on use, because exactly one answer belongs to one request - a
+    /// second one carrying the same identifier is unsolicited after all.
+    /// </remarks>
+    private readonly Dictionary<String, DateTimeOffset> _abandonedIqs = new (StringComparer.Ordinal);
+
+    /// <summary>
+    /// How long an abandoned identifier stays recognisable. Long enough for a
+    /// server that is slow, short enough that an identifier reused afterwards
+    /// is nobody's.
+    /// </summary>
+    private static readonly TimeSpan AbandonedIqMemory = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// How many abandoned identifiers are kept at most. A client whose server
+    /// has stopped answering altogether must not grow a list for it.
+    /// </summary>
+    private const Int32 MaxAbandonedIqs = 256;
 
     /// <summary>
     /// The last error from <see cref="ConnectInternalAsync"/> - so that
@@ -2106,16 +2159,24 @@ public sealed class XMPPConnection : IAsyncDisposable
             await SendAsync(xml);
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(SetupTimeout);
+            cts.CancelAfter(IqTimeout);
 
             return await tcs.Task.WaitAsync(cts.Token);
 
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+
             _logger.LogWarning("No answer to IQ '{Id}' within {Seconds}s",
-                               id, SetupTimeout.TotalSeconds);
+                               id, IqTimeout.TotalSeconds);
+
+            // The giving up is noted, not only the waiting. An answer that is
+            // merely late is this side's own business and must not arrive at
+            // the application as a stanza nobody asked for.
+            RememberAbandonedIq(id);
+
             return null;
+
         }
         finally
         {
@@ -2152,24 +2213,46 @@ public sealed class XMPPConnection : IAsyncDisposable
     {
 
         PendingIq?  pending;
-        Boolean     wrongSender;
+        Boolean     wrongSender  = false;
+        Boolean     late         = false;
 
         lock (_iqLock)
         {
 
             if (!_pendingIqs.TryGetValue(id, out pending))
-                return false;
 
-            wrongSender = !AnswerBelongsHere(pending.ExpectedFrom, from);
+                // Nobody is waiting - but this side was, until it gave up. Then
+                // this is the answer to its own request, however late, and the
+                // caller stops here instead of announcing it to an application
+                // that never asked.
+                late = WasAbandonedIq(id);
 
-            // Taken out only once the sender fits. Removing it either way would
-            // hand the forgery a second prize: the real answer would arrive
-            // afterwards and find nothing to belong to, so whoever cannot be
-            // believed could at least make sure nobody else is. As it stands, a
-            // forged answer costs nothing but a line in the log, and the request
-            // keeps waiting for the one it asked.
-            if (!wrongSender)
-                _pendingIqs.Remove(id);
+            else
+            {
+
+                wrongSender = !AnswerBelongsHere(pending.ExpectedFrom, from);
+
+                // Taken out only once the sender fits. Removing it either way
+                // would hand the forgery a second prize: the real answer would
+                // arrive afterwards and find nothing to belong to, so whoever
+                // cannot be believed could at least make sure nobody else is. As
+                // it stands, a forged answer costs nothing but a line in the log,
+                // and the request keeps waiting for the one it asked.
+                if (!wrongSender)
+                    _pendingIqs.Remove(id);
+
+            }
+
+        }
+
+        if (pending is null)
+        {
+
+            if (late)
+                _logger.LogDebug("A late answer to IQ '{Id}' from {From}, which had already been given up on",
+                                 id, from ?? "one's own server");
+
+            return late;
 
         }
 
@@ -2192,6 +2275,67 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
 
         return pending.Completion.TrySetResult(element);
+
+    }
+
+    /// <summary>
+    /// Notes that nobody is waiting for the answer to this IQ any more.
+    /// </summary>
+    private void RememberAbandonedIq(String id)
+    {
+
+        lock (_iqLock)
+        {
+
+            var now = Timestamp.Now;
+
+            _abandonedIqs[id] = now;
+
+            // Pruned here and not on a timer: this is the only place that makes
+            // the list grow, so it is the only one that has to make it shrink.
+            if (_abandonedIqs.Count > MaxAbandonedIqs)
+            {
+
+                foreach (var expired in _abandonedIqs.Where (entry => now - entry.Value > AbandonedIqMemory).
+                                                      Select(entry => entry.Key).
+                                                      ToList())
+                {
+                    _abandonedIqs.Remove(expired);
+                }
+
+                // Still too many: then the oldest go, however young they are. A
+                // bound that only holds while entries age out is not a bound.
+                while (_abandonedIqs.Count > MaxAbandonedIqs)
+                    _abandonedIqs.Remove(_abandonedIqs.MinBy(entry => entry.Value).Key);
+
+            }
+
+        }
+
+    }
+
+    /// <summary>
+    /// Was this the answer to an IQ that had already been given up on? Says so
+    /// once and forgets it.
+    /// </summary>
+    /// <remarks>
+    /// Forgotten even when it had expired: whatever is too old to be recognised
+    /// is also too old to keep.
+    /// </remarks>
+    private Boolean WasAbandonedIq(String id)
+    {
+
+        lock (_iqLock)
+        {
+
+            if (!_abandonedIqs.TryGetValue(id, out var abandoned))
+                return false;
+
+            _abandonedIqs.Remove(id);
+
+            return Timestamp.Now - abandoned <= AbandonedIqMemory;
+
+        }
 
     }
 
