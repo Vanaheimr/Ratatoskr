@@ -892,6 +892,80 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AnOwnDeviceList_ReachesThePubSubStream()
+
+        /// <summary>
+        /// XEP-0163: a report about a node of this account's own is not a
+        /// forgery, even where this client has announced no interest in being
+        /// told about that node.
+        /// </summary>
+        /// <remarks>
+        /// <b>Out of a real log, two lines below "device announced".</b> A
+        /// report about urn:xmpp:omemo:2:devices from this very account, and
+        /// one about the bundles, both discarded as attempted spoofing at every
+        /// single start. What produced them is that publishing to a node and
+        /// asking to be told about it are two different interests, and only the
+        /// second one stands in the caps: this client fetches a device list
+        /// when it is about to encrypt, so it announces no <c>+notify</c> - and
+        /// publishes at every start. Measured by the caps alone it was a
+        /// stranger at its own door. See PubSubSourceTests for the rule, which
+        /// is where the three permitted senders are weighed one by one.
+        ///
+        /// <b>Why it is worth a test over a server as well.</b> The rule is one
+        /// half; the other is that the manager is ever told which account is
+        /// its own, and that happens once, in InitialiseManagers, out of reach
+        /// of any unit test. Without that line the rule is correct and does
+        /// nothing.
+        ///
+        /// Two resources, because this server does not hand a session its own
+        /// report back - the real one does, which is where the log came from,
+        /// and from the recipient's side the two are the same stanza.
+        ///
+        /// Nothing was lost while it lasted: <c>ProcessPepEventAsync</c> runs
+        /// beside this and ungated, which is what kept the device lists
+        /// arriving and the fault to a line in the log. <b>That is the damage
+        /// all the same</b>: a security log that cries wolf at every ordinary
+        /// start is one nobody reads the day it is right.
+        /// </remarks>
+        [Test]
+        public async Task AnOwnDeviceList_ReachesThePubSubStream()
+        {
+
+            var alice = await ConnectClientAsync("alice");
+
+            // Another device of the same account, with its own resource.
+            var second = CreateClient("alice");
+            second.Connection.Resource = "second-device";
+            await second.ConnectAsync();
+
+            PubSubEvent? heard = null;
+
+            alice.Connection.PubSub!.OnEvent += (timestamp, sender, pubSubEvent, ct) => {
+                heard = pubSubEvent;
+                return Task.CompletedTask;
+            };
+
+            await second.Connection.PublishOmemoDeviceListAsync(
+                      new OmemoDeviceList([new OmemoDevice(2000)]));
+
+            await WaitFor(() => heard is not null,
+                          "the report about this account's own device list");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(heard?.NodeId, Is.EqualTo(OmemoDeviceList.Node));
+
+                Assert.That(heard?.From.Bare.ToString(), Is.EqualTo($"alice@{Server.Domain}"),
+                            "the report was passed on without saying whose node it is, which for " +
+                            "a node name every account has is worse than discarding it");
+
+            });
+
+        }
+
+        #endregion
+
         #region AMissingOwnDevice_IsReannounced()
 
         /// <summary>

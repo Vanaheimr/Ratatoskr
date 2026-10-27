@@ -107,6 +107,25 @@ public sealed class PubSubManager
     public Func<String, Boolean>? AsksToBeNotifiedOf { get; set; }
 
     /// <summary>
+    /// XEP-0163: this client's own account, which is its own PEP service like
+    /// any other account's.
+    /// </summary>
+    /// <remarks>
+    /// <b>Needed because publishing and asking to be told are two different
+    /// interests.</b> A client that fetches a node when it needs it announces
+    /// no <c>+notify</c> for it and still publishes to it - and what comes back
+    /// the moment it does is the server's notification of its own publication.
+    /// Measured against <see cref="AsksToBeNotifiedOf"/> alone that echo is a
+    /// forgery, which is what it was written to the log as: a report about
+    /// urn:xmpp:omemo:2:devices from this very account, twice per connection,
+    /// in the log where a real forgery would have to be noticed.
+    ///
+    /// Null means no account is known here, and then nothing is let in on this
+    /// ground - the answer for a manager nobody has wired up.
+    /// </remarks>
+    public JID? OwnAccount { get; set; }
+
+    /// <summary>
     /// Processes an incoming PubSub event message with spoofing protection
     /// </summary>
     public async Task<bool> ProcessEventAsync(XElement           stanza,
@@ -127,9 +146,9 @@ public sealed class PubSubManager
         if (!IsAcceptableSource(from, nodeId, expectedPubSubJid))
         {
             // Named for what was wrong with it, and no longer for an
-            // expectation that only one of the three permitted senders could
+            // expectation that only one of the four permitted senders could
             // ever have met - see IsAcceptableSource.
-            _logger.LogWarning("PubSub spoofing discarded: a report about {Node} from the component {From}, which is neither {Service} nor a service this client holds a subscription with",
+            _logger.LogWarning("PubSub spoofing discarded: a report about {Node} from {From}, which is neither {Service}, nor a service this client holds a subscription with, nor an account reporting a node of its own",
                                nodeId, from, expectedPubSubJid);
             return false;
         }
@@ -338,8 +357,12 @@ public sealed class PubSubManager
     /// sender</b>: whoever has subscribed to one node of a service has not
     /// thereby permitted it to report every node they can think up.
     ///
-    /// And an account, about a node of its own - but only a node this client
-    /// has asked to be told about (<see cref="AsksToBeNotifiedOf"/>).
+    /// This account itself (<see cref="OwnAccount"/>), about any node of its
+    /// own - the one sender not bound to a node, because what an account
+    /// publishes to is not what it asks to be told about.
+    ///
+    /// And another account, about a node of its own - but only a node this
+    /// client has asked to be told about (<see cref="AsksToBeNotifiedOf"/>).
     ///
     /// <b>That third one is new, and it is the one that was missing.</b> D71
     /// added the second in order to cover PEP and could not: a PEP
@@ -374,6 +397,14 @@ public sealed class PubSubManager
     /// (<see cref="PubSubEvent.From"/>), because the node name does not say
     /// whose node it is: <c>urn:xmpp:avatar:metadata</c> is the name of a node
     /// every account has.
+    ///
+    /// <b>And why this account needed a rule of its own.</b> Measured by
+    /// <c>+notify</c> it was a stranger at its own door: a client that fetches
+    /// a node when it needs it - which is what this one does with OMEMO's -
+    /// announces no interest in being told, publishes all the same, and gets
+    /// the server's notification of that publication back. Two of those per
+    /// connection stood in the log as attempted forgery, which is the same
+    /// fault as the one above with the contacts and was left over from it.
     /// </remarks>
     private Boolean IsAcceptableSource(JID from, String nodeId, JID expectedPubSubJid)
     {
@@ -384,6 +415,21 @@ public sealed class PubSubManager
             return true;
 
         if (SubscriptionsOf(nodeId).Any(sub => bareFrom == sub.ServiceJid.Bare))
+            return true;
+
+        // XEP-0163: this account about a node of its own, and not bound to a
+        // node - the nodes an account has are whatever its protocols make of
+        // it, so no list kept here would stay complete. See OwnAccount for why
+        // the rule below cannot stand in for this one.
+        //
+        // <b>Not a hole, because of who may wear this address.</b> A server
+        // stamps the from of its own users (RFC 6120, section 8.1.2.1) and
+        // refuses a foreign domain that claims one of them, so what is let in
+        // here is this stream's own server or another resource of this account
+        // - inside the trust this stream already rests on. And every branch
+        // that writes anything down is bound to the sender in any case, which
+        // is where that binding belongs: see RemoveSubscriptionsOf.
+        if (OwnAccount is JID own && bareFrom == own.Bare)
             return true;
 
         // XEP-0163: an account, and therefore its own service - about a node

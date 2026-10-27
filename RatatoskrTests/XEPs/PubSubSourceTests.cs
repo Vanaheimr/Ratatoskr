@@ -40,9 +40,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     /// was written to the log as attempted forgery, which is what a security
     /// log is worth least.
     ///
+    /// The same fault had a second half, found in a log a round later: this
+    /// account's own publication came back and was measured by the caps as
+    /// well, where a client that fetches a node when it needs it has announced
+    /// nothing. See TheOwnAccountsEcho_IsNotAForgery, and OmemoPepTests for the
+    /// half of that fix no unit test can reach - whether the manager is ever
+    /// told which account is its own.
+    ///
     /// Nothing here reaches the network or a server: the manager takes a
-    /// stanza, and the three answers are a pure function of the sender, the
-    /// node and what has been subscribed.
+    /// stanza, and the four answers are a pure function of the sender, the
+    /// node, this account and what has been subscribed.
     /// </remarks>
     [TestFixture]
     public class PubSubSourceTests
@@ -51,10 +58,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         #region Data & helper functions
 
         private static readonly JID  service  = JID.Parse("pubsub.example.com");
+        private static readonly JID  me       = JID.Parse("me@example.com");
         private static readonly JID  bob      = JID.Parse("bob@example.com");
         private static readonly JID  carol    = JID.Parse("carol@example.net");
 
         private const String Avatar  = "urn:xmpp:avatar:metadata";
+        private const String Devices = "urn:xmpp:omemo:2:devices";
         private const String Weather = "weather";
 
         /// <summary>
@@ -64,7 +73,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// </summary>
         private static PubSubManager Manager()
             => new (service) {
-                   AsksToBeNotifiedOf = node => node == Avatar
+                   AsksToBeNotifiedOf = node => node == Avatar,
+                   OwnAccount         = me
                };
 
         /// <summary>
@@ -186,6 +196,131 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                             "that this test is not about anything");
 
             });
+
+        }
+
+        #endregion
+
+        #region TheOwnAccountsEcho_IsNotAForgery()
+
+        /// <summary>
+        /// XEP-0163: what comes back the moment this client publishes to a node
+        /// of its own is this client's own publication.
+        /// </summary>
+        /// <remarks>
+        /// <b>The second case out of a real log, and the same fault as the
+        /// first.</b> Two lines per connection, right next to "device announced":
+        /// a report about urn:xmpp:omemo:2:devices and one about the bundles,
+        /// both from this very account, both written down as attempted forgery.
+        ///
+        /// <b>Publishing and asking to be told are two different interests</b>,
+        /// and only the second one is in the caps. This client fetches a device
+        /// list when it is about to encrypt, so it announces no
+        /// <c>+notify</c> for the node - and publishes to it at every start.
+        /// Measured by the caps alone it was a stranger at its own door.
+        ///
+        /// The node is deliberately not the avatar node here: with that one the
+        /// test would pass on the <c>+notify</c> rule and say nothing about this
+        /// one.
+        /// </remarks>
+        [Test]
+        public async Task TheOwnAccountsEcho_IsNotAForgery()
+        {
+
+            var manager = Manager();
+
+            var (accepted, reported) = await Reported(manager, me, Notification(Devices));
+
+            // The same account from one of its resources: a notification the
+            // server stamped with a full JID is the same account reporting.
+            var (fromAResource, _) = await Reported(manager,
+                                                    JID.Parse("me@example.com/laptop"),
+                                                    Notification(Devices));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(accepted,         Is.True,
+                            "this account's own publication came back and was discarded as a forgery");
+
+                Assert.That(reported?.NodeId, Is.EqualTo(Devices));
+
+                Assert.That(reported?.From,   Is.EqualTo(me),
+                            "the report was passed on without saying whose node it is");
+
+                Assert.That(fromAResource,    Is.True,
+                            "a report from a resource of this account was measured against the " +
+                            "full JID instead of the account");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AnotherAccountReportingThatNode_IsStillAForgery()
+
+        /// <summary>
+        /// The new permission is bound to the account, not to the node.
+        /// </summary>
+        /// <remarks>
+        /// <b>What keeps "this account may report its own nodes" from reading
+        /// as "this node may be reported".</b> Bob has a device list too, and
+        /// it is called exactly the same - a node name says nothing about whose
+        /// node it is. This client has announced no interest in being told
+        /// about device lists, so a report about one from anybody but this
+        /// account is a report nobody asked for.
+        ///
+        /// Without the binding the rule would be a hole of its own: every
+        /// account in the world would be let in for the whole set of node names
+        /// this client happens to publish to.
+        /// </remarks>
+        [Test]
+        public async Task AnotherAccountReportingThatNode_IsStillAForgery()
+        {
+
+            var (accepted, reported) = await Reported(Manager(), bob, Notification(Devices));
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(accepted, Is.False,
+                            "a contact was let in for a node this client never announced, because " +
+                            "this account publishes to a node of that name");
+
+                Assert.That(reported, Is.Null,
+                            "and it reached the application anyway");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AManagerWithoutAnAccount_LetsNobodyInOnThatGround()
+
+        /// <summary>
+        /// Nothing is let in on a ground nobody has named.
+        /// </summary>
+        /// <remarks>
+        /// The same answer <see cref="PubSubManager.AsksToBeNotifiedOf"/> gives
+        /// when it is unset, and for the same reason: a manager nobody has
+        /// wired up has no account whose own nodes these could be, and
+        /// defaulting to "every account is this one" would turn an unwired
+        /// manager into the most permissive one there is.
+        /// </remarks>
+        [Test]
+        public async Task AManagerWithoutAnAccount_LetsNobodyInOnThatGround()
+        {
+
+            var manager = new PubSubManager(service) {
+                              AsksToBeNotifiedOf = node => node == Avatar
+                          };
+
+            var (accepted, _) = await Reported(manager, me, Notification(Devices));
+
+            Assert.That(accepted, Is.False,
+                        "an unwired manager let an account in for a node nobody asked about");
 
         }
 

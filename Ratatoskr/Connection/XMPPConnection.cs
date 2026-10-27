@@ -1781,6 +1781,12 @@ public sealed class XMPPConnection : IAsyncDisposable
         // copy taken here would have been taken too early.
         PubSub.AsksToBeNotifiedOf = node => Disco?.LocalFeatures.Contains($"{node}+notify") == true;
 
+        // And this account itself, which publishes to nodes it has announced no
+        // interest in being told about - OMEMO's are the ones it cannot do
+        // without. Its own publications come back as notifications, and without
+        // this the rule above reads them as forgeries.
+        PubSub.OwnAccount = BareJid;
+
         // XEP-0045: the rooms. Built here with the others, and asked before the
         // roster ever sees a presence.
         // The second delegate is the one moderating needs: a kick either happened
