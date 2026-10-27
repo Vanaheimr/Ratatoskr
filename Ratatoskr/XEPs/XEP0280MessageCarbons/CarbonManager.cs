@@ -145,7 +145,15 @@ public sealed class CarbonManager
                                            ? MessageReply.QuoteRangeIn(inner, body)
                                            : null,
                                        MessageCorrection.ReplacedId(inner),
-                                       MessageRetraction.RetractedId(inner));
+                                       MessageRetraction.RetractedId(inner),
+
+                                       // XEP-0066: the same reading, on the
+                                       // inner message - which is the one that
+                                       // is about the file. A file shared from
+                                       // another device of ours, or received
+                                       // by one, is shared and received all
+                                       // the same.
+                                       OutOfBandData.UrlIn(inner, body));
 
         await OnCarbonReceived.InvokeAllAsync(handler => handler(Timestamp.Now, this, carbon, CancellationToken), _logger);
 

@@ -68,6 +68,30 @@ public sealed class CarbonMessage
     public string? RetractsId { get; }
 
     /// <summary>
+    /// XEP-0066: the address the mirrored message is about, or null when it is
+    /// about none.
+    /// </summary>
+    /// <remarks>
+    /// <b>A file received on another device of one's own is a file
+    /// received.</b> Read off the inner message by the one rule a message of
+    /// this connection's own gets - the <c>&lt;x/&gt;</c> has to name what the
+    /// body names, see <see cref="OutOfBandData.UrlIn"/> - because the inner
+    /// message is the one that was about the file.
+    ///
+    /// Without it the mirrored file arrived here as a line of text that
+    /// happened to look like an address, and whoever showed it had to guess
+    /// from the shape of the text whether it was one. Which is the guess this
+    /// element exists to replace.
+    /// </remarks>
+    public Uri? FileUrl { get; }
+
+    /// <summary>
+    /// Is the mirrored message about a file rather than about its own text
+    /// (XEP-0066/XEP-0363)?
+    /// </summary>
+    public bool IsFile => FileUrl is not null;
+
+    /// <summary>
     /// The mirrored message without the quoted lines - what was actually
     /// written. The same as <see cref="Body"/> whenever nothing was marked.
     /// </summary>
@@ -94,7 +118,8 @@ public sealed class CarbonMessage
                          MessageReplyTo?  repliesTo   = null,
                          BodyRange?       quoteRange  = null,
                          string?          replacesId  = null,
-                         string?          retractsId  = null)
+                         string?          retractsId  = null,
+                         Uri?             fileUrl     = null)
     {
         IsSent = isSent;
         OriginalFrom = originalFrom;
@@ -105,6 +130,7 @@ public sealed class CarbonMessage
         QuoteRange = quoteRange;
         ReplacesId = replacesId;
         RetractsId = retractsId;
+        FileUrl = fileUrl;
         ReceivedAt = DateTime.UtcNow;
     }
 }
