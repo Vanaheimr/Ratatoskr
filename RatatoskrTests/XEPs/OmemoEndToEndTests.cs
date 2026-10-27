@@ -1170,11 +1170,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// <b>The damage has no symptom on this side.</b> The other devices go
         /// on running, nobody encrypts to them any more, and the person reading
         /// on their telephone sees a conversation that has simply stopped. Which
-        /// is why the right answer is to publish nothing at all and try later -
-        /// and that second half is checked here too, because it hangs on the
-        /// manager being put back: the gate in front of switching on is "is
-        /// OMEMO already on", so a half-switched-on one left standing would mean
-        /// never trying again.
+        /// is why the right answer is to publish nothing at all and try later.
+        ///
+        /// <b>And OMEMO stays on while that is pending</b>, which is the half
+        /// that is easy to get wrong in the other direction: the keys are good
+        /// and what is written from here still goes out encrypted, so switching
+        /// the whole thing off over an unpublished list would answer a silence
+        /// by writing in the clear. What is missing is only the announcement -
+        /// so that is what is asked for again, and what the caller gates on.
         /// </remarks>
         [Test]
         public async Task ASilentServer_CostsTheOwnListNothing_AndIsTriedAgain()
@@ -1205,18 +1208,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             Assert.That(await alice.EnableOmemoAsync(), Is.False,
                         "switching on reported success although nothing could be found out");
 
+            var device = alice.Omemo?.Identity.DeviceId;
+
             Assert.Multiple(() =>
             {
 
-                Assert.That(alice.OmemoEnabled, Is.False,
-                            "OMEMO counts as on while this account's device is unannounced, so " +
-                            "nothing will try again");
-
-                Assert.That(alice.Connection.OmemoDeviceId, Is.Null,
-                            "and a device identifier stands for a device nobody has been told about");
-
                 Assert.That(StoredDeviceList(), Is.EqualTo(new UInt32[] { 4711 }),
                             "the other device was struck from the list by a server that said nothing");
+
+                Assert.That(alice.OmemoAnnounced, Is.False,
+                            "this device counts as announced although the list it would stand in was " +
+                            "never published - so nothing will try again");
+
+                Assert.That(alice.OmemoEnabled, Is.True,
+                            "OMEMO was switched off over an unpublished list, which answers a silent " +
+                            "server by writing in the clear - the keys are in hand and work");
 
             });
 
@@ -1225,11 +1231,22 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             alice.Connection.IqTimeout = TimeSpan.FromSeconds(10);
 
             Assert.That(await alice.EnableOmemoAsync(), Is.True,
-                        "the second attempt found nothing left to switch on");
+                        "the second attempt found nothing left to announce");
 
-            Assert.That(StoredDeviceList(),
-                        Is.EquivalentTo(new[] { 4711u, alice.Omemo!.Identity.DeviceId }),
-                        "and the list is the old entry plus this device");
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(alice.OmemoAnnounced, Is.True);
+
+                Assert.That(alice.Omemo!.Identity.DeviceId, Is.EqualTo(device),
+                            "the retry built fresh key material over the store, so this account has a " +
+                            "new fingerprint and every comparison anybody made of it is worthless");
+
+                Assert.That(StoredDeviceList(),
+                            Is.EquivalentTo(new[] { 4711u, alice.Omemo.Identity.DeviceId }),
+                            "and the list is the old entry plus this device");
+
+            });
 
         }
 

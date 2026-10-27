@@ -1996,6 +1996,17 @@ public sealed class XMPPClient : IAsyncDisposable
     public bool OmemoEnabled => _connection.Omemo is not null;
 
     /// <summary>
+    /// XEP-0384: does this device stand in the account's own device list, so
+    /// that others can encrypt to it?
+    /// </summary>
+    /// <remarks>
+    /// Not the same question as <see cref="OmemoEnabled"/>, and the one a
+    /// caller that switches OMEMO on has to ask - see
+    /// <see cref="XMPPConnection.OmemoAnnounced"/>.
+    /// </remarks>
+    public bool OmemoAnnounced => _connection.OmemoAnnounced;
+
+    /// <summary>
     /// XEP-0384: Switches OMEMO on.
     /// </summary>
     /// <param name="store">

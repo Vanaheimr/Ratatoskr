@@ -4462,6 +4462,27 @@ public sealed class XMPPConnection : IAsyncDisposable
     public UInt32? OmemoDeviceId { get; set; }
 
     /// <summary>
+    /// XEP-0384: does this device's identifier stand in the account's own
+    /// device list - that is, can anybody encrypt to it?
+    /// </summary>
+    /// <remarks>
+    /// <b>Switched on and announced are two different things</b>, and only the
+    /// first used to be visible from outside. OMEMO can be on - key material in
+    /// hand, outgoing messages encrypted - while this device stands in nobody's
+    /// list, and then everyone who writes here first writes in the clear,
+    /// because a contact encrypts to the devices they can see. That is what a
+    /// publication which did not get through leaves behind.
+    ///
+    /// <b>So this is what a caller gates a retry on</b>, and not "is the
+    /// manager there". Whoever gated on the manager tried exactly once and
+    /// never again, which for the state above means a whole run of the program
+    /// in which nobody can write to this device encrypted and nothing says so.
+    /// False until the list and the bundle are both out; see
+    /// <see cref="EnableOmemoAsync"/>, which may be called again.
+    /// </remarks>
+    public Boolean OmemoAnnounced { get; private set; }
+
+    /// <summary>
     /// Processes a PEP notification (XEP-0163).
     /// </summary>
     /// <remarks>
@@ -4731,9 +4752,21 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// <b>The device list is added to and not replaced.</b> Whoever rewrote it
     /// would thereby displace every other device of the same person - and those
     /// would get nothing any more from then on, without anyone noticing.
+    ///
+    /// <b>Call it again after an announcement that did not get through</b>, and
+    /// only the announcing is repeated: the key material in hand is kept, the
+    /// store handed in is not read a second time - so a retry cannot change
+    /// this account's fingerprint by accident, and the handlers below are not
+    /// wired twice. What says whether a retry is wanted is
+    /// <see cref="OmemoAnnounced"/> rather than whether this returned true
+    /// once, because the two came apart as soon as publishing became a thing
+    /// that can fail by itself.
     /// </remarks>
     public async Task<bool> EnableOmemoAsync(IOmemoStore store, CancellationToken ct = default)
     {
+
+        if (Omemo is not null)
+            return await AnnounceOmemoDeviceAsync(ct);
 
         Omemo = new OmemoManager(store,
                                  BareJid,
@@ -4794,6 +4827,28 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         OmemoDeviceId = Omemo.Identity.DeviceId;
 
+        return await AnnounceOmemoDeviceAsync(ct);
+
+    }
+
+    /// <summary>
+    /// XEP-0384: puts this device into the account's own device list and
+    /// publishes its bundle.
+    /// </summary>
+    /// <remarks>
+    /// <b>Apart from the switching on because it can fail on its own</b>, and
+    /// then it is the only part worth doing again: the keys are in hand, what
+    /// is missing is that anybody knows about them. <see cref="OmemoAnnounced"/>
+    /// is what it leaves behind, and nothing but both publications getting
+    /// through sets it.
+    ///
+    /// <b>The list is added to and not replaced</b>, for the reason
+    /// <see cref="EnableOmemoAsync"/> gives - and added to what came back,
+    /// which is where the next paragraph comes in.
+    /// </remarks>
+    private async Task<Boolean> AnnounceOmemoDeviceAsync(CancellationToken ct)
+    {
+
         var (existing, lookup) = await FetchOmemoDeviceListAsync(BareJid, ct);
 
         // "Nothing came back" is not "there is no list", and here the
@@ -4804,10 +4859,10 @@ public sealed class XMPPConnection : IAsyncDisposable
         // The other devices go on running and simply stop being encrypted to,
         // and that is the one failure with no symptom on this side.
         //
-        // So nothing is published, and the manager is put back: the gate in
-        // front of this is "is OMEMO already on", so a manager left standing
-        // here would mean this account never announces its device again for as
-        // long as the program runs.
+        // Nothing is published then, and OMEMO stays on with it: the keys are
+        // good, what is written from here goes out encrypted as before, and the
+        // only thing missing is the announcement - which is what the caller is
+        // told, and what it may ask for again.
         if (existing is null && lookup == PepLookup.Unknown)
         {
 
@@ -4815,19 +4870,21 @@ public sealed class XMPPConnection : IAsyncDisposable
                                "stays unannounced rather than publishing a list that would displace " +
                                "the account's other devices");
 
-            Omemo          = null;
-            OmemoDeviceId  = null;
-
             return false;
 
         }
 
-        var extended = (existing ?? new OmemoDeviceList([])).With(new OmemoDevice(Omemo.Identity.DeviceId));
+        var extended = (existing ?? new OmemoDeviceList([])).With(new OmemoDevice(Omemo!.Identity.DeviceId));
 
         if (!await PublishOmemoDeviceListAsync(extended, ct))
             return false;
 
-        return await PublishOmemoBundleAsync(Omemo.Identity.DeviceId, Omemo.Identity.Bundle(), ct);
+        if (!await PublishOmemoBundleAsync(Omemo.Identity.DeviceId, Omemo.Identity.Bundle(), ct))
+            return false;
+
+        OmemoAnnounced = true;
+
+        return true;
 
     }
 
