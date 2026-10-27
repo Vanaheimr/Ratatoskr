@@ -204,6 +204,125 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         public Boolean IsAvailable { get; private set; }
 
         /// <summary>
+        /// XEP-0115 with XEP-0163, section 4.2: what this resource answered
+        /// when it was asked what it understands - or null as long as nothing
+        /// has been answered.
+        /// </summary>
+        /// <remarks>
+        /// <b>What hangs on it is who gets a PEP notification.</b> A node is
+        /// pushed to whoever has announced <c>&lt;node&gt;+notify</c>, and the
+        /// announcement is a hash in the presence: the features themselves have
+        /// to be asked for, which is what <c>AskForCapsAsync</c> does.
+        ///
+        /// Null is not an empty set here. A resource that has answered nothing
+        /// has not said it wants nothing - it has said nothing, and until it
+        /// does there is no ground to push it anything. Whoever read the two as
+        /// the same would have an unasked resource and an uninterested one
+        /// behave alike, which is the state this server was in and the reason a
+        /// missing +notify could not be noticed in any test.
+        /// </remarks>
+        public IReadOnlySet<String>? AnnouncedFeatures { get; private set; }
+
+        /// <summary>
+        /// The verification string (XEP-0115, section 5) the features above
+        /// were fetched for.
+        /// </summary>
+        /// <remarks>
+        /// Kept so that a client which changes what it understands is asked
+        /// again: the new set goes out as a new value in the next presence, and
+        /// a value this server has not resolved is one it has to resolve. Null
+        /// where the presence carried no caps at all - then the asking happened
+        /// once, on the first presence, and nothing says it should happen again.
+        /// </remarks>
+        public String? AnnouncedCapsVer { get; private set; }
+
+        /// <summary>
+        /// The identifier of the disco#info question currently outstanding, or
+        /// null when none is.
+        /// </summary>
+        internal String? PendingCapsQueryId { get; private set; }
+
+        /// <summary>
+        /// XEP-0163, section 4.2: has this resource said it wants this node
+        /// pushed to it?
+        /// </summary>
+        public Boolean WantsNotificationsFor(String Node)
+        {
+            lock (_lock)
+            {
+                return AnnouncedFeatures?.Contains($"{Node}+notify") == true;
+            }
+        }
+
+        /// <summary>
+        /// Notes that a disco#info question has gone out for this verification
+        /// string.
+        /// </summary>
+        internal void AskingForCaps(String Id, String? Ver)
+        {
+            lock (_lock)
+            {
+                PendingCapsQueryId  = Id;
+                AnnouncedCapsVer    = Ver;
+            }
+        }
+
+        /// <summary>
+        /// Takes in the answer to the outstanding question - and only to that
+        /// one.
+        /// </summary>
+        /// <returns>
+        /// Whether this was the answer being waited for. An answer under a
+        /// different identifier belongs to something else and is left alone:
+        /// the client asks the server things too, and an answer of its own
+        /// taken for this one would put a foreign feature set on the resource.
+        /// </returns>
+        internal Boolean TakeCapsAnswer(String Id, IReadOnlySet<String> Features)
+        {
+            lock (_lock)
+            {
+
+                if (PendingCapsQueryId is null ||
+                    !String.Equals(PendingCapsQueryId, Id, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                AnnouncedFeatures   = Features;
+                PendingCapsQueryId  = null;
+
+                return true;
+
+            }
+        }
+
+        /// <summary>
+        /// Whether a question about this verification string still has to go
+        /// out.
+        /// </summary>
+        /// <remarks>
+        /// <b>An outstanding question is not asked twice.</b> Presence arrives
+        /// more than once, and a second question under a new identifier would
+        /// make the answer to the first one foreign - the resource would keep
+        /// what it announced before while a client that just changed it waits
+        /// to be believed.
+        /// </remarks>
+        internal Boolean NeedsCapsAsking(String? Ver)
+        {
+            lock (_lock)
+            {
+
+                if (PendingCapsQueryId is not null)
+                    return false;
+
+                return AnnouncedFeatures is null ||
+                       (Ver is not null &&
+                        !String.Equals(Ver, AnnouncedCapsVer, StringComparison.Ordinal));
+
+            }
+        }
+
+        /// <summary>
         /// The priority from the last undirected presence (RFC 6121,
         /// section 4.7.2.3) - default 0.
         /// </summary>
@@ -669,6 +788,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 HasSentInitialPresence     = previous.HasSentInitialPresence;
                 IsAvailable                = previous.IsAvailable;
                 LastPresence               = previous.LastPresence;
+
+                // A resumed stream is the same client with the same answer in
+                // it (XEP-0198, section 5). Dropped here, the resource would
+                // count as never asked and get no PEP notification until it
+                // sent a presence again - and a resumption is precisely the
+                // case in which it does not have to.
+                AnnouncedFeatures          = previous.AnnouncedFeatures;
+                AnnouncedCapsVer           = previous.AnnouncedCapsVer;
 
                 // What deliberately does *not* stand here: ClientIsActive.
                 // XEP-0352, section 5.2 says it explicitly - "stream resumption

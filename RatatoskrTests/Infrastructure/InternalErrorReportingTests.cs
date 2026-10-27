@@ -49,6 +49,27 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     public class InternalErrorReportingTests : AXMPPTests
     {
 
+        #region SetUp
+
+        /// <summary>
+        /// This collection decides for itself which frame fails, so nothing
+        /// else may be in flight.
+        /// </summary>
+        /// <remarks>
+        /// The server asks a resource what it understands (XEP-0115), and the
+        /// answer is a frame like any other: with the switch below thrown, it
+        /// is the answer that fails and not what the test sent - the same
+        /// confusion the remark above describes for the sign-on presence, from
+        /// a second source. Here the question is simply not asked.
+        /// </remarks>
+        [SetUp]
+        public void NoCapsQuestions()
+        {
+            Server.AsksForCaps = false;
+        }
+
+        #endregion
+
         #region AFailureWhileHandlingAFrame_IsReported()
 
         /// <summary>

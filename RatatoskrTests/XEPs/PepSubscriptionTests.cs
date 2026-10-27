@@ -111,6 +111,30 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// <summary>
         /// Collects the PubSub notifications that come in at a client.
         /// </summary>
+        /// <summary>
+        /// Makes this client say that it wants a node pushed to it - which is
+        /// what a client that cares about a node has to do (XEP-0163,
+        /// section 4.2).
+        /// </summary>
+        /// <remarks>
+        /// The announcement goes out as a new verification string in the next
+        /// presence (XEP-0115, section 5), and that value is what tells the
+        /// server to ask again. Waited for here, because what the server has
+        /// not asked about yet it cannot have been told.
+        /// </remarks>
+        private async Task AnnounceInterestAsync(XMPPClient client, String node)
+        {
+
+            client.Connection.Disco!.LocalFeatures.Add($"{node}+notify");
+
+            await client.Connection.SendPresenceAsync();
+
+            await WaitFor(() => Server.SessionOf(client.FullJid.ToString())
+                                     ?.WantsNotificationsFor(node) == true,
+                          $"the server to learn that this client wants {node}");
+
+        }
+
         private static List<String> CollectEvents(XMPPClient client)
         {
 
@@ -3170,6 +3194,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var bob    = await PublishingBobAsync();
             var alice  = await ConnectClientAsync("alice");
+
+            // Presence alone is not enough any more and never was at a real
+            // server: it says who may be told, the caps say about what.
+            await AnnounceInterestAsync(alice, Node);
+
             var events = CollectEvents(alice);
 
             await AskAsync(bob, "pub-8",
@@ -3183,6 +3212,246 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+
+        #region AnUnannouncedNode_IsNotPushedToAContact()
+
+        /// <summary>
+        /// XEP-0163, section 4.2: a contact is pushed a node because they said
+        /// they wanted it, and Alice has said nothing.
+        /// </summary>
+        /// <remarks>
+        /// <b>The gap this server had, and it was not a small one.</b> A
+        /// publication went to every presence recipient and asked nobody what
+        /// they wanted - so a client that announced a node and a client that
+        /// forgot to behaved identically here, and only differed at a real
+        /// server, where the one gets nothing for as long as it runs.
+        ///
+        /// That is not a hypothesis. XEP-0384's device list was unannounced in
+        /// this library for as long as this server did not ask, the test that
+        /// reads such a report was green the whole time, and what it proved was
+        /// this server's leniency. This test is the one that would have said
+        /// so.
+        ///
+        /// Read off the raw stanzas and not off PubSubManager, on purpose:
+        /// that manager has a rule of the same shape on the receiving side, and
+        /// measuring one gate through the other would leave both passing while
+        /// either one works.
+        /// </remarks>
+        [Test]
+        public async Task AnUnannouncedNode_IsNotPushedToAContact()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var bob    = await PublishingBobAsync();
+            var alice  = await ConnectClientAsync("alice");
+            var events = CollectEvents(alice);
+
+            await AskAsync(bob, "pub-caps-1",
+                           PublishIq("pub-caps-1", Node, "1", "<weather xmlns='urn:example:x'>fog</weather>"));
+
+            await WaitAgainst(() => Count(events) > 0,
+                              "a notification about a node this client never asked for");
+
+            // And the end of the node is no more her business than its content
+            // was: XEP-0060, section 8.4.2 tells whoever would have got the
+            // items, and she would not have.
+            await AskAsync(bob, "del-caps-1", OwnerIq("del-caps-1", "set", "delete"));
+
+            await WaitAgainst(() => NodeEventsIn(events).Count > 0,
+                              "a report about the end of a node this client never asked about");
+
+            Assert.That(Server.SessionOf(alice.FullJid.ToString())!.AnnouncedFeatures,
+                        Is.Not.Null,
+                        "the server never got an answer about what this client understands, so " +
+                        "this test would pass with the asking switched off as well");
+
+        }
+
+        #endregion
+
+        #region AnAnnouncedNode_IsPushedToAContact()
+
+        /// <summary>
+        /// And the other half: it arrives as soon as the contact says they
+        /// want it.
+        /// </summary>
+        /// <remarks>
+        /// Also the only test of the asking <b>twice</b>. A client that changes
+        /// what it understands says so with a new verification string in its
+        /// next presence, and a server that asked once would keep the old
+        /// answer for as long as the resource lives - whoever announced
+        /// something after signing on would never be believed.
+        /// </remarks>
+        [Test]
+        public async Task AnAnnouncedNode_IsPushedToAContact()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var bob   = await PublishingBobAsync();
+            var alice = await ConnectClientAsync("alice");
+
+            var firstAnswer = Server.SessionOf(alice.FullJid.ToString())!.AnnouncedFeatures!;
+
+            await AnnounceInterestAsync(alice, Node);
+
+            var events = CollectEvents(alice);
+
+            await AskAsync(bob, "pub-caps-2",
+                           PublishIq("pub-caps-2", Node, "2", "<weather xmlns='urn:example:x'>sun</weather>"));
+
+            await WaitFor(() => Count(events) > 0,
+                          "the notification about a node this client asked for");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(events[0], Does.Contain(Node));
+                Assert.That(events[0], Does.Contain("sun"));
+
+                Assert.That(firstAnswer, Does.Not.Contain($"{Node}+notify"),
+                            "the client announced this node from the start, so nothing here says " +
+                            "the server ever asked a second time");
+
+            });
+
+        }
+
+        #endregion
+
+        #region AnExplicitSubscriber_IsNotMeasuredByItsCaps()
+
+        /// <summary>
+        /// XEP-0060: whoever subscribed asked for this node themselves, and
+        /// their caps have nothing to add to that.
+        /// </summary>
+        /// <remarks>
+        /// <b>The boundary of the new question, and the reason it is asked in
+        /// one place only.</b> Caps say what somebody wants without asking;
+        /// a subscription is the asking. Measured against the caps as well, a
+        /// node could be subscribed to, granted, and then never delivered -
+        /// and nothing in the protocol would say why.
+        /// </remarks>
+        [Test]
+        public async Task AnExplicitSubscriber_IsNotMeasuredByItsCaps()
+        {
+
+            var bob   = await PublishingBobAsync();
+            var alice = await ConnectClientAsync("alice");
+
+            await SubscribeAsync(alice, "abo-caps");
+
+            var events = CollectEvents(alice);
+
+            await AskAsync(bob, "pub-caps-3",
+                           PublishIq("pub-caps-3", Node, "3", "<weather xmlns='urn:example:x'>hail</weather>"));
+
+            await WaitFor(() => Count(events) > 0,
+                          "the notification to a subscriber that announced nothing");
+
+            Assert.That(Server.SessionOf(alice.FullJid.ToString())!.WantsNotificationsFor(Node),
+                        Is.False,
+                        "this client announced the node after all, which leaves the test saying " +
+                        "nothing about subscriptions");
+
+        }
+
+        #endregion
+
+        #region AResourceThatWasNeverAsked_IsToldNothing()
+
+        /// <summary>
+        /// Nothing answered is not "nothing wanted" - it is nothing said, and
+        /// there is no ground in it to push anybody anything.
+        /// </summary>
+        /// <remarks>
+        /// <b>The one case the waiting in the fixture hides.</b> Between the
+        /// question and the answer a resource has said nothing, and whoever
+        /// read that as interest would push it every node of everybody - which
+        /// is the behaviour this server had, arrived at by a different route.
+        /// ConnectClientAsync waits that window out for every test, on purpose:
+        /// a test that published inside it would be racing the question.
+        ///
+        /// So the state is made rather than waited for, and this is the only
+        /// way round that is deterministic: the resource signs on while nothing
+        /// is being asked, and the asking is switched on afterwards. What that
+        /// leaves is exactly a resource this server has not been told about -
+        /// the same thing an answer that never came leaves, and the same thing
+        /// a resource that was online before this server started asking leaves.
+        /// </remarks>
+        [Test]
+        public async Task AResourceThatWasNeverAsked_IsToldNothing()
+        {
+
+            Server.AsksForCaps = false;
+
+            MakeContacts("alice", "bob");
+
+            var bob    = await PublishingBobAsync();
+            var alice  = await ConnectClientAsync("alice");
+            var events = CollectEvents(alice);
+
+            // From here on the question would be asked of a resource that signs
+            // on - and Alice sends no further presence, so she stays one that
+            // was never asked.
+            Server.AsksForCaps = true;
+
+            // Asserted before the publication and not after it: this is the
+            // state the publication is measured in, and a reconnect of this
+            // client afterwards would put an answer on the session and leave
+            // the test failing over something that came later.
+            Assert.That(Server.SessionOf(alice.FullJid.ToString())!.AnnouncedFeatures,
+                        Is.Null,
+                        "this resource answered after all, which leaves the test measuring the " +
+                        "ordinary case a second time");
+
+            await AskAsync(bob, "pub-caps-5",
+                           PublishIq("pub-caps-5", Node, "5", "<weather xmlns='urn:example:x'>sleet</weather>"));
+
+            await WaitAgainst(() => Count(events) > 0,
+                              "a notification to a resource that has not said what it wants");
+
+        }
+
+        #endregion
+
+        #region WithoutTheAsking_EverybodyIsToldEverything()
+
+        /// <summary>
+        /// The switch that was the old behaviour.
+        /// </summary>
+        /// <remarks>
+        /// It is here for the tests that want a notification without
+        /// furnishing a client that asked for one - and it switches the asking
+        /// off with it, so a resource stays one that was never asked rather
+        /// than one that was asked and ignored.
+        /// </remarks>
+        [Test]
+        public async Task WithoutTheAsking_EverybodyIsToldEverything()
+        {
+
+            Server.AsksForCaps = false;
+
+            MakeContacts("alice", "bob");
+
+            var bob    = await PublishingBobAsync();
+            var alice  = await ConnectClientAsync("alice");
+            var events = CollectEvents(alice);
+
+            await AskAsync(bob, "pub-caps-4",
+                           PublishIq("pub-caps-4", Node, "4", "<weather xmlns='urn:example:x'>snow</weather>"));
+
+            await WaitFor(() => Count(events) > 0,
+                          "the notification that needs no announcement");
+
+            Assert.That(Server.SessionOf(alice.FullJid.ToString())!.AnnouncedFeatures,
+                        Is.Null,
+                        "the asking went out although it was switched off");
+
+        }
+
+        #endregion
 
         #region TheSubscriberList_NamesEverybodyWithHisSubId()
 
@@ -5158,6 +5427,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             var bob   = await PublishingBobAsync();
             var alice = await ConnectClientAsync("alice");
             var carol = await ConnectClientAsync("carol");
+
+            // "Whoever would have got the items" is the assertion below, and
+            // Carol only would have if she said she wanted them: she holds no
+            // subscription and is here on her presence alone.
+            await AnnounceInterestAsync(carol, Node);
 
             await SubscribeAsync(alice, "abo-31");
             await SubscribeAsync(alice, "abo-32");

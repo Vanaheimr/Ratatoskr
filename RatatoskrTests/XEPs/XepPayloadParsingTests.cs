@@ -266,8 +266,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await WaitFor(() => client.LastReceivedMessageId == "r2", "the delivered message");
 
+            // The receipt itself and not the namespace anywhere: a client
+            // that is asked what it understands answers with its whole feature
+            // list, and urn:xmpp:receipts stands in it. Measured by the
+            // namespace alone, that answer reads as a receipt - and this test
+            // would fail for a client that sent none.
             var answered = await XMPPServer.WaitUntilAsync(
-                               () => session.Received.Any(f => f.Contains("urn:xmpp:receipts", StringComparison.Ordinal)),
+                               () => session.Received.Any(f => f.Contains("<received", StringComparison.Ordinal) &&
+                                                               f.Contains("urn:xmpp:receipts", StringComparison.Ordinal)),
                                TimeSpan.FromSeconds(1));
 
             Assert.That(answered, Is.False,

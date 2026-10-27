@@ -1153,6 +1153,163 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         }
 
         /// <summary>
+        /// XEP-0163, section 4.2: does this server ask a resource what it
+        /// understands, and push PEP nodes only to whoever said they want
+        /// them?
+        /// </summary>
+        /// <remarks>
+        /// <b>On by default, because off is how a missing +notify hides.</b>
+        /// Without it a publication goes to every presence recipient, and a
+        /// client that never announced a node is told about it anyway - so a
+        /// client which forgot to announce one passes every test and is never
+        /// pushed anything by a real server. That is not a hypothesis: the
+        /// device list of XEP-0384 was unannounced here for as long as this
+        /// server did not ask, and the test that reads such a report was green
+        /// throughout.
+        ///
+        /// Off for a test that wants a notification without furnishing a
+        /// client that asked for one. It switches the asking off as well, so a
+        /// resource stays unasked rather than asked and ignored.
+        /// </remarks>
+        public Boolean AsksForCaps { get; set; } = true;
+
+        /// <summary>
+        /// Asks a resource what it understands (XEP-0030 over XEP-0115).
+        /// </summary>
+        /// <remarks>
+        /// <b>The answer decides who gets PEP notifications</b>, which is why
+        /// the question is asked at all: the presence carries only a hash over
+        /// the feature set, and a server that wants the set has to fetch it.
+        /// A real server keeps them by that hash and asks once per value seen
+        /// anywhere; here the asking is per resource, which costs one round
+        /// trip and spares a cache whose only purpose would be to save it.
+        ///
+        /// Not awaited anywhere and deliberately so. Nothing of what presence
+        /// does hangs on the answer - it arrives or it does not, and until it
+        /// does the resource is one that has said nothing. A publication in
+        /// that window is not pushed to it, which is the honest answer to "does
+        /// this resource want this node" while nobody knows.
+        /// </remarks>
+        private async Task AskForCapsAsync(XMPPSession session, String? ver)
+        {
+
+            if (session.FullJid is null)
+                return;
+
+            var id = $"caps-{session.ConnectionNumber}-{Interlocked.Increment(ref _capsQueries)}";
+
+            session.AskingForCaps(id, ver);
+
+            try
+            {
+
+                await session.SendAsync(
+                          $"<iq type='get' id='{id}' from='{Domain}' to='{XmlEscaping.Escape(session.FullJid)}'>" +
+                          "<query xmlns='http://jabber.org/protocol/disco#info'/>" +
+                          "</iq>");
+
+            }
+            catch (Exception e)
+            {
+
+                // <b>Nothing of the presence hangs on this question.</b> A
+                // resource whose connection fell away between its presence and
+                // this line is one this server will not learn anything about,
+                // and that is the whole of the consequence - while an exception
+                // let through here would take the presence distribution of a
+                // resource that is still there with it.
+                Logger.LogDebug(e, "The question about the capabilities of {Session} could not be sent",
+                                session.FullJid);
+
+            }
+
+        }
+
+        private Int32 _capsQueries;
+
+        /// <summary>
+        /// XEP-0115, section 4: the verification string out of a presence, or
+        /// null where the presence carries no capabilities at all.
+        /// </summary>
+        private static String? CapsVerOf(String presence)
+        {
+
+            var m = Regex.Match(presence,
+                                @"<c\s[^>]*xmlns=['""]http://jabber\.org/protocol/caps['""][^>]*>");
+
+            if (!m.Success)
+                return null;
+
+            var ver = Regex.Match(m.Value, @"\sver=['""]([^'""]*)['""]");
+
+            return ver.Success ? ver.Groups[1].Value : null;
+
+        }
+
+        /// <summary>
+        /// Takes in a resource's answer about what it understands.
+        /// </summary>
+        /// <returns>
+        /// Whether this stanza was that answer. Only then is it swallowed: an
+        /// answer to something else belongs to whoever asked.
+        /// </returns>
+        private static Boolean TryTakeCapsAnswer(XMPPSession session, String frame, String? id)
+        {
+
+            if (id is null || session.PendingCapsQueryId != id)
+                return false;
+
+            var features = new HashSet<String>(StringComparer.Ordinal);
+
+            // A client that answers with an error has answered: it understands
+            // nothing it would say so about, and an empty set is what that
+            // means. Left unanswered it would be asked again at every presence.
+            if (Attr(frame, "type") == "result")
+            {
+                try
+                {
+
+                    var query = XElement.Parse(frame)
+                                        .Elements()
+                                        .FirstOrDefault(e => e.Name.NamespaceName == "http://jabber.org/protocol/disco#info");
+
+                    foreach (var feature in query?.Elements().Where(e => e.Name.LocalName == "feature") ?? [])
+                        if (feature.Attribute("var")?.Value is { } var)
+                            features.Add(var);
+
+                }
+                catch (System.Xml.XmlException)
+                {
+                    // Unreadable is not an answer about anything, and an empty
+                    // set is the same thing here as what it says.
+                }
+            }
+
+            return session.TakeCapsAnswer(id, features);
+
+        }
+
+        /// <summary>
+        /// XEP-0163, section 4.2: may this resource be told about this node
+        /// on the strength of its presence alone?
+        /// </summary>
+        /// <remarks>
+        /// Only for the presence-driven delivery. <b>An explicit subscription
+        /// is not asked about</b>: it is a request this resource made itself,
+        /// and measuring it against the caps as well would let a node be
+        /// subscribed to and then never delivered - the caps say what somebody
+        /// wants without asking, not what they are allowed to ask for.
+        ///
+        /// The account's own resources are asked like anybody's. Real servers
+        /// are observed to be more lenient there - which is where the warning
+        /// about one's own OMEMO publication came from, and why the client side
+        /// lets its own account in whatever its caps say.
+        /// </remarks>
+        private Boolean MayBeToldAbout(XMPPSession target, String node)
+            => !AsksForCaps ||
+               target.WantsNotificationsFor(node);
+
+        /// <summary>
         /// Waits until the condition holds, or until the timeout expires.
         /// </summary>
         public static async Task<Boolean> WaitUntilAsync(Func<Boolean> condition,
@@ -2121,6 +2278,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 if (unchecked(acknowledged - seq) >= 0x8000_0000u)
                     await session.SendAsync(stanza);
 
+            // A resumed stream brings the old answer along (see AdoptResumed),
+            // and where there was none to bring the question is put again here.
+            // A resumption does not have to be followed by a presence - that is
+            // the point of it - so the ordinary occasion for asking may never
+            // come, and the resource would stay one that has said nothing for
+            // as long as it runs: no PEP node pushed to it, and nothing saying
+            // why.
+            if (AsksForCaps && session.AnnouncedFeatures is null)
+                await AskForCapsAsync(session, null);
+
         }
 
         private async Task HandleStreamOpenAsync(XMPPSession session, Int32 openCount)
@@ -2953,6 +3120,15 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                 return;
             }
 
+            // The answer to what this server asked this resource it
+            // understands. Caught before everything else because it is the
+            // only stanza here whose identifier this server chose itself: an
+            // answer is never answered (section 8.2.3, rule 4), and one that
+            // fell through to the routing below would be delivered back to the
+            // client as a question about nothing.
+            if ((type is "result" or "error") && TryTakeCapsAnswer(session, frame, id))
+                return;
+
             // XEP-0163: PEP is answered by the server for the account - and
             // that BEFORE the forwarding.
             //
@@ -3423,7 +3599,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                         // A second report per section 8.8.4 does not go with
                         // it - that a subscription to a node that no longer
                         // exists has expired is said by this report already.
-                        await NotifyPepNodeAsync(session.Account, session,
+                        await NotifyPepNodeAsync(session.Account, session, node,
                                                  $"<delete node='{XmlEscaping.Escape(node)}'/>",
                                                  ended.Select(a => a.Jid));
 
@@ -3454,7 +3630,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
                     // XEP-0060, section 8.5.2. The node stays, the
                     // subscriptions stay - the report only says that there is
                     // nothing left to fetch.
-                    await NotifyPepNodeAsync(session.Account, session,
+                    await NotifyPepNodeAsync(session.Account, session, node,
                                              $"<purge node='{XmlEscaping.Escape(node)}'/>",
                                              subscribers);
 
@@ -4307,9 +4483,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // retrieval and let through the report in which the item stands
             // complete. With `authorize` that would have turned the approval
             // into a mere formality.
+            // <b>And it asks what the recipient wanted.</b> A publication goes
+            // to a presence recipient because they said they wanted this node
+            // (XEP-0163, section 4.2) - without that question every resource
+            // got every node of everybody it can see, and a client that
+            // announced nothing was served all the same. Which is how an
+            // unannounced node stays unnoticed: see AsksForCaps.
             foreach (var target in PresenceTargetsOf(owner, sender))
                 if (!explicitly.Contains(target.BareJid ?? "") &&
-                    MayAccessPepNode(owner, node, target.BareJid ?? ""))
+                    MayAccessPepNode(owner, node, target.BareJid ?? "") &&
+                    MayBeToldAbout(target, node))
                 {
                     await target.SendAsync(StampTo(Event(null), target.FullJid!));
                 }
@@ -4349,6 +4532,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
         /// </remarks>
         private async Task NotifyPepNodeAsync(XMPPAccount          owner,
                                               XMPPSession          sender,
+                                              String               node,
                                               String               content,
                                               IEnumerable<String>  subscribers)
         {
@@ -4362,8 +4546,12 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             var explicitly = new HashSet<String>(subscribers, StringComparer.OrdinalIgnoreCase);
 
+            // The same question as with a publication, and for the same
+            // reason: whoever was never told about this node has nothing to be
+            // told about its end either.
             foreach (var target in PresenceTargetsOf(owner, sender))
-                if (!explicitly.Contains(target.BareJid ?? ""))
+                if (!explicitly.Contains(target.BareJid ?? "") &&
+                    MayBeToldAbout(target, node))
                     await target.SendAsync(StampTo(eventXml, target.FullJid!));
 
             foreach (var who in explicitly)
@@ -5545,6 +5733,24 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
             // to 0 was available already - but is only just now becoming a
             // recipient.
             await SendOfflineMessagesToAsync(session);
+
+            // XEP-0115 with XEP-0163, section 4.2: which PEP nodes this
+            // resource wants pushed has to be asked for - the presence carries
+            // only a hash over the set, and that hash says whether the answer
+            // would be a new one.
+            //
+            // Here and not behind the switch below: what a resource
+            // understands is between it and this server and has nothing to do
+            // with whether its presence goes out to anybody.
+            if (AsksForCaps && type is null)
+            {
+
+                var ver = CapsVerOf(stamped);
+
+                if (session.NeedsCapsAsking(ver))
+                    await AskForCapsAsync(session, ver);
+
+            }
 
             if (!BroadcastPresence)
                 return;

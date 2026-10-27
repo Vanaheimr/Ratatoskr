@@ -47,13 +47,35 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// Connects a client and collects every presence announcement from now
         /// on as <c>jid|type</c>.
         /// </summary>
+        /// <summary>
+        /// A client that collects every presence it is told about - listening
+        /// from before it signs on.
+        /// </summary>
+        /// <remarks>
+        /// <b>The order matters and it was wrong.</b> Some of what this watches
+        /// for is sent during the sign-on itself: RFC 6121, section 4.3.1 has
+        /// the server deliver the state of the contacts to a resource that has
+        /// just become available. Subscribing afterwards means the handler is
+        /// hung on a client that may already have been told - and the test then
+        /// waits for something that happened before it was looking.
+        ///
+        /// It passed for as long as signing on returned quickly enough to win
+        /// that race, which is not a property anybody wrote down. It stopped
+        /// doing so when the sign-on grew a round trip, and the fault was the
+        /// order here all along.
+        /// </remarks>
         private async Task<(XMPPClient Client, ConcurrentQueue<String> Presences)> WatcherAsync(String localPart)
         {
 
-            var client     = await ConnectClientAsync(localPart);
+            if (Server.GetAccount($"{localPart}@{Server.Domain}") is null)
+                Server.AddAccount(localPart);
+
+            var client     = CreateClient(localPart);
             var presences  = new ConcurrentQueue<String>();
 
             client.OnPresenceChanged += (timestamp, sender, from, type, ct) => { presences.Enqueue($"{from}|{type}"); return Task.CompletedTask; };
+
+            await client.ConnectAsync();
 
             return (client, presences);
 

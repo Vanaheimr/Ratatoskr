@@ -538,6 +538,101 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AResumedStream_KeepsWhatItAnswered()
+
+        /// <summary>
+        /// XEP-0115 over XEP-0198: a resumed stream is the same client with the
+        /// same answer in it.
+        /// </summary>
+        /// <remarks>
+        /// <b>What hangs on it is PEP.</b> A node is pushed to a resource
+        /// because it said it wanted it, and what it said is fetched once, on
+        /// the strength of a presence. A resumption does not have to be
+        /// followed by a presence - that is what it is for - so a resource that
+        /// lost its answer in the tear would be one that has said nothing, and
+        /// would be pushed nothing, for as long as it runs.
+        ///
+        /// Read off the verification string and not off the features: the
+        /// server puts the question again where there is nothing to carry over,
+        /// so the features would fill up either way. What only the carrying
+        /// over leaves behind is the value they were fetched for - a fresh
+        /// question knows none.
+        /// </remarks>
+        [Test]
+        public async Task AResumedStream_KeepsWhatItAnswered()
+        {
+
+            var alice    = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
+            var full     = alice.FullJid!.ToString();
+            var session  = Server.SessionOf(full)!;
+
+            await WaitFor(() => alice.StreamManagement?.CanResume == true,
+                          "a promised resumption");
+
+            var answered = session.AnnouncedCapsVer;
+
+            Assert.That(answered, Is.Not.Null,
+                        "this client announced no capabilities at all, which leaves the test with " +
+                        "nothing to watch being carried over");
+
+            await KillAndAwaitParked(session);
+
+            await WaitFor(() => Server.SessionOf(full) is { } s && s != session,
+                          "the resumed session",
+                          TimeSpan.FromSeconds(20));
+
+            Assert.That(Server.SessionOf(full)!.AnnouncedCapsVer, Is.EqualTo(answered),
+                        "the resumed stream lost what this resource had answered, so nothing is " +
+                        "pushed to it until it sends a presence it does not owe");
+
+        }
+
+        #endregion
+
+        #region AResumedStream_IsAskedWhereNothingWasCarriedOver()
+
+        /// <summary>
+        /// And where there is nothing to carry over, the question is put again
+        /// on the resumption.
+        /// </summary>
+        /// <remarks>
+        /// The ordinary occasion for asking is a presence, and a resumption
+        /// owes none. A stream that tore before the answer came would therefore
+        /// never be asked again - the one state in which a resource stays
+        /// unasked for its whole life.
+        ///
+        /// The state is made and not waited for: the client signs on while
+        /// nothing is being asked, which leaves exactly a resource this server
+        /// knows nothing about, and the asking is switched on before the tear.
+        /// </remarks>
+        [Test]
+        public async Task AResumedStream_IsAskedWhereNothingWasCarriedOver()
+        {
+
+            Server.AsksForCaps = false;
+
+            var alice    = await ConnectClientAsync(reconnectDelay: TimeSpan.FromMilliseconds(200));
+            var full     = alice.FullJid!.ToString();
+            var session  = Server.SessionOf(full)!;
+
+            await WaitFor(() => alice.StreamManagement?.CanResume == true,
+                          "a promised resumption");
+
+            Assert.That(session.AnnouncedFeatures, Is.Null,
+                        "this resource answered although nothing was asked of it");
+
+            Server.AsksForCaps = true;
+
+            await KillAndAwaitParked(session);
+
+            await WaitFor(() => Server.SessionOf(full)?.AnnouncedFeatures is not null,
+                          "the question put again after the resumption",
+                          TimeSpan.FromSeconds(20));
+
+        }
+
+        #endregion
+
         #region WhatArrivedDuringTheOutage_IsDeliveredAfterwards()
 
         /// <summary>

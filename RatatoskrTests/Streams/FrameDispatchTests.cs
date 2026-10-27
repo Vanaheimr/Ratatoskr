@@ -57,6 +57,26 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     public class FrameDispatchTests : AXMPPTests
     {
 
+        #region SetUp
+
+        /// <summary>
+        /// What is measured here is the whole of what a client gets back for a
+        /// frame, so nothing is asked of it that it would answer by itself.
+        /// </summary>
+        /// <remarks>
+        /// The capability question (XEP-0115) is server-initiated traffic and
+        /// belongs to a different subject; its answer is an IQ, and an IQ in
+        /// the recording is exactly what several of these tests assert the
+        /// absence of.
+        /// </remarks>
+        [SetUp]
+        public void NoCapsQuestions()
+        {
+            Server.AsksForCaps = false;
+        }
+
+        #endregion
+
         #region Helper functions
 
         /// <summary>

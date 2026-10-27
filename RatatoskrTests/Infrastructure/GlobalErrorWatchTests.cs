@@ -46,6 +46,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
     public class GlobalErrorWatchTests : AXMPPTests
     {
 
+        #region SetUp
+
+        /// <summary>
+        /// No capability questions here either: this collection throws frame
+        /// handling off deliberately, and the answer to such a question is a
+        /// frame that would then be the one that fails.
+        /// </summary>
+        [SetUp]
+        public void NoCapsQuestions()
+        {
+            Server.AsksForCaps = false;
+        }
+
+        #endregion
+
         #region AnUnwatchedServer_IsStillSeen()
 
         /// <summary>

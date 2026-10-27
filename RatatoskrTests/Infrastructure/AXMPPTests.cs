@@ -139,6 +139,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await client.ConnectAsync();
 
+            // The server asks a freshly available resource what it understands
+            // (XEP-0115 with XEP-0163, section 4.2), and until the answer is
+            // in, that resource is one which has said nothing - so no PEP node
+            // is pushed to it. A test that published in that window would be
+            // racing the question instead of checking anything, so the answer
+            // is waited for here, once, for everybody.
+            if (Server.AsksForCaps)
+                await WaitFor(() => Server.SessionOf(client.FullJid.ToString())?.AnnouncedFeatures is not null,
+                              "the server to have asked this client what it understands");
+
             return client;
 
         }
