@@ -784,6 +784,80 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region AContactIsTold_ThatDeviceListsAreWanted()
+
+        /// <summary>
+        /// XEP-0384, section 4.3 with XEP-0163, section 4.2: a contact's server
+        /// pushes the device list only to whoever has said they want it, and
+        /// this says it.
+        /// </summary>
+        /// <remarks>
+        /// <b>The test below handles such a report; this one is about being
+        /// sent one at all.</b> The two are a pair and only one of them was
+        /// there: the handling has always worked, because this server delivers
+        /// a publication to every presence recipient and asks nobody's caps -
+        /// which is exactly how a missing <c>+notify</c> stays invisible in a
+        /// test suite. What a real server does instead is ask, and the answer
+        /// was no.
+        ///
+        /// Not needed in order to encrypt: a device list is fetched when there
+        /// is something to encrypt, and that is the moment it has to be right.
+        /// What it buys is being told without asking - and this account's own
+        /// list, written anew by another of its devices with this one forgotten
+        /// in it, is mended on the strength of such a report (see
+        /// AMissingOwnDevice_IsReannounced). Until this announcement that
+        /// mending rested on servers which deliver an account its own
+        /// notifications whether its caps ask for them or not.
+        ///
+        /// <b>Read out of Bob's cache and not out of Alice's list</b>, because
+        /// the list is the claim and the cache is what arrived: what lies there
+        /// came over the wire in a disco#info answer and has been checked
+        /// against the hash Alice announced (XEP-0115, section 5.4). A feature
+        /// in the list that the answer leaves out would make us a liar rather
+        /// than a client that wants notifications - see CapsExchangeTests,
+        /// where that round trip is the subject.
+        ///
+        /// The bundles are asserted away for good: one entry per device, every
+        /// one of them key material, rewritten whenever a prekey is used up.
+        /// Announcing interest in that would mean being sent every contact's
+        /// keys again and again, to be told what is fetched by device id the
+        /// moment it is needed.
+        /// </remarks>
+        [Test]
+        public async Task AContactIsTold_ThatDeviceListsAreWanted()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice = await ConnectClientAsync("alice");
+            var bob   = await ConnectClientAsync("bob");
+
+            var key   = $"{alice.Connection.EntityCaps!.Node}#" +
+                        $"{alice.Connection.EntityCaps!.CalculateVerificationString()}";
+
+            await WaitFor(() => bob.Connection.EntityCaps!.GetCachedInfo(key) is not null,
+                          "Alice's checked capabilities in Bob's cache");
+
+            var announced = bob.Connection.EntityCaps!.GetCachedInfo(key)!.Features;
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(announced, Does.Contain($"{OmemoDeviceList.Node}+notify"),
+                            "a contact's server has nothing to go by and pushes no device list, " +
+                            "so a new device of theirs is learned of only at the next send - and " +
+                            "this account's own list is never mended");
+
+                Assert.That(announced, Does.Not.Contain($"{OmemoPep.BundlesNode}+notify"),
+                            "every contact's key material would be pushed here on every prekey " +
+                            "they use up, to say what is fetched by device id when it is needed");
+
+            });
+
+        }
+
+        #endregion
+
         #region ANewDeviceList_ReachesTheContacts()
 
         /// <summary>

@@ -144,6 +144,32 @@ public sealed class DiscoManager
         // split the extension is built around.
         "urn:xmpp:avatar:metadata+notify",
 
+        // XEP-0384, section 4.3: the same arrangement for the device list, and
+        // for the same reason - a contact's server pushes it only to whoever
+        // has said here that they want it.
+        //
+        // <b>Not needed in order to encrypt.</b> The list is fetched when there
+        // is something to encrypt, which is the moment it has to be right, and
+        // that does not change. What this adds is being told without asking:
+        // a contact who adds a device is otherwise known to have done so only
+        // at the next send, and this account's own list - written anew by
+        // another of its devices, this one forgotten in it - is mended on the
+        // strength of such a report (see ProcessPepEventAsync). Until this
+        // line, that mending rested on servers which deliver an account its
+        // own notifications whether its caps ask for them or not.
+        //
+        // <b>And the bundles node is expressly not here.</b> It carries one
+        // entry per device, every one of them a key bundle, and it changes
+        // whenever a prekey is used up - announcing interest in it would mean
+        // being sent every contact's key material again and again, to be told
+        // what is fetched by device id the moment it is needed. The same split
+        // as the avatar's, and here it weighs more.
+        //
+        // Spelled out of the constant rather than typed: a namespace wrong by
+        // one character here is not an error anywhere, it is a contact's server
+        // never pushing and nobody being told why.
+        OmemoDeviceList.Node + "+notify",
+
         // XEP-0066, and only this one of the two: it says a message about a
         // file will be recognised as one rather than shown as a line of text.
         //
