@@ -1200,28 +1200,17 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Server
 
             session.AskingForCaps(id, ver);
 
-            try
-            {
-
-                await session.SendAsync(
-                          $"<iq type='get' id='{id}' from='{Domain}' to='{XmlEscaping.Escape(session.FullJid)}'>" +
-                          "<query xmlns='http://jabber.org/protocol/disco#info'/>" +
-                          "</iq>");
-
-            }
-            catch (Exception e)
-            {
-
-                // <b>Nothing of the presence hangs on this question.</b> A
-                // resource whose connection fell away between its presence and
-                // this line is one this server will not learn anything about,
-                // and that is the whole of the consequence - while an exception
-                // let through here would take the presence distribution of a
-                // resource that is still there with it.
-                Logger.LogDebug(e, "The question about the capabilities of {Session} could not be sent",
-                                session.FullJid);
-
-            }
+            // <b>Nothing of the presence hangs on this question</b>, and
+            // nothing here has to see to that: XMPPSession.SendAsync answers a
+            // connection dropped in the meantime by itself, which is why not
+            // one of the sends in this class is guarded. A resource whose
+            // connection fell away between its presence and this line is one
+            // this server will not learn anything about, and that is the whole
+            // of the consequence.
+            await session.SendAsync(
+                      $"<iq type='get' id='{id}' from='{Domain}' to='{XmlEscaping.Escape(session.FullJid)}'>" +
+                      "<query xmlns='http://jabber.org/protocol/disco#info'/>" +
+                      "</iq>");
 
         }
 
