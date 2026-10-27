@@ -17,6 +17,8 @@
 
 #region Usings
 
+using System.Xml.Linq;
+
 using NUnit.Framework;
 
 using org.GraphDefined.Vanaheimr.Ratatoskr;
@@ -1132,7 +1134,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.EnableOmemoAsync();
 
-            var list = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
+            var (list, _) = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
 
             Assert.Multiple(() =>
             {
@@ -1144,6 +1146,109 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(list.Contains(alice.Omemo!.Identity.DeviceId), Is.True);
 
             });
+
+        }
+
+        #endregion
+
+        #region ASilentServer_CostsTheOwnListNothing_AndIsTriedAgain()
+
+        /// <summary>
+        /// Nobody answered about this account's own device list - so nothing is
+        /// published, and the other devices are still in it.
+        /// </summary>
+        /// <remarks>
+        /// <b>The same fault as in the test above, caused by a slow server
+        /// rather than by a wrong line.</b> That one adds to the list instead of
+        /// replacing it, which is right - but it adds to <i>what came back</i>,
+        /// and what came back was null, which was then taken for an empty list.
+        /// A list built on an empty one and published holds this device and
+        /// nothing else: every other device of this account gone from it, and
+        /// the entry here that cannot defend itself shows it, exactly as it was
+        /// put there to.
+        ///
+        /// <b>The damage has no symptom on this side.</b> The other devices go
+        /// on running, nobody encrypts to them any more, and the person reading
+        /// on their telephone sees a conversation that has simply stopped. Which
+        /// is why the right answer is to publish nothing at all and try later -
+        /// and that second half is checked here too, because it hangs on the
+        /// manager being put back: the gate in front of switching on is "is
+        /// OMEMO already on", so a half-switched-on one left standing would mean
+        /// never trying again.
+        /// </remarks>
+        [Test]
+        public async Task ASilentServer_CostsTheOwnListNothing_AndIsTriedAgain()
+        {
+
+            var alice = await ConnectClientAsync("alice");
+
+            // Another device of this account, already announced - and one no
+            // client answers for, for the reason the test above gives.
+            await alice.Connection.PublishOmemoDeviceListAsync(
+                      new OmemoDeviceList([new OmemoDevice(4711, "old phone")]));
+
+            var silent = true;
+
+            // A server that does not answer about the list, without the test
+            // sitting out the ordinary ten seconds for one.
+            alice.Connection.IqTimeout = TimeSpan.FromMilliseconds(300);
+
+            Server.OnStanzaReceived += async (timestamp, server, session, frame, ct) => {
+                if (silent &&
+                    frame.Contains("type='get'") &&
+                    frame.Contains(OmemoDeviceList.Node))
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1), ct);
+                }
+            };
+
+            Assert.That(await alice.EnableOmemoAsync(), Is.False,
+                        "switching on reported success although nothing could be found out");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(alice.OmemoEnabled, Is.False,
+                            "OMEMO counts as on while this account's device is unannounced, so " +
+                            "nothing will try again");
+
+                Assert.That(alice.Connection.OmemoDeviceId, Is.Null,
+                            "and a device identifier stands for a device nobody has been told about");
+
+                Assert.That(StoredDeviceList(), Is.EqualTo(new UInt32[] { 4711 }),
+                            "the other device was struck from the list by a server that said nothing");
+
+            });
+
+            // And now the server answers, as it would a moment later.
+            silent = false;
+            alice.Connection.IqTimeout = TimeSpan.FromSeconds(10);
+
+            Assert.That(await alice.EnableOmemoAsync(), Is.True,
+                        "the second attempt found nothing left to switch on");
+
+            Assert.That(StoredDeviceList(),
+                        Is.EquivalentTo(new[] { 4711u, alice.Omemo!.Identity.DeviceId }),
+                        "and the list is the old entry plus this device");
+
+        }
+
+        /// <summary>
+        /// Alice's device list as the server keeps it - read out of the account
+        /// rather than fetched, so that a server which is being kept quiet does
+        /// not also silence the reading.
+        /// </summary>
+        private UInt32[] StoredDeviceList()
+        {
+
+            var stored = Server.GetAccount($"alice@{Server.Domain}")!
+                               .GetPepItems(OmemoDeviceList.Node, OmemoDeviceList.ItemId);
+
+            if (stored.Count != 1 ||
+                !OmemoDeviceList.TryRead(XElement.Parse(stored[0].Payload), out var list))
+                return [];
+
+            return [.. list!.Devices.Select(device => device.Id)];
 
         }
 
@@ -1175,7 +1280,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await first.EnableOmemoAsync();
             await second.EnableOmemoAsync();
 
-            var list = await second.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
+            var (list, _) = await second.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
 
             Assert.Multiple(() =>
             {

@@ -58,10 +58,21 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             return new OmemoManager(store,
                                     JID.Parse("alice@example.org"),
-                                    _      => Task.FromResult<OmemoDeviceList?>(null),
-                                    (_, _) => Task.FromResult<OmemoBundle?>(null));
+                                    _      => NoDeviceList(),
+                                    (_, _) => NoBundle());
 
         }
+
+        /// <summary>
+        /// Nothing published, and the server said so - these tests are about
+        /// the rotation and never fetch anything; what matters is only that the
+        /// shape is the one the manager expects.
+        /// </summary>
+        private static Task<(OmemoDeviceList? List, PepLookup Lookup)> NoDeviceList()
+            => Task.FromResult<(OmemoDeviceList?, PepLookup)>((null, PepLookup.Absent));
+
+        private static Task<(OmemoBundle? Bundle, PepLookup Lookup)> NoBundle()
+            => Task.FromResult<(OmemoBundle?, PepLookup)>((null, PepLookup.Absent));
 
         private static OmemoIdentityState Aged(TimeSpan by)
         {
@@ -174,16 +185,16 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             store.SaveIdentity(Aged(TimeSpan.FromDays(30)));
 
             var first = new OmemoManager(store, JID.Parse("alice@example.org"),
-                                         _      => Task.FromResult<OmemoDeviceList?>(null),
-                                         (_, _) => Task.FromResult<OmemoBundle?>(null));
+                                         _      => NoDeviceList(),
+                                         (_, _) => NoBundle());
 
             var rotated = first.Identity.SignedPreKeyId;
 
             // A second manager over the same store: the rotation is done and
             // stays done.
             var second = new OmemoManager(store, JID.Parse("alice@example.org"),
-                                          _      => Task.FromResult<OmemoDeviceList?>(null),
-                                          (_, _) => Task.FromResult<OmemoBundle?>(null));
+                                          _      => NoDeviceList(),
+                                          (_, _) => NoBundle());
 
             Assert.That(second.Identity.SignedPreKeyId, Is.EqualTo(rotated),
                         "The age has to be stored along with the key, or every start rotates.");

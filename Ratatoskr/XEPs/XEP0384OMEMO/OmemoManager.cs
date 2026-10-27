@@ -91,9 +91,29 @@ public delegate Task OnOmemoIdentityChangedDelegate(DateTimeOffset        Timest
 /// What came out of the encryption for a single device.
 /// </summary>
 /// <param name="Jid">Whom it belongs to.</param>
-/// <param name="DeviceId">Which device.</param>
+/// <param name="DeviceId">
+/// Which device - or 0 for an entry about the whole account, which is what
+/// there is to say when the devices never came to be known.
+/// </param>
 /// <param name="Reason">Why it was skipped.</param>
-public sealed record OmemoSkippedDevice(JID Jid, UInt32 DeviceId, String Reason);
+/// <param name="NoOmemoThere">
+/// Whether this entry is the account having been <b>shown</b> to publish no
+/// OMEMO device at all.
+/// </param>
+/// <remarks>
+/// <b>Why that last one is a field and not a reading of the reason.</b> A
+/// caller writing a one-to-one message has exactly one decision left when the
+/// encryption reached nobody: send it in the clear instead, or refuse. Sending
+/// in the clear is right for the recipient who does no OMEMO - most of the
+/// world - and is the plain downgrade for every other case, among them a
+/// server that did not answer, a bundle that did not verify and a device whose
+/// identity key has changed. Only the server saying "there is no such node"
+/// settles it, so only that entry carries this.
+/// </remarks>
+public sealed record OmemoSkippedDevice(JID      Jid,
+                                        UInt32   DeviceId,
+                                        String   Reason,
+                                        Boolean  NoOmemoThere = false);
 
 /// <summary>
 /// An encrypted message that has gone out.
@@ -109,6 +129,10 @@ public sealed record OmemoSkippedDevice(JID Jid, UInt32 DeviceId, String Reason)
 /// <param name="Readable">
 /// Whether at least one device of the recipient got a key.
 /// </param>
+/// <param name="NoOmemoThere">
+/// Whether the recipient has been <b>shown</b> to publish no OMEMO device:
+/// their server answered, and what it answered was that there is nothing.
+/// </param>
 /// <remarks>
 /// <see cref="Readable"/> is kept apart from an empty <see cref="Skipped"/>,
 /// and the difference is the one that matters to whoever wrote the message: one
@@ -116,10 +140,25 @@ public sealed record OmemoSkippedDevice(JID Jid, UInt32 DeviceId, String Reason)
 /// that went out and nobody can open. The second is what writing to somebody
 /// who does not do OMEMO at all looks like, and it has to be distinguishable
 /// from success.
+///
+/// <b><see cref="NoOmemoThere"/> is the second half of that, and it is the one
+/// a fallback has to hang on.</b> An unreadable message says that nobody could
+/// be written to; only this says whether that was the recipient's answer.
+/// Nothing came back, the bundle did not verify, the identity key has changed,
+/// the only device is one this side will not write to - in all of them the
+/// message is unreadable and the recipient has been shown nothing at all, and
+/// a sender who falls back to the clear there hands whoever arranged it the
+/// plaintext. It is false in every one of those, and false is the cautious
+/// value: whoever ignores it refuses a message now and then, whoever acts on
+/// <see cref="Readable"/> alone downgrades.
+///
+/// Meaningless while <see cref="Readable"/> is true. The question it answers
+/// only arises for a message that reached nobody.
 /// </remarks>
 public sealed record OmemoSent(String                             MessageId,
                                IReadOnlyList<OmemoSkippedDevice>  Skipped,
-                               Boolean                            Readable);
+                               Boolean                            Readable,
+                               Boolean                            NoOmemoThere = false);
 
 /// <summary>
 /// A decrypted message.
@@ -165,6 +204,15 @@ public sealed record OmemoDecrypted(IReadOnlyList<XElement>  Content,
 ///       every skipped device together with the reason.</item>
 /// </list>
 ///
+/// <b>The same question about a whole account has the same answer</b>, and it
+/// took longer to see. A contact with no fetchable device list at all leaves
+/// nothing to encrypt to, so the middle answer above is the one that offers
+/// itself - and it is as wrong there as it is for the fourth device, with one
+/// exception: the contact who does no OMEMO and whose server says so. Most of
+/// the world is that contact, which is why the exception has to exist, and
+/// <see cref="OmemoSent.NoOmemoThere"/> is that exception and nothing beside
+/// it.
+///
 /// <b>One's own further devices belong with it</b>, otherwise one's own
 /// computer does not see what one's own telephone has written. One's own
 /// <i>device itself</i> does not: it would have to keep a session with itself.
@@ -176,8 +224,8 @@ public sealed class OmemoManager
 
     private readonly IOmemoStore                                _store;
     private readonly JID                                        _ownBareJid;
-    private readonly Func<JID, Task<OmemoDeviceList?>>          _fetchDeviceList;
-    private readonly Func<JID, UInt32, Task<OmemoBundle?>>      _fetchBundle;
+    private readonly Func<JID, Task<(OmemoDeviceList? List, PepLookup Lookup)>>      _fetchDeviceList;
+    private readonly Func<JID, UInt32, Task<(OmemoBundle? Bundle, PepLookup Lookup)>> _fetchBundle;
     private readonly ILogger?                                   _logger;
     private readonly Lock                                       _lock = new();
 
@@ -280,11 +328,18 @@ public sealed class OmemoManager
     /// Builds the manager on a storage - and creates fresh key material when
     /// there is none yet.
     /// </summary>
-    public OmemoManager(IOmemoStore                               store,
-                        JID                                       ownBareJid,
-                        Func<JID, Task<OmemoDeviceList?>>         fetchDeviceList,
-                        Func<JID, UInt32, Task<OmemoBundle?>>     fetchBundle,
-                        ILogger?                                  logger = null)
+    /// <param name="fetchDeviceList">
+    /// Fetches an account's device list, and says whether a missing one is that
+    /// account's answer or this side's failure to find out - see
+    /// <see cref="PepLookup"/>. The two were one value here once, and that is
+    /// the whole of how a slow server became a message in the clear.
+    /// </param>
+    /// <param name="fetchBundle">Fetches one device's bundle, likewise.</param>
+    public OmemoManager(IOmemoStore                                                       store,
+                        JID                                                               ownBareJid,
+                        Func<JID, Task<(OmemoDeviceList? List, PepLookup Lookup)>>        fetchDeviceList,
+                        Func<JID, UInt32, Task<(OmemoBundle? Bundle, PepLookup Lookup)>>  fetchBundle,
+                        ILogger?                                                          logger = null)
     {
 
         _store            = store;
@@ -383,12 +438,27 @@ public sealed class OmemoManager
                                       .Distinct())
         {
 
-            var list = await _fetchDeviceList(jid);
+            var (list, lookup) = await _fetchDeviceList(jid);
 
-            if (list is null)
+            // Nothing to encrypt to for this address - and the reasons for that
+            // are not one reason. "They publish no device" is an answer, and a
+            // caller may act on it; "nobody said" is the absence of one, and a
+            // caller who takes it for an answer writes in the clear exactly
+            // when somebody has arranged for the answer not to arrive.
+            //
+            // An empty published list belongs with the first: whoever removes
+            // their last device leaves one behind, and it says what it says.
+            if (list is null || list.Devices.Count == 0)
             {
-                skipped.Add(new OmemoSkippedDevice(jid, 0, "no device list"));
+
+                var said = lookup != PepLookup.Unknown;
+
+                skipped.Add(new OmemoSkippedDevice(jid, 0,
+                                                   said ? "publishes no OMEMO device"
+                                                        : "no answer about their devices",
+                                                   NoOmemoThere: said));
                 continue;
+
             }
 
             var forThisJid = new List<OmemoKey>();
@@ -478,10 +548,16 @@ public sealed class OmemoManager
             }
 
             // No session - so begin one.
-            var bundle = await _fetchBundle(jid, deviceId);
+            var (bundle, lookup) = await _fetchBundle(jid, deviceId);
 
+            // Said apart for the sake of whoever reads the reason: one of them
+            // is worth trying again in a moment and the other is not. Neither
+            // of them says anything about whether this account does OMEMO, so
+            // neither carries NoOmemoThere - see OmemoSkippedDevice.
             if (bundle is null)
-                return (null, "no fetchable bundle");
+                return (null, lookup == PepLookup.Unknown
+                                  ? "no answer about its key material"
+                                  : "no bundle published");
 
             // The identity key from the bundle is noted down before anything is
             // computed with it: a change belongs reported, not used silently.
@@ -780,4 +856,21 @@ public sealed class OmemoManager
 /// and wonders about the answer that does not come.
 /// </remarks>
 public sealed record OmemoEncryptionResult(OmemoEncryptedElement                Element,
-                                           IReadOnlyList<OmemoSkippedDevice>    Skipped);
+                                           IReadOnlyList<OmemoSkippedDevice>    Skipped)
+{
+
+    /// <summary>
+    /// Has this recipient been <b>shown</b> to publish no OMEMO device?
+    /// </summary>
+    /// <remarks>
+    /// Per recipient, and that is the point of it. One's own further devices
+    /// are encrypted to in the same pass, so a silent answer about one's own
+    /// list would otherwise speak for a contact whose list arrived perfectly
+    /// well - and the other way round.
+    /// </remarks>
+    public Boolean NoOmemoFor(JID Recipient)
+
+        => Skipped.Any(device => device.NoOmemoThere &&
+                                 device.Jid.Bare == Recipient.Bare);
+
+}

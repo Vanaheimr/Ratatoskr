@@ -4312,19 +4312,37 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// XEP-0384: Fetches the device list of an account.
     /// </summary>
     /// <returns>
-    /// null when there is none - this person does not use OMEMO, or their
-    /// server keeps nothing ready. Both are the same thing for whoever wants to
-    /// write.
+    /// The list, and what the asking produced. <b>A null list is two different
+    /// things, and the second value is which of them:</b>
+    /// <see cref="PepLookup.Absent"/> is somebody who does not use OMEMO,
+    /// <see cref="PepLookup.Unknown"/> is this side not having found out.
+    ///
+    /// They were one value here, and the sentence that stood in this place said
+    /// so - "both are the same thing for whoever wants to write". They are not.
+    /// A sender who cannot tell them apart writes in the clear whenever
+    /// somebody holds up one stanza, which is the one thing OMEMO is for. See
+    /// <see cref="PepLookup"/>.
     /// </returns>
-    public async Task<OmemoDeviceList?> FetchOmemoDeviceListAsync(JID                bareJid,
-                                                                  CancellationToken  ct = default)
+    public async Task<(OmemoDeviceList? List, PepLookup Lookup)> FetchOmemoDeviceListAsync(JID                bareJid,
+                                                                                           CancellationToken  ct = default)
     {
 
-        var content = await FetchPepAsync(bareJid, OmemoDeviceList.Node, OmemoDeviceList.ItemId, ct);
+        var (content, lookup) = await FetchPepAsync(bareJid, OmemoDeviceList.Node, OmemoDeviceList.ItemId, ct);
 
-        return content is not null && OmemoDeviceList.TryRead(content, out var list)
-                   ? list
-                   : null;
+        if (content is null)
+            return (null, lookup);
+
+        // Something stands in that node and it is not a device list. The node
+        // is there, so this is not somebody who does no OMEMO - what it is,
+        // nobody here knows, and unknown is the answer that does not become a
+        // licence to write in the clear.
+        if (!OmemoDeviceList.TryRead(content, out var list))
+        {
+            _logger.LogWarning("OMEMO: what {Jid} publishes as a device list cannot be read", bareJid);
+            return (null, PepLookup.Unknown);
+        }
+
+        return (list, PepLookup.Published);
 
     }
 
@@ -4336,25 +4354,34 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// comes from the server of the peer - that is, from the party OMEMO
     /// protects against. Passing an unchecked bundle on would mean leaving the
     /// check to whoever is most likely to forget it.
+    ///
+    /// <b>A bundle that is there and is refused here is not an absent one.</b>
+    /// Both come back null and the second value keeps them apart: a bundle that
+    /// cannot be read, or that does not verify, has said nothing at all about
+    /// whether its owner does OMEMO - and a caller that read it as "nothing
+    /// there" would answer a forged bundle by writing in the clear.
     /// </remarks>
-    public async Task<OmemoBundle?> FetchOmemoBundleAsync(JID                bareJid,
-                                                          UInt32             deviceId,
-                                                          CancellationToken  ct = default)
+    public async Task<(OmemoBundle? Bundle, PepLookup Lookup)> FetchOmemoBundleAsync(JID                bareJid,
+                                                                                     UInt32             deviceId,
+                                                                                     CancellationToken  ct = default)
     {
 
-        var content = await FetchPepAsync(bareJid, OmemoPep.BundlesNode, deviceId.ToString(), ct);
+        var (content, lookup) = await FetchPepAsync(bareJid, OmemoPep.BundlesNode, deviceId.ToString(), ct);
 
-        if (content is null || !OmemoPep.TryReadBundle(content, out var bundle))
-            return null;
+        if (content is null)
+            return (null, lookup);
+
+        if (!OmemoPep.TryReadBundle(content, out var bundle))
+            return (null, PepLookup.Unknown);
 
         if (!bundle!.SignatureIsValid())
         {
             _logger.LogWarning("OMEMO: The bundle of {Jid}/{Device} is not validly signed",
                                bareJid, deviceId);
-            return null;
+            return (null, PepLookup.Unknown);
         }
 
-        return bundle;
+        return (bundle, PepLookup.Published);
 
     }
 
@@ -4385,23 +4412,40 @@ public sealed class XMPPConnection : IAsyncDisposable
 
     }
 
-    private async Task<XElement?> FetchPepAsync(JID                bareJid,
-                                                string             node,
-                                                string             itemId,
-                                                CancellationToken  ct)
+    /// <summary>
+    /// Fetches one item of a PEP node by name.
+    /// </summary>
+    /// <returns>
+    /// The content of the item, and what the asking produced. <b>Nothing there
+    /// and nothing came back are different values</b>, and every caller that
+    /// draws a conclusion from a missing item has to see which of the two it
+    /// has - see <see cref="PepLookup"/>.
+    /// </returns>
+    private async Task<(XElement? Content, PepLookup Lookup)> FetchPepAsync(JID                bareJid,
+                                                                            string             node,
+                                                                            string             itemId,
+                                                                            CancellationToken  ct)
     {
 
         var id       = $"pep-{Interlocked.Increment(ref _pepCounter)}";
         var response = await SendIqAsync(id, OmemoPep.FetchIq(id, bareJid.ToString(), node, itemId), ct,
                                          expectedFrom: bareJid);
 
-        if (response is null || response.Attr("type") != "result")
-            return null;
+        var lookup   = PepAnswer.WhatItSays(response);
 
-        return response.Child(OmemoPep.PubSubNamespace, "pubsub")
-                      ?.Child(OmemoPep.PubSubNamespace, "items")
-                      ?.Elements().FirstOrDefault(e => e.Name.LocalName == "item")
-                      ?.Elements().FirstOrDefault();
+        if (lookup != PepLookup.Published)
+            return (null, lookup);
+
+        var content  = response!.Child(OmemoPep.PubSubNamespace, "pubsub")
+                               ?.Child(OmemoPep.PubSubNamespace, "items")
+                               ?.Elements().FirstOrDefault(e => e.Name.LocalName == "item")
+                               ?.Elements().FirstOrDefault();
+
+        // A result with nothing in it is an answer all the same: the node holds
+        // no such item. Absent and not Unknown - the server spoke.
+        return content is not null
+                   ? (content, PepLookup.Published)
+                   : (null,    PepLookup.Absent);
 
     }
 
@@ -4619,7 +4663,10 @@ public sealed class XMPPConnection : IAsyncDisposable
                                                 CancellationToken  ct = default)
     {
 
-        var content = await FetchPepAsync(bareJid, UserAvatar.DataNode, info.Id, ct);
+        // The lookup is discarded here and nowhere else: a picture that is not
+        // there and a picture nobody answered about are the same thing for
+        // whoever wants to show one. For key material they are not.
+        var (content, _) = await FetchPepAsync(bareJid, UserAvatar.DataNode, info.Id, ct);
 
         if (content is null)
             return null;
@@ -4747,10 +4794,35 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         OmemoDeviceId = Omemo.Identity.DeviceId;
 
-        var existing = await FetchOmemoDeviceListAsync(BareJid, ct)
-                           ?? new OmemoDeviceList([]);
+        var (existing, lookup) = await FetchOmemoDeviceListAsync(BareJid, ct);
 
-        var extended = existing.With(new OmemoDevice(Omemo.Identity.DeviceId));
+        // "Nothing came back" is not "there is no list", and here the
+        // difference decides whether this account's other devices survive the
+        // next line. Taken for an empty list, what gets published is this
+        // device alone - which is precisely the harm the remark above warns
+        // about, brought about by nothing worse than a server that was slow.
+        // The other devices go on running and simply stop being encrypted to,
+        // and that is the one failure with no symptom on this side.
+        //
+        // So nothing is published, and the manager is put back: the gate in
+        // front of this is "is OMEMO already on", so a manager left standing
+        // here would mean this account never announces its device again for as
+        // long as the program runs.
+        if (existing is null && lookup == PepLookup.Unknown)
+        {
+
+            _logger.LogWarning("OMEMO: no answer about this account's own device list; this device " +
+                               "stays unannounced rather than publishing a list that would displace " +
+                               "the account's other devices");
+
+            Omemo          = null;
+            OmemoDeviceId  = null;
+
+            return false;
+
+        }
+
+        var extended = (existing ?? new OmemoDeviceList([])).With(new OmemoDevice(Omemo.Identity.DeviceId));
 
         if (!await PublishOmemoDeviceListAsync(extended, ct))
             return false;
@@ -4948,7 +5020,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         return new OmemoSent(
                    messageId,
                    result.Skipped,
-                   result.Element.Keys.ContainsKey(to.Bare)
+                   result.Element.Keys.ContainsKey(to.Bare),
+                   result.NoOmemoFor(to)
                );
 
     }

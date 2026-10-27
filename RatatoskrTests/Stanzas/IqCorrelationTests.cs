@@ -145,7 +145,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             var fetched = await fetch.WaitAsync(TimeSpan.FromSeconds(5));
 
-            Assert.That(fetched, Is.Null,
+            Assert.That(fetched.Bundle, Is.Null,
                         "And nothing a stranger sent may come back as a bundle.");
 
         }

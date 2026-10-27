@@ -304,6 +304,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// The fetch itself already treats the refusal correctly: no node, no
         /// device list, null. What is checked here is that nothing <i>also</i>
         /// announces it as a stanza error nobody was waiting for.
+        ///
+        /// <b>And that the refusal is read as an answer</b>, which is the half
+        /// a sender acts on: Absent is what makes it right to write to this
+        /// contact in the clear, and it has to be reachable by the ordinary
+        /// path or most of the world becomes unwritable-to.
         /// </remarks>
         [Test]
         public async Task AMissingDeviceList_IsNotReportedAsAStanzaError()
@@ -317,9 +322,18 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             StanzaError? reported = null;
             alice.OnStanzaError += (timestamp, sender, from, error, ct) => { reported = error; return Task.CompletedTask; };
 
-            var list = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"bob@{Server.Domain}"));
+            var (list, lookup) = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"bob@{Server.Domain}"));
 
-            Assert.That(list, Is.Null, "Bob has published no device list");
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(list,   Is.Null, "Bob has published no device list");
+
+                Assert.That(lookup, Is.EqualTo(PepLookup.Absent),
+                            "a refusal that names the node as not there is an answer, and a sender " +
+                            "who cannot read it as one cannot write to anybody without OMEMO");
+
+            });
 
             await WaitAgainst(() => reported is not null,
                               $"a stanza error for a node that is simply not there: {reported}");
@@ -381,10 +395,25 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             StanzaError? reported = null;
             alice.OnStanzaError += (timestamp, sender, from, error, ct) => { reported = error; return Task.CompletedTask; };
 
-            var list      = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"bob@{Server.Domain}"));
-            var gaveUpAt  = DateTimeOffset.UtcNow;
+            var (list, lookup)  = await alice.Connection.FetchOmemoDeviceListAsync(JID.Parse($"bob@{Server.Domain}"));
+            var gaveUpAt        = DateTimeOffset.UtcNow;
 
-            Assert.That(list, Is.Null, "the fetch gave up before an answer came");
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(list,   Is.Null, "the fetch gave up before an answer came");
+
+                // The other half of the same fault, and the worse half: the
+                // remark above says the fetch "gave up and sent in the clear",
+                // which is what it did. A server that did not answer must not
+                // come back looking like a server that said there is nothing -
+                // otherwise whoever can delay one stanza decides that the next
+                // message goes unencrypted.
+                Assert.That(lookup, Is.EqualTo(PepLookup.Unknown),
+                            "silence came back as an answer, and an answer is what a sender falls " +
+                            "back to the clear on");
+
+            });
 
             await WaitFor(() => answered is not null,
                           "the answer that was waited for in vain",
@@ -435,13 +464,13 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
                 Assert.That(bundlePublished, Is.True, "The bundle could not be published.");
             });
 
-            var list = await bob.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
+            var (list, _) = await bob.Connection.FetchOmemoDeviceListAsync(JID.Parse($"alice@{Server.Domain}"));
 
             Assert.That(list, Is.Not.Null, "Bob does not find Alice's device list.");
             Assert.That(list!.Contains(identity.DeviceId), Is.True);
 
-            var bundle = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"),
-                                                                     identity.DeviceId);
+            var (bundle, _) = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"),
+                                                                         identity.DeviceId);
 
             Assert.That(bundle, Is.Not.Null, "Bob does not get Alice's bundle.");
 
@@ -494,8 +523,8 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             await alice.Connection.PublishOmemoBundleAsync(phone.DeviceId, phone.Bundle());
             await alice.Connection.PublishOmemoBundleAsync(desktop.DeviceId, desktop.Bundle());
 
-            var forPhone   = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"), 1000);
-            var forDesktop = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"), 2000);
+            var (forPhone,   _) = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"), 1000);
+            var (forDesktop, _) = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"), 2000);
 
             Assert.Multiple(() =>
             {
@@ -626,9 +655,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(withoutList,    Is.Null, "An account without a device list delivers one.");
-                Assert.That(withoutAccount, Is.Null, "An account that does not exist delivers a device list.");
-                Assert.That(withoutBundle,  Is.Null);
+
+                Assert.That(withoutList.List,    Is.Null, "An account without a device list delivers one.");
+                Assert.That(withoutAccount.List, Is.Null, "An account that does not exist delivers a device list.");
+                Assert.That(withoutBundle.Bundle, Is.Null);
+
+                // The equal treatment goes as far as this value, and that is
+                // what makes it equal: a sender acts on Absent, so if the
+                // account that does not exist came back as Unknown and the one
+                // with nothing published as Absent, the two would be told apart
+                // by how the sender then behaves.
+                Assert.That(withoutList.Lookup,    Is.EqualTo(PepLookup.Absent));
+                Assert.That(withoutAccount.Lookup, Is.EqualTo(PepLookup.Absent));
+                Assert.That(withoutBundle.Lookup,  Is.EqualTo(PepLookup.Absent));
+
             });
 
         }
@@ -647,6 +687,14 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
         /// checks the signature itself and does <b>not</b> pass an invalid
         /// bundle on: to hand an unchecked one through would mean leaving the
         /// check to the one most likely to forget it.
+        ///
+        /// <b>And it is refused as a bundle that is there</b>, not as one that
+        /// was never published. The difference is what the sender does next: a
+        /// device that publishes nothing can belong to somebody who does no
+        /// OMEMO, and writing to them in the clear is right. A planted bundle
+        /// is the server having been caught at exactly what this check exists
+        /// for, and answering that by writing in the clear would hand over the
+        /// plaintext it could not read.
         /// </remarks>
         [Test]
         public async Task ATamperedBundle_IsRefusedOnFetching()
@@ -664,10 +712,20 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
             await alice.Connection.PublishOmemoBundleAsync(real.DeviceId, planted);
 
-            Assert.That(await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"),
-                                                                    real.DeviceId),
-                        Is.Null,
-                        "A planted bundle reached the caller.");
+            var fetched = await bob.Connection.FetchOmemoBundleAsync(JID.Parse($"alice@{Server.Domain}"),
+                                                                     real.DeviceId);
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(fetched.Bundle, Is.Null,
+                            "A planted bundle reached the caller.");
+
+                Assert.That(fetched.Lookup, Is.EqualTo(PepLookup.Unknown),
+                            "a planted bundle came back as a device that has published nothing, which " +
+                            "is a sender's reason to write in the clear instead");
+
+            });
 
         }
 

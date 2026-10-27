@@ -63,9 +63,11 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
             OmemoManager Party(String jid, Func<OmemoManager?> other)
                 => new(new OmemoMemoryStore(),
                        JID.Parse(jid),
-                       _        => Task.FromResult<OmemoDeviceList?>(
-                                       new OmemoDeviceList([new OmemoDevice(other()!.Identity.DeviceId)])),
-                       (_, _)   => Task.FromResult<OmemoBundle?>(other()!.Identity.Bundle()));
+                       _        => Task.FromResult<(OmemoDeviceList?, PepLookup)>(
+                                       (new OmemoDeviceList([new OmemoDevice(other()!.Identity.DeviceId)]),
+                                        PepLookup.Published)),
+                       (_, _)   => Task.FromResult<(OmemoBundle?, PepLookup)>(
+                                       (other()!.Identity.Bundle(), PepLookup.Published)));
 
             alice = Party("alice@example.org", () => bob);
             bob   = Party("bob@example.org",   () => alice);
