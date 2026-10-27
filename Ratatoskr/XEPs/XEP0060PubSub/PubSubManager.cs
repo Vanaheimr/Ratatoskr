@@ -87,6 +87,26 @@ public sealed class PubSubManager
     public JID PubSubService => _pubsubService;
 
     /// <summary>
+    /// XEP-0163: whether this client has asked for a PEP node to be pushed to
+    /// it - which under PEP is the whole of what subscribing is.
+    /// </summary>
+    /// <remarks>
+    /// <b>A question and not a list, because the answer is somebody else's to
+    /// give.</b> What this client wants pushed stands in its own caps, as the
+    /// <c>+notify</c> of a node name (XEP-0163, section 4.2, with XEP-0115):
+    /// a contact's server sends an avatar notification because this account
+    /// said it wanted avatar notifications. A copy of that list kept here
+    /// would be a second truth, and the first one is a mutable list anybody
+    /// may add to while running.
+    ///
+    /// Null means nothing has been asked for. Then no account is a permitted
+    /// source - which is the right answer for a manager nobody has wired up:
+    /// a client that has announced no interest in a node has no business
+    /// being told about it.
+    /// </remarks>
+    public Func<String, Boolean>? AsksToBeNotifiedOf { get; set; }
+
+    /// <summary>
     /// Processes an incoming PubSub event message with spoofing protection
     /// </summary>
     public async Task<bool> ProcessEventAsync(XElement           stanza,
@@ -106,8 +126,11 @@ public sealed class PubSubManager
 
         if (!IsAcceptableSource(from, nodeId, expectedPubSubJid))
         {
-            _logger.LogWarning("PubSub spoofing detected! From: {From}, node: {Node}, expected: {Expected}",
-                               from, nodeId, expectedPubSubJid);
+            // Named for what was wrong with it, and no longer for an
+            // expectation that only one of the three permitted senders could
+            // ever have met - see IsAcceptableSource.
+            _logger.LogWarning("PubSub spoofing discarded: a report about {Node} from the component {From}, which is neither {Service} nor a service this client holds a subscription with",
+                               nodeId, from, expectedPubSubJid);
             return false;
         }
 
@@ -124,7 +147,7 @@ public sealed class PubSubManager
             if (retracted.Count > 0)
             {
 
-                var retractEvent = new PubSubEvent(nodeId, PubSubEventType.Retract, subId);
+                var retractEvent = new PubSubEvent(nodeId, PubSubEventType.Retract, from, subId);
 
                 foreach (var retract in retracted)
                 {
@@ -138,7 +161,7 @@ public sealed class PubSubManager
 
             }
 
-            var itemsEvent = new PubSubEvent(nodeId, PubSubEventType.Items, subId);
+            var itemsEvent = new PubSubEvent(nodeId, PubSubEventType.Items, from, subId);
 
             foreach (var item in itemsElement.Children(EventNamespace, "item"))
             {
@@ -168,7 +191,7 @@ public sealed class PubSubManager
         // publication comes to the same address.
         if (eventElement.Child(EventNamespace, "purge") is not null)
         {
-            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.Purge, subId), CancellationToken), _logger);
+            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.Purge, from, subId), CancellationToken), _logger);
             return true;
         }
 
@@ -183,7 +206,7 @@ public sealed class PubSubManager
 
             RemoveSubscriptionsOf(nodeId, from);
 
-            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.Delete, subId), CancellationToken), _logger);
+            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.Delete, from, subId), CancellationToken), _logger);
 
             return true;
 
@@ -218,7 +241,7 @@ public sealed class PubSubManager
                 }
 
                 var approved = new PubSubEvent(nodeId, PubSubEventType.SubscriptionApproved,
-                                               report.Attr("subid"));
+                                               from, report.Attr("subid"));
 
                 await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, approved, CancellationToken), _logger);
 
@@ -238,9 +261,23 @@ public sealed class PubSubManager
             // the service names them when it keeps several (section 12.19), and
             // to leave one of them standing would mean going on waiting for
             // notifications that do not come any more.
-            RemoveSubscription(nodeId, ended);
+            //
+            // All of this node held *with the sender*, and that binding is not
+            // decoration. A report that a subscription has ended says something
+            // about the sender's own books and nothing about anybody else's;
+            // unbound - RemoveSubscription, as this was - a report naming no
+            // identifier struck every subscription on the node, including one
+            // taken out with a different service entirely. The method next door
+            // says why the address belongs with the node name, and this is the
+            // caller that was not listening.
+            //
+            // It was reachable before by a service subscribed to the same node
+            // name; with an account let in for its own nodes it would be
+            // reachable by anybody. Bound here rather than guarded up there:
+            // what a sender may end is what the sender holds.
+            RemoveSubscriptionsOf(nodeId, from, ended);
 
-            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.SubscriptionEnded, ended), CancellationToken), _logger);
+            await OnEvent.InvokeAllAsync(handler => handler(Timestamp.Now, this, new PubSubEvent(nodeId, PubSubEventType.SubscriptionEnded, from, ended), CancellationToken), _logger);
 
             return true;
 
@@ -292,16 +329,51 @@ public sealed class PubSubManager
     /// May a report about this node come from this sender?
     /// </summary>
     /// <remarks>
-    /// <b>Until D71 the answer was the configured service alone</b> - right for
-    /// a PubSub service as a component of its own, wrong for PEP: there the
-    /// report comes from the account itself (XEP-0163, section 4.3), and every
-    /// single one therefore counted as a forgery. It did not show up because
-    /// nobody had a subscription whose reports anybody expected - OMEMO goes its
-    /// own way.
+    /// <b>Three senders may, for three different reasons.</b>
     ///
-    /// The second permission is therefore <b>bound to the node and not to the
-    /// sender</b>: whoever has subscribed to Bob's weather node has not thereby
-    /// permitted Bob to send them reports about every node he can think up.
+    /// The configured service, which is what this manager was built around.
+    ///
+    /// A service this client holds a confirmed subscription with, and only for
+    /// the node that subscription is on - <b>bound to the node and not to the
+    /// sender</b>: whoever has subscribed to one node of a service has not
+    /// thereby permitted it to report every node they can think up.
+    ///
+    /// And an account, about a node of its own - but only a node this client
+    /// has asked to be told about (<see cref="AsksToBeNotifiedOf"/>).
+    ///
+    /// <b>That third one is new, and it is the one that was missing.</b> D71
+    /// added the second in order to cover PEP and could not: a PEP
+    /// notification is not a subscription this client ever applied for.
+    /// Delivery follows presence and caps (XEP-0163, section 4.2), so nothing
+    /// is entered in the subscription table and there was nothing for the
+    /// second rule to find. Every single avatar notification from a contact
+    /// was therefore written to the log as a forgery - the exact line being
+    /// <i>PubSub spoofing detected! From: someone@example.org, node:
+    /// urn:xmpp:avatar:metadata, expected: pubsub.example.com</i>, where the
+    /// expectation was the one thing a PEP notification can never meet.
+    ///
+    /// Harmless, in that <c>ProcessPepEventAsync</c> runs on its own path and
+    /// the avatars arrived anyway. Not harmless as a habit: <b>a security log
+    /// that cries wolf at every ordinary event is a security log nobody reads
+    /// the one time it is right.</b>
+    ///
+    /// <b>Asked for, because under PEP that is what being subscribed means.</b>
+    /// Nobody applies for an avatar node; a client announces <c>+notify</c>
+    /// for it and the contact's server pushes it from then on. So the
+    /// permission is bound to the node here too, by the only register that
+    /// says anything about PEP interest - and an account reporting a node this
+    /// client never announced is as unasked-for as a component reporting one
+    /// nobody subscribed to. Both stay refused, which is what keeps this from
+    /// being "any account may report anything".
+    ///
+    /// <b>Why an account may at all is not a hole.</b> A PEP report says
+    /// something about the account it came from and about no other - that is
+    /// what makes an account its own service, and it is why Bob's avatar and
+    /// Carol's are not each other's business to refuse. What makes it safe to
+    /// pass on is that it is passed on with its sender
+    /// (<see cref="PubSubEvent.From"/>), because the node name does not say
+    /// whose node it is: <c>urn:xmpp:avatar:metadata</c> is the name of a node
+    /// every account has.
     /// </remarks>
     private Boolean IsAcceptableSource(JID from, String nodeId, JID expectedPubSubJid)
     {
@@ -311,7 +383,15 @@ public sealed class PubSubManager
         if (bareFrom == expectedPubSubJid.Bare)
             return true;
 
-        return SubscriptionsOf(nodeId).Any(sub => bareFrom == sub.ServiceJid.Bare);
+        if (SubscriptionsOf(nodeId).Any(sub => bareFrom == sub.ServiceJid.Bare))
+            return true;
+
+        // XEP-0163: an account, and therefore its own service - about a node
+        // this client has announced it wants. A localpart is what tells an
+        // account from a component, and the whole of what tells them apart,
+        // which is why the sender travels with the event.
+        return from.Localpart is not null &&
+               AsksToBeNotifiedOf?.Invoke(nodeId) == true;
 
     }
 
@@ -368,8 +448,13 @@ public sealed class PubSubManager
     }
 
     /// <summary>
-    /// Strikes all subscriptions of a node <b>at a particular service</b>.
+    /// Strikes the subscriptions of a node <b>at a particular service</b>.
     /// </summary>
+    /// <param name="subId">
+    /// The one subscription meant, or null for every one of this node held with
+    /// that service - which is what a service naming no identifier means
+    /// (section 12.19: it names them when it keeps several).
+    /// </param>
     /// <remarks>
     /// The service belongs with it because the node name alone is none:
     /// <c>urn:xmpp:omemo:2:bundles</c> is called that at every account. Whoever
@@ -377,7 +462,7 @@ public sealed class PubSubManager
     /// to somebody else's node of the same name too - and notices it only when
     /// their reports stay away.
     /// </remarks>
-    public void RemoveSubscriptionsOf(String nodeId, JID serviceJid)
+    public void RemoveSubscriptionsOf(String nodeId, JID serviceJid, String? subId = null)
     {
         lock (_lock)
         {
@@ -385,7 +470,9 @@ public sealed class PubSubManager
             if (!_subscriptions.TryGetValue(nodeId, out var subs))
                 return;
 
-            subs.RemoveAll(a => a.ServiceJid.Bare == serviceJid.Bare);
+            subs.RemoveAll(a => a.ServiceJid.Bare == serviceJid.Bare &&
+                               (subId is null ||
+                                String.Equals(a.SubId, subId, StringComparison.Ordinal)));
 
             if (subs.Count == 0)
                 _subscriptions.Remove(nodeId);

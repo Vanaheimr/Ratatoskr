@@ -1773,6 +1773,14 @@ public sealed class XMPPConnection : IAsyncDisposable
         // XEP-0030: Service Discovery
         Disco = new DiscoManager(xml => SendAsync(xml), BareJid.ToString(), CreateLogger<DiscoManager>());
 
+        // XEP-0163, section 4.2: which PEP nodes a contact's server pushes to
+        // this account is decided by this account's own caps, so that is where
+        // the PubSub side has to ask whether a report was wanted. Read through
+        // the list rather than copied out of it: a handler registered while
+        // running adds its "+notify" there (see RegisterPayloadHandler), and a
+        // copy taken here would have been taken too early.
+        PubSub.AsksToBeNotifiedOf = node => Disco?.LocalFeatures.Contains($"{node}+notify") == true;
+
         // XEP-0045: the rooms. Built here with the others, and asked before the
         // roster ever sees a presence.
         // The second delegate is the one moderating needs: a kick either happened
