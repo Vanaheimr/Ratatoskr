@@ -74,6 +74,7 @@ public sealed class Roster
     #region Data
 
     private readonly Dictionary<JID, RosterItem>     _items  = new();
+    private readonly HashSet<JID>                    _asked  = new();
     private readonly Lock                            _lock   = new();
     private readonly ILogger                         _logger;
 
@@ -120,7 +121,8 @@ public sealed class Roster
     /// Creates a new roster.
     /// </summary>
     /// <param name="LoggerFactory">
-    /// Optional; used for nothing but reporting a handler that threw.
+    /// Optional; used for reporting a handler that threw, and for the one
+    /// subscription change this roster notes without applying it.
     /// </param>
     public Roster(ILoggerFactory? LoggerFactory = null)
     {
@@ -253,6 +255,55 @@ public sealed class Roster
 
     #endregion
 
+    #region NoteOwnSubscriptionRequest(Jid)
+
+    /// <summary>
+    /// Notes that we have asked this contact to let us see their presence
+    /// (RFC 6121, section 3.1.1): a <c>subscribe</c> of ours has gone out.
+    /// </summary>
+    /// <remarks>
+    /// What the RFC keeps as <c>ask='subscribe'</c> on the roster entry, as far
+    /// as this side knows it - and it is kept beside the entries rather than on
+    /// one of them, because the case it exists for is the case where there is
+    /// no entry: the push that would carry it is exactly what may be missing.
+    ///
+    /// It is no promise about what the server did with the request. The server
+    /// may refuse it, and nothing noted here counts as a subscription; the note
+    /// says only that an inbound <c>subscribed</c> from this address would be
+    /// an answer and not an announcement out of nowhere.
+    /// </remarks>
+    /// <param name="Jid">The address the request went to.</param>
+    public void NoteOwnSubscriptionRequest(JID Jid)
+    {
+        lock (_lock)
+            _asked.Add(Jid.Bare);
+    }
+
+    #endregion
+
+    #region HasOwnSubscriptionRequest(Jid)
+
+    /// <summary>
+    /// Whether a <c>subscribe</c> of ours to this address has gone out and
+    /// nothing has used the note up since.
+    /// </summary>
+    /// <remarks>
+    /// The question <see cref="ProcessSubscriptionChangeAsync"/> asks before it
+    /// makes an entry out of a <c>subscribed</c>: would that stanza be an
+    /// answer to something of ours. A roster push arriving in the meantime does
+    /// not clear it - while an entry stands there is nothing for the note to
+    /// decide, and clearing it would cost the one thing it is good for outside
+    /// this class, which is telling a reader that this contact was asked.
+    /// </remarks>
+    /// <param name="Jid">The address in question.</param>
+    public Boolean HasOwnSubscriptionRequest(JID Jid)
+    {
+        lock (_lock)
+            return _asked.Contains(Jid.Bare);
+    }
+
+    #endregion
+
     #region ProcessSubscriptionChangeAsync(From, Type, CancellationToken = default)
 
     /// <summary>
@@ -266,8 +317,24 @@ public sealed class Roster
     /// them away from <see cref="UpdatePresenceAsync"/>, where everything
     /// without <c>type='unavailable'</c> counts as present.
     ///
-    /// An unknown contact is deliberately not created: entries come into being
-    /// through the roster push, not through a presence.
+    /// That net had a hole in the one place where it was needed. It was
+    /// written for a lost <em>second</em> push, the one carrying
+    /// <c>subscription='to'</c>, and there it holds: the entry stands and the
+    /// arriving <c>subscribed</c> brings it up to date. It does not hold when
+    /// the <em>first</em> push goes missing - the one that brings the entry
+    /// into being after a <c>subscribe</c> of our own. Then there was nothing
+    /// to update, this method returned, and the <c>subscribed</c> behind it
+    /// could repair nothing, while the server had long since granted the
+    /// subscription. Measured in the conformance suite on 2026-10-24, where a
+    /// handshake against ejabberd waited out its ten seconds for exactly that.
+    ///
+    /// So an entry is created here after all - but only for a
+    /// <c>subscribed</c> that answers a request of our own, as recorded by
+    /// <see cref="NoteOwnSubscriptionRequest"/>. That is the whole distinction,
+    /// and it is the push path's own in another form: the answer to our own
+    /// question is ours to believe, an unsolicited <c>subscribed</c> is not,
+    /// and an entry made from one would be the roster forgery that
+    /// <c>RosterPushSecurityTests</c> keeps out of the push.
     /// </remarks>
     /// <param name="From">Sender of the stanza.</param>
     /// <param name="Type">subscribed, unsubscribed or unsubscribe.</param>
@@ -279,33 +346,71 @@ public sealed class Roster
 
         var          bareJid = From.Bare;
         RosterItem?  item;
+        Boolean      isNew   = false;
 
         lock (_lock)
         {
 
-            if (!_items.TryGetValue(bareJid, out item))
-                return;
-
-            item.Subscription = Type switch {
-                "subscribed"    => item.Subscription.GrantTo(),
-                "unsubscribed"  => item.Subscription.RevokeTo(),
-                "unsubscribe"   => item.Subscription.RevokeFrom(),
-                _               => item.Subscription
-            };
-
-            // Without a 'to' no presence arrives any more. Whatever was last
-            // known would from now on grow arbitrarily old - the contact
-            // therefore counts as offline instead of standing forever in the
-            // last state seen.
-            if (Type == "unsubscribed")
+            if (_items.TryGetValue(bareJid, out item))
             {
-                item.Presence        = PresenceState.Offline;
-                item.PresenceStatus  = null;
+
+                item.Subscription = Type switch {
+                    "subscribed"    => item.Subscription.GrantTo(),
+                    "unsubscribed"  => item.Subscription.RevokeTo(),
+                    "unsubscribe"   => item.Subscription.RevokeFrom(),
+                    _               => item.Subscription
+                };
+
+                // Without a 'to' no presence arrives any more. Whatever was
+                // last known would from now on grow arbitrarily old - the
+                // contact therefore counts as offline instead of standing
+                // forever in the last state seen.
+                if (Type == "unsubscribed")
+                {
+                    item.Presence        = PresenceState.Offline;
+                    item.PresenceStatus  = null;
+                }
+
+            }
+
+            // The answer to a question of ours, with the push that should have
+            // brought the entry into being still missing. Only 'subscribed'
+            // gets this: the other two take something away, and an entry that
+            // is not there has nothing left to lose.
+            //
+            // Remove both asks and consumes - the note is used up in the
+            // asking, so a second 'subscribed' has nothing left to lean on.
+            else if (Type == "subscribed" &&
+                     _asked.Remove(bareJid))
+            {
+
+                item            = new RosterItem(bareJid) {
+                                      Subscription = SubscriptionState.To
+                                  };
+
+                _items[bareJid] = item;
+                isNew           = true;
+
             }
 
         }
 
-        await OnItemUpdated.InvokeAllAsync(handler => handler(Timestamp.Now, this, item, CancellationToken), _logger);
+        if (item is null)
+        {
+
+            _logger.LogDebug("A <presence type='{Type}'/> from {From}, who is " +
+                             "not in the roster and whom we did not ask - " +
+                             "nothing to apply",
+                             Type, bareJid);
+
+            return;
+
+        }
+
+        if (isNew)
+            await OnItemAdded.  InvokeAllAsync(handler => handler(Timestamp.Now, this, item, CancellationToken), _logger);
+        else
+            await OnItemUpdated.InvokeAllAsync(handler => handler(Timestamp.Now, this, item, CancellationToken), _logger);
 
     }
 
@@ -321,7 +426,15 @@ public sealed class Roster
         Boolean  removed;
 
         lock (_lock)
+        {
+
             removed = _items.Remove(bareJid);
+
+            // Together with the entry, so that a <presence type='subscribed'/>
+            // arriving after we have thrown the contact out brings nobody back.
+            _asked.Remove(bareJid);
+
+        }
 
         if (removed)
             await OnItemRemoved.InvokeAllAsync(handler => handler(Timestamp.Now, this, bareJid, CancellationToken), _logger);

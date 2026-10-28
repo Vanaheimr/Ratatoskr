@@ -6130,8 +6130,17 @@ public sealed class XMPPConnection : IAsyncDisposable
     // Roster operations
     public async Task AddContactAsync(JID jid, string? name = null, IEnumerable<string>? groups = null)
     {
+
         await SendAsync(RosterStanzaBuilder.SetItem(jid, name, groups));
+
+        // Before the subscribe goes out, not after: the answer can be back
+        // before this method has returned, and a note taken too late is a note
+        // the answer has already walked past. What it is for is in
+        // Roster.NoteOwnSubscriptionRequest.
+        Roster.NoteOwnSubscriptionRequest(jid);
+
         await SendAsync(RosterStanzaBuilder.Subscribe(jid));
+
     }
 
     public async Task RemoveContactAsync(JID jid) => await SendAsync(RosterStanzaBuilder.RemoveItem(jid));
