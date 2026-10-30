@@ -368,6 +368,7 @@ whose Python strings are code points by nature — in `XMPPConformanceTests`,
 | Subprotocol `xmpp`, `<open/>`/`<close/>` framing | ✅ |
 | Close handshake | ✅ `<close/>` is sent, then up to 3 s of waiting for the other side, then the socket is torn down |
 | Endpoint discovery (XEP-0156 / `host-meta`) | ✅ With no endpoint given, `https://<domain>/.well-known/host-meta.json` and then `.../host-meta` are read — over HTTPS, checked at the address the answer came from and not only at the one requested (D139); only `wss://` addresses are taken. With no find it stays at `wss://<domain>:5443/ws` |
+| Dial address (`DialAddress`) | ✅ The address the TCP connection goes to, given by hand instead of asking DNS - the endpoint keeps naming the origin, so the TLS server name and the Host field still say what the server is, and only the port of the endpoint is used. For a server reachable at an address that is not its name: a test server for `jabber.test` on the loopback. Without it the only way there was to put `localhost` into the endpoint, which asks for an origin the certificate does not cover and is refused with 421 by any server keeping to RFC 9110, Section 7.4 - Hermod does since `6c94974d`. The certificate check is the same either way (D142) |
 
 The default port is ejabberd-specific and only applies when the domain serves
 no `host-meta`. Whoever does not want it gives the URL, e.g. for Prosody:

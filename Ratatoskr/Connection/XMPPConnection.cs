@@ -18,6 +18,7 @@
 #region Usings
 
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Runtime.ExceptionServices;
@@ -662,6 +663,14 @@ public sealed class XMPPConnection : IAsyncDisposable
     private Boolean _bind2Offered;
 
     private ClientWebSocket? _webSocket;
+
+    /// <summary>
+    /// The invoker a connection with a <see cref="DialAddress"/> is made
+    /// through. ClientWebSocket does not own an invoker it is handed, so this
+    /// class does, and disposes it with the socket.
+    /// </summary>
+    private HttpMessageInvoker? _dialInvoker;
+
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
     private Task? _keepaliveTask;
@@ -775,6 +784,35 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// the middle.
     /// </remarks>
     public RemoteCertificateValidationCallback? ServerCertificateValidator { get; set; }
+
+    /// <summary>
+    /// Where the WebSocket connection is actually dialled, given by hand instead
+    /// of resolving the host of <see cref="WebSocketUri"/>. Null, the default,
+    /// leaves it to DNS.
+    /// </summary>
+    /// <remarks>
+    /// The endpoint names the origin, and the origin is what the server is
+    /// asked for: it is the TLS server name and the Host field of the upgrade.
+    /// This changes only which address the TCP connection goes to - the one
+    /// thing DNS would otherwise have answered. The port stays the endpoint's.
+    ///
+    /// Wanted wherever a server is reachable at an address that is not its
+    /// name: a test server for jabber.test listening on the loopback, a host
+    /// whose name does not resolve from where the client stands. Until D142 the
+    /// only way to reach one was to put the address into the endpoint instead -
+    /// wss://localhost for a server whose certificate says jabber.test - and a
+    /// server that keeps to RFC 9110, Section 7.4 refuses that with 421
+    /// (Misdirected Request), because the request then asks for an origin the
+    /// certificate does not cover. Hermod does, since 6c94974d.
+    ///
+    /// Nothing about the certificate check changes: it runs against whatever
+    /// the server presents, through <see cref="ServerCertificateValidator"/>
+    /// when one is set, exactly as without a dial address.
+    ///
+    /// <c>System.Net.IPAddress</c> written out, because Hermod has a static
+    /// class of the same name in a namespace this file imports.
+    /// </remarks>
+    public System.Net.IPAddress? DialAddress { get; set; }
 
     // State
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
@@ -1206,16 +1244,21 @@ public sealed class XMPPConnection : IAsyncDisposable
         var receiveTask   = _receiveTask;
         var keepaliveTask = _keepaliveTask;
         var webSocket     = _webSocket;
+        var dialInvoker   = _dialInvoker;
 
         _cts           = null;
         _receiveTask   = null;
         _keepaliveTask = null;
         _webSocket     = null;
+        _dialInvoker   = null;
 
         CancelPendingIqs();
 
         if (cts is null && webSocket is null)
+        {
+            dialInvoker?.Dispose();
             return;
+        }
 
         if (cts is not null)
         {
@@ -1250,6 +1293,72 @@ public sealed class XMPPConnection : IAsyncDisposable
         cts?.Dispose();
         webSocket?.Dispose();
 
+        // After the socket and not before it: the handler under the invoker
+        // holds the connection the socket is still closing over.
+        dialInvoker?.Dispose();
+
+    }
+
+    /// <summary>
+    /// The one place the server's certificate is judged, whichever way the
+    /// connection was made.
+    /// </summary>
+    /// <remarks>
+    /// It also keeps the certificate: this callback is the only place .NET
+    /// hands a ClientWebSocket's server certificate to anybody, and
+    /// tls-server-end-point (RFC 5929) is a hash of exactly that certificate.
+    /// </remarks>
+    private Boolean ValidateServerCertificate(Object            sender,
+                                              X509Certificate?  certificate,
+                                              X509Chain?        chain,
+                                              SslPolicyErrors   sslPolicyErrors)
+    {
+
+        _serverCertificate = certificate as X509Certificate2;
+
+        return ServerCertificateValidator is not null
+                   ? ServerCertificateValidator(sender, certificate, chain, sslPolicyErrors)
+                   : sslPolicyErrors == SslPolicyErrors.None;
+
+    }
+
+    /// <summary>
+    /// An invoker that dials the given address and leaves everything else to
+    /// the endpoint: the TLS server name and the Host field still say what
+    /// <see cref="WebSocketUri"/> says, as they would after a DNS answer.
+    /// </summary>
+    private HttpMessageInvoker DialingInvoker(System.Net.IPAddress address)
+    {
+
+        var handler = new SocketsHttpHandler {
+
+            SslOptions       = new SslClientAuthenticationOptions {
+                                   RemoteCertificateValidationCallback = ValidateServerCertificate
+                               },
+
+            // The port is the endpoint's: the hand-given address replaces the
+            // DNS answer and nothing else.
+            ConnectCallback  = async (context, token) => {
+
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+
+                try
+                {
+                    await socket.ConnectAsync(new System.Net.IPEndPoint(address, context.DnsEndPoint.Port), token);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+
+            }
+
+        };
+
+        return new HttpMessageInvoker(handler, disposeHandler: true);
+
     }
 
     private async Task ConnectInternalAsync(CancellationToken ct)
@@ -1279,19 +1388,23 @@ public sealed class XMPPConnection : IAsyncDisposable
             // receives the platform's own aggregate judgement in
             // sslPolicyErrors, so returning "None means yes" is the same policy
             // that applied when no callback was installed at all.
-            webSocket.Options.RemoteCertificateValidationCallback =
+            //
+            // One callback, installed in one of two places. Without a dial
+            // address it goes on these options, as it always has. With one the
+            // connection is made through an invoker of our own, and then the
+            // handler carries it instead. Both point at
+            // ValidateServerCertificate, because two copies of a security check
+            // are two chances for one of them to be wrong.
+            HttpMessageInvoker? dialInvoker = null;
 
-                (sender, certificate, chain, sslPolicyErrors) => {
+            if (DialAddress is null)
+                webSocket.Options.RemoteCertificateValidationCallback = ValidateServerCertificate;
 
-                    _serverCertificate = certificate as X509Certificate2;
+            else
+                dialInvoker = DialingInvoker(DialAddress);
 
-                    return ServerCertificateValidator is not null
-                               ? ServerCertificateValidator(sender, certificate, chain, sslPolicyErrors)
-                               : sslPolicyErrors == SslPolicyErrors.None;
-
-                };
-
-            _webSocket = webSocket;
+            _webSocket    = webSocket;
+            _dialInvoker  = dialInvoker;
 
             _logger.LogInformation("Connecting to {WebSocketUri} ...", WebSocketUri);
 
@@ -1308,7 +1421,11 @@ public sealed class XMPPConnection : IAsyncDisposable
             // not touched.
             try
             {
-                await webSocket.ConnectAsync(new Uri(WebSocketUri.ToString()), ct);
+                if (dialInvoker is null)
+                    await webSocket.ConnectAsync(new Uri(WebSocketUri.ToString()), ct);
+
+                else
+                    await webSocket.ConnectAsync(new Uri(WebSocketUri.ToString()), dialInvoker, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
