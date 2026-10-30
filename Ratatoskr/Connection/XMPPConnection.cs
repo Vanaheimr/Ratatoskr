@@ -798,7 +798,7 @@ public sealed class XMPPConnection : IAsyncDisposable
     ///
     /// Wanted wherever a server is reachable at an address that is not its
     /// name: a test server for jabber.test listening on the loopback, a host
-    /// whose name does not resolve from where the client stands. Until D142 the
+    /// whose name does not resolve from where the client stands. Until D143 the
     /// only way to reach one was to put the address into the endpoint instead -
     /// wss://localhost for a server whose certificate says jabber.test - and a
     /// server that keeps to RFC 9110, Section 7.4 refuses that with 421

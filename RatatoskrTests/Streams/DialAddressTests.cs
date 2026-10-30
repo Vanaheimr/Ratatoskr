@@ -36,7 +36,7 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 {
 
     /// <summary>
-    /// D142: <see cref="XMPPConnection.DialAddress"/> - reaching a server at an
+    /// D143: <see cref="XMPPConnection.DialAddress"/> - reaching a server at an
     /// address that is not its name, without asking it for the wrong origin.
     /// </summary>
     /// <remarks>
