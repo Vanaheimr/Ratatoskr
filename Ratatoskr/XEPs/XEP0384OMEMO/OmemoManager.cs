@@ -119,9 +119,11 @@ public sealed record OmemoSkippedDevice(JID      Jid,
 /// An encrypted message that has gone out.
 /// </summary>
 /// <param name="MessageId">
-/// The id of the stanza. <b>Not a detail:</b> a delivery receipt (XEP-0184) and
-/// a read marker (XEP-0333) are answers <i>about this message</i>, and a caller
-/// that does not know its id can neither match them nor correct it later.
+/// The id of the stanza, or <b>null where nothing went out</b>. Not a detail
+/// either way: a delivery receipt (XEP-0184) and a read marker (XEP-0333) are
+/// answers <i>about this message</i>, so a caller that does not know its id can
+/// neither match them nor correct it later - and a caller handed an id for a
+/// stanza that was never on the wire writes that id into its history.
 /// </param>
 /// <param name="Skipped">
 /// The devices that cannot read it - <b>empty means everyone can</b>.
@@ -154,8 +156,15 @@ public sealed record OmemoSkippedDevice(JID      Jid,
 ///
 /// Meaningless while <see cref="Readable"/> is true. The question it answers
 /// only arises for a message that reached nobody.
+///
+/// <b>What nobody can read is not sent</b>, and that ties the two values
+/// together: <see cref="MessageId"/> is null in exactly those cases where
+/// <see cref="Readable"/> is false. A header without a single key is not a
+/// message anybody can do anything with - the far side reports an OMEMO
+/// message with no key for its device - and a sender that then falls back to
+/// the clear has sent them both.
 /// </remarks>
-public sealed record OmemoSent(String                             MessageId,
+public sealed record OmemoSent(String?                            MessageId,
                                IReadOnlyList<OmemoSkippedDevice>  Skipped,
                                Boolean                            Readable,
                                Boolean                            NoOmemoThere = false);

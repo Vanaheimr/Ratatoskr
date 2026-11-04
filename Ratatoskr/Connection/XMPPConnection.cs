@@ -4279,7 +4279,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     /// </remarks>
     public async Task<bool> PublishOmemoDeviceListAsync(OmemoDeviceList   list,
                                                         CancellationToken ct = default)
-        => await PublishPepAsync(OmemoDeviceList.Node, OmemoDeviceList.ItemId, list.ToXml(), ct);
+    {
+
+        var published = await PublishPepAsync(OmemoDeviceList.Node, OmemoDeviceList.ItemId, list.ToXml(), ct);
+
+        // What was just published is what stands there - no notification of
+        // one's own needs waiting for. Only on success: a list the server
+        // refused is not the list anybody will be served.
+        if (published)
+            OmemoDeviceLists.Remember(BareJid, list, PepLookup.Published);
+
+        return published;
+
+    }
 
     /// <summary>
     /// XEP-0384: Publishes one's own bundle under the device identifier.
@@ -4349,6 +4361,71 @@ public sealed class XMPPConnection : IAsyncDisposable
         }
 
         return (list, PepLookup.Published);
+
+    }
+
+    /// <summary>
+    /// XEP-0384: The device list of an account, out of
+    /// <see cref="OmemoDeviceLists"/> where it is known and still believed,
+    /// and asked for where it is not.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is what encrypting goes through, and
+    /// <see cref="FetchOmemoDeviceListAsync"/> is not.</b> The difference is
+    /// not caution about one of them: switching OMEMO on reads this account's
+    /// own list in order to put this device back into it, and reading a
+    /// remembered list there would mean publishing a list that was true a
+    /// quarter of an hour ago. Whoever must be current asks; the sending path,
+    /// which asked the same server the same question before every single
+    /// message, remembers.
+    /// </remarks>
+    /// <param name="bareJid">The address, bare.</param>
+    /// <param name="ct">A cancellation token.</param>
+    private async Task<(OmemoDeviceList? List, PepLookup Lookup)> KnownOmemoDeviceListAsync(JID                bareJid,
+                                                                                            CancellationToken  ct = default)
+    {
+
+        var remembered = OmemoDeviceLists.Get(bareJid);
+
+        if (remembered is not null)
+            return remembered.Value;
+
+        var answer = await FetchOmemoDeviceListAsync(bareJid, ct);
+
+        OmemoDeviceLists.Remember(bareJid, answer.List, answer.Lookup);
+
+        return answer;
+
+    }
+
+    /// <summary>
+    /// XEP-0384: Asks for a device list before anybody needs it, so that the
+    /// first encrypted message to this address does not wait for the answer.
+    /// </summary>
+    /// <remarks>
+    /// For the moment a conversation is opened. The asking costs one IQ and
+    /// the waiting costs up to the IQ timeout, and the difference between the
+    /// two is only where it happens: in the background, or in front of
+    /// somebody who has pressed send.
+    ///
+    /// A failure is none: this is a head start, and what it does not manage is
+    /// asked for again at the send.
+    /// </remarks>
+    /// <param name="bareJid">The address, bare.</param>
+    /// <param name="ct">A cancellation token.</param>
+    public async Task WarmOmemoDeviceListAsync(JID                bareJid,
+                                               CancellationToken  ct = default)
+    {
+
+        try
+        {
+            await KnownOmemoDeviceListAsync(bareJid, ct);
+        }
+        catch (Exception e)
+        {
+            _logger.LogDebug("OMEMO: the device list of {Jid} could not be fetched in advance: {Reason}",
+                             bareJid, e.Message);
+        }
 
     }
 
@@ -4468,6 +4545,19 @@ public sealed class XMPPConnection : IAsyncDisposable
     public UInt32? OmemoDeviceId { get; set; }
 
     /// <summary>
+    /// What is known about whose devices: filled by the asking below, by the
+    /// notifications of <see cref="ProcessPepEventAsync"/>, and by this
+    /// account's own publishing.
+    /// </summary>
+    /// <remarks>
+    /// Public so that it can be emptied or warmed from outside - an
+    /// application that knows a conversation has just been opened knows a
+    /// second before this layer does. See <see cref="OmemoDeviceLists"/> for
+    /// how long which answer is believed.
+    /// </remarks>
+    public OmemoDeviceLists OmemoDeviceLists { get; } = new();
+
+    /// <summary>
     /// XEP-0384: does this device's identifier stand in the account's own
     /// device list - that is, can anybody encrypt to it?
     /// </summary>
@@ -4528,6 +4618,13 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         if (payload is null || !OmemoDeviceList.TryRead(payload, out var list) || list is null)
             return;
+
+        // The reason a remembered list may be believed at all: this is the
+        // publisher saying what is true now, unasked, and it resets the span
+        // for which the answer holds. Somebody who switches OMEMO on is
+        // written to encrypted from here on rather than from whenever the
+        // remembered "publishes nothing" would have run out.
+        OmemoDeviceLists.Remember(JID.Parse(JID.BareTextOf(from)), list, PepLookup.Published);
 
         await OnOmemoDeviceListChanged.InvokeAllAsync(handler => handler(Timestamp.Now, this, JID.Parse(JID.BareTextOf(from)), list, ConnectionToken), _logger);
 
@@ -4776,7 +4873,7 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         Omemo = new OmemoManager(store,
                                  BareJid,
-                                 jid => FetchOmemoDeviceListAsync(jid, ct),
+                                 jid => KnownOmemoDeviceListAsync(jid, ct),
                                  (jid, device) => FetchOmemoBundleAsync(jid, device, ct),
                                  _logger);
 
@@ -5068,6 +5165,26 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var result = await Omemo.EncryptAsync([to], [new XElement(client + "body", body), .. extras]);
 
+        // Not one key for this recipient, so nothing goes out. What would go
+        // out is an <encrypted/> whose header carries the sender's device and
+        // nothing else: the recipient's client reports an OMEMO message with
+        // no key for its device, and the sender's own further devices cannot
+        // read it either. It is noise with a timestamp.
+        //
+        // The caller is told rather than thrown at, and it is the caller that
+        // decides what follows - the clear, or refusing to write at all. That
+        // decision needs both halves below, and above all NoOmemoThere: a
+        // recipient who was shown to publish nothing is a different thing from
+        // one nobody could get an answer about, and only the first of the two
+        // may ever become a message in the clear.
+        if (!result.Element.Keys.ContainsKey(to.Bare))
+            return new OmemoSent(
+                       null,
+                       result.Skipped,
+                       Readable:      false,
+                       NoOmemoThere:  result.NoOmemoFor(to)
+                   );
+
         // A <store/> per XEP-0334, so that the storage keeps it: from the
         // outside this message looks like one without content, and a server
         // deciding by the <body/> would throw it away.
@@ -5083,8 +5200,8 @@ public sealed class XMPPConnection : IAsyncDisposable
         return new OmemoSent(
                    messageId,
                    result.Skipped,
-                   result.Element.Keys.ContainsKey(to.Bare),
-                   result.NoOmemoFor(to)
+                   Readable:      true,
+                   NoOmemoThere:  false
                );
 
     }
@@ -5247,6 +5364,19 @@ public sealed class XMPPConnection : IAsyncDisposable
 
         var result = await Omemo.EncryptAsync(recipients.Jids,
                                               [new XElement(client + "body", body), .. extras]);
+
+        // Not one occupant with a key, so nothing goes into the room - for the
+        // reason one to one, and one more besides: what a room keeps is what
+        // somebody joining later is shown, and an unreadable line stays there
+        // for all of them. Some occupants without a key is another matter and
+        // goes out: those who have one read it, and Skipped names the rest.
+        if (result.Element.Keys.Count == 0)
+            return new OmemoRoomSent(
+                       null,
+                       recipients.Jids,
+                       result.Skipped,
+                       "nobody in this room has a device this message could have been read on"
+                   );
 
         var messageId = await SendMessageStanzaAsync(
                                   room.Bare,

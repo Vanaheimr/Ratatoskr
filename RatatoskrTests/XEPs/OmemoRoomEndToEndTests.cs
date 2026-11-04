@@ -576,6 +576,65 @@ namespace org.GraphDefined.Vanaheimr.Ratatoskr.Tests
 
         #endregion
 
+        #region ARoomWhereNobodyCanRead_GetsNothing()
+
+        /// <summary>
+        /// Everybody in the room does without OMEMO. Then nothing encrypted
+        /// goes into the room.
+        /// </summary>
+        /// <remarks>
+        /// The same rule as one to one, and one reason more: what a room keeps
+        /// is what somebody joining later is shown, so an unreadable line
+        /// stays there for all of them.
+        ///
+        /// <b>Some</b> occupants without a key is another matter and goes out -
+        /// those who have one read it, and Skipped names the rest. What is
+        /// refused here is the room where the set of keys is empty.
+        /// </remarks>
+        [Test]
+        public async Task ARoomWhereNobodyCanRead_GetsNothing()
+        {
+
+            MakeContacts("alice", "bob");
+
+            var alice  = await ConnectClientAsync("alice", createAccount: false);
+            var bob    = await ConnectClientAsync("bob",   createAccount: false);
+
+            // Only Alice. Bob is in the room and publishes no device.
+            Assert.That(await alice.EnableOmemoAsync(), Is.True,
+                        "Alice could not switch OMEMO on.");
+
+            var aliceSession = await SessionOfAsync(alice);
+            var bobSession   = await SessionOfAsync(bob);
+
+            await JoinAsync(alice, aliceSession, "alice", ("bob",   BobJid));
+            await JoinAsync(bob,   bobSession,   "bob",   ("alice", AliceJid));
+
+            var sent = await alice.SendEncryptedRoomMessageAsync(RoomJid, "The meeting is at eight.");
+
+            Assert.Multiple(() =>
+            {
+
+                Assert.That(sent.Sent,       Is.False,
+                            "a line nobody in the room could read went into it");
+
+                Assert.That(sent.MessageId,  Is.Null);
+
+                Assert.That(sent.Refusal,    Is.Not.Null,
+                            "and nothing said why");
+
+                var frames = Server.Sessions.SelectMany(session => session.Received.Concat(session.Sent)).ToList();
+
+                Assert.That(frames.Any(frame => frame.Contains("<encrypted", StringComparison.Ordinal)),
+                            Is.False,
+                            "an encrypted element went over the wire that nobody could have read");
+
+            });
+
+        }
+
+        #endregion
+
         #region ASemiAnonymousRoomRefusesBeforeAnythingIsEncrypted()
 
         /// <summary>

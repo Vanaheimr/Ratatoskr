@@ -2094,8 +2094,15 @@ public sealed class XMPPClient : IAsyncDisposable
         // this address is what a later correction (XEP-0308) names. Missing
         // here until now, which made every encrypted message the one message
         // that could not be corrected.
-        lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = new (sent.MessageId, Encrypted: true);
+        //
+        // Only what actually went out. A message nobody could have read is not
+        // sent at all, and writing it down here would offer the correction of a
+        // stanza that never existed.
+        if (sent.MessageId is not null)
+        {
+            lock (_lastSentToLock)
+                _lastSentTo[LastSentKey(to)] = new (sent.MessageId, Encrypted: true);
+        }
 
         return sent;
 
@@ -2128,9 +2135,12 @@ public sealed class XMPPClient : IAsyncDisposable
                                                              ct);
 
         // An answer is a message like any other, and whoever mistypes in one
-        // wants to correct it too.
-        lock (_lastSentToLock)
-            _lastSentTo[LastSentKey(to)] = new (sent.MessageId, Encrypted: true);
+        // wants to correct it too - as long as it went out at all.
+        if (sent.MessageId is not null)
+        {
+            lock (_lastSentToLock)
+                _lastSentTo[LastSentKey(to)] = new (sent.MessageId, Encrypted: true);
+        }
 
         return sent;
 
