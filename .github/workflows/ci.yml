@@ -42,7 +42,8 @@ jobs:
     # "would be cheaper and is worth a second matrix entry - but not before
     # someone has seen it pass". Somebody has now seen it, on Debian 13
     # (trixie) with .NET 10.0.302, and the numbers below are that measurement
-    # rather than a hope.
+    # rather than a hope. The SDK has moved to 11 since; the timings are from
+    # that run and have not been taken again.
     #
     # It did not pass the first time, which is the shortest argument for the
     # leg that exists. AMarkerFromTheRecipient_IsBelieved waited for one chat
@@ -139,7 +140,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       - name: Build
         working-directory: Ratatoskr

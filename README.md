@@ -1,6 +1,6 @@
 ﻿<img src="images/logo.jpg" alt="Ratatoskr" width="240" align="right" />
 
-# Ratatoskr — XMPP for .NET 10
+# Ratatoskr — XMPP for .NET 11
 
 [![CI](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/ci.yml/badge.svg)](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/ci.yml)
 [![Nightly](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/nightly.yml/badge.svg)](https://github.com/Vanaheimr/Ratatoskr/actions/workflows/nightly.yml)

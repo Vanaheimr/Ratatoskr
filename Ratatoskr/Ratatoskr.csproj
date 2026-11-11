@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>org.GraphDefined.Vanaheimr.Ratatoskr</RootNamespace>
@@ -9,17 +9,28 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" />
 
     <!--
-      OMEMO (XEP-0384) needs X25519 and Ed25519. The BCL has neither - in
-      System.Security.Cryptography.dll of .NET 10 the string "X25519" does not
-      appear a single time -, and curve arithmetic by hand is the one place
-      where an error does not come out and costs everything.
+      OMEMO (XEP-0384) needs X25519 and Ed25519, and curve arithmetic by
+      hand is the one place where an error does not come out and costs
+      everything.
 
-      Both packages listed expressly although Hermod brings them along
-      already: whoever uses a transitive dependency directly loses it at the
-      moment at which the previous owner puts it down.
+      .NET 11 brings half of it. X25519DiffieHellman is new in
+      System.Security.Cryptography: in the 10.0.15 reference assembly the
+      string "X25519" does not appear a single time, in the 11.0.0 one it
+      names a class. Ed25519 is in neither - "WithEd25519" appears, but that
+      is part of a composite ML-DSA algorithm name and not a key anything can
+      be signed with.
+
+      So the package stays, and the half the BCL now covers stays with it:
+      one protocol served by two implementations of the same curve buys
+      nothing but a second set of edge cases, at the one place where an edge
+      case is silent.
+
+      Listed expressly although Hermod brings it along already: whoever uses
+      a transitive dependency directly loses it at the moment at which the
+      previous owner puts it down.
     -->
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
   </ItemGroup>
